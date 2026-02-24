@@ -1,11 +1,116 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import { storage } from "./storage";
+import { processAnalysis } from "./analysis-engine";
+
+const uploadDir = path.resolve(process.cwd(), "uploads");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      cb(null, uniqueSuffix + path.extname(file.originalname));
+    },
+  }),
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      "video/mp4",
+      "video/quicktime",
+      "video/x-msvideo",
+      "video/webm",
+    ];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only video files are allowed"));
+    }
+  },
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
+  app.post(
+    "/api/upload",
+    upload.single("video"),
+    async (req: Request, res: Response) => {
+      try {
+        if (!req.file) {
+          return res.status(400).json({ error: "No video file provided" });
+        }
+
+        const analysis = await storage.createAnalysis(
+          req.file.originalname,
+          req.file.path,
+        );
+
+        processAnalysis(analysis.id).catch(console.error);
+
+        res.json({
+          id: analysis.id,
+          status: analysis.status,
+          message: "Video uploaded successfully. Processing started.",
+        });
+      } catch (error: any) {
+        console.error("Upload error:", error);
+        res.status(500).json({ error: error.message || "Upload failed" });
+      }
+    },
+  );
+
+  app.get("/api/analyses", async (_req: Request, res: Response) => {
+    try {
+      const allAnalyses = await storage.getAllAnalyses();
+      res.json(allAnalyses);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/analyses/:id", async (req: Request, res: Response) => {
+    try {
+      const analysis = await storage.getAnalysis(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+
+      const metricsData = await storage.getMetrics(req.params.id);
+      const insights = await storage.getCoachingInsights(req.params.id);
+
+      res.json({
+        analysis,
+        metrics: metricsData || null,
+        coaching: insights || null,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/analyses/:id", async (req: Request, res: Response) => {
+    try {
+      const analysis = await storage.getAnalysis(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+
+      if (fs.existsSync(analysis.videoPath)) {
+        fs.unlinkSync(analysis.videoPath);
+      }
+
+      await storage.deleteAnalysis(req.params.id);
+      res.json({ message: "Analysis deleted" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
 
   const httpServer = createServer(app);
-
   return httpServer;
 }
