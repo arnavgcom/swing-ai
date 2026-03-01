@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -16,19 +16,32 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useVideoPlayer, VideoView } from "expo-video";
 import Colors from "@/constants/colors";
-import { fetchAnalysisDetail } from "@/lib/api";
+import { fetchAnalysisDetail, fetchComparison } from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
 import { ScoreGauge } from "@/components/ScoreGauge";
 import { MetricCard } from "@/components/MetricCard";
 import { SubScoreBar } from "@/components/SubScoreBar";
 import { CoachingCard } from "@/components/CoachingCard";
 
+const PERIODS = [
+  { key: "7d", label: "7D" },
+  { key: "30d", label: "30D" },
+  { key: "90d", label: "90D" },
+  { key: "all", label: "All" },
+] as const;
+
+function calcChange(current: number | null | undefined, avg: number | null | undefined): number | null {
+  if (current == null || avg == null || avg === 0) return null;
+  return ((current - avg) / avg) * 100;
+}
+
 export default function AnalysisDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = Colors.dark;
   const insets = useSafeAreaInsets();
+  const [period, setPeriod] = useState("30d");
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["analysis", id],
     queryFn: () => fetchAnalysisDetail(id!),
     enabled: !!id,
@@ -38,6 +51,14 @@ export default function AnalysisDetailScreen() {
       return false;
     },
   });
+
+  const { data: comparison } = useQuery({
+    queryKey: ["analysis", id, "comparison", period],
+    queryFn: () => fetchComparison(id!, period),
+    enabled: !!id && data?.analysis?.status === "completed" && !!data?.metrics,
+  });
+
+  const avg = comparison?.averages ?? null;
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
   const analysis = data?.analysis;
@@ -201,6 +222,7 @@ export default function AnalysisDetailScreen() {
               score={m.forehandPerformanceScore}
               size={160}
               label="Performance"
+              change={calcChange(m.forehandPerformanceScore, avg?.forehandPerformanceScore)}
             />
           </View>
 
@@ -214,18 +236,10 @@ export default function AnalysisDetailScreen() {
               Performance Breakdown
             </Text>
             <View style={styles.barsContainer}>
-              <SubScoreBar label="Power" score={m.powerScore} delay={200} />
-              <SubScoreBar
-                label="Stability"
-                score={m.stabilityScore}
-                delay={400}
-              />
-              <SubScoreBar label="Timing" score={m.timingScore} delay={600} />
-              <SubScoreBar
-                label="Follow-through"
-                score={m.followThroughScore}
-                delay={800}
-              />
+              <SubScoreBar label="Power" score={m.powerScore} delay={200} change={calcChange(m.powerScore, avg?.powerScore)} />
+              <SubScoreBar label="Stability" score={m.stabilityScore} delay={400} change={calcChange(m.stabilityScore, avg?.stabilityScore)} />
+              <SubScoreBar label="Timing" score={m.timingScore} delay={600} change={calcChange(m.timingScore, avg?.timingScore)} />
+              <SubScoreBar label="Follow-through" score={m.followThroughScore} delay={800} change={calcChange(m.followThroughScore, avg?.followThroughScore)} />
             </View>
           </View>
 
@@ -236,9 +250,6 @@ export default function AnalysisDetailScreen() {
                 { backgroundColor: colors.surface, borderColor: colors.border },
               ]}
             >
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Video Replay
-              </Text>
               <View style={styles.videoWrapper}>
                 <VideoView
                   player={player}
@@ -249,6 +260,36 @@ export default function AnalysisDetailScreen() {
               </View>
             </View>
           )}
+
+          <View style={styles.periodRow}>
+            {PERIODS.map((p) => (
+              <Pressable
+                key={p.key}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setPeriod(p.key);
+                }}
+                style={[
+                  styles.periodPill,
+                  period === p.key && styles.periodPillActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.periodText,
+                    period === p.key && styles.periodTextActive,
+                  ]}
+                >
+                  {p.label}
+                </Text>
+              </Pressable>
+            ))}
+            {comparison && comparison.count > 0 && (
+              <Text style={styles.periodHint}>
+                vs {comparison.count} prior
+              </Text>
+            )}
+          </View>
 
           <View style={styles.metricsSection}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
@@ -261,6 +302,7 @@ export default function AnalysisDetailScreen() {
                 value={m.wristSpeed}
                 unit="m/s"
                 color={colors.tint}
+                change={calcChange(m.wristSpeed, avg?.wristSpeed)}
               />
               <MetricCard
                 icon="body"
@@ -268,6 +310,7 @@ export default function AnalysisDetailScreen() {
                 value={m.elbowAngle}
                 unit="deg"
                 color={colors.blue}
+                change={calcChange(m.elbowAngle, avg?.elbowAngle)}
               />
               <MetricCard
                 icon="refresh-circle"
@@ -275,6 +318,7 @@ export default function AnalysisDetailScreen() {
                 value={m.shoulderRotationVelocity}
                 unit="deg/s"
                 color={colors.accent}
+                change={calcChange(m.shoulderRotationVelocity, avg?.shoulderRotationVelocity)}
               />
               <MetricCard
                 icon="footsteps"
@@ -282,6 +326,7 @@ export default function AnalysisDetailScreen() {
                 value={m.balanceStabilityScore}
                 unit="/100"
                 color={colors.amber}
+                change={calcChange(m.balanceStabilityScore, avg?.balanceStabilityScore)}
               />
             </View>
           </View>
@@ -297,6 +342,7 @@ export default function AnalysisDetailScreen() {
                 value={m.ballSpeed}
                 unit="mph"
                 color={colors.red}
+                change={calcChange(m.ballSpeed, avg?.ballSpeed)}
               />
               <MetricCard
                 icon="trending-up"
@@ -304,6 +350,7 @@ export default function AnalysisDetailScreen() {
                 value={m.ballTrajectoryArc}
                 unit="deg"
                 color={colors.blue}
+                change={calcChange(m.ballTrajectoryArc, avg?.ballTrajectoryArc)}
               />
               <MetricCard
                 icon="sync"
@@ -311,6 +358,7 @@ export default function AnalysisDetailScreen() {
                 value={m.spinEstimation}
                 unit="rpm"
                 color={colors.accent}
+                change={calcChange(m.spinEstimation, avg?.spinEstimation)}
               />
               <MetricCard
                 icon="ribbon"
@@ -318,6 +366,7 @@ export default function AnalysisDetailScreen() {
                 value={m.shotConsistencyScore}
                 unit="/100"
                 color={colors.tint}
+                change={calcChange(m.shotConsistencyScore, avg?.shotConsistencyScore)}
               />
             </View>
           </View>
@@ -333,6 +382,7 @@ export default function AnalysisDetailScreen() {
                 value={m.backswingDuration}
                 unit="s"
                 color={colors.amber}
+                change={calcChange(m.backswingDuration, avg?.backswingDuration)}
               />
               <MetricCard
                 icon="locate"
@@ -340,6 +390,7 @@ export default function AnalysisDetailScreen() {
                 value={m.contactTiming}
                 unit="s"
                 color={colors.red}
+                change={calcChange(m.contactTiming, avg?.contactTiming)}
               />
               <MetricCard
                 icon="arrow-forward-circle"
@@ -347,6 +398,7 @@ export default function AnalysisDetailScreen() {
                 value={m.followThroughDuration}
                 unit="s"
                 color={colors.tint}
+                change={calcChange(m.followThroughDuration, avg?.followThroughDuration)}
               />
               <MetricCard
                 icon="musical-notes"
@@ -354,6 +406,7 @@ export default function AnalysisDetailScreen() {
                 value={m.rhythmConsistency}
                 unit="/100"
                 color={colors.blue}
+                change={calcChange(m.rhythmConsistency, avg?.rhythmConsistency)}
               />
             </View>
           </View>
@@ -495,6 +548,37 @@ const styles = StyleSheet.create({
   videoPlayer: {
     width: "100%",
     aspectRatio: 16 / 9,
+  },
+  periodRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  periodPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: "#1A1A36",
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+  },
+  periodPillActive: {
+    backgroundColor: "#6C5CE7",
+    borderColor: "#6C5CE7",
+  },
+  periodText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#94A3B8",
+  },
+  periodTextActive: {
+    color: "#FFFFFF",
+  },
+  periodHint: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: "#64748B",
+    marginLeft: 4,
   },
   metricsSection: {
     gap: 12,

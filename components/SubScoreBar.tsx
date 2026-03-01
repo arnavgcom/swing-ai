@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { View, Text, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -11,9 +12,10 @@ interface SubScoreBarProps {
   label: string;
   score: number;
   delay?: number;
+  change?: number | null;
 }
 
-export function SubScoreBar({ label, score, delay = 0 }: SubScoreBarProps) {
+export function SubScoreBar({ label, score, delay = 0, change }: SubScoreBarProps) {
   const width = useSharedValue(0);
 
   useEffect(() => {
@@ -37,11 +39,29 @@ export function SubScoreBar({ label, score, delay = 0 }: SubScoreBarProps) {
     return "#FF6B6B";
   };
 
+  const hasChange = change !== null && change !== undefined;
+  const changeColor = hasChange ? (change >= 0 ? "#00F5A0" : "#FF6B6B") : null;
+
   return (
     <View style={styles.container}>
       <View style={styles.labelRow}>
         <Text style={styles.label}>{label}</Text>
-        <Text style={[styles.score, { color: getColor() }]}>{score}</Text>
+        <View style={styles.scoreRow}>
+          {hasChange && changeColor && (
+            <View style={styles.changeRow}>
+              <Ionicons
+                name={change >= 0 ? "caret-up" : "caret-down"}
+                size={10}
+                color={changeColor}
+              />
+              <Text style={[styles.changeText, { color: changeColor }]}>
+                {change >= 0 ? "+" : ""}
+                {change.toFixed(1)}%
+              </Text>
+            </View>
+          )}
+          <Text style={[styles.score, { color: getColor() }]}>{score}</Text>
+        </View>
       </View>
       <View style={styles.track}>
         <Animated.View
@@ -64,9 +84,23 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     color: "#F8FAFC",
   },
+  scoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   score: {
     fontSize: 16,
     fontFamily: "Inter_700Bold",
+  },
+  changeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  changeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
   },
   track: {
     height: 8,

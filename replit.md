@@ -32,7 +32,7 @@ All data is stored entirely on Replit:
 ### Backend
 - `server/index.ts` — Express app entry point (port 5000)
 - `server/auth.ts` — Authentication routes (register, login, logout, me) + profile routes (GET/PUT /api/profile, POST /api/profile/avatar) + session setup
-- `server/routes.ts` — API routes: sports, upload, analyses CRUD
+- `server/routes.ts` — API routes: sports, upload, analyses CRUD, comparison endpoint (GET /api/analyses/:id/comparison?period=7d|30d|90d|all)
 - `server/analysis-engine.ts` — Calls Python analysis via child_process.execFile, stores results in DB
 - `server/storage.ts` — DatabaseStorage class (Drizzle ORM CRUD operations)
 - `server/seed-sports.ts` — Seeds 6 sports + movements on first startup
@@ -54,7 +54,7 @@ All data is stored entirely on Replit:
 - `app/(tabs)/index.tsx` — Dashboard with sport pill, gradient stat cards, analysis list; avatar icon navigates to profile
 - `app/(tabs)/upload.tsx` — Video upload with gradient background
 - `app/(tabs)/history.tsx` — Analysis history list with gradient background
-- `app/analysis/[id].tsx` — Analysis detail screen with gradient background, inline video player (expo-video) after Performance Breakdown
+- `app/analysis/[id].tsx` — Analysis detail screen with gradient background, inline video player (expo-video), metric comparison with time period selector (7D/30D/90D/All)
 - `lib/auth-context.tsx` — Auth context provider (login, register, logout, refreshUser, user state with profile fields)
 - `lib/sport-context.tsx` — Sport context provider (selected sport/movement, persisted to AsyncStorage)
 - `lib/query-client.ts` — React Query client with API URL configuration

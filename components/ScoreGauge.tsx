@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import Svg, { Circle } from "react-native-svg";
+import { Ionicons } from "@expo/vector-icons";
 import Animated, {
   useAnimatedProps,
   useSharedValue,
@@ -16,6 +17,7 @@ interface ScoreGaugeProps {
   size?: number;
   strokeWidth?: number;
   label?: string;
+  change?: number | null;
 }
 
 export function ScoreGauge({
@@ -23,6 +25,7 @@ export function ScoreGauge({
   size = 140,
   strokeWidth = 10,
   label,
+  change,
 }: ScoreGaugeProps) {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
@@ -45,6 +48,9 @@ export function ScoreGauge({
     if (score >= 40) return "#FFD93D";
     return "#FF6B6B";
   };
+
+  const hasChange = change !== null && change !== undefined;
+  const changeColor = hasChange ? (change >= 0 ? "#00F5A0" : "#FF6B6B") : null;
 
   return (
     <View style={styles.container}>
@@ -87,6 +93,19 @@ export function ScoreGauge({
             {label}
           </Text>
         )}
+        {hasChange && changeColor && (
+          <View style={styles.changeRow}>
+            <Ionicons
+              name={change >= 0 ? "caret-up" : "caret-down"}
+              size={12}
+              color={changeColor}
+            />
+            <Text style={[styles.changeText, { color: changeColor }]}>
+              {change >= 0 ? "+" : ""}
+              {change.toFixed(1)}%
+            </Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -111,5 +130,15 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
     color: "#94A3B8",
+  },
+  changeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    marginTop: 4,
+  },
+  changeText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
   },
 });

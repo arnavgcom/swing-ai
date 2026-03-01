@@ -132,6 +132,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/analyses/:id/comparison", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const analysis = await storage.getAnalysis(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+
+      const periodMap: Record<string, number | null> = {
+        "7d": 7,
+        "30d": 30,
+        "90d": 90,
+        "all": null,
+      };
+      const period = (req.query.period as string) || "30d";
+      if (!(period in periodMap)) {
+        return res.status(400).json({ error: "Invalid period. Use 7d, 30d, 90d, or all." });
+      }
+      const periodDays = periodMap[period];
+
+      const result = await storage.getHistoricalMetricAverages(
+        analysis.userId!,
+        new Date(analysis.createdAt),
+        periodDays,
+        analysis.sportId,
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Comparison error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.delete("/api/analyses/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const analysis = await storage.getAnalysis(req.params.id);

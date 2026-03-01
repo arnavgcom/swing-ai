@@ -8,10 +8,25 @@ interface MetricCardProps {
   value: string | number;
   unit?: string;
   color?: string;
+  change?: number | null;
 }
 
-export function MetricCard({ icon, label, value, unit, color }: MetricCardProps) {
+export function MetricCard({ icon, label, value, unit, color, change }: MetricCardProps) {
   const accentColor = color || "#6C5CE7";
+
+  const changeColor =
+    change !== null && change !== undefined
+      ? change >= 0
+        ? "#00F5A0"
+        : "#FF6B6B"
+      : null;
+
+  const changeIcon =
+    change !== null && change !== undefined
+      ? change >= 0
+        ? ("caret-up" as const)
+        : ("caret-down" as const)
+      : null;
 
   return (
     <View style={styles.card}>
@@ -23,6 +38,15 @@ export function MetricCard({ icon, label, value, unit, color }: MetricCardProps)
         <Text style={styles.value}>{value}</Text>
         {unit && <Text style={styles.unit}>{unit}</Text>}
       </View>
+      {change !== null && change !== undefined && changeColor && changeIcon && (
+        <View style={styles.changeRow}>
+          <Ionicons name={changeIcon} size={12} color={changeColor} />
+          <Text style={[styles.changeText, { color: changeColor }]}>
+            {change >= 0 ? "+" : ""}
+            {change.toFixed(1)}%
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -67,5 +91,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_400Regular",
     color: "#94A3B8",
+  },
+  changeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginTop: 2,
+  },
+  changeText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
   },
 });

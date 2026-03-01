@@ -72,6 +72,23 @@ export async function fetchAnalysisDetail(
   return res.json();
 }
 
+export interface ComparisonResponse {
+  averages: Record<string, number> | null;
+  count: number;
+}
+
+export async function fetchComparison(
+  id: string,
+  period: string,
+): Promise<ComparisonResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/analyses/${id}/comparison?period=${period}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch comparison");
+  return res.json();
+}
+
 export async function deleteAnalysis(id: string): Promise<void> {
   const baseUrl = getApiUrl();
   const res = await fetch(`${baseUrl}api/analyses/${id}`, {
