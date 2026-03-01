@@ -2,54 +2,74 @@ import cv2
 import numpy as np
 import mediapipe as mp
 import math
+import os
 from typing import List, Dict, Optional, Tuple
+
+BaseOptions = mp.tasks.BaseOptions
+PoseLandmarker = mp.tasks.vision.PoseLandmarker
+PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
+RunningMode = mp.tasks.vision.RunningMode
 
 
 class PoseDetector:
+    LANDMARK_MAP = {
+        0: "nose",
+        11: "left_shoulder",
+        12: "right_shoulder",
+        13: "left_elbow",
+        14: "right_elbow",
+        15: "left_wrist",
+        16: "right_wrist",
+        23: "left_hip",
+        24: "right_hip",
+        25: "left_knee",
+        26: "right_knee",
+        27: "left_ankle",
+        28: "right_ankle",
+    }
+
     def __init__(self):
-        self.mp_pose = mp.solutions.pose
-        self.pose = self.mp_pose.Pose(
-            static_image_mode=False,
-            model_complexity=1,
-            smooth_landmarks=True,
-            min_detection_confidence=0.5,
+        model_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "models",
+            "pose_landmarker_lite.task",
+        )
+
+        options = PoseLandmarkerOptions(
+            base_options=BaseOptions(model_asset_path=model_path),
+            running_mode=RunningMode.VIDEO,
+            num_poses=1,
+            min_pose_detection_confidence=0.5,
             min_tracking_confidence=0.5,
         )
-        self.landmark_names = {
-            0: "nose",
-            11: "left_shoulder",
-            12: "right_shoulder",
-            13: "left_elbow",
-            14: "right_elbow",
-            15: "left_wrist",
-            16: "right_wrist",
-            23: "left_hip",
-            24: "right_hip",
-            25: "left_knee",
-            26: "right_knee",
-            27: "left_ankle",
-            28: "right_ankle",
-        }
+        self.landmarker = PoseLandmarker.create_from_options(options)
+        self._timestamp_ms = 0
 
     def detect(self, frame: np.ndarray) -> Optional[Dict]:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.pose.process(rgb)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
-        if not results.pose_landmarks:
+        self._timestamp_ms += 33
+        result = self.landmarker.detect_for_video(mp_image, self._timestamp_ms)
+
+        if not result.pose_landmarks or len(result.pose_landmarks) == 0:
             return None
 
         h, w = frame.shape[:2]
+        pose = result.pose_landmarks[0]
         landmarks = {}
-        for idx, name in self.landmark_names.items():
-            lm = results.pose_landmarks.landmark[idx]
-            landmarks[name] = {
-                "x": lm.x * w,
-                "y": lm.y * h,
-                "z": lm.z,
-                "visibility": lm.visibility,
-            }
 
-        return landmarks
+        for idx, name in self.LANDMARK_MAP.items():
+            if idx < len(pose):
+                lm = pose[idx]
+                landmarks[name] = {
+                    "x": lm.x * w,
+                    "y": lm.y * h,
+                    "z": lm.z,
+                    "visibility": lm.visibility,
+                }
+
+        return landmarks if landmarks else None
 
     @staticmethod
     def calc_angle(a: Dict, b: Dict, c: Dict) -> float:
@@ -71,4 +91,4 @@ class PoseDetector:
         return float(math.sqrt(dx**2 + dy**2) / dt)
 
     def close(self):
-        self.pose.close()
+        self.landmarker.close()
