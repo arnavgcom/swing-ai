@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -15,20 +15,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
 
-WebBrowser.maybeCompleteAuthSession();
-
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "";
-
-const discovery = {
-  authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
-  tokenEndpoint: "https://oauth2.googleapis.com/token",
-  revocationEndpoint: "https://oauth2.googleapis.com/revoke",
-};
 
 export default function LoginScreen() {
   const colors = Colors.dark;
@@ -44,36 +35,6 @@ export default function LoginScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
-
-  const redirectUri = AuthSession.makeRedirectUri({
-    scheme: "acexai",
-    path: "redirect",
-  });
-
-  const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: GOOGLE_CLIENT_ID,
-      scopes: ["openid", "profile", "email"],
-      redirectUri,
-      responseType: AuthSession.ResponseType.Token,
-      usePKCE: false,
-    },
-    discovery,
-  );
-
-  useEffect(() => {
-    if (response?.type === "success") {
-      const { access_token } = response.params;
-      if (access_token) {
-        handleGoogleToken(access_token);
-      }
-    } else if (response?.type === "error") {
-      setGoogleLoading(false);
-      Alert.alert("Google Sign-In Failed", response.error?.message || "Something went wrong");
-    } else if (response?.type === "dismiss") {
-      setGoogleLoading(false);
-    }
-  }, [response]);
 
   const handleGoogleToken = async (accessToken: string) => {
     setGoogleLoading(true);
@@ -102,8 +63,35 @@ export default function LoginScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setGoogleLoading(true);
     try {
-      await promptAsync();
-    } catch (e) {
+      const redirectUri = Platform.select({
+        web: typeof window !== "undefined" ? window.location.origin + "/login" : "",
+        default: "https://auth.expo.io/@anonymous/acex-ai",
+      }) || "";
+
+      const authUrl =
+        `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&response_type=token` +
+        `&scope=${encodeURIComponent("openid profile email")}`;
+
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+
+      if (result.type === "success" && result.url) {
+        const urlFragment = result.url.split("#")[1];
+        if (urlFragment) {
+          const params = new URLSearchParams(urlFragment);
+          const accessToken = params.get("access_token");
+          if (accessToken) {
+            await handleGoogleToken(accessToken);
+            return;
+          }
+        }
+        Alert.alert("Error", "Could not get access token from Google");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Google sign-in failed");
+    } finally {
       setGoogleLoading(false);
     }
   };
