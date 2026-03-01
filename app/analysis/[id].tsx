@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -14,8 +14,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import { useVideoPlayer, VideoView } from "expo-video";
 import Colors from "@/constants/colors";
 import { fetchAnalysisDetail } from "@/lib/api";
+import { getApiUrl } from "@/lib/query-client";
 import { ScoreGauge } from "@/components/ScoreGauge";
 import { MetricCard } from "@/components/MetricCard";
 import { SubScoreBar } from "@/components/SubScoreBar";
@@ -41,6 +43,22 @@ export default function AnalysisDetailScreen() {
   const analysis = data?.analysis;
   const m = data?.metrics;
   const coaching = data?.coaching;
+
+  const videoUrl = useMemo(() => {
+    if (!analysis?.videoPath) return null;
+    try {
+      const filename = analysis.videoPath.split("/").pop();
+      if (!filename) return null;
+      const base = getApiUrl();
+      return new URL(`/uploads/${filename}`, base).href;
+    } catch {
+      return null;
+    }
+  }, [analysis?.videoPath]);
+
+  const player = useVideoPlayer(videoUrl ?? "about:blank", (p) => {
+    p.loop = false;
+  });
 
   if (isLoading) {
     return (
@@ -210,6 +228,27 @@ export default function AnalysisDetailScreen() {
               />
             </View>
           </View>
+
+          {videoUrl && (
+            <View
+              style={[
+                styles.section,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Video Replay
+              </Text>
+              <View style={styles.videoWrapper}>
+                <VideoView
+                  player={player}
+                  style={styles.videoPlayer}
+                  contentFit="contain"
+                  nativeControls
+                />
+              </View>
+            </View>
+          )}
 
           <View style={styles.metricsSection}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
@@ -447,6 +486,15 @@ const styles = StyleSheet.create({
   },
   barsContainer: {
     gap: 14,
+  },
+  videoWrapper: {
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#000",
+  },
+  videoPlayer: {
+    width: "100%",
+    aspectRatio: 16 / 9,
   },
   metricsSection: {
     gap: 12,

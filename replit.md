@@ -7,7 +7,7 @@
 - **Database**: Replit PostgreSQL via Drizzle ORM — stores users, sports, sport_movements, analyses, metrics, coaching_insights tables
 - **Video Storage**: Local `uploads/` folder on Replit filesystem
 - **ML Pipeline**: Python 3.11 with OpenCV (frame extraction), MediaPipe Tasks API v0.10.32 (pose detection), HSV ball tracking
-- **Auth**: Email/password + Google OAuth (expo-auth-session) with express-session + connect-pg-simple (session stored in PostgreSQL). Google Client ID via `EXPO_PUBLIC_GOOGLE_CLIENT_ID` env var.
+- **Auth**: Email/password + Google OAuth (WebBrowser.openAuthSessionAsync + backend bridge page at `/api/auth/google/mobile-callback`) with express-session + connect-pg-simple (session stored in PostgreSQL). Google Client ID via `EXPO_PUBLIC_GOOGLE_CLIENT_ID` env var.
 
 ## Design System
 
@@ -54,7 +54,7 @@ All data is stored entirely on Replit:
 - `app/(tabs)/index.tsx` — Dashboard with sport pill, gradient stat cards, analysis list; avatar icon navigates to profile
 - `app/(tabs)/upload.tsx` — Video upload with gradient background
 - `app/(tabs)/history.tsx` — Analysis history list with gradient background
-- `app/analysis/[id].tsx` — Analysis detail screen with gradient background
+- `app/analysis/[id].tsx` — Analysis detail screen with gradient background, inline video player (expo-video) after Performance Breakdown
 - `lib/auth-context.tsx` — Auth context provider (login, register, logout, refreshUser, user state with profile fields)
 - `lib/sport-context.tsx` — Sport context provider (selected sport/movement, persisted to AsyncStorage)
 - `lib/query-client.ts` — React Query client with API URL configuration
