@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, useColorScheme } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import Animated, {
   useAnimatedProps,
@@ -8,7 +8,6 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 import { useEffect } from "react";
-import Colors from "@/constants/colors";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -25,10 +24,6 @@ export function ScoreGauge({
   strokeWidth = 10,
   label,
 }: ScoreGaugeProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const colors = isDark ? Colors.dark : Colors.light;
-
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const progress = useSharedValue(0);
@@ -45,10 +40,10 @@ export function ScoreGauge({
   }));
 
   const getScoreColor = () => {
-    if (score >= 80) return colors.tint;
-    if (score >= 60) return colors.accent;
-    if (score >= 40) return colors.amber;
-    return colors.red;
+    if (score >= 80) return "#00F5A0";
+    if (score >= 60) return "#4CC9F0";
+    if (score >= 40) return "#FFD93D";
+    return "#FF6B6B";
   };
 
   return (
@@ -58,7 +53,7 @@ export function ScoreGauge({
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={colors.border}
+          stroke="#2A2A50"
           strokeWidth={strokeWidth}
           fill="none"
           strokeLinecap="round"
@@ -87,7 +82,7 @@ export function ScoreGauge({
         </Text>
         {label && (
           <Text
-            style={[styles.label, { color: colors.textSecondary, fontSize: size * 0.09 }]}
+            style={[styles.label, { fontSize: size * 0.09 }]}
           >
             {label}
           </Text>
@@ -115,5 +110,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textTransform: "uppercase",
     letterSpacing: 1,
+    color: "#94A3B8",
   },
 });

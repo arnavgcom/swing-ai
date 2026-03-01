@@ -15,22 +15,13 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { SportProvider, useSport } from "@/lib/sport-context";
-import {
-  View,
-  ActivityIndicator,
-  useColorScheme,
-} from "react-native";
-import Colors from "@/constants/colors";
+import { View, ActivityIndicator } from "react-native";
 
 SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {
   const { user, isLoading } = useAuth();
   const { selectedSport } = useSport();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const colors = isDark ? Colors.dark : Colors.light;
-
   if (isLoading) {
     return (
       <View
@@ -38,10 +29,10 @@ function RootNavigator() {
           flex: 1,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: colors.background,
+          backgroundColor: "#0A0A1A",
         }}
       >
-        <ActivityIndicator size="large" color={colors.tint} />
+        <ActivityIndicator size="large" color="#6C5CE7" />
       </View>
     );
   }

@@ -3,10 +3,10 @@ import {
   StyleSheet,
   Text,
   View,
+  ScrollView,
   Pressable,
   ActivityIndicator,
   Alert,
-  useColorScheme,
   Platform,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
@@ -15,14 +15,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
 import { uploadVideo } from "@/lib/api";
 import { useSport } from "@/lib/sport-context";
 
 export default function UploadScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const colors = isDark ? Colors.dark : Colors.light;
+  const colors = Colors.dark;
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { selectedSport, selectedMovement } = useSport();
@@ -85,12 +84,18 @@ export default function UploadScreen() {
   const movementLabel = selectedMovement?.name || selectedSport?.name || "Performance";
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View
-        style={[
+    <View style={styles.container}>
+      <LinearGradient
+        colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
+        style={StyleSheet.absoluteFill}
+      />
+      <ScrollView
+        contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 16 + webTopInset },
+          { paddingTop: insets.top + 16 + webTopInset, paddingBottom: 100 },
         ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         <Text style={[styles.title, { color: colors.text }]}>
           Analyze {movementLabel}
@@ -257,13 +262,13 @@ export default function UploadScreen() {
             </View>
           ))}
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: "#0A0A1A" },
   content: {
     flex: 1,
     paddingHorizontal: 20,

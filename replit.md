@@ -7,7 +7,18 @@
 - **Database**: Replit PostgreSQL via Drizzle ORM — stores users, sports, sport_movements, analyses, metrics, coaching_insights tables
 - **Video Storage**: Local `uploads/` folder on Replit filesystem
 - **ML Pipeline**: Python 3.11 with OpenCV (frame extraction), MediaPipe Tasks API v0.10.32 (pose detection), HSV ball tracking
-- **Auth**: Email/password with express-session + connect-pg-simple (session stored in PostgreSQL)
+- **Auth**: Email/password with express-session + connect-pg-simple (session stored in PostgreSQL); Google login button (placeholder)
+
+## Design System
+
+- **Theme**: Premium dark midnight theme — always dark, no light mode toggle
+- **Background**: Midnight (#0A0A1A) with subtle gradient (#0F0F2E)
+- **Primary**: Purple (#6C5CE7, light: #A29BFE)
+- **Accent**: Neon green (#00F5A0)
+- **Surfaces**: Dark card (#131328), borders (#2A2A50)
+- **Sport-specific colors**: Tennis green, Golf cyan, Pickleball amber, Paddle purple, Badminton red, Table Tennis blue (defined in `sportColors` export in `constants/colors.ts`)
+- **Typography**: Inter font family (400/500/600/700 weights)
+- **All screens use `LinearGradient` backgrounds and consistent dark surface styling**
 
 ## Data Storage
 
@@ -36,19 +47,19 @@ All data is stored entirely on Replit:
 
 ### Frontend
 - `app/_layout.tsx` — Root layout: auth routing (login → sport-select → tabs)
-- `app/login.tsx` — Login/Register screen with email/password + social placeholders
-- `app/sport-select.tsx` — Sport selection with expandable movement hierarchy
-- `app/(tabs)/_layout.tsx` — Tab navigator (Dashboard, Upload, History)
-- `app/(tabs)/index.tsx` — Dashboard with sport context, user greeting, stats
-- `app/(tabs)/upload.tsx` — Video upload with sport/movement context
-- `app/(tabs)/history.tsx` — Analysis history list
-- `app/analysis/[id].tsx` — Analysis detail screen
+- `app/login.tsx` — Login screen: Google button + email/password fallback, purple/neon gradient branding
+- `app/sport-select.tsx` — Sport selection with 2-column gradient grid cards → movement list
+- `app/(tabs)/_layout.tsx` — Tab navigator (Dashboard, Upload, History) with neon green active tab
+- `app/(tabs)/index.tsx` — Dashboard with sport pill, gradient stat cards, analysis list
+- `app/(tabs)/upload.tsx` — Video upload with gradient background
+- `app/(tabs)/history.tsx` — Analysis history list with gradient background
+- `app/analysis/[id].tsx` — Analysis detail screen with gradient background
 - `lib/auth-context.tsx` — Auth context provider (login, register, logout, user state)
 - `lib/sport-context.tsx` — Sport context provider (selected sport/movement, persisted to AsyncStorage)
 - `lib/query-client.ts` — React Query client with API URL configuration
 - `lib/api.ts` — API helper functions (fetchAnalyses, uploadVideo, etc.)
-- `components/` — ScoreGauge, MetricCard, SubScoreBar, CoachingCard, AnalysisCard
-- `constants/colors.ts` — Theme colors (dark/light with emerald primary)
+- `components/` — ScoreGauge, MetricCard, SubScoreBar, CoachingCard, AnalysisCard (all dark-themed)
+- `constants/colors.ts` — Theme colors (midnight/purple/neon palette) + `sportColors` map
 
 ### Schema
 - `shared/schema.ts` — Drizzle schema: users, sports, sport_movements, analyses, metrics, coaching_insights
@@ -65,7 +76,7 @@ All data is stored entirely on Replit:
 
 ## Dependencies
 
-- **Node**: express, express-session, connect-pg-simple, bcryptjs, multer, drizzle-orm, @tanstack/react-query, expo-router
+- **Node**: express, express-session, connect-pg-simple, bcryptjs, multer, drizzle-orm, @tanstack/react-query, expo-router, expo-linear-gradient
 - **Python**: opencv-python-headless, mediapipe (0.10.32), numpy
 
 ## Workflows

@@ -6,13 +6,13 @@ import {
   ScrollView,
   ActivityIndicator,
   Pressable,
-  useColorScheme,
   Platform,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { fetchAnalysisDetail } from "@/lib/api";
@@ -23,9 +23,7 @@ import { CoachingCard } from "@/components/CoachingCard";
 
 export default function AnalysisDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const colors = isDark ? Colors.dark : Colors.light;
+  const colors = Colors.dark;
   const insets = useSafeAreaInsets();
 
   const { data, isLoading, refetch } = useQuery({
@@ -46,34 +44,24 @@ export default function AnalysisDetailScreen() {
 
   if (isLoading) {
     return (
-      <View
-        style={[
-          styles.container,
-          styles.center,
-          { backgroundColor: colors.background },
-        ]}
-      >
-        <ActivityIndicator size="large" color={colors.tint} />
+      <View style={[styles.container, styles.center]}>
+        <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+        <ActivityIndicator size="large" color="#6C5CE7" />
       </View>
     );
   }
 
   if (!analysis) {
     return (
-      <View
-        style={[
-          styles.container,
-          styles.center,
-          { backgroundColor: colors.background },
-        ]}
-      >
-        <Ionicons name="alert-circle-outline" size={48} color={colors.red} />
-        <Text style={[styles.errorText, { color: colors.text }]}>
+      <View style={[styles.container, styles.center]}>
+        <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+        <Ionicons name="alert-circle-outline" size={48} color="#FF6B6B" />
+        <Text style={[styles.errorText, { color: "#F8FAFC" }]}>
           Analysis not found
         </Text>
         <Pressable
           onPress={() => router.back()}
-          style={[styles.backButton, { backgroundColor: colors.tint }]}
+          style={[styles.backButton, { backgroundColor: "#6C5CE7" }]}
         >
           <Text style={styles.backButtonText}>Go Back</Text>
         </Pressable>
@@ -85,14 +73,12 @@ export default function AnalysisDetailScreen() {
     analysis.status === "pending" || analysis.status === "processing";
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
+      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
       <View
         style={[
           styles.topBar,
-          {
-            paddingTop: insets.top + 8 + webTopInset,
-            backgroundColor: colors.background,
-          },
+          { paddingTop: insets.top + 8 + webTopInset },
         ]}
       >
         <Pressable
@@ -414,6 +400,7 @@ export default function AnalysisDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#0A0A1A",
   },
   center: {
     alignItems: "center",

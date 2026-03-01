@@ -6,18 +6,20 @@ import {
   Pressable,
   ScrollView,
   ActivityIndicator,
-  useColorScheme,
   Platform,
+  Dimensions,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import Colors from "@/constants/colors";
+import Colors, { sportColors } from "@/constants/colors";
 import { useSport } from "@/lib/sport-context";
-import { getApiUrl } from "@/lib/query-client";
-import { fetch } from "expo/fetch";
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const CARD_WIDTH = (SCREEN_WIDTH - 56 - 12) / 2;
 
 interface Sport {
   id: string;
@@ -35,13 +37,9 @@ interface Movement {
 }
 
 export default function SportSelectScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const colors = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
   const { setSport, setMovement } = useSport();
-
-  const [expandedSportId, setExpandedSportId] = useState<string | null>(null);
+  const [selectedSport, setSelectedSport] = useState<Sport | null>(null);
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
 
@@ -50,26 +48,23 @@ export default function SportSelectScreen() {
   });
 
   const { data: movements } = useQuery<Movement[]>({
-    queryKey: ["/api/sports", expandedSportId, "movements"],
-    enabled: !!expandedSportId,
+    queryKey: ["/api/sports", selectedSport?.id, "movements"],
+    enabled: !!selectedSport,
   });
 
   const handleSportPress = (sport: Sport) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (expandedSportId === sport.id) {
-      setExpandedSportId(null);
-    } else {
-      setExpandedSportId(sport.id);
-    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSelectedSport(sport);
   };
 
-  const handleMovementSelect = (sport: Sport, movement: Movement) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const handleMovementSelect = (movement: Movement) => {
+    if (!selectedSport) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setSport({
-      id: sport.id,
-      name: sport.name,
-      icon: sport.icon,
-      color: sport.color,
+      id: selectedSport.id,
+      name: selectedSport.name,
+      icon: selectedSport.icon,
+      color: selectedSport.color,
     });
     setMovement({
       id: movement.id,
@@ -79,24 +74,43 @@ export default function SportSelectScreen() {
     router.replace("/(tabs)");
   };
 
-  const handleSportOnly = (sport: Sport) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const handleAutoDetect = () => {
+    if (!selectedSport) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setSport({
-      id: sport.id,
-      name: sport.name,
-      icon: sport.icon,
-      color: sport.color,
+      id: selectedSport.id,
+      name: selectedSport.name,
+      icon: selectedSport.icon,
+      color: selectedSport.color,
     });
     setMovement(null);
     router.replace("/(tabs)");
   };
 
-  const iconName = (name: string): keyof typeof Ionicons.glyphMap => {
-    return name as keyof typeof Ionicons.glyphMap;
+  const icon = (name: string) => name as keyof typeof Ionicons.glyphMap;
+
+  const getSportColors = (sportName: string) => {
+    return sportColors[sportName] || { primary: "#6C5CE7", gradient: "#5A4BD1" };
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
+
+      {selectedSport && (
+        <View
+          style={[
+            styles.glowOrb,
+            { backgroundColor: getSportColors(selectedSport.name).primary + "20" },
+          ]}
+        />
+      )}
+
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -107,148 +121,159 @@ export default function SportSelectScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>
-            CHOOSE YOUR SPORT
-          </Text>
-          <Text style={[styles.title, { color: colors.text }]}>
-            What are you training?
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Select a sport and movement to get personalized AI analysis
-          </Text>
-        </View>
+        {!selectedSport ? (
+          <>
+            <View style={styles.header}>
+              <Text style={styles.headerLabel}>SELECT YOUR SPORT</Text>
+              <Text style={styles.headerTitle}>
+                What do you{"\n"}
+                <Text style={styles.headerTitleAccent}>play?</Text>
+              </Text>
+            </View>
 
-        {isLoading ? (
-          <ActivityIndicator size="large" color={colors.tint} style={{ marginTop: 40 }} />
-        ) : (
-          <View style={styles.sportsList}>
-            {sportsData?.map((sport) => {
-              const isExpanded = expandedSportId === sport.id;
-              return (
-                <View key={sport.id}>
-                  <Pressable
-                    onPress={() => handleSportPress(sport)}
-                    style={({ pressed }) => [
-                      styles.sportCard,
-                      {
-                        backgroundColor: isExpanded
-                          ? sport.color + "15"
-                          : colors.surface,
-                        borderColor: isExpanded ? sport.color + "40" : colors.border,
-                        transform: [{ scale: pressed ? 0.98 : 1 }],
-                      },
-                    ]}
-                  >
-                    <View style={styles.sportCardContent}>
-                      <View
-                        style={[
-                          styles.sportIconWrap,
-                          { backgroundColor: sport.color + "20" },
-                        ]}
+            {isLoading ? (
+              <ActivityIndicator size="large" color="#6C5CE7" style={{ marginTop: 60 }} />
+            ) : (
+              <View style={styles.sportGrid}>
+                {sportsData?.map((sport) => {
+                  const sc = getSportColors(sport.name);
+                  return (
+                    <Pressable
+                      key={sport.id}
+                      onPress={() => handleSportPress(sport)}
+                      style={({ pressed }) => [
+                        styles.sportCard,
+                        { transform: [{ scale: pressed ? 0.95 : 1 }] },
+                      ]}
+                    >
+                      <LinearGradient
+                        colors={[sc.primary + "25", sc.gradient + "10"]}
+                        style={styles.sportCardInner}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
                       >
-                        <Ionicons
-                          name={iconName(sport.icon)}
-                          size={24}
-                          color={sport.color}
-                        />
-                      </View>
-                      <View style={styles.sportInfo}>
-                        <Text style={[styles.sportName, { color: colors.text }]}>
-                          {sport.name}
-                        </Text>
-                        <Text
-                          style={[styles.sportDesc, { color: colors.textSecondary }]}
-                          numberOfLines={1}
-                        >
+                        <View style={[styles.sportIconCircle, { backgroundColor: sc.primary + "30" }]}>
+                          <Ionicons name={icon(sport.icon)} size={28} color={sc.primary} />
+                        </View>
+                        <Text style={styles.sportCardName}>{sport.name}</Text>
+                        <Text style={styles.sportCardDesc} numberOfLines={2}>
                           {sport.description}
                         </Text>
-                      </View>
-                      <Ionicons
-                        name={isExpanded ? "chevron-up" : "chevron-down"}
-                        size={20}
-                        color={colors.textSecondary}
-                      />
-                    </View>
-                  </Pressable>
+                        <View style={[styles.sportCardArrow, { backgroundColor: sc.primary + "20" }]}>
+                          <Ionicons name="arrow-forward" size={14} color={sc.primary} />
+                        </View>
+                      </LinearGradient>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </>
+        ) : (
+          <>
+            <View style={styles.movementHeader}>
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSelectedSport(null);
+                }}
+                style={styles.backButton}
+              >
+                <Ionicons name="arrow-back" size={20} color="#CBD5E1" />
+              </Pressable>
+              <View style={styles.movementHeaderText}>
+                <Text style={styles.headerLabel}>{selectedSport.name.toUpperCase()}</Text>
+                <Text style={styles.movementTitle}>
+                  Choose your{"\n"}
+                  <Text style={{ color: getSportColors(selectedSport.name).primary }}>
+                    focus
+                  </Text>
+                </Text>
+              </View>
+            </View>
 
-                  {isExpanded && (
-                    <View style={styles.movementsList}>
-                      {movements ? (
-                        <>
-                          {movements.map((movement) => (
-                            <Pressable
-                              key={movement.id}
-                              onPress={() => handleMovementSelect(sport, movement)}
-                              style={({ pressed }) => [
-                                styles.movementCard,
-                                {
-                                  backgroundColor: colors.surface,
-                                  borderColor: colors.border,
-                                  transform: [{ scale: pressed ? 0.97 : 1 }],
-                                },
-                              ]}
-                            >
-                              <View
-                                style={[
-                                  styles.movementIcon,
-                                  { backgroundColor: sport.color + "15" },
-                                ]}
-                              >
-                                <Ionicons
-                                  name={iconName(movement.icon)}
-                                  size={16}
-                                  color={sport.color}
-                                />
-                              </View>
-                              <View style={styles.movementInfo}>
-                                <Text
-                                  style={[styles.movementName, { color: colors.text }]}
-                                >
-                                  {movement.name}
-                                </Text>
-                                <Text
-                                  style={[
-                                    styles.movementDesc,
-                                    { color: colors.textSecondary },
-                                  ]}
-                                  numberOfLines={1}
-                                >
-                                  {movement.description}
-                                </Text>
-                              </View>
-                              <Ionicons
-                                name="arrow-forward"
-                                size={16}
-                                color={sport.color}
-                              />
-                            </Pressable>
-                          ))}
-                          <Pressable
-                            onPress={() => handleSportOnly(sport)}
-                            style={[
-                              styles.allButton,
-                              { borderColor: sport.color + "40" },
-                            ]}
-                          >
-                            <Text style={[styles.allButtonText, { color: sport.color }]}>
-                              All {sport.name} (Auto-detect)
-                            </Text>
-                          </Pressable>
-                        </>
-                      ) : (
-                        <ActivityIndicator
-                          size="small"
-                          color={sport.color}
-                          style={{ paddingVertical: 16 }}
-                        />
-                      )}
-                    </View>
-                  )}
+            <View style={[styles.selectedSportBanner]}>
+              <LinearGradient
+                colors={[
+                  getSportColors(selectedSport.name).primary + "20",
+                  getSportColors(selectedSport.name).gradient + "10",
+                ]}
+                style={styles.bannerGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0.5 }}
+              >
+                <View style={[styles.bannerIcon, { backgroundColor: getSportColors(selectedSport.name).primary + "30" }]}>
+                  <Ionicons
+                    name={icon(selectedSport.icon)}
+                    size={32}
+                    color={getSportColors(selectedSport.name).primary}
+                  />
                 </View>
-              );
-            })}
-          </View>
+                <View style={styles.bannerInfo}>
+                  <Text style={styles.bannerName}>{selectedSport.name}</Text>
+                  <Text style={styles.bannerDesc}>{selectedSport.description}</Text>
+                </View>
+              </LinearGradient>
+            </View>
+
+            {movements ? (
+              <View style={styles.movementsList}>
+                {movements.map((movement, idx) => {
+                  const sc = getSportColors(selectedSport.name);
+                  return (
+                    <Pressable
+                      key={movement.id}
+                      onPress={() => handleMovementSelect(movement)}
+                      style={({ pressed }) => [
+                        styles.movementCard,
+                        { transform: [{ scale: pressed ? 0.97 : 1 }] },
+                      ]}
+                    >
+                      <View style={[styles.movementIndex, { backgroundColor: sc.primary + "20" }]}>
+                        <Text style={[styles.movementIndexText, { color: sc.primary }]}>
+                          {idx + 1}
+                        </Text>
+                      </View>
+                      <View style={styles.movementInfo}>
+                        <Text style={styles.movementName}>{movement.name}</Text>
+                        <Text style={styles.movementDesc}>{movement.description}</Text>
+                      </View>
+                      <View style={[styles.movementArrow, { backgroundColor: sc.primary + "15" }]}>
+                        <Ionicons name="chevron-forward" size={16} color={sc.primary} />
+                      </View>
+                    </Pressable>
+                  );
+                })}
+
+                <Pressable
+                  onPress={handleAutoDetect}
+                  style={({ pressed }) => [
+                    styles.autoDetectButton,
+                    { transform: [{ scale: pressed ? 0.97 : 1 }] },
+                  ]}
+                >
+                  <LinearGradient
+                    colors={[
+                      getSportColors(selectedSport.name).primary,
+                      getSportColors(selectedSport.name).gradient,
+                    ]}
+                    style={styles.autoDetectGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Ionicons name="scan-outline" size={18} color="#fff" />
+                    <Text style={styles.autoDetectText}>Auto-Detect Movement</Text>
+                  </LinearGradient>
+                </Pressable>
+              </View>
+            ) : (
+              <ActivityIndicator
+                size="large"
+                color={getSportColors(selectedSport.name).primary}
+                style={{ marginTop: 40 }}
+              />
+            )}
+          </>
         )}
       </ScrollView>
     </View>
@@ -256,94 +281,194 @@ export default function SportSelectScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scroll: { paddingHorizontal: 20 },
-  header: { marginBottom: 28 },
-  label: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    letterSpacing: 1.5,
-    textTransform: "uppercase" as const,
-    marginBottom: 8,
+  container: { flex: 1, backgroundColor: "#0A0A1A" },
+  scroll: { paddingHorizontal: 24 },
+  glowOrb: {
+    position: "absolute",
+    top: -40,
+    right: -60,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
   },
-  title: {
-    fontSize: 26,
+  header: { marginBottom: 32 },
+  headerLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: 2,
+    color: "#64748B",
+    marginBottom: 10,
+  },
+  headerTitle: {
+    fontSize: 34,
     fontFamily: "Inter_700Bold",
-    marginBottom: 6,
+    color: "#F8FAFC",
+    lineHeight: 42,
   },
-  subtitle: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    lineHeight: 21,
+  headerTitleAccent: {
+    color: "#A29BFE",
   },
-  sportsList: { gap: 10 },
-  sportCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-  },
-  sportCardContent: {
+  sportGrid: {
     flexDirection: "row",
-    alignItems: "center",
+    flexWrap: "wrap",
     gap: 12,
   },
-  sportIconWrap: {
-    width: 48,
-    height: 48,
+  sportCard: {
+    width: CARD_WIDTH,
+    borderRadius: 18,
+    overflow: "hidden",
+  },
+  sportCardInner: {
+    padding: 18,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#2A2A5030",
+    minHeight: 170,
+    justifyContent: "space-between",
+  },
+  sportIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  sportCardName: {
+    fontSize: 17,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+    marginBottom: 4,
+  },
+  sportCardDesc: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: "#64748B",
+    lineHeight: 15,
+    marginBottom: 10,
+  },
+  sportCardArrow: {
+    width: 28,
+    height: 28,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+    alignSelf: "flex-end",
   },
-  sportInfo: { flex: 1 },
-  sportName: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+  movementHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+    marginBottom: 24,
   },
-  sportDesc: {
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#1A1A36",
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  movementHeaderText: { flex: 1 },
+  movementTitle: {
+    fontSize: 30,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+    lineHeight: 38,
+  },
+  selectedSportBanner: {
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 24,
+  },
+  bannerGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 18,
+    gap: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#2A2A5030",
+  },
+  bannerIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bannerInfo: { flex: 1 },
+  bannerName: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+  },
+  bannerDesc: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
-    marginTop: 2,
+    color: "#94A3B8",
+    marginTop: 3,
   },
-  movementsList: {
-    paddingLeft: 24,
-    paddingTop: 6,
-    paddingBottom: 8,
-    gap: 6,
-  },
+  movementsList: { gap: 10 },
   movementCard: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 10,
+    backgroundColor: "#131328",
+    borderRadius: 14,
     borderWidth: 1,
-    padding: 12,
-    gap: 10,
+    borderColor: "#2A2A50",
+    padding: 14,
+    gap: 12,
   },
-  movementIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+  movementIndex: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
+  movementIndexText: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+  },
   movementInfo: { flex: 1 },
   movementName: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
   },
   movementDesc: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
-    marginTop: 1,
+    color: "#64748B",
+    marginTop: 2,
   },
-  allButton: {
-    borderWidth: 1,
+  movementArrow: {
+    width: 32,
+    height: 32,
     borderRadius: 10,
-    borderStyle: "dashed" as const,
-    paddingVertical: 12,
     alignItems: "center",
+    justifyContent: "center",
   },
-  allButtonText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
+  autoDetectButton: {
+    borderRadius: 14,
+    overflow: "hidden",
+    marginTop: 8,
+  },
+  autoDetectGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 14,
+  },
+  autoDetectText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#fff",
   },
 });

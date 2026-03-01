@@ -7,7 +7,6 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
-  useColorScheme,
   Platform,
   KeyboardAvoidingView,
   ScrollView,
@@ -15,15 +14,13 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
 
 export default function LoginScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const colors = isDark ? Colors.dark : Colors.light;
+  const colors = Colors.dark;
   const insets = useSafeAreaInsets();
-
   const { login, register } = useAuth();
 
   const [isRegister, setIsRegister] = useState(false);
@@ -34,6 +31,10 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
+
+  const handleGooglePress = () => {
+    Alert.alert("Coming Soon", "Google sign-in will be available in a future update. Use email to get started.");
+  };
 
   const handleSubmit = async () => {
     if (!email.trim() || !password.trim()) {
@@ -65,7 +66,17 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={["#0A0A1A", "#131340", "#0A0A1A"]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
+
+      <View style={styles.glowOrb1} />
+      <View style={styles.glowOrb2} />
+
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -74,7 +85,7 @@ export default function LoginScreen() {
           contentContainerStyle={[
             styles.scroll,
             {
-              paddingTop: insets.top + 40 + webTopInset,
+              paddingTop: insets.top + 60 + webTopInset,
               paddingBottom: insets.bottom + 40,
             },
           ]}
@@ -82,29 +93,49 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.logoSection}>
-            <View style={[styles.logoCircle, { backgroundColor: colors.tint + "18" }]}>
-              <Ionicons name="analytics" size={40} color={colors.tint} />
+            <View style={styles.logoMark}>
+              <LinearGradient
+                colors={["#6C5CE7", "#00F5A0"]}
+                style={styles.logoGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Text style={styles.logoLetter}>A</Text>
+              </LinearGradient>
             </View>
-            <Text style={[styles.appName, { color: colors.text }]}>
-              AceX AI
+            <Text style={styles.appName}>
+              Ace<Text style={styles.appNameAccent}>X</Text> AI
             </Text>
-            <Text style={[styles.tagline, { color: colors.textSecondary }]}>
-              AI-Powered Sports Performance Analysis
+            <Text style={styles.tagline}>
+              Your AI Performance Coach
             </Text>
           </View>
 
-          <View style={styles.formSection}>
-            <Text style={[styles.formTitle, { color: colors.text }]}>
-              {isRegister ? "Create Account" : "Welcome Back"}
-            </Text>
+          <Pressable
+            onPress={handleGooglePress}
+            style={({ pressed }) => [
+              styles.googleButton,
+              { transform: [{ scale: pressed ? 0.97 : 1 }] },
+            ]}
+          >
+            <Ionicons name="logo-google" size={20} color="#fff" />
+            <Text style={styles.googleText}>Continue with Google</Text>
+          </Pressable>
 
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or use email</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <View style={styles.formSection}>
             {isRegister && (
-              <View style={[styles.inputWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <Ionicons name="person-outline" size={18} color={colors.textSecondary} />
+              <View style={styles.inputWrap}>
+                <Ionicons name="person-outline" size={18} color="#64748B" />
                 <TextInput
-                  style={[styles.input, { color: colors.text }]}
+                  style={styles.input}
                   placeholder="Full Name"
-                  placeholderTextColor={colors.textSecondary}
+                  placeholderTextColor="#4A5568"
                   value={name}
                   onChangeText={setName}
                   autoCapitalize="words"
@@ -113,12 +144,12 @@ export default function LoginScreen() {
               </View>
             )}
 
-            <View style={[styles.inputWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Ionicons name="mail-outline" size={18} color={colors.textSecondary} />
+            <View style={styles.inputWrap}>
+              <Ionicons name="mail-outline" size={18} color="#64748B" />
               <TextInput
-                style={[styles.input, { color: colors.text }]}
+                style={styles.input}
                 placeholder="Email"
-                placeholderTextColor={colors.textSecondary}
+                placeholderTextColor="#4A5568"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -128,22 +159,22 @@ export default function LoginScreen() {
               />
             </View>
 
-            <View style={[styles.inputWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} />
+            <View style={styles.inputWrap}>
+              <Ionicons name="lock-closed-outline" size={18} color="#64748B" />
               <TextInput
-                style={[styles.input, { color: colors.text }]}
+                style={styles.input}
                 placeholder="Password"
-                placeholderTextColor={colors.textSecondary}
+                placeholderTextColor="#4A5568"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 testID="password-input"
               />
-              <Pressable onPress={() => setShowPassword(!showPassword)}>
+              <Pressable onPress={() => setShowPassword(!showPassword)} hitSlop={8}>
                 <Ionicons
                   name={showPassword ? "eye-off-outline" : "eye-outline"}
                   size={18}
-                  color={colors.textSecondary}
+                  color="#64748B"
                 />
               </Pressable>
             </View>
@@ -154,47 +185,31 @@ export default function LoginScreen() {
               style={({ pressed }) => [
                 styles.submitButton,
                 {
-                  backgroundColor: isLoading ? colors.tint + "80" : colors.tint,
+                  opacity: isLoading ? 0.7 : 1,
                   transform: [{ scale: pressed ? 0.97 : 1 }],
                 },
               ]}
               testID="submit-button"
             >
-              {isLoading ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.submitText}>
-                  {isRegister ? "Create Account" : "Sign In"}
-                </Text>
-              )}
+              <LinearGradient
+                colors={["#6C5CE7", "#A29BFE"]}
+                style={styles.submitGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.submitText}>
+                    {isRegister ? "Create Account" : "Sign In"}
+                  </Text>
+                )}
+              </LinearGradient>
             </Pressable>
-
-            <View style={styles.dividerRow}>
-              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-              <Text style={[styles.dividerText, { color: colors.textSecondary }]}>or</Text>
-              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-            </View>
-
-            <View style={styles.socialRow}>
-              <Pressable
-                style={[styles.socialButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                onPress={() => Alert.alert("Coming Soon", "Google sign-in will be available in a future update")}
-              >
-                <Ionicons name="logo-google" size={20} color={colors.text} />
-                <Text style={[styles.socialText, { color: colors.text }]}>Google</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.socialButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                onPress={() => Alert.alert("Coming Soon", "Apple sign-in will be available in a future update")}
-              >
-                <Ionicons name="logo-apple" size={20} color={colors.text} />
-                <Text style={[styles.socialText, { color: colors.text }]}>Apple</Text>
-              </Pressable>
-            </View>
           </View>
 
           <View style={styles.toggleSection}>
-            <Text style={[styles.toggleText, { color: colors.textSecondary }]}>
+            <Text style={styles.toggleText}>
               {isRegister ? "Already have an account?" : "Don't have an account?"}
             </Text>
             <Pressable
@@ -203,7 +218,7 @@ export default function LoginScreen() {
                 setIsRegister(!isRegister);
               }}
             >
-              <Text style={[styles.toggleLink, { color: colors.tint }]}>
+              <Text style={styles.toggleLink}>
                 {isRegister ? "Sign In" : "Sign Up"}
               </Text>
             </Pressable>
@@ -215,101 +230,136 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: "#0A0A1A" },
   flex: { flex: 1 },
-  scroll: { paddingHorizontal: 24 },
-  logoSection: { alignItems: "center", marginBottom: 40 },
-  logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
+  scroll: { paddingHorizontal: 28 },
+  glowOrb1: {
+    position: "absolute",
+    top: -80,
+    right: -60,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: "#6C5CE720",
+  },
+  glowOrb2: {
+    position: "absolute",
+    bottom: 60,
+    left: -80,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: "#00F5A015",
+  },
+  logoSection: { alignItems: "center", marginBottom: 44 },
+  logoMark: {
     marginBottom: 16,
   },
-  appName: {
-    fontSize: 28,
+  logoGradient: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logoLetter: {
+    fontSize: 36,
     fontFamily: "Inter_700Bold",
+    color: "#fff",
+  },
+  appName: {
+    fontSize: 36,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+    letterSpacing: -0.5,
+  },
+  appNameAccent: {
+    color: "#00F5A0",
   },
   tagline: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: "Inter_400Regular",
-    marginTop: 4,
+    color: "#64748B",
+    marginTop: 6,
   },
-  formSection: { gap: 14 },
-  formTitle: {
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
-    marginBottom: 4,
+  googleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#1A1A36",
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+    borderRadius: 14,
+    paddingVertical: 15,
+    marginBottom: 24,
   },
+  googleText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 24,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: "#2A2A50" },
+  dividerText: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "#475569",
+  },
+  formSection: { gap: 12 },
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#131328",
     borderWidth: 1,
+    borderColor: "#2A2A50",
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
     gap: 10,
   },
   input: {
     flex: 1,
     fontSize: 15,
     fontFamily: "Inter_400Regular",
+    color: "#F8FAFC",
   },
   submitButton: {
-    paddingVertical: 15,
+    marginTop: 6,
     borderRadius: 12,
+    overflow: "hidden",
+  },
+  submitGradient: {
+    paddingVertical: 15,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
+    borderRadius: 12,
   },
   submitText: {
     color: "#fff",
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
   },
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginVertical: 8,
-  },
-  dividerLine: { flex: 1, height: 1 },
-  dividerText: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-  },
-  socialRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  socialButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 13,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  socialText: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-  },
   toggleSection: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 6,
-    marginTop: 28,
+    marginTop: 32,
   },
   toggleText: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
+    color: "#64748B",
   },
   toggleLink: {
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
+    color: "#A29BFE",
   },
 });

@@ -1,7 +1,6 @@
 import React from "react";
-import { View, Text, StyleSheet, useColorScheme } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import Colors from "@/constants/colors";
 
 interface MetricCardProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -12,22 +11,17 @@ interface MetricCardProps {
 }
 
 export function MetricCard({ icon, label, value, unit, color }: MetricCardProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const colors = isDark ? Colors.dark : Colors.light;
-  const accentColor = color || colors.tint;
+  const accentColor = color || "#6C5CE7";
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <View style={styles.card}>
       <View style={[styles.iconContainer, { backgroundColor: accentColor + "18" }]}>
         <Ionicons name={icon} size={18} color={accentColor} />
       </View>
-      <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
+      <Text style={styles.label}>{label}</Text>
       <View style={styles.valueRow}>
-        <Text style={[styles.value, { color: colors.text }]}>{value}</Text>
-        {unit && (
-          <Text style={[styles.unit, { color: colors.textSecondary }]}>{unit}</Text>
-        )}
+        <Text style={styles.value}>{value}</Text>
+        {unit && <Text style={styles.unit}>{unit}</Text>}
       </View>
     </View>
   );
@@ -40,6 +34,8 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
+    borderColor: "#2A2A50",
+    backgroundColor: "#131328",
     gap: 6,
   },
   iconContainer: {
@@ -55,6 +51,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    color: "#CBD5E1",
   },
   valueRow: {
     flexDirection: "row",
@@ -64,9 +61,11 @@ const styles = StyleSheet.create({
   value: {
     fontSize: 22,
     fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
   },
   unit: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
   },
 });

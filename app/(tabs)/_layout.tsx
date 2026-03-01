@@ -3,10 +3,9 @@ import { Tabs } from "expo-router";
 import { NativeTabs, Icon, Label } from "expo-router/unstable-native-tabs";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
-import { Platform, StyleSheet, useColorScheme, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React from "react";
-import Colors from "@/constants/colors";
 
 function NativeTabLayout() {
   return (
@@ -28,9 +27,6 @@ function NativeTabLayout() {
 }
 
 function ClassicTabLayout() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const colors = isDark ? Colors.dark : Colors.light;
   const safeAreaInsets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const isIOS = Platform.OS === "ios";
@@ -39,13 +35,13 @@ function ClassicTabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.tint,
-        tabBarInactiveTintColor: colors.tabIconDefault,
+        tabBarActiveTintColor: "#00F5A0",
+        tabBarInactiveTintColor: "#64748B",
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : colors.background,
+          backgroundColor: isIOS ? "transparent" : "#0A0A1A",
           borderTopWidth: isWeb ? 1 : 0,
-          borderTopColor: colors.border,
+          borderTopColor: "#2A2A50",
           elevation: 0,
           paddingBottom: isWeb ? 0 : safeAreaInsets.bottom,
           ...(isWeb ? { height: 84 } : {}),
@@ -54,14 +50,14 @@ function ClassicTabLayout() {
           isIOS ? (
             <BlurView
               intensity={100}
-              tint={isDark ? "dark" : "light"}
+              tint="dark"
               style={StyleSheet.absoluteFill}
             />
           ) : isWeb ? (
             <View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: colors.background },
+                { backgroundColor: "#0A0A1AEE" },
               ]}
             />
           ) : null,

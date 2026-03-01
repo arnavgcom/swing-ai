@@ -7,7 +7,6 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
-  useColorScheme,
   Platform,
   Pressable,
 } from "react-native";
@@ -15,15 +14,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { fetchAnalyses, deleteAnalysis } from "@/lib/api";
 import { AnalysisCard } from "@/components/AnalysisCard";
 
 export default function HistoryScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const colors = isDark ? Colors.dark : Colors.light;
+  const colors = Colors.dark;
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
 
@@ -79,43 +77,40 @@ export default function HistoryScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={[styles.header, { paddingTop: insets.top + 16 + webTopInset }]}>
-        <Text style={[styles.title, { color: colors.text }]}>History</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+        <Text style={styles.title}>History</Text>
+        <Text style={styles.subtitle}>
           {analyses?.length || 0} analyses
         </Text>
       </View>
 
       {isLoading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={colors.tint} />
+          <ActivityIndicator size="large" color="#6C5CE7" />
         </View>
       ) : (
         <FlatList
           data={analyses || []}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          contentContainerStyle={[
-            styles.list,
-            { paddingBottom: 100 },
-          ]}
+          contentContainerStyle={[styles.list, { paddingBottom: 100 }]}
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
+            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#6C5CE7" />
           }
           scrollEnabled={!!(analyses && analyses.length > 0)}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Ionicons
-                name="folder-open-outline"
-                size={48}
-                color={colors.textSecondary}
-              />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                No analysis history
-              </Text>
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                Upload and analyze forehand videos to see them here
+              <View style={styles.emptyIconWrap}>
+                <Ionicons name="folder-open-outline" size={40} color="#64748B" />
+              </View>
+              <Text style={styles.emptyTitle}>No analysis history</Text>
+              <Text style={styles.emptyText}>
+                Upload and analyze videos to see them here
               </Text>
             </View>
           }
@@ -126,9 +121,7 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: "#0A0A1A" },
   header: {
     paddingHorizontal: 20,
     paddingBottom: 16,
@@ -136,11 +129,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
   },
   subtitle: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
     marginTop: 4,
+    color: "#CBD5E1",
   },
   loadingWrap: {
     flex: 1,
@@ -165,14 +160,26 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     gap: 12,
   },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: "#131328",
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   emptyTitle: {
     fontSize: 18,
     fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
   },
   emptyText: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     textAlign: "center",
     paddingHorizontal: 40,
+    color: "#64748B",
   },
 });

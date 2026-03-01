@@ -1,47 +1,69 @@
-const emerald = "#10B981";
-const emeraldDark = "#059669";
-const navy = "#0F172A";
-const slate = "#1E293B";
-const slateMid = "#334155";
-const slateLight = "#475569";
+const primary = "#6C5CE7";
+const primaryLight = "#A29BFE";
+const primaryDark = "#5A4BD1";
+const neon = "#00F5A0";
+const neonDark = "#00D68F";
+const midnight = "#0A0A1A";
+const darkSurface = "#131328";
+const darkCard = "#1A1A36";
+const darkCardAlt = "#22224A";
+const darkBorder = "#2A2A50";
+const glow = "#6C5CE730";
 const white = "#F8FAFC";
-const offWhite = "#E2E8F0";
-const accent = "#22D3EE";
-const red = "#EF4444";
-const amber = "#F59E0B";
-const blue = "#3B82F6";
+const offWhite = "#CBD5E1";
+const muted = "#64748B";
+const accent = "#00F5A0";
+const red = "#FF6B6B";
+const amber = "#FFD93D";
+const blue = "#4CC9F0";
+const cyan = "#22D3EE";
 
 export default {
   light: {
-    text: navy,
-    textSecondary: slateLight,
-    background: white,
+    text: "#0F172A",
+    textSecondary: "#64748B",
+    background: "#F8FAFC",
     surface: "#FFFFFF",
     surfaceAlt: "#F1F5F9",
     border: "#E2E8F0",
-    tint: emerald,
-    tintDark: emeraldDark,
-    accent,
-    tabIconDefault: slateLight,
-    tabIconSelected: emerald,
+    tint: primary,
+    tintDark: primaryDark,
+    accent: neon,
+    tabIconDefault: muted,
+    tabIconSelected: primary,
     red,
     amber,
     blue,
+    glow,
+    neon,
+    neonDark,
   },
   dark: {
     text: white,
     textSecondary: offWhite,
-    background: navy,
-    surface: slate,
-    surfaceAlt: slateMid,
-    border: slateMid,
-    tint: emerald,
-    tintDark: emeraldDark,
-    accent,
-    tabIconDefault: slateLight,
-    tabIconSelected: emerald,
+    background: midnight,
+    surface: darkSurface,
+    surfaceAlt: darkCard,
+    border: darkBorder,
+    tint: primary,
+    tintDark: primaryDark,
+    accent: neon,
+    tabIconDefault: muted,
+    tabIconSelected: neon,
     red,
     amber,
     blue,
+    glow,
+    neon,
+    neonDark,
   },
+};
+
+export const sportColors: Record<string, { primary: string; gradient: string }> = {
+  Tennis: { primary: "#10B981", gradient: "#059669" },
+  Golf: { primary: "#22D3EE", gradient: "#0891B2" },
+  Pickleball: { primary: "#F59E0B", gradient: "#D97706" },
+  Paddle: { primary: "#8B5CF6", gradient: "#7C3AED" },
+  Badminton: { primary: "#EF4444", gradient: "#DC2626" },
+  "Table Tennis": { primary: "#3B82F6", gradient: "#2563EB" },
 };

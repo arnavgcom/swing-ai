@@ -1,12 +1,11 @@
 import React, { useEffect } from "react";
-import { View, Text, StyleSheet, useColorScheme } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   Easing,
 } from "react-native-reanimated";
-import Colors from "@/constants/colors";
 
 interface SubScoreBarProps {
   label: string;
@@ -15,9 +14,6 @@ interface SubScoreBarProps {
 }
 
 export function SubScoreBar({ label, score, delay = 0 }: SubScoreBarProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const colors = isDark ? Colors.dark : Colors.light;
   const width = useSharedValue(0);
 
   useEffect(() => {
@@ -35,19 +31,19 @@ export function SubScoreBar({ label, score, delay = 0 }: SubScoreBarProps) {
   }));
 
   const getColor = () => {
-    if (score >= 80) return colors.tint;
-    if (score >= 60) return colors.accent;
-    if (score >= 40) return colors.amber;
-    return colors.red;
+    if (score >= 80) return "#00F5A0";
+    if (score >= 60) return "#4CC9F0";
+    if (score >= 40) return "#FFD93D";
+    return "#FF6B6B";
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.labelRow}>
-        <Text style={[styles.label, { color: colors.text }]}>{label}</Text>
+        <Text style={styles.label}>{label}</Text>
         <Text style={[styles.score, { color: getColor() }]}>{score}</Text>
       </View>
-      <View style={[styles.track, { backgroundColor: colors.surfaceAlt }]}>
+      <View style={styles.track}>
         <Animated.View
           style={[styles.fill, animatedStyle, { backgroundColor: getColor() }]}
         />
@@ -57,9 +53,7 @@ export function SubScoreBar({ label, score, delay = 0 }: SubScoreBarProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: 6,
-  },
+  container: { gap: 6 },
   labelRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -68,6 +62,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontFamily: "Inter_500Medium",
+    color: "#F8FAFC",
   },
   score: {
     fontSize: 16,
@@ -77,6 +72,7 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     overflow: "hidden",
+    backgroundColor: "#22224A",
   },
   fill: {
     height: "100%",
