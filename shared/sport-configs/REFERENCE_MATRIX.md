@@ -18,6 +18,26 @@ Complete reference for all sport categories, metrics, optimal ranges, sub-scores
 | 8 | Golf | Chip | `golf-chip` | 8 | 4 | Chip Score |
 | 9 | Golf | Putt | `golf-putt` | 8 | 4 | Putting Score |
 | 10 | Golf | Full Swing | `golf-full-swing` | 10 | 5 | Full Swing Score |
+| 11 | Pickleball | Dink | `pickleball-dink` | 7 | 6 | Dink Score |
+| 12 | Pickleball | Drive | `pickleball-drive` | 7 | 6 | Drive Score |
+| 13 | Pickleball | Serve | `pickleball-serve` | 6 | 6 | Serve Score |
+| 14 | Pickleball | Volley | `pickleball-volley` | 7 | 6 | Volley Score |
+| 15 | Pickleball | Third Shot Drop | `pickleball-third-shot-drop` | 6 | 6 | Third Shot Drop Score |
+| 16 | Paddle | Forehand | `paddle-forehand` | 9 | 5 | Forehand Score |
+| 17 | Paddle | Backhand | `paddle-backhand` | 8 | 5 | Backhand Score |
+| 18 | Paddle | Serve | `paddle-serve` | 6 | 4 | Serve Score |
+| 19 | Paddle | Smash | `paddle-smash` | 7 | 4 | Smash Score |
+| 20 | Paddle | Bandeja | `paddle-bandeja` | 7 | 4 | Bandeja Score |
+| 21 | Badminton | Clear | `badminton-clear` | 7 | 5 | Clear Score |
+| 22 | Badminton | Smash | `badminton-smash` | 7 | 5 | Smash Score |
+| 23 | Badminton | Drop | `badminton-drop` | 6 | 5 | Drop Shot Score |
+| 24 | Badminton | Net Shot | `badminton-net-shot` | 6 | 5 | Net Shot Score |
+| 25 | Badminton | Serve | `badminton-serve` | 5 | 4 | Serve Score |
+| 26 | Table Tennis | Forehand | `tabletennis-forehand` | 7 | 5 | Forehand Score |
+| 27 | Table Tennis | Backhand | `tabletennis-backhand` | 6 | 5 | Backhand Score |
+| 28 | Table Tennis | Serve | `tabletennis-serve` | 6 | 5 | Serve Score |
+| 29 | Table Tennis | Loop | `tabletennis-loop` | 6 | 5 | Loop Score |
+| 30 | Table Tennis | Chop | `tabletennis-chop` | 6 | 5 | Chop Score |
 
 ---
 
@@ -364,59 +384,596 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 
 ---
 
-## Cross-Category Metric Comparison
+## 11. Pickleball — Dink
 
-### Shared Metrics (appear in multiple categories)
+**Config Key:** `pickleball-dink`
 
-| Metric Key | Tennis Categories | Golf Categories |
-|------------|------------------|-----------------|
-| balanceScore | Forehand, Backhand, Serve, Volley, Game | Drive, Iron, Chip, Putt, Full Swing |
-| rhythmConsistency | Forehand, Backhand, Serve, Volley, Game | Drive, Iron, Chip, Putt, Full Swing |
-| ballSpeed | Forehand, Backhand, Serve, Volley | — |
-| contactHeight | Forehand, Backhand, Serve, Volley | — |
-| shotConsistency | Forehand, Backhand, Volley, Game | — |
-| backswingDuration | Forehand, Backhand, Serve | Drive, Iron, Full Swing |
-| contactTiming | Forehand, Backhand, Serve | — |
-| wristSpeed | Forehand, Backhand, Serve | — |
-| shoulderRotation | Forehand, Backhand, Serve | Drive, Iron, Full Swing |
-| trajectoryArc | Forehand, Backhand, Serve | — |
-| spinRate | Forehand, Backhand, Serve | — |
-| clubHeadSpeed | — | Drive, Iron, Full Swing |
-| hipRotation | — | Drive, Iron, Full Swing |
-| headStability | — | Drive, Iron, Chip, Putt, Full Swing |
-| tempoRatio | — | Drive, Iron, Putt, Full Swing |
-| spineAngle | — | Drive, Iron, Full Swing |
-| xFactor | — | Drive, Full Swing |
+### Scores
 
-### Unique Metrics (appear in only one category)
+| Key | Label | Weight |
+|-----|-------|--------|
+| touch | Soft Touch | 25% |
+| technique | Technique | 20% |
+| arc | Arc Control | 15% |
+| stability | Stability | 15% |
+| consistency | Consistency | 15% |
+| rhythm | Rhythm | 10% |
 
-| Metric Key | Category | Description |
-|------------|----------|-------------|
-| elbowAngle | Tennis Forehand, Backhand | Elbow joint angle during stroke |
-| followThroughDuration | Tennis Forehand, Backhand; Golf Drive | Post-contact follow-through time |
-| tossHeight | Tennis Serve | Ball toss height relative to contact |
-| trophyAngle | Tennis Serve | Elbow angle at trophy position |
-| pronation | Tennis Serve | Forearm pronation speed |
-| reactionSpeed | Tennis Volley | Time to initiate racket movement |
-| racketPrep | Tennis Volley | Compact racket preparation quality |
-| wristFirmness | Tennis Volley | Wrist stability at contact |
-| splitStepTiming | Tennis Volley | Split step timing precision |
-| stepForward | Tennis Volley | Quality of forward step |
-| courtCoverage | Tennis Game | Court area covered during rallies |
-| recoverySpeed | Tennis Game | Recovery to ready position speed |
-| avgBallSpeed | Tennis Game | Average ball speed across all shots |
-| shotVariety | Tennis Game | Shot diversity during play |
-| rallyLength | Tennis Game | Average shots per rally |
-| downswingDuration | Golf Drive | Downswing to impact time |
-| divotAngle | Golf Iron | Angle of attack |
-| wristHinge | Golf Chip | Wrist hinge amount |
-| armPendulum | Golf Chip | Pendulum motion quality |
-| strokeLength | Golf Chip, Putt | Stroke length appropriateness |
-| contactQuality | Golf Chip | Ball-first contact quality |
-| followThroughRatio | Golf Chip | Follow-through vs backswing ratio |
-| pendulumScore | Golf Putt | Shoulder-driven pendulum quality |
-| eyeLine | Golf Putt | Eyes positioned over ball |
-| wristStability | Golf Putt | Wrist firmness during stroke |
+**Formula:** `overallScore = 0.25 × touch + 0.20 × technique + 0.15 × arc + 0.15 × stability + 0.15 × consistency + 0.10 × rhythm`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| paddleAngle | Paddle Angle | deg | technique | 25 – 50 |
+| softTouch | Soft Touch | /100 | technique | 70 – 98 |
+| wristStability | Wrist Stability | /100 | biomechanics | 75 – 98 |
+| arcHeight | Arc Height | m | ball | 0.05 – 0.30 |
+| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
+| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+---
+
+## 12. Pickleball — Drive
+
+**Config Key:** `pickleball-drive`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| power | Power | 25% |
+| technique | Technique | 20% |
+| trajectory | Trajectory | 15% |
+| stability | Stability | 15% |
+| consistency | Consistency | 15% |
+| rhythm | Rhythm | 10% |
+
+**Formula:** `overallScore = 0.25 × power + 0.20 × technique + 0.15 × trajectory + 0.15 × stability + 0.15 × consistency + 0.10 × rhythm`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| paddleSpeed | Paddle Speed | m/s | power | 15 – 30 |
+| bodyRotation | Body Rotation | deg/s | biomechanics | 300 – 700 |
+| ballSpeed | Ball Speed | mph | ball | 35 – 65 |
+| trajectoryAngle | Trajectory | deg | ball | 2 – 12 |
+| balanceScore | Balance | /100 | biomechanics | 65 – 95 |
+| shotConsistency | Consistency | /100 | consistency | 65 – 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 60 – 90 |
+
+---
+
+## 13. Pickleball — Serve
+
+**Config Key:** `pickleball-serve`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| technique | Technique | 25% |
+| placement | Placement | 20% |
+| power | Power | 15% |
+| stability | Stability | 15% |
+| consistency | Consistency | 15% |
+| rhythm | Rhythm | 10% |
+
+**Formula:** `overallScore = 0.25 × technique + 0.20 × placement + 0.15 × power + 0.15 × stability + 0.15 × consistency + 0.10 × rhythm`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| paddleAngle | Paddle Angle | deg | technique | 20 – 45 |
+| tossConsistency | Toss Consistency | /100 | technique | 70 – 98 |
+| ballSpeed | Ball Speed | mph | ball | 25 – 50 |
+| placement | Placement | /100 | ball | 65 – 95 |
+| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+---
+
+## 14. Pickleball — Volley
+
+**Config Key:** `pickleball-volley`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| reflexes | Reflexes | 25% |
+| technique | Technique | 20% |
+| stability | Stability | 15% |
+| power | Power | 15% |
+| consistency | Consistency | 15% |
+| rhythm | Rhythm | 10% |
+
+**Formula:** `overallScore = 0.25 × reflexes + 0.20 × technique + 0.15 × stability + 0.15 × power + 0.15 × consistency + 0.10 × rhythm`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| reactionSpeed | Reaction Speed | ms | timing | 120 – 300 |
+| paddlePrep | Paddle Prep | /100 | technique | 70 – 98 |
+| wristFirmness | Wrist Firmness | /100 | technique | 75 – 98 |
+| balanceScore | Balance | /100 | biomechanics | 65 – 95 |
+| ballSpeed | Ball Speed | mph | ball | 20 – 50 |
+| shotConsistency | Consistency | /100 | consistency | 65 – 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 60 – 90 |
+
+---
+
+## 15. Pickleball — Third Shot Drop
+
+**Config Key:** `pickleball-third-shot-drop`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| touch | Soft Touch | 25% |
+| arc | Arc Control | 20% |
+| technique | Technique | 20% |
+| consistency | Consistency | 15% |
+| stability | Stability | 10% |
+| rhythm | Rhythm | 10% |
+
+**Formula:** `overallScore = 0.25 × touch + 0.20 × arc + 0.20 × technique + 0.15 × consistency + 0.10 × stability + 0.10 × rhythm`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| arcHeight | Arc Height | m | ball | 0.10 – 0.40 |
+| softTouch | Soft Touch | /100 | technique | 70 – 98 |
+| paddleAngle | Paddle Angle | deg | technique | 30 – 55 |
+| shotConsistency | Consistency | /100 | consistency | 65 – 95 |
+| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+---
+
+## 16. Paddle — Forehand
+
+**Config Key:** `paddle-forehand`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| power | Power | 20% |
+| technique | Technique | 25% |
+| wallPlay | Wall Play | 20% |
+| consistency | Consistency | 15% |
+| timing | Timing | 20% |
+
+**Formula:** `overallScore = 0.20 × power + 0.25 × technique + 0.20 × wallPlay + 0.15 × consistency + 0.20 × timing`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| wristSpeed | Wrist Speed | m/s | biomechanics | 18 – 32 |
+| elbowAngle | Elbow Angle | deg | biomechanics | 110 – 150 |
+| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 400 – 800 |
+| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
+| ballSpeed | Ball Speed | mph | ball | 40 – 80 |
+| wallPlayScore | Wall Play | /100 | technique | 60 – 95 |
+| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+| contactHeight | Contact Height | m | technique | 0.70 – 1.10 |
+
+---
+
+## 17. Paddle — Backhand
+
+**Config Key:** `paddle-backhand`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| power | Power | 20% |
+| technique | Technique | 25% |
+| stability | Stability | 20% |
+| consistency | Consistency | 15% |
+| timing | Timing | 20% |
+
+**Formula:** `overallScore = 0.20 × power + 0.25 × technique + 0.20 × stability + 0.15 × consistency + 0.20 × timing`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| wristSpeed | Wrist Speed | m/s | biomechanics | 15 – 28 |
+| elbowAngle | Elbow Angle | deg | biomechanics | 100 – 145 |
+| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 350 – 750 |
+| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
+| ballSpeed | Ball Speed | mph | ball | 35 – 70 |
+| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+| contactHeight | Contact Height | m | technique | 0.60 – 1.05 |
+
+---
+
+## 18. Paddle — Serve
+
+**Config Key:** `paddle-serve`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| technique | Technique | 30% |
+| placement | Placement | 25% |
+| consistency | Consistency | 25% |
+| timing | Timing | 20% |
+
+**Formula:** `overallScore = 0.30 × technique + 0.25 × placement + 0.25 × consistency + 0.20 × timing`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| paddleAngle | Paddle Angle | deg | technique | 15 – 45 |
+| ballSpeed | Ball Speed | mph | ball | 30 – 60 |
+| placementScore | Placement | /100 | technique | 65 – 98 |
+| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
+| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+---
+
+## 19. Paddle — Smash
+
+**Config Key:** `paddle-smash`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| power | Power | 30% |
+| technique | Technique | 25% |
+| athleticism | Athleticism | 25% |
+| timing | Timing | 20% |
+
+**Formula:** `overallScore = 0.30 × power + 0.25 × technique + 0.25 × athleticism + 0.20 × timing`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| wristSpeed | Wrist Speed | m/s | biomechanics | 22 – 38 |
+| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 500 – 900 |
+| jumpHeight | Jump Height | m | power | 0.10 – 0.50 |
+| ballSpeed | Ball Speed | mph | ball | 50 – 90 |
+| contactHeight | Contact Height | m | technique | 2.0 – 3.0 |
+| balanceScore | Balance | /100 | biomechanics | 65 – 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 60 – 92 |
+
+---
+
+## 20. Paddle — Bandeja
+
+**Config Key:** `paddle-bandeja`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| control | Control | 30% |
+| technique | Technique | 25% |
+| consistency | Consistency | 25% |
+| timing | Timing | 20% |
+
+**Formula:** `overallScore = 0.30 × control + 0.25 × technique + 0.25 × consistency + 0.20 × timing`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| paddleAngle | Paddle Angle | deg | technique | 20 – 50 |
+| ballSpeed | Ball Speed | mph | ball | 25 – 55 |
+| wristControl | Wrist Control | /100 | technique | 70 – 98 |
+| contactHeight | Contact Height | m | technique | 1.8 – 2.8 |
+| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
+| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+---
+
+## 21. Badminton — Clear
+
+**Config Key:** `badminton-clear`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| power | Power | 25% |
+| technique | Technique | 25% |
+| footwork | Footwork | 20% |
+| timing | Timing | 15% |
+| consistency | Consistency | 15% |
+
+**Formula:** `overallScore = 0.25 × power + 0.25 × technique + 0.20 × footwork + 0.15 × timing + 0.15 × consistency`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| racketSpeed | Racket Speed | m/s | power | 25 – 45 |
+| shuttleSpeed | Shuttle Speed | mph | ball | 80 – 150 |
+| trajectoryHeight | Trajectory Height | m | ball | 5 – 10 |
+| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 500 – 900 |
+| footworkScore | Footwork | /100 | biomechanics | 65 – 95 |
+| balanceScore | Balance | /100 | biomechanics | 65 – 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+---
+
+## 22. Badminton — Smash
+
+**Config Key:** `badminton-smash`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| power | Power | 30% |
+| technique | Technique | 25% |
+| timing | Timing | 20% |
+| athleticism | Athleticism | 15% |
+| consistency | Consistency | 10% |
+
+**Formula:** `overallScore = 0.30 × power + 0.25 × technique + 0.20 × timing + 0.15 × athleticism + 0.10 × consistency`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| racketSpeed | Racket Speed | m/s | power | 35 – 60 |
+| shuttleSpeed | Shuttle Speed | mph | ball | 150 – 300 |
+| jumpHeight | Jump Height | m | biomechanics | 0.2 – 0.6 |
+| contactHeight | Contact Height | m | technique | 2.5 – 3.2 |
+| wristSnap | Wrist Snap | deg/s | technique | 400 – 800 |
+| bodyRotation | Body Rotation | deg/s | biomechanics | 500 – 1000 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+---
+
+## 23. Badminton — Drop
+
+**Config Key:** `badminton-drop`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| touch | Touch | 30% |
+| deception | Deception | 25% |
+| technique | Technique | 20% |
+| consistency | Consistency | 15% |
+| timing | Timing | 10% |
+
+**Formula:** `overallScore = 0.30 × touch + 0.25 × deception + 0.20 × technique + 0.15 × consistency + 0.10 × timing`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| touchScore | Touch | /100 | technique | 70 – 98 |
+| deceptionScore | Deception | /100 | technique | 65 – 95 |
+| netClearance | Net Clearance | cm | ball | 2 – 15 |
+| racketAngle | Racket Angle | deg | technique | 20 – 45 |
+| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+---
+
+## 24. Badminton — Net Shot
+
+**Config Key:** `badminton-net-shot`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| control | Control | 30% |
+| finesse | Finesse | 25% |
+| footwork | Footwork | 20% |
+| consistency | Consistency | 15% |
+| timing | Timing | 10% |
+
+**Formula:** `overallScore = 0.30 × control + 0.25 × finesse + 0.20 × footwork + 0.15 × consistency + 0.10 × timing`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| racketControl | Racket Control | /100 | technique | 70 – 98 |
+| wristFinesse | Wrist Finesse | /100 | technique | 70 – 98 |
+| balanceScore | Balance | /100 | biomechanics | 65 – 95 |
+| footworkScore | Footwork | /100 | biomechanics | 65 – 95 |
+| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+---
+
+## 25. Badminton — Serve
+
+**Config Key:** `badminton-serve`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| accuracy | Accuracy | 30% |
+| technique | Technique | 25% |
+| consistency | Consistency | 25% |
+| timing | Timing | 20% |
+
+**Formula:** `overallScore = 0.30 × accuracy + 0.25 × technique + 0.25 × consistency + 0.20 × timing`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| racketAngle | Racket Angle | deg | technique | 15 – 40 |
+| shuttleSpeed | Shuttle Speed | mph | ball | 30 – 100 |
+| placementScore | Placement | /100 | ball | 70 – 98 |
+| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+---
+
+## 26. Table Tennis — Forehand
+
+**Config Key:** `tabletennis-forehand`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| power | Power | 20% |
+| technique | Technique | 25% |
+| spin | Spin | 20% |
+| footwork | Footwork | 15% |
+| consistency | Consistency | 20% |
+
+**Formula:** `overallScore = 0.20 × power + 0.25 × technique + 0.20 × spin + 0.15 × footwork + 0.20 × consistency`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| batSpeed | Bat Speed | m/s | power | 8 – 18 |
+| wristAction | Wrist Action | deg/s | technique | 300 – 700 |
+| spinRate | Spin Rate | rpm | ball | 2000 – 5000 |
+| footworkScore | Footwork | /100 | biomechanics | 65 – 95 |
+| bodyRotation | Body Rotation | deg/s | biomechanics | 200 – 500 |
+| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+---
+
+## 27. Table Tennis — Backhand
+
+**Config Key:** `tabletennis-backhand`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| speed | Speed | 20% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+| consistency | Consistency | 20% |
+| stability | Stability | 15% |
+
+**Formula:** `overallScore = 0.20 × speed + 0.25 × timing + 0.20 × technique + 0.20 × consistency + 0.15 × stability`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| batSpeed | Bat Speed | m/s | power | 6 – 15 |
+| timingScore | Timing | /100 | timing | 70 – 98 |
+| batAngle | Bat Angle | deg | technique | 30 – 70 |
+| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
+| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+---
+
+## 28. Table Tennis — Serve
+
+**Config Key:** `tabletennis-serve`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| spin | Spin | 25% |
+| technique | Technique | 25% |
+| placement | Placement | 20% |
+| deception | Deception | 15% |
+| consistency | Consistency | 15% |
+
+**Formula:** `overallScore = 0.25 × spin + 0.25 × technique + 0.20 × placement + 0.15 × deception + 0.15 × consistency`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| spinVariation | Spin Variation | rpm | ball | 1500 – 4500 |
+| batAngle | Bat Angle | deg | technique | 20 – 65 |
+| ballSpeed | Ball Speed | mph | ball | 15 – 40 |
+| tossHeight | Toss Height | cm | technique | 16 – 30 |
+| placementScore | Placement | /100 | technique | 65 – 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+---
+
+## 29. Table Tennis — Loop
+
+**Config Key:** `tabletennis-loop`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| power | Power | 20% |
+| spin | Spin | 25% |
+| technique | Technique | 20% |
+| stability | Stability | 15% |
+| consistency | Consistency | 20% |
+
+**Formula:** `overallScore = 0.20 × power + 0.25 × spin + 0.20 × technique + 0.15 × stability + 0.20 × consistency`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| batSpeed | Bat Speed | m/s | power | 10 – 22 |
+| bodyRotation | Body Rotation | deg/s | biomechanics | 250 – 600 |
+| spinRate | Spin Rate | rpm | ball | 3000 – 6000 |
+| contactPoint | Contact Point | /100 | technique | 65 – 95 |
+| balanceScore | Balance | /100 | biomechanics | 65 – 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 60 – 92 |
+
+---
+
+## 30. Table Tennis — Chop
+
+**Config Key:** `tabletennis-chop`
+
+### Scores
+
+| Key | Label | Weight |
+|-----|-------|--------|
+| technique | Technique | 25% |
+| consistency | Consistency | 25% |
+| spin | Spin | 20% |
+| stability | Stability | 15% |
+| footwork | Footwork | 15% |
+
+**Formula:** `overallScore = 0.25 × technique + 0.25 × consistency + 0.20 × spin + 0.15 × stability + 0.15 × footwork`
+
+### Metrics
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| batAngle | Bat Angle | deg | technique | 40 – 75 |
+| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
+| spinRate | Spin Rate | rpm | ball | 1500 – 4000 |
+| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
+| footworkScore | Footwork | /100 | biomechanics | 65 – 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
 
 ---
 
@@ -436,6 +993,26 @@ Each category's config is defined in its own TypeScript file:
 | golf-chip | `shared/sport-configs/golf-chip.ts` |
 | golf-putt | `shared/sport-configs/golf-putt.ts` |
 | golf-full-swing | `shared/sport-configs/golf-full-swing.ts` |
+| pickleball-dink | `shared/sport-configs/pickleball-dink.ts` |
+| pickleball-drive | `shared/sport-configs/pickleball-drive.ts` |
+| pickleball-serve | `shared/sport-configs/pickleball-serve.ts` |
+| pickleball-volley | `shared/sport-configs/pickleball-volley.ts` |
+| pickleball-third-shot-drop | `shared/sport-configs/pickleball-third-shot-drop.ts` |
+| paddle-forehand | `shared/sport-configs/paddle-forehand.ts` |
+| paddle-backhand | `shared/sport-configs/paddle-backhand.ts` |
+| paddle-serve | `shared/sport-configs/paddle-serve.ts` |
+| paddle-smash | `shared/sport-configs/paddle-smash.ts` |
+| paddle-bandeja | `shared/sport-configs/paddle-bandeja.ts` |
+| badminton-clear | `shared/sport-configs/badminton-clear.ts` |
+| badminton-smash | `shared/sport-configs/badminton-smash.ts` |
+| badminton-drop | `shared/sport-configs/badminton-drop.ts` |
+| badminton-net-shot | `shared/sport-configs/badminton-net-shot.ts` |
+| badminton-serve | `shared/sport-configs/badminton-serve.ts` |
+| tabletennis-forehand | `shared/sport-configs/tabletennis-forehand.ts` |
+| tabletennis-backhand | `shared/sport-configs/tabletennis-backhand.ts` |
+| tabletennis-serve | `shared/sport-configs/tabletennis-serve.ts` |
+| tabletennis-loop | `shared/sport-configs/tabletennis-loop.ts` |
+| tabletennis-chop | `shared/sport-configs/tabletennis-chop.ts` |
 
 Type definitions: `shared/sport-configs/types.ts`
 Registry & lookup functions: `shared/sport-configs/index.ts`

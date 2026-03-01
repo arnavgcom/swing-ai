@@ -18,9 +18,13 @@ Each sport+movement combination (e.g., "Tennis/Forehand", "Golf/Drive") is a **s
 - **Database**: `metrics` table uses JSONB columns (`metricValues`, `subScores`) + `configKey` varchar — no fixed metric columns
 - **Frontend**: Analysis detail screen fetches the sport config via API and renders metrics/scores dynamically — no hardcoded labels
 
-### Supported Sport Categories (10 total)
-- **Tennis**: forehand, backhand, serve, volley, game
-- **Golf**: drive, iron, chip, putt, full-swing
+### Supported Sport Categories (30 total)
+- **Tennis** (5): forehand, backhand, serve, volley, game
+- **Golf** (5): drive, iron, chip, putt, full-swing
+- **Pickleball** (5): dink, drive, serve, volley, third-shot-drop
+- **Paddle** (5): forehand, backhand, serve, smash, bandeja
+- **Badminton** (5): clear, smash, drop, net-shot, serve
+- **Table Tennis** (5): forehand, backhand, serve, loop, chop
 
 ## Design System
 
@@ -58,6 +62,11 @@ All data is stored entirely on Replit:
 - `shared/sport-configs/index.ts` — Config registry with getSportConfig(), getAllConfigs(), getConfigKey()
 - `shared/sport-configs/tennis-*.ts` — 5 tennis category configs (forehand, backhand, serve, volley, game)
 - `shared/sport-configs/golf-*.ts` — 5 golf category configs (drive, iron, chip, putt, full-swing)
+- `shared/sport-configs/pickleball-*.ts` — 5 pickleball category configs (dink, drive, serve, volley, third-shot-drop)
+- `shared/sport-configs/paddle-*.ts` — 5 paddle category configs (forehand, backhand, serve, smash, bandeja)
+- `shared/sport-configs/badminton-*.ts` — 5 badminton category configs (clear, smash, drop, net-shot, serve)
+- `shared/sport-configs/tabletennis-*.ts` — 5 table tennis category configs (forehand, backhand, serve, loop, chop)
+- `shared/sport-configs/REFERENCE_MATRIX.md` — Complete reference of all 30 sport categories with metrics, optimal ranges, scores, and formulas
 
 ### Python Analysis
 - `python_analysis/run_analysis.py` — CLI entry point with --sport/--movement args, dispatches via registry
@@ -67,6 +76,10 @@ All data is stored entirely on Replit:
 - `python_analysis/sports/registry.py` — Maps configKey → analyzer class with lazy loading
 - `python_analysis/sports/tennis_*.py` — 5 tennis analyzer modules
 - `python_analysis/sports/golf_*.py` — 5 golf analyzer modules
+- `python_analysis/sports/pickleball_*.py` — 5 pickleball analyzer modules
+- `python_analysis/sports/paddle_*.py` — 5 paddle analyzer modules
+- `python_analysis/sports/badminton_*.py` — 5 badminton analyzer modules
+- `python_analysis/sports/tabletennis_*.py` — 5 table tennis analyzer modules
 - `models/pose_landmarker_lite.task` — MediaPipe pose model file
 
 ### Frontend
@@ -92,12 +105,12 @@ All data is stored entirely on Replit:
 ## Sports & Movements
 
 6 sports with auto-detected skill categories:
-- **Tennis** (enabled): Forehand, Backhand, Serve, Volley, Game
-- **Golf** (enabled): Drive, Iron Shot, Chip, Putt, Full Swing
-- **Pickleball** (coming soon): Dink, Drive, Serve, Volley, Third Shot Drop
-- **Paddle** (coming soon): Forehand, Backhand, Serve, Smash, Bandeja
-- **Badminton** (coming soon): Clear, Smash, Drop, Net Shot, Serve
-- **Table Tennis** (coming soon): Forehand, Backhand, Serve, Loop, Chop
+- **Tennis**: Forehand, Backhand, Serve, Volley, Game
+- **Golf**: Drive, Iron Shot, Chip, Putt, Full Swing
+- **Pickleball**: Dink, Drive, Serve, Volley, Third Shot Drop
+- **Paddle**: Forehand, Backhand, Serve, Smash, Bandeja
+- **Badminton**: Clear, Smash, Drop, Net Shot, Serve
+- **Table Tennis**: Forehand, Backhand, Serve, Loop, Chop
 
 ## Dependencies
 

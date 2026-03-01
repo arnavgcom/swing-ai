@@ -88,7 +88,7 @@ export default function SportSelectScreen() {
     router.replace("/(tabs)");
   };
 
-  const ENABLED_SPORTS = ["Tennis", "Golf"];
+  const ENABLED_SPORTS = ["Tennis", "Golf", "Pickleball", "Paddle", "Badminton", "Table Tennis"];
 
   const icon = (name: string) => name as keyof typeof Ionicons.glyphMap;
 

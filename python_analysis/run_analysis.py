@@ -16,9 +16,11 @@ def main():
     movement_aliases = {
         "iron-shot": "iron",
     }
+
+    sport = args.sport.lower().replace(' ', '').replace('_', '')
     movement = args.movement.lower().replace(' ', '-').replace('_', '-')
     movement = movement_aliases.get(movement, movement)
-    config_key = f"{args.sport.lower()}-{movement}"
+    config_key = f"{sport}-{movement}"
 
     try:
         from python_analysis.sports.registry import get_analyzer
