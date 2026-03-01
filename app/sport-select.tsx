@@ -274,26 +274,34 @@ export default function SportSelectScreen() {
               <View style={styles.movementsList}>
                 {movements.map((movement, idx) => {
                   const sc = getSportColors(selectedSport.name);
+                  const isMovementDisabled = selectedSport.name === "Tennis" && movement.name === "Game";
                   return (
                     <Pressable
                       key={movement.id}
-                      onPress={() => handleMovementSelect(movement)}
+                      onPress={() => !isMovementDisabled && handleMovementSelect(movement)}
+                      disabled={isMovementDisabled}
                       style={({ pressed }) => [
                         styles.movementCard,
-                        { transform: [{ scale: pressed ? 0.97 : 1 }] },
+                        { transform: [{ scale: pressed && !isMovementDisabled ? 0.97 : 1 }] },
+                        isMovementDisabled && { opacity: 0.5 },
                       ]}
                     >
-                      <View style={[styles.movementIndex, { backgroundColor: sc.primary + "20" }]}>
-                        <Text style={[styles.movementIndexText, { color: sc.primary }]}>
+                      {isMovementDisabled && (
+                        <View style={styles.movementComingSoonBadge}>
+                          <Text style={styles.comingSoonText}>Coming Soon</Text>
+                        </View>
+                      )}
+                      <View style={[styles.movementIndex, { backgroundColor: isMovementDisabled ? "#2A2A5020" : sc.primary + "20" }]}>
+                        <Text style={[styles.movementIndexText, { color: isMovementDisabled ? "#475569" : sc.primary }]}>
                           {idx + 1}
                         </Text>
                       </View>
                       <View style={styles.movementInfo}>
-                        <Text style={styles.movementName}>{movement.name}</Text>
+                        <Text style={[styles.movementName, isMovementDisabled && { color: "#475569" }]}>{movement.name}</Text>
                         <Text style={styles.movementDesc}>{movement.description}</Text>
                       </View>
-                      <View style={[styles.movementArrow, { backgroundColor: sc.primary + "15" }]}>
-                        <Ionicons name="chevron-forward" size={16} color={sc.primary} />
+                      <View style={[styles.movementArrow, { backgroundColor: isMovementDisabled ? "#2A2A5010" : sc.primary + "15" }]}>
+                        <Ionicons name="chevron-forward" size={16} color={isMovementDisabled ? "#47556950" : sc.primary} />
                       </View>
                     </Pressable>
                   );
@@ -446,6 +454,18 @@ const styles = StyleSheet.create({
     color: "#FBBF24",
     letterSpacing: 0.3,
     textTransform: "uppercase" as const,
+  },
+  movementComingSoonBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "#FBBF2420",
+    borderWidth: 1,
+    borderColor: "#FBBF2430",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    zIndex: 1,
   },
   movementHeader: {
     flexDirection: "row",
