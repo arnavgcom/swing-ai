@@ -9,6 +9,7 @@ import { requireAuth } from "./auth";
 import { db } from "./db";
 import { sports, sportMovements } from "@shared/schema";
 import { eq, asc } from "drizzle-orm";
+import { getSportConfig, getAllConfigs } from "@shared/sport-configs";
 
 const uploadDir = path.resolve(process.cwd(), "uploads");
 if (!fs.existsSync(uploadDir)) {
@@ -63,6 +64,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
+  });
+
+  app.get("/api/sport-configs", (_req: Request, res: Response) => {
+    res.json(getAllConfigs());
+  });
+
+  app.get("/api/sport-configs/:configKey", (req: Request, res: Response) => {
+    const config = getSportConfig(req.params.configKey);
+    if (!config) {
+      return res.status(404).json({ error: "Sport config not found" });
+    }
+    res.json(config);
   });
 
   app.post(
@@ -139,6 +152,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Analysis not found" });
       }
 
+      const metricsData = await storage.getMetrics(req.params.id);
+
       const periodMap: Record<string, number | null> = {
         "7d": 7,
         "30d": 30,
@@ -156,6 +171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         new Date(analysis.createdAt),
         periodDays,
         analysis.sportId,
+        metricsData?.configKey || null,
       );
 
       res.json(result);

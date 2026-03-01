@@ -16,7 +16,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useVideoPlayer, VideoView } from "expo-video";
 import Colors from "@/constants/colors";
-import { fetchAnalysisDetail, fetchComparison } from "@/lib/api";
+import {
+  fetchAnalysisDetail,
+  fetchComparison,
+  fetchSportConfig,
+} from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
 import { ScoreGauge } from "@/components/ScoreGauge";
 import { MetricCard } from "@/components/MetricCard";
@@ -30,7 +34,19 @@ const PERIODS = [
   { key: "all", label: "All" },
 ] as const;
 
-function calcChange(current: number | null | undefined, avg: number | null | undefined): number | null {
+const CATEGORY_LABELS: Record<string, string> = {
+  biomechanics: "Biomechanics",
+  ball: "Ball Metrics",
+  timing: "Timing & Rhythm",
+  consistency: "Consistency",
+  technique: "Technique",
+  power: "Power",
+};
+
+function calcChange(
+  current: number | null | undefined,
+  avg: number | null | undefined,
+): number | null {
   if (current == null || avg == null || avg === 0) return null;
   return ((current - avg) / avg) * 100;
 }
@@ -52,18 +68,51 @@ export default function AnalysisDetailScreen() {
     },
   });
 
+  const configKey = data?.metrics?.configKey;
+
+  const { data: sportConfig } = useQuery({
+    queryKey: ["sport-config", configKey],
+    queryFn: () => fetchSportConfig(configKey!),
+    enabled: !!configKey,
+  });
+
   const { data: comparison } = useQuery({
     queryKey: ["analysis", id, "comparison", period],
     queryFn: () => fetchComparison(id!, period),
-    enabled: !!id && data?.analysis?.status === "completed" && !!data?.metrics,
+    enabled:
+      !!id && data?.analysis?.status === "completed" && !!data?.metrics,
   });
 
-  const avg = comparison?.averages ?? null;
+  const avgMetrics = comparison?.averages?.metricValues ?? null;
+  const avgSubScores = comparison?.averages?.subScores ?? null;
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
   const analysis = data?.analysis;
   const m = data?.metrics;
   const coaching = data?.coaching;
+
+  const metricsByCategory = useMemo(() => {
+    if (!sportConfig) return {};
+    const groups: Record<
+      string,
+      Array<{
+        key: string;
+        label: string;
+        unit: string;
+        icon: string;
+        color: string;
+        description: string;
+        optimalRange?: [number, number];
+      }>
+    > = {};
+    for (const metric of sportConfig.metrics) {
+      if (!groups[metric.category]) {
+        groups[metric.category] = [];
+      }
+      groups[metric.category].push(metric);
+    }
+    return groups;
+  }, [sportConfig]);
 
   const videoUrl = useMemo(() => {
     if (!analysis?.videoPath) return null;
@@ -84,7 +133,10 @@ export default function AnalysisDetailScreen() {
   if (isLoading) {
     return (
       <View style={[styles.container, styles.center]}>
-        <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+        <LinearGradient
+          colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
+          style={StyleSheet.absoluteFill}
+        />
         <ActivityIndicator size="large" color="#6C5CE7" />
       </View>
     );
@@ -93,7 +145,10 @@ export default function AnalysisDetailScreen() {
   if (!analysis) {
     return (
       <View style={[styles.container, styles.center]}>
-        <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+        <LinearGradient
+          colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
+          style={StyleSheet.absoluteFill}
+        />
         <Ionicons name="alert-circle-outline" size={48} color="#F87171" />
         <Text style={[styles.errorText, { color: "#F8FAFC" }]}>
           Analysis not found
@@ -111,9 +166,15 @@ export default function AnalysisDetailScreen() {
   const isProcessing =
     analysis.status === "pending" || analysis.status === "processing";
 
+  const movementLabel =
+    sportConfig?.movementName || analysis.detectedMovement || "Movement";
+
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
+        style={StyleSheet.absoluteFill}
+      />
       <View
         style={[
           styles.topBar,
@@ -146,7 +207,7 @@ export default function AnalysisDetailScreen() {
           <View style={styles.processingCard}>
             <ActivityIndicator size="large" color={colors.tint} />
             <Text style={styles.processingTitle}>
-              Analyzing Your Forehand
+              Analyzing Your {movementLabel}
             </Text>
             <Text style={styles.processingSubtitle}>
               Processing video with pose detection, ball tracking, and motion
@@ -204,15 +265,26 @@ export default function AnalysisDetailScreen() {
         </View>
       ) : m ? (
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 34 }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + 34 },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.scoreSection}>
             <ScoreGauge
-              score={m.forehandPerformanceScore}
+              score={m.overallScore}
               size={160}
-              label="Performance"
-              change={calcChange(m.forehandPerformanceScore, avg?.forehandPerformanceScore)}
+              label={sportConfig?.overallScoreLabel || "Performance"}
+              change={calcChange(
+                m.overallScore,
+                avgSubScores
+                  ? Object.values(avgSubScores).reduce(
+                      (a, b) => a + b,
+                      0,
+                    ) / Math.max(Object.keys(avgSubScores).length, 1)
+                  : null,
+              )}
             />
           </View>
 
@@ -227,17 +299,25 @@ export default function AnalysisDetailScreen() {
             </View>
           )}
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              Performance Breakdown
-            </Text>
-            <View style={styles.barsContainer}>
-              <SubScoreBar label="Power" score={m.powerScore} delay={200} change={calcChange(m.powerScore, avg?.powerScore)} />
-              <SubScoreBar label="Stability" score={m.stabilityScore} delay={400} change={calcChange(m.stabilityScore, avg?.stabilityScore)} />
-              <SubScoreBar label="Timing" score={m.timingScore} delay={600} change={calcChange(m.timingScore, avg?.timingScore)} />
-              <SubScoreBar label="Follow-through" score={m.followThroughScore} delay={800} change={calcChange(m.followThroughScore, avg?.followThroughScore)} />
+          {sportConfig && m.subScores && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Performance Breakdown</Text>
+              <View style={styles.barsContainer}>
+                {sportConfig.scores.map((score, i) => (
+                  <SubScoreBar
+                    key={score.key}
+                    label={score.label}
+                    score={m.subScores[score.key] ?? 0}
+                    delay={200 + i * 200}
+                    change={calcChange(
+                      m.subScores[score.key],
+                      avgSubScores?.[score.key],
+                    )}
+                  />
+                ))}
+              </View>
             </View>
-          </View>
+          )}
 
           <View style={styles.periodRow}>
             {PERIODS.map((p) => (
@@ -269,156 +349,37 @@ export default function AnalysisDetailScreen() {
             )}
           </View>
 
-          <View style={styles.metricsSection}>
-            <Text style={styles.sectionTitle}>
-              Biomechanics
-            </Text>
-            <View style={styles.metricsGrid}>
-              <MetricCard
-                icon="speedometer"
-                label="Wrist Speed"
-                value={m.wristSpeed}
-                unit="m/s"
-                color="#6C5CE7"
-                change={calcChange(m.wristSpeed, avg?.wristSpeed)}
-              />
-              <MetricCard
-                icon="body"
-                label="Elbow Angle"
-                value={m.elbowAngle}
-                unit="deg"
-                color="#60A5FA"
-                change={calcChange(m.elbowAngle, avg?.elbowAngle)}
-              />
-              <MetricCard
-                icon="refresh-circle"
-                label="Shoulder Rotation"
-                value={m.shoulderRotationVelocity}
-                unit="deg/s"
-                color="#6C5CE7"
-                change={calcChange(m.shoulderRotationVelocity, avg?.shoulderRotationVelocity)}
-              />
-              <MetricCard
-                icon="footsteps"
-                label="Balance"
-                value={m.balanceStabilityScore}
-                unit="/100"
-                color="#60A5FA"
-                change={calcChange(m.balanceStabilityScore, avg?.balanceStabilityScore)}
-              />
-            </View>
-          </View>
-
-          <View style={styles.metricsSection}>
-            <Text style={styles.sectionTitle}>
-              Ball Metrics
-            </Text>
-            <View style={styles.metricsGrid}>
-              <MetricCard
-                icon="flash"
-                label="Ball Speed"
-                value={m.ballSpeed}
-                unit="mph"
-                color="#34D399"
-                change={calcChange(m.ballSpeed, avg?.ballSpeed)}
-              />
-              <MetricCard
-                icon="trending-up"
-                label="Trajectory Arc"
-                value={m.ballTrajectoryArc}
-                unit="deg"
-                color="#6C5CE7"
-                change={calcChange(m.ballTrajectoryArc, avg?.ballTrajectoryArc)}
-              />
-              <MetricCard
-                icon="sync"
-                label="Spin Rate"
-                value={m.spinEstimation}
-                unit="rpm"
-                color="#34D399"
-                change={calcChange(m.spinEstimation, avg?.spinEstimation)}
-              />
-              <MetricCard
-                icon="ribbon"
-                label="Consistency"
-                value={m.shotConsistencyScore}
-                unit="/100"
-                color="#6C5CE7"
-                change={calcChange(m.shotConsistencyScore, avg?.shotConsistencyScore)}
-              />
-            </View>
-          </View>
-
-          <View style={styles.metricsSection}>
-            <Text style={styles.sectionTitle}>
-              Timing & Rhythm
-            </Text>
-            <View style={styles.metricsGrid}>
-              <MetricCard
-                icon="arrow-back-circle"
-                label="Backswing"
-                value={m.backswingDuration}
-                unit="s"
-                color="#60A5FA"
-                change={calcChange(m.backswingDuration, avg?.backswingDuration)}
-              />
-              <MetricCard
-                icon="locate"
-                label="Contact Timing"
-                value={m.contactTiming}
-                unit="s"
-                color="#6C5CE7"
-                change={calcChange(m.contactTiming, avg?.contactTiming)}
-              />
-              <MetricCard
-                icon="arrow-forward-circle"
-                label="Follow-through"
-                value={m.followThroughDuration}
-                unit="s"
-                color="#60A5FA"
-                change={calcChange(m.followThroughDuration, avg?.followThroughDuration)}
-              />
-              <MetricCard
-                icon="musical-notes"
-                label="Rhythm"
-                value={m.rhythmConsistency}
-                unit="/100"
-                color="#6C5CE7"
-                change={calcChange(m.rhythmConsistency, avg?.rhythmConsistency)}
-              />
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <View style={styles.contactRow}>
-              <Text style={styles.sectionTitle}>
-                Contact Height
-              </Text>
-              <Text style={styles.contactValue}>
-                {m.contactHeight}m
-              </Text>
-            </View>
-            <Text style={styles.contactHint}>
-              Optimal range: 0.85m - 1.10m above ground
-            </Text>
-            <View style={styles.contactBar}>
-              <View style={styles.contactOptimal} />
-              <View
-                style={[
-                  styles.contactMarker,
-                  {
-                    left: `${Math.min(Math.max(((m.contactHeight - 0.5) / 1.0) * 100, 0), 100)}%`,
-                  },
-                ]}
-              />
-            </View>
-          </View>
+          {sportConfig &&
+            m.metricValues &&
+            Object.entries(metricsByCategory).map(
+              ([category, categoryMetrics]) => (
+                <View key={category} style={styles.metricsSection}>
+                  <Text style={styles.sectionTitle}>
+                    {CATEGORY_LABELS[category] || category}
+                  </Text>
+                  <View style={styles.metricsGrid}>
+                    {categoryMetrics.map((metric) => (
+                      <MetricCard
+                        key={metric.key}
+                        icon={metric.icon as any}
+                        label={metric.label}
+                        value={m.metricValues[metric.key] ?? 0}
+                        unit={metric.unit}
+                        color={metric.color}
+                        change={calcChange(
+                          m.metricValues[metric.key],
+                          avgMetrics?.[metric.key],
+                        )}
+                      />
+                    ))}
+                  </View>
+                </View>
+              ),
+            )}
 
           {coaching && (
             <View style={styles.coachingSection}>
-              <Text style={styles.sectionTitle}>
-                Coaching Insights
-              </Text>
+              <Text style={styles.sectionTitle}>Coaching Insights</Text>
               <CoachingCard
                 icon="trophy"
                 title="Key Strength"
@@ -554,44 +515,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
-  },
-  contactRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  contactValue: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
-    color: "#6C5CE7",
-  },
-  contactHint: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "#64748B",
-  },
-  contactBar: {
-    height: 10,
-    borderRadius: 5,
-    overflow: "hidden",
-    position: "relative",
-    backgroundColor: "#1E1E3F",
-  },
-  contactOptimal: {
-    position: "absolute",
-    left: "35%",
-    width: "25%",
-    height: "100%",
-    borderRadius: 5,
-    backgroundColor: "#6C5CE720",
-  },
-  contactMarker: {
-    position: "absolute",
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    top: 0,
-    backgroundColor: "#6C5CE7",
   },
   coachingSection: {
     gap: 14,

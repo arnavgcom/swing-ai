@@ -6,6 +6,7 @@ import {
   real,
   timestamp,
   boolean,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -73,28 +74,10 @@ export const metrics = pgTable("metrics", {
   analysisId: varchar("analysis_id")
     .notNull()
     .references(() => analyses.id),
-  wristSpeed: real("wrist_speed"),
-  elbowAngle: real("elbow_angle"),
-  shoulderRotationVelocity: real("shoulder_rotation_velocity"),
-  balanceStabilityScore: real("balance_stability_score"),
-  forehandPerformanceScore: real("forehand_performance_score"),
-  shotConsistencyScore: real("shot_consistency_score"),
-  ballSpeed: real("ball_speed"),
-  ballTrajectoryArc: real("ball_trajectory_arc"),
-  spinEstimation: real("spin_estimation"),
-  backswingDuration: real("backswing_duration"),
-  contactTiming: real("contact_timing"),
-  followThroughDuration: real("follow_through_duration"),
-  rhythmConsistency: real("rhythm_consistency"),
-  contactHeight: real("contact_height"),
-  powerScore: real("power_score"),
-  stabilityScore: real("stability_score"),
-  timingScore: real("timing_score"),
-  followThroughScore: real("follow_through_score"),
-  normalizedRacketSpeed: real("normalized_racket_speed"),
-  normalizedRotation: real("normalized_rotation"),
-  contactConsistency: real("contact_consistency"),
-  followThroughQuality: real("follow_through_quality"),
+  configKey: varchar("config_key").notNull().default("tennis-forehand"),
+  overallScore: real("overall_score"),
+  subScores: jsonb("sub_scores").$type<Record<string, number>>(),
+  metricValues: jsonb("metric_values").$type<Record<string, number>>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

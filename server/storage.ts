@@ -7,7 +7,7 @@ import {
   type Metric,
   type CoachingInsight,
 } from "@shared/schema";
-import { eq, desc, and, lt, gte, sql } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 
 export interface IStorage {
   createAnalysis(
@@ -93,29 +93,8 @@ export class DatabaseStorage implements IStorage {
     beforeDate: Date,
     periodDays: number | null,
     sportId?: string | null,
-  ): Promise<{ averages: Record<string, number> | null; count: number }> {
-    const metricFields = [
-      "wrist_speed", "elbow_angle", "shoulder_rotation_velocity",
-      "balance_stability_score", "forehand_performance_score",
-      "shot_consistency_score", "ball_speed", "ball_trajectory_arc",
-      "spin_estimation", "backswing_duration", "contact_timing",
-      "follow_through_duration", "rhythm_consistency", "contact_height",
-      "power_score", "stability_score", "timing_score", "follow_through_score",
-    ];
-
-    const camelFields = [
-      "wristSpeed", "elbowAngle", "shoulderRotationVelocity",
-      "balanceStabilityScore", "forehandPerformanceScore",
-      "shotConsistencyScore", "ballSpeed", "ballTrajectoryArc",
-      "spinEstimation", "backswingDuration", "contactTiming",
-      "followThroughDuration", "rhythmConsistency", "contactHeight",
-      "powerScore", "stabilityScore", "timingScore", "followThroughScore",
-    ];
-
-    const avgSelects = sql.raw(
-      metricFields.map((f) => `AVG(m.${f}) as avg_${f}`).join(", ")
-    );
-
+    configKey?: string | null,
+  ): Promise<{ averages: { metricValues: Record<string, number>; subScores: Record<string, number> } | null; count: number }> {
     const conditions = [
       sql`a.user_id = ${userId}`,
       sql`a.status = 'completed'`,
@@ -131,29 +110,68 @@ export class DatabaseStorage implements IStorage {
       conditions.push(sql`a.sport_id = ${sportId}`);
     }
 
+    if (configKey) {
+      conditions.push(sql`m.config_key = ${configKey}`);
+    }
+
     const whereClause = sql.join(conditions, sql` AND `);
 
-    const result = await db.execute(
-      sql`SELECT COUNT(DISTINCT a.id) as cnt, ${avgSelects}
-        FROM analyses a
-        JOIN metrics m ON m.analysis_id = a.id
-        WHERE ${whereClause}`
+    const countResult = await db.execute(
+      sql`SELECT COUNT(DISTINCT a.id) as cnt
+          FROM analyses a
+          JOIN metrics m ON m.analysis_id = a.id
+          WHERE ${whereClause}`
     );
 
-    const row = (result as any).rows?.[0] || (result as any)[0];
-    if (!row || Number(row.cnt) === 0) {
+    const countRow = (countResult as any).rows?.[0] || (countResult as any)[0];
+    const count = Number(countRow?.cnt || 0);
+    if (count === 0) {
       return { averages: null, count: 0 };
     }
 
-    const averages: Record<string, number> = {};
-    metricFields.forEach((f, i) => {
-      const val = row[`avg_${f}`];
-      if (val !== null && val !== undefined) {
-        averages[camelFields[i]] = parseFloat(Number(val).toFixed(2));
-      }
-    });
+    const metricAvgResult = await db.execute(
+      sql`SELECT kv.key, AVG(kv.value::numeric) as avg_val
+          FROM analyses a
+          JOIN metrics m ON m.analysis_id = a.id,
+          LATERAL jsonb_each_text(m.metric_values) AS kv(key, value)
+          WHERE ${whereClause}
+          GROUP BY kv.key`
+    );
 
-    return { averages, count: Number(row.cnt) };
+    const subScoreAvgResult = await db.execute(
+      sql`SELECT kv.key, AVG(kv.value::numeric) as avg_val
+          FROM analyses a
+          JOIN metrics m ON m.analysis_id = a.id,
+          LATERAL jsonb_each_text(m.sub_scores) AS kv(key, value)
+          WHERE ${whereClause}
+          GROUP BY kv.key`
+    );
+
+    const metricAvgs: Record<string, number> = {};
+    const subScoreAvgs: Record<string, number> = {};
+
+    const metricRows = (metricAvgResult as any).rows || metricAvgResult;
+    if (Array.isArray(metricRows)) {
+      for (const row of metricRows) {
+        if (row.key && row.avg_val != null) {
+          metricAvgs[row.key] = parseFloat(Number(row.avg_val).toFixed(2));
+        }
+      }
+    }
+
+    const subScoreRows = (subScoreAvgResult as any).rows || subScoreAvgResult;
+    if (Array.isArray(subScoreRows)) {
+      for (const row of subScoreRows) {
+        if (row.key && row.avg_val != null) {
+          subScoreAvgs[row.key] = parseFloat(Number(row.avg_val).toFixed(2));
+        }
+      }
+    }
+
+    return {
+      averages: { metricValues: metricAvgs, subScores: subScoreAvgs },
+      count,
+    };
   }
 
   async deleteAnalysis(id: string): Promise<void> {

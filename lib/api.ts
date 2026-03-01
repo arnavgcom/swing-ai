@@ -13,28 +13,10 @@ export interface AnalysisResponse {
 export interface MetricsResponse {
   id: string;
   analysisId: string;
-  wristSpeed: number;
-  elbowAngle: number;
-  shoulderRotationVelocity: number;
-  balanceStabilityScore: number;
-  forehandPerformanceScore: number;
-  shotConsistencyScore: number;
-  ballSpeed: number;
-  ballTrajectoryArc: number;
-  spinEstimation: number;
-  backswingDuration: number;
-  contactTiming: number;
-  followThroughDuration: number;
-  rhythmConsistency: number;
-  contactHeight: number;
-  powerScore: number;
-  stabilityScore: number;
-  timingScore: number;
-  followThroughScore: number;
-  normalizedRacketSpeed: number;
-  normalizedRotation: number;
-  contactConsistency: number;
-  followThroughQuality: number;
+  configKey: string;
+  overallScore: number;
+  subScores: Record<string, number>;
+  metricValues: Record<string, number>;
 }
 
 export interface CoachingResponse {
@@ -50,6 +32,36 @@ export interface AnalysisDetail {
   analysis: AnalysisResponse;
   metrics: MetricsResponse | null;
   coaching: CoachingResponse | null;
+}
+
+export interface SportCategoryConfig {
+  sportName: string;
+  movementName: string;
+  configKey: string;
+  overallScoreLabel: string;
+  metrics: Array<{
+    key: string;
+    label: string;
+    unit: string;
+    icon: string;
+    category: string;
+    color: string;
+    description: string;
+    optimalRange?: [number, number];
+  }>;
+  scores: Array<{
+    key: string;
+    label: string;
+    weight: number;
+  }>;
+}
+
+export interface ComparisonResponse {
+  averages: {
+    metricValues: Record<string, number>;
+    subScores: Record<string, number>;
+  } | null;
+  count: number;
 }
 
 export async function fetchAnalyses(): Promise<AnalysisResponse[]> {
@@ -72,9 +84,15 @@ export async function fetchAnalysisDetail(
   return res.json();
 }
 
-export interface ComparisonResponse {
-  averages: Record<string, number> | null;
-  count: number;
+export async function fetchSportConfig(
+  configKey: string,
+): Promise<SportCategoryConfig> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/sport-configs/${configKey}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch sport config");
+  return res.json();
 }
 
 export async function fetchComparison(

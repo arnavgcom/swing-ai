@@ -1,58 +1,40 @@
 import { db } from "./db";
-import { analyses, metrics, coachingInsights } from "@shared/schema";
+import { analyses, metrics, coachingInsights, sportMovements, sports } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { execFile } from "child_process";
-import path from "path";
-
-interface PythonMetrics {
-  wristSpeed: number;
-  elbowAngle: number;
-  shoulderRotationVelocity: number;
-  balanceStabilityScore: number;
-  forehandPerformanceScore: number;
-  shotConsistencyScore: number;
-  ballSpeed: number;
-  ballTrajectoryArc: number;
-  spinEstimation: number;
-  backswingDuration: number;
-  contactTiming: number;
-  followThroughDuration: number;
-  rhythmConsistency: number;
-  contactHeight: number;
-  powerScore: number;
-  stabilityScore: number;
-  timingScore: number;
-  followThroughScore: number;
-  normalizedRacketSpeed: number;
-  normalizedRotation: number;
-  contactConsistency: number;
-  followThroughQuality: number;
-}
-
-interface PythonCoaching {
-  keyStrength: string;
-  improvementArea: string;
-  trainingSuggestion: string;
-  simpleExplanation: string;
-}
+import { getConfigKey } from "@shared/sport-configs";
 
 interface PythonResult {
-  metrics: PythonMetrics;
-  coaching: PythonCoaching;
+  configKey: string;
+  overallScore: number;
+  subScores: Record<string, number>;
+  metricValues: Record<string, number>;
+  coaching: {
+    keyStrength: string;
+    improvementArea: string;
+    trainingSuggestion: string;
+    simpleExplanation: string;
+  };
   error?: string;
 }
 
-function runPythonAnalysis(videoPath: string): Promise<PythonResult> {
+function runPythonAnalysis(
+  videoPath: string,
+  sportName: string,
+  movementName: string,
+): Promise<PythonResult> {
   return new Promise((resolve, reject) => {
-    const scriptPath = path.resolve(
-      process.cwd(),
-      "python_analysis",
-      "run_analysis.py",
-    );
-
     execFile(
       "python3",
-      ["-m", "python_analysis.run_analysis", videoPath],
+      [
+        "-m",
+        "python_analysis.run_analysis",
+        videoPath,
+        "--sport",
+        sportName.toLowerCase(),
+        "--movement",
+        movementName.toLowerCase().replace(/\s+/g, "-"),
+      ],
       {
         cwd: process.cwd(),
         timeout: 120000,
@@ -99,15 +81,49 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       throw new Error("Analysis not found");
     }
 
-    console.log(`Starting Python OpenCV analysis for: ${analysis.videoPath}`);
-    const result = await runPythonAnalysis(analysis.videoPath);
+    let sportName = "tennis";
+    let movementName = "forehand";
+
+    if (analysis.movementId) {
+      const [movement] = await db
+        .select()
+        .from(sportMovements)
+        .where(eq(sportMovements.id, analysis.movementId));
+      if (movement) {
+        movementName = movement.name;
+      }
+    }
+
+    if (analysis.sportId) {
+      const [sport] = await db
+        .select()
+        .from(sports)
+        .where(eq(sports.id, analysis.sportId));
+      if (sport) {
+        sportName = sport.name;
+      }
+    }
+
+    const configKey = getConfigKey(sportName, movementName);
+
     console.log(
-      `Python analysis complete. Performance score: ${result.metrics.forehandPerformanceScore}`,
+      `Starting Python analysis for: ${analysis.videoPath} (${sportName}/${movementName}, config: ${configKey})`,
+    );
+    const result = await runPythonAnalysis(
+      analysis.videoPath,
+      sportName,
+      movementName,
+    );
+    console.log(
+      `Python analysis complete. Overall score: ${result.overallScore}`,
     );
 
     await db.insert(metrics).values({
       analysisId,
-      ...result.metrics,
+      configKey: result.configKey || configKey,
+      overallScore: result.overallScore,
+      subScores: result.subScores,
+      metricValues: result.metricValues,
     });
 
     await db.insert(coachingInsights).values({
@@ -117,7 +133,11 @@ export async function processAnalysis(analysisId: string): Promise<void> {
 
     await db
       .update(analyses)
-      .set({ status: "completed", updatedAt: new Date() })
+      .set({
+        status: "completed",
+        detectedMovement: movementName,
+        updatedAt: new Date(),
+      })
       .where(eq(analyses.id, analysisId));
 
     console.log(`Analysis ${analysisId} completed successfully`);

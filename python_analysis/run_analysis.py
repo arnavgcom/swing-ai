@@ -1,21 +1,30 @@
 #!/usr/bin/env python3
 import sys
 import json
+import argparse
 import traceback
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(json.dumps({"error": "Usage: run_analysis.py <video_path>"}))
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="AceX AI Sport Analysis")
+    parser.add_argument("video_path", help="Path to the video file")
+    parser.add_argument("--sport", default="tennis", help="Sport name (e.g., tennis, golf)")
+    parser.add_argument("--movement", default="forehand", help="Movement name (e.g., forehand, drive)")
 
-    video_path = sys.argv[1]
+    args = parser.parse_args()
+
+    movement_aliases = {
+        "iron-shot": "iron",
+    }
+    movement = args.movement.lower().replace(' ', '-').replace('_', '-')
+    movement = movement_aliases.get(movement, movement)
+    config_key = f"{args.sport.lower()}-{movement}"
 
     try:
-        from python_analysis.analyzer import ForehandAnalyzer
+        from python_analysis.sports.registry import get_analyzer
 
-        analyzer = ForehandAnalyzer()
-        result = analyzer.analyze_video(video_path)
+        analyzer = get_analyzer(config_key)
+        result = analyzer.analyze_video(args.video_path)
         analyzer.close()
 
         print(json.dumps(result))
