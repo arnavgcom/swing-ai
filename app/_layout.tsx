@@ -3,7 +3,6 @@ import { Stack, useSegments, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "react-native-keyboard-controller";
 import {
   useFonts,
   Inter_400Regular,
@@ -103,10 +102,8 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <SportProvider>
-            <GestureHandlerRootView>
-              <KeyboardProvider>
-                <RootNavigator />
-              </KeyboardProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <RootNavigator />
             </GestureHandlerRootView>
           </SportProvider>
         </AuthProvider>
