@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Platform,
+  Image,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
@@ -20,6 +21,7 @@ import { fetchAnalyses } from "@/lib/api";
 import { AnalysisCard } from "@/components/AnalysisCard";
 import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
+import { getApiUrl } from "@/lib/query-client";
 
 export default function DashboardScreen() {
   const colors = Colors.dark;
@@ -28,6 +30,9 @@ export default function DashboardScreen() {
   const { selectedSport, selectedMovement, setSport } = useSport();
 
   const sc = sportColors[selectedSport?.name || ""] || { primary: "#6C5CE7", gradient: "#5A4BD1" };
+  const avatarSource = user?.avatarUrl
+    ? { uri: `${getApiUrl()}${user.avatarUrl.replace(/^\//, "")}` }
+    : null;
 
   const { data: analyses, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["analyses"],
@@ -100,9 +105,13 @@ export default function DashboardScreen() {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 router.push("/profile");
               }}
-              style={styles.avatarCircle}
+              style={[styles.avatarCircle, avatarSource && styles.avatarCircleWithImage]}
             >
-              <Ionicons name="person" size={15} color="#94A3B8" />
+              {avatarSource ? (
+                <Image source={avatarSource} style={styles.avatarImage} />
+              ) : (
+                <Ionicons name="person" size={15} color="#94A3B8" />
+              )}
             </Pressable>
           </View>
         </View>
@@ -247,6 +256,16 @@ const styles = StyleSheet.create({
     borderColor: "#2A2A50",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarCircleWithImage: {
+    borderColor: "#6C5CE7",
+    borderWidth: 2,
+  },
+  avatarImage: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
   },
   movementBanner: {
     flexDirection: "row",
