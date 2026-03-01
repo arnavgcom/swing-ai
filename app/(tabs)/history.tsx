@@ -13,23 +13,286 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
-import { fetchAnalyses, deleteAnalysis } from "@/lib/api";
-import { AnalysisCard } from "@/components/AnalysisCard";
+import { fetchAnalysesSummary, deleteAnalysis } from "@/lib/api";
+import type { AnalysisSummary } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { useSport } from "@/lib/sport-context";
+import { sportColors } from "@/constants/colors";
+import { TabHeader } from "@/components/TabHeader";
+
+function TrendChart({ data }: { data: number[] }) {
+  if (data.length === 0) return null;
+
+  const maxVal = Math.max(...data, 1);
+  const minVal = Math.min(...data, 0);
+  const range = Math.max(maxVal - minVal, 10);
+  const chartHeight = 100;
+  const chartWidth = 280;
+  const stepX = data.length > 1 ? chartWidth / (data.length - 1) : 0;
+
+  const points = data.map((val, i) => ({
+    x: i * stepX,
+    y: chartHeight - ((val - minVal) / range) * chartHeight,
+  }));
+
+  return (
+    <View style={trendStyles.container}>
+      <View style={trendStyles.gridLine} />
+      <View style={[trendStyles.gridLine, { top: "50%" }]} />
+      <View style={{ width: chartWidth, height: chartHeight, position: "relative" }}>
+        {points.map((point, i) => {
+          if (i === 0) return null;
+          const prev = points[i - 1];
+          const dx = point.x - prev.x;
+          const dy = point.y - prev.y;
+          const length = Math.sqrt(dx * dx + dy * dy);
+          const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+          return (
+            <View
+              key={`line-${i}`}
+              style={{
+                position: "absolute",
+                left: prev.x,
+                top: prev.y,
+                width: length,
+                height: 2,
+                backgroundColor: "#34D399",
+                transform: [{ rotate: `${angle}deg` }],
+                transformOrigin: "left center",
+                opacity: 0.8,
+              }}
+            />
+          );
+        })}
+        {points.map((point, i) => (
+          <View
+            key={`dot-${i}`}
+            style={[
+              trendStyles.dot,
+              {
+                left: point.x - 4,
+                top: point.y - 4,
+                backgroundColor: i === points.length - 1 ? "#34D399" : "#34D39960",
+                width: i === points.length - 1 ? 10 : 8,
+                height: i === points.length - 1 ? 10 : 8,
+                borderRadius: i === points.length - 1 ? 5 : 4,
+                left: point.x - (i === points.length - 1 ? 5 : 4),
+                top: point.y - (i === points.length - 1 ? 5 : 4),
+              },
+            ]}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const trendStyles = StyleSheet.create({
+  container: { position: "relative", alignItems: "center", paddingVertical: 12 },
+  gridLine: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    top: "25%",
+    height: 1,
+    backgroundColor: "#2A2A5020",
+  },
+  dot: { position: "absolute" },
+});
+
+function SummaryCard({
+  item,
+  isOwner,
+  onPress,
+  onDelete,
+}: {
+  item: AnalysisSummary;
+  isOwner: boolean;
+  onPress: () => void;
+  onDelete: () => void;
+}) {
+  const date = new Date(item.createdAt);
+  const timeStr = date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const score = item.overallScore != null ? Math.round(item.overallScore) : null;
+  const subs = item.subScores || {};
+  const subEntries = Object.entries(subs).slice(0, 3);
+  const movement = item.detectedMovement || item.videoFilename?.split("-")[1] || "";
+
+  const statusConfig: Record<string, { color: string; label: string }> = {
+    pending: { color: "#FBBF24", label: "Pending" },
+    processing: { color: "#60A5FA", label: "Processing" },
+    completed: { color: "#34D399", label: "Completed" },
+    failed: { color: "#F87171", label: "Failed" },
+  };
+  const status = statusConfig[item.status] || statusConfig.pending;
+
+  return (
+    <Pressable
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onPress();
+      }}
+      style={({ pressed }) => [
+        summaryStyles.card,
+        { transform: [{ scale: pressed ? 0.98 : 1 }] },
+      ]}
+    >
+      <View style={[summaryStyles.accentBar, { backgroundColor: status.color }]} />
+      <View style={summaryStyles.cardTop}>
+        <View style={summaryStyles.cardTopLeft}>
+          <Text style={summaryStyles.timeText}>{timeStr}</Text>
+          {movement ? (
+            <Text style={summaryStyles.movementText}>{movement}</Text>
+          ) : null}
+        </View>
+        <View style={summaryStyles.cardTopRight}>
+          {score != null ? (
+            <Text style={summaryStyles.scoreText}>{score}</Text>
+          ) : (
+            <View style={[summaryStyles.statusBadge, { backgroundColor: status.color + "14" }]}>
+              <Text style={[summaryStyles.statusText, { color: status.color }]}>{status.label}</Text>
+            </View>
+          )}
+          <Ionicons name="chevron-forward" size={16} color="#475569" />
+        </View>
+      </View>
+
+      {subEntries.length > 0 && (
+        <View style={summaryStyles.metricsRow}>
+          {subEntries.map(([key, val]) => (
+            <View key={key} style={summaryStyles.metricItem}>
+              <Text style={summaryStyles.metricLabel} numberOfLines={1}>{key}</Text>
+              <Text style={summaryStyles.metricValue}>{Math.round(val)}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {isOwner && (
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation?.();
+            onDelete();
+          }}
+          style={({ pressed }) => [
+            summaryStyles.deleteBtn,
+            { opacity: pressed ? 0.6 : 1 },
+          ]}
+          hitSlop={8}
+        >
+          <Ionicons name="trash-outline" size={16} color="#F87171" />
+        </Pressable>
+      )}
+    </Pressable>
+  );
+}
+
+const summaryStyles = StyleSheet.create({
+  card: {
+    backgroundColor: "#15152D",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#2A2A5040",
+    padding: 16,
+    overflow: "hidden",
+    position: "relative",
+  },
+  accentBar: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+  },
+  cardTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  cardTopLeft: { flex: 1, gap: 2 },
+  cardTopRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  timeText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
+  },
+  movementText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
+  },
+  scoreText: {
+    fontSize: 28,
+    fontFamily: "Inter_700Bold",
+    color: "#34D399",
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  statusText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  metricsRow: {
+    flexDirection: "row",
+    marginTop: 12,
+    gap: 8,
+  },
+  metricItem: {
+    flex: 1,
+    backgroundColor: "#0A0A1A50",
+    borderRadius: 10,
+    padding: 10,
+    alignItems: "center",
+    gap: 2,
+    borderWidth: 1,
+    borderColor: "#2A2A5020",
+  },
+  metricLabel: {
+    fontSize: 10,
+    fontFamily: "Inter_500Medium",
+    color: "#64748B",
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.3,
+  },
+  metricValue: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+  },
+  deleteBtn: {
+    position: "absolute",
+    right: 8,
+    bottom: 8,
+    padding: 6,
+  },
+});
 
 export default function HistoryScreen() {
   const colors = Colors.dark;
-  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { selectedSport } = useSport();
+
+  const sc = sportColors[selectedSport?.name || ""] || { primary: "#6C5CE7", gradient: "#5A4BD1" };
 
   const { data: analyses, isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ["analyses"],
-    queryFn: fetchAnalyses,
+    queryKey: ["analyses-summary"],
+    queryFn: fetchAnalysesSummary,
     refetchInterval: 5000,
     enabled: !!user,
     retry: false,
@@ -38,7 +301,7 @@ export default function HistoryScreen() {
   const deleteMutation = useMutation({
     mutationFn: deleteAnalysis,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["analyses"] });
+      queryClient.invalidateQueries({ queryKey: ["analyses-summary"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
   });
@@ -55,33 +318,109 @@ export default function HistoryScreen() {
     ]);
   };
 
-  const webTopInset = Platform.OS === "web" ? 67 : 0;
-
   const isAdmin = user?.role === "admin";
-  const isOwner = (item: (typeof analyses)[0]) => item.userId === user?.id;
+  const isOwner = (item: AnalysisSummary) => item.userId === user?.id;
 
-  const renderItem = ({ item }: { item: (typeof analyses)[0] }) => (
-    <View style={styles.cardWrapper}>
-      <AnalysisCard
-        analysis={item}
-        showUserName={isAdmin}
-        onPress={() =>
-          router.push({
-            pathname: "/analysis/[id]",
-            params: { id: item.id },
-          })
-        }
-      />
-      {isOwner(item) && (
-        <Pressable
-          onPress={() => handleDelete(item.id, item.videoFilename)}
-          style={({ pressed }) => [
-            styles.deleteBtn,
-            { opacity: pressed ? 0.6 : 1 },
-          ]}
-        >
-          <Ionicons name="trash-outline" size={18} color={colors.red} />
-        </Pressable>
+  const totalAnalyses = analyses?.length || 0;
+  const completed = analyses?.filter((a) => a.status === "completed") || [];
+  const processing = analyses?.filter((a) => a.status === "processing" || a.status === "pending") || [];
+
+  const trendScores = completed
+    .filter((a) => a.overallScore != null)
+    .slice(0, 7)
+    .reverse()
+    .map((a) => Math.round(a.overallScore || 0));
+
+  const latestScore = completed.length > 0 && completed[0].overallScore != null
+    ? Math.round(completed[0].overallScore)
+    : null;
+
+  const now = Date.now();
+  const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
+  const olderThanWeek = completed.filter((a) => a.overallScore != null && new Date(a.createdAt).getTime() < oneWeekAgo);
+  let scoreDelta: number | null = null;
+  if (latestScore != null && olderThanWeek.length > 0) {
+    const avgOld = olderThanWeek.reduce((s, a) => s + (a.overallScore || 0), 0) / olderThanWeek.length;
+    scoreDelta = Math.round(latestScore - avgOld);
+  }
+
+  const renderItem = ({ item }: { item: AnalysisSummary }) => (
+    <SummaryCard
+      item={item}
+      isOwner={isOwner(item)}
+      onPress={() =>
+        router.push({
+          pathname: "/analysis/[id]",
+          params: { id: item.id },
+        })
+      }
+      onDelete={() => handleDelete(item.id, item.videoFilename)}
+    />
+  );
+
+  const ListHeader = () => (
+    <View>
+      <View style={styles.headerSection}>
+        <Text style={styles.title}>History</Text>
+        <Text style={styles.subtitle}>Track your progress over time</Text>
+      </View>
+
+      {trendScores.length > 1 && (
+        <View style={styles.trendCard}>
+          <LinearGradient
+            colors={[sc.primary + "12", sc.gradient + "08", "#15152D"]}
+            style={styles.trendCardGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <View style={styles.trendHeader}>
+              <Text style={styles.trendLabel}>Overall Score</Text>
+              <View style={styles.trendScoreRow}>
+                <Text style={styles.trendScore}>
+                  {latestScore != null ? latestScore : "—"}
+                </Text>
+                {scoreDelta != null && (
+                  <View style={styles.trendDelta}>
+                    <Ionicons
+                      name={scoreDelta >= 0 ? "arrow-up" : "arrow-down"}
+                      size={12}
+                      color={scoreDelta >= 0 ? "#34D399" : "#F87171"}
+                    />
+                    <Text style={[styles.trendDeltaText, { color: scoreDelta >= 0 ? "#34D399" : "#F87171" }]}>
+                      {Math.abs(scoreDelta)} this week
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+            <TrendChart data={trendScores} />
+          </LinearGradient>
+        </View>
+      )}
+
+      <View style={styles.statsRow}>
+        {[
+          { label: "Total", value: totalAnalyses, color: "#6C5CE7", icon: "analytics" as const },
+          { label: "Active", value: processing.length, color: "#60A5FA", icon: "pulse" as const },
+          { label: "Done", value: completed.length, color: "#34D399", icon: "checkmark-circle" as const },
+        ].map((stat) => (
+          <View key={stat.label} style={styles.statCard}>
+            <LinearGradient
+              colors={[stat.color + "14", stat.color + "06"]}
+              style={styles.statCardGradient}
+            >
+              <Ionicons name={stat.icon} size={18} color={stat.color} />
+              <Text style={[styles.statNumber, { color: stat.color }]}>
+                {stat.value}
+              </Text>
+              <Text style={styles.statLabel}>{stat.label}</Text>
+            </LinearGradient>
+          </View>
+        ))}
+      </View>
+
+      {analyses && analyses.length > 0 && (
+        <Text style={styles.recentTitle}>Recent Analyses</Text>
       )}
     </View>
   );
@@ -92,12 +431,8 @@ export default function HistoryScreen() {
         colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
         style={StyleSheet.absoluteFill}
       />
-      <View style={[styles.header, { paddingTop: insets.top + 16 + webTopInset }]}>
-        <Text style={styles.title}>History</Text>
-        <Text style={styles.subtitle}>
-          {analyses?.length || 0} analyses
-        </Text>
-      </View>
+
+      <TabHeader />
 
       {isLoading ? (
         <View style={styles.loadingWrap}>
@@ -112,7 +447,8 @@ export default function HistoryScreen() {
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#6C5CE7" />
           }
-          scrollEnabled={!!(analyses && analyses.length > 0)}
+          scrollEnabled={true}
+          ListHeaderComponent={ListHeader}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <View style={styles.emptyIconWrap}>
@@ -132,9 +468,8 @@ export default function HistoryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0A0A1A" },
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+  headerSection: {
+    marginBottom: 20,
   },
   title: {
     fontSize: 26,
@@ -142,7 +477,7 @@ const styles = StyleSheet.create({
     color: "#F8FAFC",
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: "Inter_400Regular",
     marginTop: 4,
     color: "#94A3B8",
@@ -152,22 +487,88 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  trendCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#6C5CE730",
+    overflow: "hidden",
+    marginBottom: 16,
+  },
+  trendCardGradient: {
+    padding: 20,
+    borderRadius: 20,
+  },
+  trendHeader: {
+    marginBottom: 4,
+  },
+  trendLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
+  },
+  trendScoreRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 10,
+  },
+  trendScore: {
+    fontSize: 36,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+    lineHeight: 42,
+  },
+  trendDelta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingBottom: 6,
+  },
+  trendDeltaText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 24,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  statCardGradient: {
+    padding: 14,
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#2A2A5030",
+  },
+  statNumber: {
+    fontSize: 24,
+    fontFamily: "Inter_700Bold",
+  },
+  statLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+    color: "#64748B",
+  },
+  recentTitle: {
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+    color: "#CBD5E1",
+    marginBottom: 12,
+  },
   list: {
     paddingHorizontal: 20,
-    gap: 14,
-  },
-  cardWrapper: {
-    position: "relative",
-  },
-  deleteBtn: {
-    position: "absolute",
-    right: 8,
-    bottom: 8,
-    padding: 6,
+    gap: 12,
   },
   emptyState: {
     alignItems: "center",
-    paddingTop: 60,
+    paddingTop: 40,
     gap: 12,
   },
   emptyIconWrap: {
@@ -188,7 +589,7 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
-    textAlign: "center",
+    textAlign: "center" as const,
     paddingHorizontal: 40,
     color: "#64748B",
   },

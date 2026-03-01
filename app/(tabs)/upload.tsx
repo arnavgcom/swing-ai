@@ -19,6 +19,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
 import { uploadVideo } from "@/lib/api";
 import { useSport } from "@/lib/sport-context";
+import { TabHeader } from "@/components/TabHeader";
 
 export default function UploadScreen() {
   const colors = Colors.dark;
@@ -47,7 +48,7 @@ export default function UploadScreen() {
     },
     onSuccess: (data) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      queryClient.invalidateQueries({ queryKey: ["analyses"] });
+      queryClient.invalidateQueries({ queryKey: ["analyses-summary"] });
       setSelectedVideo(null);
       router.push({
         pathname: "/analysis/[id]",
@@ -144,10 +145,11 @@ export default function UploadScreen() {
         colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
         style={StyleSheet.absoluteFill}
       />
+      <TabHeader />
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 16 + webTopInset, paddingBottom: 100 },
+          { paddingBottom: 100 },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"

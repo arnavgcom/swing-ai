@@ -7,7 +7,7 @@
 - **Database**: Replit PostgreSQL via Drizzle ORM — stores users, sports, sport_movements, analyses, metrics (JSONB), coaching_insights tables
 - **Video Storage**: Local `uploads/` folder on Replit filesystem. Files renamed to `Sport-Category-UserName-YYYYMMDD-HHMMSS-xxxx.ext` on upload (e.g., `Tennis-Forehand-JohnSmith-20260301-143022-a1b2.mp4`)
 - **ML Pipeline**: Python 3.11 with OpenCV (frame extraction), MediaPipe Tasks API v0.10.32 (pose detection), HSV ball tracking — pluggable per-sport analyzers with automatic movement classification
-- **Auth**: Email/password + Google OAuth (WebBrowser.openAuthSessionAsync + backend bridge page at `/api/auth/google/mobile-callback`) with express-session + connect-pg-simple (session stored in PostgreSQL). Google Client ID via `EXPO_PUBLIC_GOOGLE_CLIENT_ID` env var.
+- **Auth**: Google OAuth + Apple Sign-In (coming soon) via WebBrowser.openAuthSessionAsync + backend bridge page at `/api/auth/google/mobile-callback` with express-session + connect-pg-simple (session stored in PostgreSQL). Google Client ID via `EXPO_PUBLIC_GOOGLE_CLIENT_ID` env var.
 
 ## Sport-Agnostic Architecture
 
@@ -52,7 +52,7 @@ All data is stored entirely on Replit:
 ### Backend
 - `server/index.ts` — Express app entry point (port 5000)
 - `server/auth.ts` — Authentication routes (register, login, logout, me) + profile routes (GET/PUT /api/profile, POST /api/profile/avatar) + session setup
-- `server/routes.ts` — API routes: sports, upload, analyses CRUD, sport-configs endpoints (GET /api/sport-configs, GET /api/sport-configs/:configKey), comparison endpoint
+- `server/routes.ts` — API routes: sports, upload, analyses CRUD, sport-configs endpoints, comparison endpoint, `GET /api/analyses/summary` (analyses with overallScore/subScores joined from metrics table)
 - `server/analysis-engine.ts` — Looks up sport/movement from analysis record, passes --sport/--movement to Python, stores JSONB results
 - `server/storage.ts` — DatabaseStorage class (Drizzle ORM CRUD operations with JSONB metric queries)
 - `server/seed-sports.ts` — Seeds 6 sports + movements on first startup

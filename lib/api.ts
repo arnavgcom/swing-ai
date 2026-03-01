@@ -77,6 +77,21 @@ export async function fetchAnalyses(): Promise<AnalysisResponse[]> {
   return res.json();
 }
 
+export interface AnalysisSummary extends AnalysisResponse {
+  overallScore: number | null;
+  subScores: Record<string, number> | null;
+  configKey: string | null;
+}
+
+export async function fetchAnalysesSummary(): Promise<AnalysisSummary[]> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/analyses/summary`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch analyses summary");
+  return res.json();
+}
+
 export async function fetchAnalysisDetail(
   id: string,
 ): Promise<AnalysisDetail> {

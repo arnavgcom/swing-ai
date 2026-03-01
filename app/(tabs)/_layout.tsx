@@ -12,15 +12,12 @@ function NativeTabLayout() {
     <NativeTabs>
       <NativeTabs.Trigger name="index">
         <Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
-        <Label>Dashboard</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="upload">
         <Icon sf={{ default: "plus.circle", selected: "plus.circle.fill" }} />
-        <Label>Analyze</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="history">
         <Icon sf={{ default: "clock", selected: "clock.fill" }} />
-        <Label>History</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
@@ -66,7 +63,8 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Dashboard",
+          title: "",
+          tabBarLabel: () => null,
           tabBarIcon: ({ color }) => (
             <Ionicons name="stats-chart" size={22} color={color} />
           ),
@@ -75,7 +73,8 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="upload"
         options={{
-          title: "Analyze",
+          title: "",
+          tabBarLabel: () => null,
           tabBarIcon: ({ color }) => (
             <Ionicons name="add-circle-outline" size={24} color={color} />
           ),
@@ -84,7 +83,8 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="history"
         options={{
-          title: "History",
+          title: "",
+          tabBarLabel: () => null,
           tabBarIcon: ({ color }) => (
             <Ionicons name="time-outline" size={22} color={color} />
           ),

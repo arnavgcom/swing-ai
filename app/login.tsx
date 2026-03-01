@@ -165,7 +165,7 @@ export default function LoginScreen() {
           <Text style={styles.appName}>
             Swing <Text style={styles.appNameAccent}>AI</Text>
           </Text>
-          <Text style={styles.tagline}>Your AI Performance Coach</Text>
+          <Text style={styles.tagline}>Improve Every Swing</Text>
         </View>
 
         <View style={styles.bottomSection}>
@@ -196,6 +196,21 @@ export default function LoginScreen() {
                 </>
               )}
             </LinearGradient>
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              Alert.alert("Coming Soon", "Apple Sign-In will be available soon.");
+            }}
+            style={({ pressed }) => [
+              styles.appleButton,
+              { transform: [{ scale: pressed ? 0.97 : 1 }] },
+            ]}
+            testID="apple-login-button"
+          >
+            <Ionicons name="logo-apple" size={20} color="#F8FAFC" />
+            <Text style={styles.appleText}>Continue with Apple</Text>
           </Pressable>
 
           <Text style={styles.termsText}>
@@ -275,6 +290,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
     color: "#fff",
+  },
+  appleButton: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    backgroundColor: "#15152D",
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    borderRadius: 16,
+    paddingVertical: 17,
+  },
+  appleText: {
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
   },
   termsText: {
     fontSize: 12,

@@ -8,48 +8,127 @@ import {
   RefreshControl,
   ActivityIndicator,
   Platform,
-  Image,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import Colors, { sportColors } from "@/constants/colors";
-import { fetchAnalyses } from "@/lib/api";
-import { AnalysisCard } from "@/components/AnalysisCard";
+import { sportColors } from "@/constants/colors";
+import { fetchAnalysesSummary } from "@/lib/api";
+import type { AnalysisSummary } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
-import { getApiUrl } from "@/lib/query-client";
+import { TabHeader } from "@/components/TabHeader";
+
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good Morning";
+  if (h < 17) return "Good Afternoon";
+  return "Good Evening";
+}
+
+function computeScores(analyses: AnalysisSummary[]) {
+  const completed = analyses.filter((a) => a.status === "completed" && a.overallScore != null);
+  if (completed.length === 0) {
+    return { overall: null, consistency: null, power: null, focus: null, overallDelta: null, consistencyDelta: null, powerDelta: null };
+  }
+
+  const latest = completed[0];
+  const overall = Math.round(latest.overallScore || 0);
+  const subs = latest.subScores || {};
+
+  const subKeys = Object.keys(subs);
+  const consistency = subs["Consistency"] ?? subs["consistency"] ?? (subKeys.length > 0 ? subs[subKeys[0]] : null);
+  const power = subs["Power"] ?? subs["power"] ?? subs["Technique"] ?? subs["technique"] ?? (subKeys.length > 1 ? subs[subKeys[1]] : null);
+
+  let lowestKey = "";
+  let lowestVal = Infinity;
+  for (const k of subKeys) {
+    if (subs[k] < lowestVal) {
+      lowestVal = subs[k];
+      lowestKey = k;
+    }
+  }
+  const focus = lowestKey || null;
+
+  const now = Date.now();
+  const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
+  const olderThanWeek = completed.filter((a) => new Date(a.createdAt).getTime() < oneWeekAgo);
+
+  let overallDelta: number | null = null;
+  let consistencyDelta: number | null = null;
+  let powerDelta: number | null = null;
+
+  if (olderThanWeek.length > 0) {
+    const avgOld = olderThanWeek.reduce((s, a) => s + (a.overallScore || 0), 0) / olderThanWeek.length;
+    overallDelta = Math.round(overall - avgOld);
+
+    if (consistency != null) {
+      const oldConsVals = olderThanWeek.map((a) => {
+        const s = a.subScores || {};
+        return s["Consistency"] ?? s["consistency"] ?? (Object.keys(s).length > 0 ? s[Object.keys(s)[0]] : null);
+      }).filter((v): v is number => v != null);
+      if (oldConsVals.length > 0) {
+        consistencyDelta = Math.round(consistency - oldConsVals.reduce((a, b) => a + b, 0) / oldConsVals.length);
+      }
+    }
+    if (power != null) {
+      const oldPowVals = olderThanWeek.map((a) => {
+        const s = a.subScores || {};
+        return s["Power"] ?? s["power"] ?? s["Technique"] ?? s["technique"] ?? (Object.keys(s).length > 1 ? s[Object.keys(s)[1]] : null);
+      }).filter((v): v is number => v != null);
+      if (oldPowVals.length > 0) {
+        powerDelta = Math.round(power - oldPowVals.reduce((a, b) => a + b, 0) / oldPowVals.length);
+      }
+    }
+  }
+
+  return {
+    overall,
+    consistency: consistency != null ? Math.round(consistency) : null,
+    power: power != null ? Math.round(power) : null,
+    focus,
+    overallDelta,
+    consistencyDelta,
+    powerDelta,
+  };
+}
+
+function DeltaBadge({ value }: { value: number | null }) {
+  if (value == null) return null;
+  const isUp = value >= 0;
+  return (
+    <View style={[deltaStyles.badge, { backgroundColor: isUp ? "#34D39915" : "#F8717115" }]}>
+      <Ionicons name={isUp ? "arrow-up" : "arrow-down"} size={10} color={isUp ? "#34D399" : "#F87171"} />
+      <Text style={[deltaStyles.text, { color: isUp ? "#34D399" : "#F87171" }]}>
+        {Math.abs(value)}
+      </Text>
+    </View>
+  );
+}
+
+const deltaStyles = StyleSheet.create({
+  badge: { flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
+  text: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+});
 
 export default function DashboardScreen() {
-  const colors = Colors.dark;
-  const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { selectedSport, selectedMovement, setSport } = useSport();
+  const { selectedSport } = useSport();
 
   const sc = sportColors[selectedSport?.name || ""] || { primary: "#6C5CE7", gradient: "#5A4BD1" };
-  const avatarSource = user?.avatarUrl
-    ? { uri: `${getApiUrl()}${user.avatarUrl.replace(/^\//, "")}` }
-    : null;
 
   const { data: analyses, isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ["analyses"],
-    queryFn: fetchAnalyses,
+    queryKey: ["analyses-summary"],
+    queryFn: fetchAnalysesSummary,
     refetchInterval: 5000,
     enabled: !!user,
     retry: false,
   });
 
-  const completed = analyses?.filter((a) => a.status === "completed") || [];
-  const processing = analyses?.filter(
-    (a) => a.status === "processing" || a.status === "pending",
-  ) || [];
-  const totalAnalyses = analyses?.length || 0;
-
-  const webTopInset = Platform.OS === "web" ? 67 : 0;
   const firstName = user?.name?.split(" ")[0] || "Athlete";
+  const scores = computeScores(analyses || []);
 
   return (
     <View style={styles.container}>
@@ -58,144 +137,116 @@ export default function DashboardScreen() {
         style={StyleSheet.absoluteFill}
       />
 
+      <TabHeader />
+
       <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingTop: insets.top + 16 + webTopInset, paddingBottom: 100 },
-        ]}
+        contentContainerStyle={styles.scroll}
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#6C5CE7" />
         }
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.topBar}>
-          <View style={styles.topBarLeft}>
-            <Text style={styles.greeting}>Welcome {firstName}</Text>
-          </View>
-          <View style={styles.topBarRight}>
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/sport-select");
-              }}
-              style={[styles.sportPill, { borderColor: sc.primary + "40" }]}
-            >
-              <LinearGradient
-                colors={[sc.primary + "18", sc.gradient + "08"]}
-                style={styles.sportPillGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <Ionicons
-                  name={selectedSport?.icon as any || "fitness-outline"}
-                  size={14}
-                  color={sc.primary}
-                />
-                <Text style={[styles.sportPillText, { color: sc.primary }]}>
-                  {selectedSport?.name || "Sport"}
-                </Text>
-                <Ionicons name="swap-horizontal" size={11} color={sc.primary} />
-              </LinearGradient>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/profile");
-              }}
-              style={[styles.avatarCircle, avatarSource && styles.avatarCircleWithImage]}
-            >
-              {avatarSource ? (
-                <Image source={avatarSource} style={styles.avatarImage} />
-              ) : (
-                <Ionicons name="person" size={15} color="#64748B" />
-              )}
-            </Pressable>
-          </View>
-        </View>
-
-        {selectedMovement && (
-          <View style={[styles.movementBanner, { borderColor: sc.primary + "25" }]}>
-            <View style={[styles.movementDot, { backgroundColor: sc.primary }]} />
-            <Text style={[styles.movementBannerText, { color: sc.primary }]}>
-              {selectedMovement.name} Analysis
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.statsRow}>
-          {[
-            { label: "Total", value: totalAnalyses, color: "#6C5CE7", icon: "analytics" as const },
-            { label: "Active", value: processing.length, color: "#60A5FA", icon: "pulse" as const },
-            { label: "Done", value: completed.length, color: "#34D399", icon: "checkmark-circle" as const },
-          ].map((stat) => (
-            <View key={stat.label} style={styles.statCard}>
-              <LinearGradient
-                colors={[stat.color + "14", stat.color + "06"]}
-                style={styles.statCardGradient}
-              >
-                <Ionicons name={stat.icon} size={18} color={stat.color} />
-                <Text style={[styles.statNumber, { color: stat.color }]}>
-                  {stat.value}
-                </Text>
-                <Text style={styles.statLabel}>{stat.label}</Text>
-              </LinearGradient>
-            </View>
-          ))}
+        <View style={styles.greetingSection}>
+          <Text style={styles.greeting}>{getGreeting()}, {firstName}</Text>
+          <Text style={styles.sportLine}>Your {selectedSport?.name || "Sport"} Performance</Text>
         </View>
 
         {isLoading ? (
           <View style={styles.loadingWrap}>
             <ActivityIndicator size="large" color="#6C5CE7" />
           </View>
-        ) : !analyses || analyses.length === 0 ? (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIconWrap}>
-              <Ionicons name={selectedSport?.icon as any || "fitness-outline"} size={36} color="#475569" />
+        ) : (
+          <>
+            <View style={styles.glassCard}>
+              <LinearGradient
+                colors={[sc.primary + "12", sc.gradient + "08", "#15152D"]}
+                style={styles.glassCardGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Text style={styles.glassLabel}>Overall Score</Text>
+                <View style={styles.scoreRow}>
+                  <Text style={styles.scoreBig}>
+                    {scores.overall != null ? scores.overall : "—"}
+                  </Text>
+                  {scores.overallDelta != null && (
+                    <View style={styles.deltaInline}>
+                      <Ionicons
+                        name={scores.overallDelta >= 0 ? "arrow-up" : "arrow-down"}
+                        size={14}
+                        color={scores.overallDelta >= 0 ? "#34D399" : "#F87171"}
+                      />
+                      <Text style={[styles.deltaText, { color: scores.overallDelta >= 0 ? "#34D399" : "#F87171" }]}>
+                        {Math.abs(scores.overallDelta)} this week
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.subRow}>
+                  <View style={styles.subItem}>
+                    <Text style={styles.subLabel}>Consistency</Text>
+                    <View style={styles.subValueRow}>
+                      <Text style={styles.subValue}>
+                        {scores.consistency != null ? scores.consistency : "—"}
+                      </Text>
+                      <DeltaBadge value={scores.consistencyDelta} />
+                    </View>
+                  </View>
+                  <View style={[styles.subDivider, { backgroundColor: sc.primary + "20" }]} />
+                  <View style={styles.subItem}>
+                    <Text style={styles.subLabel}>Power</Text>
+                    <View style={styles.subValueRow}>
+                      <Text style={styles.subValue}>
+                        {scores.power != null ? scores.power : "—"}
+                      </Text>
+                      <DeltaBadge value={scores.powerDelta} />
+                    </View>
+                  </View>
+                  <View style={[styles.subDivider, { backgroundColor: sc.primary + "20" }]} />
+                  <View style={styles.subItem}>
+                    <Text style={styles.subLabel}>Today's Focus</Text>
+                    <Text style={[styles.focusText, { color: sc.primary }]} numberOfLines={2}>
+                      {scores.focus || "—"}
+                    </Text>
+                  </View>
+                </View>
+              </LinearGradient>
             </View>
-            <Text style={styles.emptyTitle}>No analyses yet</Text>
-            <Text style={styles.emptyText}>
-              Upload a {selectedMovement?.name?.toLowerCase() || selectedSport?.name?.toLowerCase() || "sport"} video to get started
-            </Text>
+
             <Pressable
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 router.push("/(tabs)/upload");
               }}
               style={({ pressed }) => [
-                styles.ctaButton,
-                { transform: [{ scale: pressed ? 0.96 : 1 }] },
+                styles.uploadButton,
+                { transform: [{ scale: pressed ? 0.97 : 1 }] },
               ]}
             >
               <LinearGradient
                 colors={["#6C5CE7", "#A29BFE"]}
-                style={styles.ctaGradient}
+                style={styles.uploadGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <Ionicons name="add" size={20} color="#fff" />
-                <Text style={styles.ctaText}>Upload Video</Text>
+                <Ionicons name="add" size={22} color="#fff" />
+                <Text style={styles.uploadText}>Upload Video</Text>
               </LinearGradient>
             </Pressable>
-          </View>
-        ) : (
-          <View style={styles.listSection}>
-            <Text style={styles.sectionTitle}>Recent Analyses</Text>
-            <View style={styles.list}>
-              {analyses.slice(0, 10).map((analysis) => (
-                <AnalysisCard
-                  key={analysis.id}
-                  analysis={analysis}
-                  showUserName={user?.role === "admin"}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/analysis/[id]",
-                      params: { id: analysis.id },
-                    })
-                  }
-                />
-              ))}
-            </View>
-          </View>
+
+            {(!analyses || analyses.length === 0) && (
+              <View style={styles.emptyState}>
+                <View style={styles.emptyIconWrap}>
+                  <Ionicons name={(selectedSport?.icon as any) || "fitness-outline"} size={36} color="#475569" />
+                </View>
+                <Text style={styles.emptyTitle}>No analyses yet</Text>
+                <Text style={styles.emptyText}>
+                  Upload a {selectedSport?.name?.toLowerCase() || "sport"} video to get started
+                </Text>
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
     </View>
@@ -204,113 +255,119 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0A0A1A" },
-  scroll: { paddingHorizontal: 20 },
-  topBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 28,
-  },
-  topBarLeft: {},
-  topBarRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
+  scroll: { paddingHorizontal: 20, paddingBottom: 100 },
+  greetingSection: { marginBottom: 24 },
   greeting: {
     fontSize: 26,
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
   },
-  sportPill: {
+  sportLine: {
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+    marginTop: 4,
+  },
+  loadingWrap: { paddingTop: 60, alignItems: "center" },
+  glassCard: {
     borderRadius: 20,
     borderWidth: 1,
+    borderColor: "#6C5CE730",
     overflow: "hidden",
+    marginBottom: 24,
   },
-  sportPillGradient: {
+  glassCardGradient: {
+    padding: 24,
+    borderRadius: 20,
+  },
+  glassLabel: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
+    marginBottom: 4,
+  },
+  scoreRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 12,
+    marginBottom: 20,
+  },
+  scoreBig: {
+    fontSize: 56,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+    lineHeight: 62,
+  },
+  deltaInline: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    gap: 4,
+    paddingBottom: 10,
   },
-  sportPillText: {
-    fontSize: 12,
+  deltaText: {
+    fontSize: 14,
     fontFamily: "Inter_600SemiBold",
   },
-  avatarCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#1A1A36",
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  avatarCircleWithImage: {
-    borderColor: "#6C5CE7",
-    borderWidth: 2,
-  },
-  avatarImage: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-  },
-  movementBanner: {
+  subRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    backgroundColor: "#15152D",
-    marginBottom: 16,
-  },
-  movementDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  movementBannerText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 36,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  statCardGradient: {
-    padding: 14,
-    alignItems: "center",
-    gap: 6,
-    borderRadius: 16,
+    backgroundColor: "#0A0A1A60",
+    borderRadius: 14,
+    padding: 16,
     borderWidth: 1,
     borderColor: "#2A2A5030",
   },
-  statNumber: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
+  subItem: {
+    flex: 1,
+    alignItems: "center",
+    gap: 6,
   },
-  statLabel: {
+  subValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  subLabel: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
     textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
-    color: "#64748B",
+    letterSpacing: 0.3,
   },
-  loadingWrap: { paddingTop: 60, alignItems: "center" },
+  subValue: {
+    fontSize: 20,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+  },
+  subDivider: {
+    width: 1,
+    marginVertical: -4,
+  },
+  focusText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    textAlign: "center" as const,
+  },
+  uploadButton: {
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 24,
+  },
+  uploadGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: 16,
+  },
+  uploadText: {
+    color: "#fff",
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+  },
   emptyState: {
     alignItems: "center",
-    paddingTop: 40,
+    paddingTop: 20,
     gap: 12,
   },
   emptyIconWrap: {
@@ -332,34 +389,9 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
-    textAlign: "center",
+    textAlign: "center" as const,
     lineHeight: 21,
     paddingHorizontal: 20,
     color: "#64748B",
   },
-  ctaButton: {
-    borderRadius: 14,
-    overflow: "hidden",
-    marginTop: 12,
-  },
-  ctaGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  ctaText: {
-    color: "#fff",
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-  },
-  listSection: { gap: 16 },
-  sectionTitle: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
-  },
-  list: { gap: 14 },
 });

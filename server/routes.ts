@@ -7,8 +7,8 @@ import { storage } from "./storage";
 import { processAnalysis } from "./analysis-engine";
 import { requireAuth } from "./auth";
 import { db } from "./db";
-import { sports, sportMovements, users, analysisFeedback } from "@shared/schema";
-import { eq, asc, and } from "drizzle-orm";
+import { sports, sportMovements, users, analysisFeedback, analyses, metrics } from "@shared/schema";
+import { eq, asc, and, desc } from "drizzle-orm";
 import { getSportConfig, getAllConfigs } from "@shared/sport-configs";
 
 const uploadDir = path.resolve(process.cwd(), "uploads");
@@ -174,6 +174,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? await storage.getAllAnalyses(null, sportId)
         : await storage.getAllAnalyses(userId, sportId);
       res.json(allAnalyses);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/analyses/summary", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+
+      const query = db
+        .select({
+          id: analyses.id,
+          userId: analyses.userId,
+          sportId: analyses.sportId,
+          movementId: analyses.movementId,
+          videoFilename: analyses.videoFilename,
+          videoPath: analyses.videoPath,
+          status: analyses.status,
+          detectedMovement: analyses.detectedMovement,
+          createdAt: analyses.createdAt,
+          updatedAt: analyses.updatedAt,
+          userName: users.name,
+          overallScore: metrics.overallScore,
+          subScores: metrics.subScores,
+          configKey: metrics.configKey,
+        })
+        .from(analyses)
+        .leftJoin(users, eq(analyses.userId, users.id))
+        .leftJoin(metrics, eq(analyses.id, metrics.analysisId));
+
+      const rows = isAdmin
+        ? await query.orderBy(desc(analyses.createdAt))
+        : await query.where(eq(analyses.userId, userId)).orderBy(desc(analyses.createdAt));
+
+      res.json(rows);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
