@@ -79,7 +79,7 @@ export default function DashboardScreen() {
             <Pressable
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setSport(null);
+                router.push("/sport-select");
               }}
               style={[styles.sportPill, { borderColor: sc.primary + "40" }]}
             >

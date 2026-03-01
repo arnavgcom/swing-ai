@@ -44,7 +44,7 @@ function RootNavigator() {
       router.replace("/login");
     } else if (user && !selectedSport && !inSportSelect) {
       router.replace("/sport-select");
-    } else if (user && selectedSport && (inAuthGroup || (inSportSelect && segments.length === 1))) {
+    } else if (user && selectedSport && inAuthGroup) {
       router.replace("/(tabs)");
     }
   }, [user, selectedSport, segments, navigationReady]);

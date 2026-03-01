@@ -38,8 +38,9 @@ interface Movement {
 
 export default function SportSelectScreen() {
   const insets = useSafeAreaInsets();
-  const { setSport, setMovement } = useSport();
+  const { selectedSport: currentSport, setSport, setMovement } = useSport();
   const [selectedSport, setSelectedSport] = useState<Sport | null>(null);
+  const hasPreviousSport = !!currentSport;
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
 
@@ -126,11 +127,30 @@ export default function SportSelectScreen() {
         {!selectedSport ? (
           <>
             <View style={styles.header}>
-              <Text style={styles.headerLabel}>SELECT YOUR SPORT</Text>
-              <Text style={styles.headerTitle}>
-                What do you{"\n"}
-                <Text style={styles.headerTitleAccent}>play?</Text>
-              </Text>
+              <View style={styles.headerRow}>
+                <View style={styles.headerRowLeft}>
+                  <Text style={styles.headerLabel}>SELECT YOUR SPORT</Text>
+                  <Text style={styles.headerTitle}>
+                    What do you{"\n"}
+                    <Text style={styles.headerTitleAccent}>play?</Text>
+                  </Text>
+                </View>
+                {hasPreviousSport && (
+                  <Pressable
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.back();
+                    }}
+                    style={({ pressed }) => [
+                      styles.closeButton,
+                      { opacity: pressed ? 0.6 : 1 },
+                    ]}
+                    testID="sport-select-close"
+                  >
+                    <Ionicons name="close" size={20} color="#94A3B8" />
+                  </Pressable>
+                )}
+              </View>
             </View>
 
             {isLoading ? (
@@ -326,6 +346,23 @@ const styles = StyleSheet.create({
     borderRadius: 120,
   },
   header: { marginBottom: 32 },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  headerRowLeft: { flex: 1 },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#1A1A36",
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
   headerLabel: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
