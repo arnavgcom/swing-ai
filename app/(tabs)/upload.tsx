@@ -66,8 +66,9 @@ export default function UploadScreen() {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["videos"],
-        quality: 0.8,
-        videoMaxDuration: 20,
+        quality: 1,
+        videoMaxDuration: 30,
+        legacy: true,
       });
 
       if (!result.canceled && result.assets[0]) {
@@ -80,7 +81,14 @@ export default function UploadScreen() {
         });
       }
     } catch (error: any) {
-      if (error?.code !== "ERR_CANCELED") {
+      const msg = error?.message || "";
+      if (error?.code === "ERR_CANCELED" || msg.includes("cancel")) return;
+      if (msg.includes("PHPhotosErrorDomain") || msg.includes("3164")) {
+        Alert.alert(
+          "Video Access Error",
+          "Could not load this video. Try a shorter or smaller video, or record a new one with your camera.",
+        );
+      } else {
         Alert.alert("Error", "Could not access your video library. Please try again.");
       }
     }
