@@ -47,6 +47,7 @@ export default function LoginScreen() {
 
   const redirectUri = AuthSession.makeRedirectUri({
     scheme: "acexai",
+    path: "redirect",
   });
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
@@ -55,6 +56,7 @@ export default function LoginScreen() {
       scopes: ["openid", "profile", "email"],
       redirectUri,
       responseType: AuthSession.ResponseType.Token,
+      usePKCE: false,
     },
     discovery,
   );
