@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import {
   StyleSheet,
   Text,
@@ -7,9 +7,12 @@ import {
   ActivityIndicator,
   Pressable,
   Platform,
+  TextInput,
+  Modal,
+  Dimensions,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -20,6 +23,8 @@ import {
   fetchAnalysisDetail,
   fetchComparison,
   fetchSportConfig,
+  fetchFeedback,
+  submitFeedback,
 } from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
 import { ScoreGauge } from "@/components/ScoreGauge";
@@ -55,7 +60,11 @@ export default function AnalysisDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = Colors.dark;
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const [period, setPeriod] = useState("30d");
+  const [fullscreen, setFullscreen] = useState(false);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [showCommentInput, setShowCommentInput] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["analysis", id],
@@ -82,6 +91,38 @@ export default function AnalysisDetailScreen() {
     enabled:
       !!id && data?.analysis?.status === "completed" && !!data?.metrics,
   });
+
+  const { data: feedback } = useQuery({
+    queryKey: ["analysis", id, "feedback"],
+    queryFn: () => fetchFeedback(id!),
+    enabled: !!id && data?.analysis?.status === "completed",
+  });
+
+  const feedbackMutation = useMutation({
+    mutationFn: (vars: { rating: "up" | "down"; comment?: string }) =>
+      submitFeedback(id!, vars.rating, vars.comment),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["analysis", id, "feedback"] });
+    },
+  });
+
+  const handleThumbsUp = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    feedbackMutation.mutate({ rating: "up", comment: feedbackComment || undefined });
+  }, [feedbackComment]);
+
+  const handleThumbsDown = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    feedbackMutation.mutate({ rating: "down", comment: feedbackComment || undefined });
+  }, [feedbackComment]);
+
+  const handleSubmitComment = useCallback(() => {
+    if (!feedback) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    feedbackMutation.mutate({ rating: feedback.rating, comment: feedbackComment || undefined });
+    setShowCommentInput(false);
+    setFeedbackComment("");
+  }, [feedbackComment, feedback]);
 
   const avgMetrics = comparison?.averages?.metricValues ?? null;
   const avgSubScores = comparison?.averages?.subScores ?? null;
@@ -288,17 +329,6 @@ export default function AnalysisDetailScreen() {
             />
           </View>
 
-          {videoUrl && (
-            <View style={styles.videoContainer}>
-              <VideoView
-                player={player}
-                style={styles.videoPlayer}
-                contentFit="contain"
-                nativeControls
-              />
-            </View>
-          )}
-
           {sportConfig && m.subScores && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Performance Breakdown</Text>
@@ -315,6 +345,34 @@ export default function AnalysisDetailScreen() {
                     )}
                   />
                 ))}
+              </View>
+            </View>
+          )}
+
+          {videoUrl && (
+            <View style={styles.videoSection}>
+              <View style={styles.videoHeader}>
+                <Text style={styles.sectionTitle}>Video</Text>
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setFullscreen(true);
+                  }}
+                  style={({ pressed }) => [
+                    styles.fullscreenButton,
+                    { opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Ionicons name="expand-outline" size={18} color="#94A3B8" />
+                </Pressable>
+              </View>
+              <View style={styles.videoContainer}>
+                <VideoView
+                  player={player}
+                  style={styles.videoPlayer}
+                  contentFit="contain"
+                  nativeControls
+                />
               </View>
             </View>
           )}
@@ -359,18 +417,19 @@ export default function AnalysisDetailScreen() {
                   </Text>
                   <View style={styles.metricsGrid}>
                     {categoryMetrics.map((metric) => (
-                      <MetricCard
-                        key={metric.key}
-                        icon={metric.icon as any}
-                        label={metric.label}
-                        value={m.metricValues[metric.key] ?? 0}
-                        unit={metric.unit}
-                        color={metric.color}
-                        change={calcChange(
-                          m.metricValues[metric.key],
-                          avgMetrics?.[metric.key],
-                        )}
-                      />
+                      <View key={metric.key} style={styles.metricCardWrapper}>
+                        <MetricCard
+                          icon={metric.icon as any}
+                          label={metric.label}
+                          value={m.metricValues[metric.key] ?? 0}
+                          unit={metric.unit}
+                          color={metric.color}
+                          change={calcChange(
+                            m.metricValues[metric.key],
+                            avgMetrics?.[metric.key],
+                          )}
+                        />
+                      </View>
                     ))}
                   </View>
                 </View>
@@ -398,19 +457,147 @@ export default function AnalysisDetailScreen() {
                 content={coaching.trainingSuggestion}
                 color="#60A5FA"
               />
-              <View style={styles.summaryCard}>
-                <Ionicons name="chatbubbles" size={18} color="#6C5CE7" />
+              <View style={styles.overallCard}>
+                <View style={styles.overallHeader}>
+                  <Ionicons name="chatbubbles" size={18} color="#6C5CE7" />
+                  <Text style={styles.overallHeading}>Overall</Text>
+                </View>
                 <Text style={styles.summaryText}>
                   {coaching.simpleExplanation}
                 </Text>
               </View>
             </View>
           )}
+
+          {data?.analysis?.status === "completed" && (
+            <View style={styles.feedbackSection}>
+              <Text style={styles.sectionTitle}>Your Feedback</Text>
+              <View style={styles.feedbackCard}>
+                <Text style={styles.feedbackPrompt}>
+                  Was this analysis helpful?
+                </Text>
+                <View style={styles.thumbsRow}>
+                  <Pressable
+                    onPress={handleThumbsUp}
+                    style={({ pressed }) => [
+                      styles.thumbButton,
+                      feedback?.rating === "up" && styles.thumbButtonActiveUp,
+                      { opacity: pressed ? 0.7 : 1 },
+                    ]}
+                  >
+                    <Ionicons
+                      name={feedback?.rating === "up" ? "thumbs-up" : "thumbs-up-outline"}
+                      size={22}
+                      color={feedback?.rating === "up" ? "#34D399" : "#94A3B8"}
+                    />
+                  </Pressable>
+                  <Pressable
+                    onPress={handleThumbsDown}
+                    style={({ pressed }) => [
+                      styles.thumbButton,
+                      feedback?.rating === "down" && styles.thumbButtonActiveDown,
+                      { opacity: pressed ? 0.7 : 1 },
+                    ]}
+                  >
+                    <Ionicons
+                      name={feedback?.rating === "down" ? "thumbs-down" : "thumbs-down-outline"}
+                      size={22}
+                      color={feedback?.rating === "down" ? "#F87171" : "#94A3B8"}
+                    />
+                  </Pressable>
+                </View>
+
+                {feedback && !showCommentInput && (
+                  <Pressable
+                    onPress={() => {
+                      setFeedbackComment(feedback.comment || "");
+                      setShowCommentInput(true);
+                    }}
+                    style={styles.addCommentButton}
+                  >
+                    <Ionicons name="chatbox-outline" size={14} color="#6C5CE7" />
+                    <Text style={styles.addCommentText}>
+                      {feedback.comment ? "Edit comment" : "Add a comment"}
+                    </Text>
+                  </Pressable>
+                )}
+
+                {showCommentInput && (
+                  <View style={styles.commentSection}>
+                    <TextInput
+                      style={styles.commentInput}
+                      placeholder="Share your thoughts..."
+                      placeholderTextColor="#475569"
+                      value={feedbackComment}
+                      onChangeText={setFeedbackComment}
+                      multiline
+                      maxLength={500}
+                    />
+                    <View style={styles.commentActions}>
+                      <Pressable
+                        onPress={() => setShowCommentInput(false)}
+                        style={styles.cancelButton}
+                      >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={handleSubmitComment}
+                        style={({ pressed }) => [
+                          styles.submitButton,
+                          { opacity: pressed ? 0.7 : 1 },
+                        ]}
+                      >
+                        <Text style={styles.submitButtonText}>Save</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
+
+                {feedback?.comment && !showCommentInput && (
+                  <View style={styles.existingComment}>
+                    <Text style={styles.existingCommentText}>
+                      "{feedback.comment}"
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
         </ScrollView>
       ) : null}
+
+      {fullscreen && videoUrl && (
+        <Modal
+          animationType="fade"
+          transparent={false}
+          visible={fullscreen}
+          onRequestClose={() => setFullscreen(false)}
+        >
+          <View style={styles.fullscreenContainer}>
+            <VideoView
+              player={player}
+              style={styles.fullscreenVideo}
+              contentFit="contain"
+              nativeControls
+            />
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setFullscreen(false);
+              }}
+              style={[styles.closeFullscreen, { top: insets.top + 12 }]}
+            >
+              <Ionicons name="close" size={24} color="#fff" />
+            </Pressable>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const METRIC_CARD_WIDTH = (SCREEN_WIDTH - 40 - 12) / 2;
 
 const styles = StyleSheet.create({
   container: {
@@ -450,6 +637,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 20,
   },
+  videoSection: {
+    gap: 10,
+  },
+  videoHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  fullscreenButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#15152D",
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   videoContainer: {
     borderRadius: 16,
     overflow: "hidden",
@@ -459,7 +664,27 @@ const styles = StyleSheet.create({
   },
   videoPlayer: {
     width: "100%",
-    aspectRatio: 4 / 3,
+    aspectRatio: 16 / 9,
+  },
+  fullscreenContainer: {
+    flex: 1,
+    backgroundColor: "#000",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fullscreenVideo: {
+    width: "100%",
+    height: "100%",
+  },
+  closeFullscreen: {
+    position: "absolute",
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   section: {
     borderRadius: 16,
@@ -516,18 +741,29 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 12,
   },
+  metricCardWrapper: {
+    width: METRIC_CARD_WIDTH,
+  },
   coachingSection: {
     gap: 14,
   },
-  summaryCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
+  overallCard: {
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
     backgroundColor: "#6C5CE708",
     borderColor: "#6C5CE720",
+    gap: 10,
+  },
+  overallHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  overallHeading: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#6C5CE7",
   },
   summaryText: {
     flex: 1,
@@ -535,6 +771,116 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     lineHeight: 21,
     color: "#CBD5E1",
+  },
+  feedbackSection: {
+    gap: 14,
+  },
+  feedbackCard: {
+    padding: 18,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#15152D",
+    gap: 14,
+    alignItems: "center",
+  },
+  feedbackPrompt: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#CBD5E1",
+  },
+  thumbsRow: {
+    flexDirection: "row",
+    gap: 20,
+  },
+  thumbButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#0A0A1A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  thumbButtonActiveUp: {
+    borderColor: "#34D39940",
+    backgroundColor: "#34D39910",
+  },
+  thumbButtonActiveDown: {
+    borderColor: "#F8717140",
+    backgroundColor: "#F8717110",
+  },
+  addCommentButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+  },
+  addCommentText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: "#6C5CE7",
+  },
+  commentSection: {
+    width: "100%",
+    gap: 10,
+  },
+  commentInput: {
+    width: "100%",
+    minHeight: 72,
+    backgroundColor: "#0A0A1A",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: "#F8FAFC",
+    textAlignVertical: "top",
+  },
+  commentActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
+  cancelButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  cancelButtonText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: "#64748B",
+  },
+  submitButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#6C5CE7",
+  },
+  submitButtonText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: "#fff",
+  },
+  existingComment: {
+    width: "100%",
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#0A0A1A40",
+    borderWidth: 1,
+    borderColor: "#2A2A5030",
+  },
+  existingCommentText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    fontStyle: "italic",
+    color: "#94A3B8",
+    lineHeight: 19,
   },
   processingCard: {
     borderRadius: 20,

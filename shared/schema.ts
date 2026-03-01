@@ -96,6 +96,21 @@ export const coachingInsights = pgTable("coaching_insights", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const analysisFeedback = pgTable("analysis_feedback", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  analysisId: varchar("analysis_id")
+    .notNull()
+    .references(() => analyses.id),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id),
+  rating: text("rating").notNull(),
+  comment: text("comment"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   email: true,
   name: true,

@@ -100,7 +100,7 @@ All data is stored entirely on Replit:
 - `constants/colors.ts` — Theme colors (midnight/purple/neon palette) + `sportColors` map
 
 ### Schema
-- `shared/schema.ts` — Drizzle schema: users (with `role` column: "player"|"admin"), sports, sport_movements, analyses, metrics (JSONB metricValues/subScores/configKey), coaching_insights
+- `shared/schema.ts` — Drizzle schema: users (with `role` column: "player"|"admin"), sports, sport_movements, analyses, metrics (JSONB metricValues/subScores/configKey), coaching_insights, analysis_feedback (thumbs up/down + comment)
 
 ## User Roles
 

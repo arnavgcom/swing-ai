@@ -7,8 +7,8 @@ import { storage } from "./storage";
 import { processAnalysis } from "./analysis-engine";
 import { requireAuth } from "./auth";
 import { db } from "./db";
-import { sports, sportMovements, users } from "@shared/schema";
-import { eq, asc } from "drizzle-orm";
+import { sports, sportMovements, users, analysisFeedback } from "@shared/schema";
+import { eq, asc, and } from "drizzle-orm";
 import { getSportConfig, getAllConfigs } from "@shared/sport-configs";
 
 const uploadDir = path.resolve(process.cwd(), "uploads");
@@ -183,6 +183,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(result);
     } catch (error: any) {
       console.error("Comparison error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/analyses/:id/feedback", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const [feedback] = await db
+        .select()
+        .from(analysisFeedback)
+        .where(
+          and(
+            eq(analysisFeedback.analysisId, req.params.id),
+            eq(analysisFeedback.userId, req.session.userId!),
+          ),
+        )
+        .limit(1);
+      res.json(feedback || null);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/analyses/:id/feedback", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { rating, comment } = req.body;
+      if (!rating || !["up", "down"].includes(rating)) {
+        return res.status(400).json({ error: "Rating must be 'up' or 'down'" });
+      }
+
+      const existing = await db
+        .select()
+        .from(analysisFeedback)
+        .where(
+          and(
+            eq(analysisFeedback.analysisId, req.params.id),
+            eq(analysisFeedback.userId, req.session.userId!),
+          ),
+        )
+        .limit(1);
+
+      if (existing.length > 0) {
+        await db
+          .update(analysisFeedback)
+          .set({ rating, comment: comment || null })
+          .where(eq(analysisFeedback.id, existing[0].id));
+      } else {
+        await db.insert(analysisFeedback).values({
+          analysisId: req.params.id,
+          userId: req.session.userId!,
+          rating,
+          comment: comment || null,
+        });
+      }
+
+      const [feedback] = await db
+        .select()
+        .from(analysisFeedback)
+        .where(
+          and(
+            eq(analysisFeedback.analysisId, req.params.id),
+            eq(analysisFeedback.userId, req.session.userId!),
+          ),
+        )
+        .limit(1);
+      res.json(feedback);
+    } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });

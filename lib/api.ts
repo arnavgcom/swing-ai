@@ -146,3 +146,37 @@ export async function uploadVideo(
   }
   return res.json();
 }
+
+export interface FeedbackResponse {
+  id: string;
+  analysisId: string;
+  userId: string;
+  rating: "up" | "down";
+  comment: string | null;
+  createdAt: string;
+}
+
+export async function fetchFeedback(analysisId: string): Promise<FeedbackResponse | null> {
+  const base = getApiUrl();
+  const res = await fetch(`${base}api/analyses/${analysisId}/feedback`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch feedback");
+  return res.json();
+}
+
+export async function submitFeedback(
+  analysisId: string,
+  rating: "up" | "down",
+  comment?: string,
+): Promise<FeedbackResponse> {
+  const base = getApiUrl();
+  const res = await fetch(`${base}api/analyses/${analysisId}/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ rating, comment }),
+  });
+  if (!res.ok) throw new Error("Failed to submit feedback");
+  return res.json();
+}

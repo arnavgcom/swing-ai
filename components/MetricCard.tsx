@@ -54,13 +54,13 @@ export function MetricCard({ icon, label, value, unit, color, change }: MetricCa
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    minWidth: "45%",
     padding: 14,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#2A2A5060",
     backgroundColor: "#15152D",
     gap: 6,
+    minHeight: 120,
   },
   iconContainer: {
     width: 30,

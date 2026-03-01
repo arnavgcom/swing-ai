@@ -173,16 +173,6 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.logoSection}>
-            <View style={styles.logoMark}>
-              <LinearGradient
-                colors={["#6C5CE7", "#34D399"]}
-                style={styles.logoGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Text style={styles.logoLetter}>S</Text>
-              </LinearGradient>
-            </View>
             <Text style={styles.appName}>
               Swing <Text style={styles.appNameAccent}>AI</Text>
             </Text>
@@ -343,21 +333,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#34D39908",
   },
   logoSection: { alignItems: "center", marginBottom: 48 },
-  logoMark: {
-    marginBottom: 18,
-  },
-  logoGradient: {
-    width: 68,
-    height: 68,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logoLetter: {
-    fontSize: 32,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
-  },
   appName: {
     fontSize: 32,
     fontFamily: "Inter_700Bold",
