@@ -18,7 +18,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as WebBrowser from "expo-web-browser";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
-import { getApiUrl } from "@/lib/query-client";
 
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "";
 
@@ -87,8 +86,9 @@ export default function LoginScreen() {
           Alert.alert("Error", "Could not get access token from Google");
         }
       } else {
-        const apiBase = getApiUrl();
-        const callbackUrl = new URL("/api/auth/google/mobile-callback", apiBase).href;
+        const domain = process.env.EXPO_PUBLIC_DOMAIN || "";
+        const host = domain.split(":")[0];
+        const callbackUrl = `https://${host}/api/auth/google/mobile-callback`;
 
         const authUrl =
           `https://accounts.google.com/o/oauth2/v2/auth?` +
