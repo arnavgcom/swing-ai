@@ -2,9 +2,50 @@ import type { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcryptjs";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { db } from "./db";
-import { users, registerSchema, loginSchema } from "@shared/schema";
+import { users, registerSchema, loginSchema, type User } from "@shared/schema";
 import { eq } from "drizzle-orm";
+
+function sanitizeUser(user: User) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    avatarUrl: user.avatarUrl,
+    phone: user.phone,
+    address: user.address,
+    country: user.country,
+    sportsInterests: user.sportsInterests,
+    bio: user.bio,
+  };
+}
+
+const avatarDir = path.resolve(process.cwd(), "uploads", "avatars");
+if (!fs.existsSync(avatarDir)) {
+  fs.mkdirSync(avatarDir, { recursive: true });
+}
+
+const avatarUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, avatarDir),
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      cb(null, uniqueSuffix + path.extname(file.originalname));
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic"];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files (JPEG, PNG, WebP, HEIC) are allowed"));
+    }
+  },
+});
 
 declare module "express-session" {
   interface SessionData {
@@ -65,12 +106,7 @@ export function setupAuth(app: Express) {
 
       req.session.userId = user.id;
 
-      res.json({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        avatarUrl: user.avatarUrl,
-      });
+      res.json(sanitizeUser(user));
     } catch (error: any) {
       console.error("Register error:", error);
       res.status(500).json({ error: "Registration failed" });
@@ -104,12 +140,7 @@ export function setupAuth(app: Express) {
 
       req.session.userId = user.id;
 
-      res.json({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        avatarUrl: user.avatarUrl,
-      });
+      res.json(sanitizeUser(user));
     } catch (error: any) {
       console.error("Login error:", error);
       res.status(500).json({ error: "Login failed" });
@@ -142,16 +173,87 @@ export function setupAuth(app: Express) {
         return res.status(401).json({ error: "User not found" });
       }
 
-      res.json({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        avatarUrl: user.avatarUrl,
-      });
+      res.json(sanitizeUser(user));
     } catch (error) {
       res.status(500).json({ error: "Failed to get user" });
     }
   });
+
+  app.get("/api/profile", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, req.session.userId!));
+      if (!user) return res.status(404).json({ error: "User not found" });
+      res.json(sanitizeUser(user));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get profile" });
+    }
+  });
+
+  app.put("/api/profile", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { name, phone, address, country, sportsInterests, bio } = req.body;
+
+      if (name !== undefined && (!name || typeof name !== "string" || !name.trim())) {
+        return res.status(400).json({ error: "Name is required" });
+      }
+
+      const updates: Record<string, string | null> = {};
+      if (name !== undefined) updates.name = name.trim();
+      if (phone !== undefined) updates.phone = phone?.trim() || null;
+      if (address !== undefined) updates.address = address?.trim() || null;
+      if (country !== undefined) updates.country = country?.trim() || null;
+      if (sportsInterests !== undefined) updates.sportsInterests = sportsInterests?.trim() || null;
+      if (bio !== undefined) updates.bio = bio?.trim() || null;
+
+      const [updated] = await db
+        .update(users)
+        .set(updates)
+        .where(eq(users.id, req.session.userId!))
+        .returning();
+
+      res.json(sanitizeUser(updated));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update profile" });
+    }
+  });
+
+  app.post(
+    "/api/profile/avatar",
+    requireAuth,
+    (req: Request, res: Response, next: NextFunction) => {
+      avatarUpload.single("avatar")(req, res, (err: any) => {
+        if (err) {
+          if (err.code === "LIMIT_FILE_SIZE") {
+            return res.status(400).json({ error: "File too large. Maximum 5MB." });
+          }
+          return res.status(400).json({ error: err.message || "Invalid file upload" });
+        }
+        next();
+      });
+    },
+    async (req: Request, res: Response) => {
+      try {
+        if (!req.file) {
+          return res.status(400).json({ error: "No image provided" });
+        }
+
+        const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+
+        const [updated] = await db
+          .update(users)
+          .set({ avatarUrl })
+          .where(eq(users.id, req.session.userId!))
+          .returning();
+
+        res.json(sanitizeUser(updated));
+      } catch (error) {
+        res.status(500).json({ error: "Failed to upload avatar" });
+      }
+    },
+  );
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {

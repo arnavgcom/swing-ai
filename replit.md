@@ -31,7 +31,7 @@ All data is stored entirely on Replit:
 
 ### Backend
 - `server/index.ts` — Express app entry point (port 5000)
-- `server/auth.ts` — Authentication routes (register, login, logout, me) + session setup
+- `server/auth.ts` — Authentication routes (register, login, logout, me) + profile routes (GET/PUT /api/profile, POST /api/profile/avatar) + session setup
 - `server/routes.ts` — API routes: sports, upload, analyses CRUD
 - `server/analysis-engine.ts` — Calls Python analysis via child_process.execFile, stores results in DB
 - `server/storage.ts` — DatabaseStorage class (Drizzle ORM CRUD operations)
@@ -50,11 +50,12 @@ All data is stored entirely on Replit:
 - `app/login.tsx` — Login screen: Google button + email/password fallback, purple/neon gradient branding
 - `app/sport-select.tsx` — Sport selection with 2-column gradient grid cards → movement list
 - `app/(tabs)/_layout.tsx` — Tab navigator (Dashboard, Upload, History) with neon green active tab
-- `app/(tabs)/index.tsx` — Dashboard with sport pill, gradient stat cards, analysis list
+- `app/profile.tsx` — Profile screen (edit name, phone, address, country, sports interests, bio, avatar upload, logout)
+- `app/(tabs)/index.tsx` — Dashboard with sport pill, gradient stat cards, analysis list; avatar icon navigates to profile
 - `app/(tabs)/upload.tsx` — Video upload with gradient background
 - `app/(tabs)/history.tsx` — Analysis history list with gradient background
 - `app/analysis/[id].tsx` — Analysis detail screen with gradient background
-- `lib/auth-context.tsx` — Auth context provider (login, register, logout, user state)
+- `lib/auth-context.tsx` — Auth context provider (login, register, logout, refreshUser, user state with profile fields)
 - `lib/sport-context.tsx` — Sport context provider (selected sport/movement, persisted to AsyncStorage)
 - `lib/query-client.ts` — React Query client with API URL configuration
 - `lib/api.ts` — API helper functions (fetchAnalyses, uploadVideo, etc.)

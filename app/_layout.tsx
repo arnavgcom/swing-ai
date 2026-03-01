@@ -71,6 +71,10 @@ function RootNavigator() {
       <Stack.Screen name="sport-select" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen
+        name="profile"
+        options={{ headerShown: false, animation: "slide_from_right" }}
+      />
+      <Stack.Screen
         name="analysis/[id]"
         options={{ headerShown: false, animation: "slide_from_right" }}
       />

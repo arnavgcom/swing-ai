@@ -24,7 +24,7 @@ import { useSport } from "@/lib/sport-context";
 export default function DashboardScreen() {
   const colors = Colors.dark;
   const insets = useSafeAreaInsets();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { selectedSport, selectedMovement, setSport } = useSport();
 
   const sc = sportColors[selectedSport?.name || ""] || { primary: "#6C5CE7", gradient: "#5A4BD1" };
@@ -98,7 +98,7 @@ export default function DashboardScreen() {
             <Pressable
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                logout();
+                router.push("/profile");
               }}
               style={styles.avatarCircle}
             >
