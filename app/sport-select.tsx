@@ -87,6 +87,8 @@ export default function SportSelectScreen() {
     router.replace("/(tabs)");
   };
 
+  const ENABLED_SPORTS = ["Tennis", "Golf"];
+
   const icon = (name: string) => name as keyof typeof Ionicons.glyphMap;
 
   const getSportColors = (sportName: string) => {
@@ -137,31 +139,63 @@ export default function SportSelectScreen() {
               <View style={styles.sportGrid}>
                 {sportsData?.map((sport) => {
                   const sc = getSportColors(sport.name);
+                  const isEnabled = ENABLED_SPORTS.includes(sport.name);
                   return (
                     <Pressable
                       key={sport.id}
-                      onPress={() => handleSportPress(sport)}
+                      onPress={() => isEnabled && handleSportPress(sport)}
+                      disabled={!isEnabled}
                       style={({ pressed }) => [
                         styles.sportCard,
-                        { transform: [{ scale: pressed ? 0.95 : 1 }] },
+                        { transform: [{ scale: pressed && isEnabled ? 0.95 : 1 }] },
+                        !isEnabled && styles.sportCardDisabled,
                       ]}
                     >
                       <LinearGradient
-                        colors={[sc.primary + "25", sc.gradient + "10"]}
+                        colors={
+                          isEnabled
+                            ? [sc.primary + "25", sc.gradient + "10"]
+                            : ["#1A1A3010", "#15152D08"]
+                        }
                         style={styles.sportCardInner}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                       >
-                        <View style={[styles.sportIconCircle, { backgroundColor: sc.primary + "30" }]}>
-                          <Ionicons name={icon(sport.icon)} size={28} color={sc.primary} />
+                        {!isEnabled && (
+                          <View style={styles.comingSoonBadge}>
+                            <Text style={styles.comingSoonText}>Coming Soon</Text>
+                          </View>
+                        )}
+                        <View
+                          style={[
+                            styles.sportIconCircle,
+                            { backgroundColor: isEnabled ? sc.primary + "30" : "#2A2A5020" },
+                          ]}
+                        >
+                          <Ionicons
+                            name={icon(sport.icon)}
+                            size={28}
+                            color={isEnabled ? sc.primary : "#475569"}
+                          />
                         </View>
-                        <Text style={styles.sportCardName}>{sport.name}</Text>
+                        <Text
+                          style={[
+                            styles.sportCardName,
+                            !isEnabled && { color: "#475569" },
+                          ]}
+                        >
+                          {sport.name}
+                        </Text>
                         <Text style={styles.sportCardDesc} numberOfLines={2}>
                           {sport.description}
                         </Text>
-                        <View style={[styles.sportCardArrow, { backgroundColor: sc.primary + "20" }]}>
-                          <Ionicons name="arrow-forward" size={14} color={sc.primary} />
-                        </View>
+                        {isEnabled ? (
+                          <View style={[styles.sportCardArrow, { backgroundColor: sc.primary + "20" }]}>
+                            <Ionicons name="arrow-forward" size={14} color={sc.primary} />
+                          </View>
+                        ) : (
+                          <View style={styles.sportCardArrow} />
+                        )}
                       </LinearGradient>
                     </Pressable>
                   );
@@ -354,6 +388,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "flex-end",
+  },
+  sportCardDisabled: {
+    opacity: 0.55,
+  },
+  comingSoonBadge: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    backgroundColor: "#FBBF2420",
+    borderWidth: 1,
+    borderColor: "#FBBF2430",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  comingSoonText: {
+    fontSize: 9,
+    fontFamily: "Inter_600SemiBold",
+    color: "#FBBF24",
+    letterSpacing: 0.3,
+    textTransform: "uppercase" as const,
   },
   movementHeader: {
     flexDirection: "row",
