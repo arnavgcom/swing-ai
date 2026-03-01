@@ -92,7 +92,7 @@ All data is stored entirely on Replit:
 - `app/(tabs)/index.tsx` — Dashboard with overall score card (category badge, delta vs previous session), 3 glass-feel sub-cards (Consistency, Timing, Stability with deltas), filtered by selected sport/movement via configKey
 - `app/(tabs)/upload.tsx` — Video upload with gradient background
 - `app/(tabs)/history.tsx` — Analysis history with trend chart, Total/Active/Done stat cards, session cards showing 4 sub-scores (Power, Timing, Stability, Consistency) with deltas, filtered by sport/movement
-- `app/analysis/[id].tsx` — Dynamic analysis detail: fetches sport config by configKey → renders metrics by category, sub-scores, and coaching dynamically
+- `app/analysis/[id].tsx` — Dynamic analysis detail: score circle labeled "Score" with sport+category badges and compact thumbs up/down inline to the right; "Player's Comment" section with always-visible TextInput; fetches sport config by configKey → renders metrics by category, sub-scores, and coaching dynamically
 - `lib/auth-context.tsx` — Auth context provider
 - `lib/sport-context.tsx` — Sport context provider (selected sport/movement, persisted to AsyncStorage)
 - `lib/query-client.ts` — React Query client with API URL configuration

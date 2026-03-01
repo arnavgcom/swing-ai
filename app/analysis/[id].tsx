@@ -63,8 +63,7 @@ export default function AnalysisDetailScreen() {
   const queryClient = useQueryClient();
   const [period, setPeriod] = useState("30d");
   const [fullscreen, setFullscreen] = useState(false);
-  const [feedbackComment, setFeedbackComment] = useState("");
-  const [showCommentInput, setShowCommentInput] = useState(false);
+  const [feedbackComment, setFeedbackComment] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["analysis", id],
@@ -106,23 +105,25 @@ export default function AnalysisDetailScreen() {
     },
   });
 
+  const commentValue = feedbackComment ?? feedback?.comment ?? "";
+  const commentChanged = feedbackComment !== null && feedbackComment !== (feedback?.comment ?? "");
+
   const handleThumbsUp = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    feedbackMutation.mutate({ rating: "up", comment: feedbackComment || undefined });
-  }, [feedbackComment]);
+    feedbackMutation.mutate({ rating: "up", comment: commentValue || undefined });
+  }, [commentValue]);
 
   const handleThumbsDown = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    feedbackMutation.mutate({ rating: "down", comment: feedbackComment || undefined });
-  }, [feedbackComment]);
+    feedbackMutation.mutate({ rating: "down", comment: commentValue || undefined });
+  }, [commentValue]);
 
   const handleSubmitComment = useCallback(() => {
-    if (!feedback) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    feedbackMutation.mutate({ rating: feedback.rating, comment: feedbackComment || undefined });
-    setShowCommentInput(false);
-    setFeedbackComment("");
-  }, [feedbackComment, feedback]);
+    const rating = feedback?.rating ?? "up";
+    feedbackMutation.mutate({ rating, comment: commentValue || undefined });
+    setFeedbackComment(null);
+  }, [commentValue, feedback]);
 
   const avgMetrics = comparison?.averages?.metricValues ?? null;
   const avgSubScores = comparison?.averages?.subScores ?? null;
@@ -321,20 +322,69 @@ export default function AnalysisDetailScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.scoreSection}>
-            <ScoreGauge
-              score={m.overallScore}
-              size={160}
-              label={sportConfig?.overallScoreLabel || "Performance"}
-              change={calcChange(
-                m.overallScore,
-                avgSubScores
-                  ? Object.values(avgSubScores).reduce(
-                      (a, b) => a + b,
-                      0,
-                    ) / Math.max(Object.keys(avgSubScores).length, 1)
-                  : null,
-              )}
-            />
+            <View style={styles.scoreRow}>
+              <ScoreGauge
+                score={m.overallScore}
+                size={160}
+                label="Score"
+                change={calcChange(
+                  m.overallScore,
+                  avgSubScores
+                    ? Object.values(avgSubScores).reduce(
+                        (a, b) => a + b,
+                        0,
+                      ) / Math.max(Object.keys(avgSubScores).length, 1)
+                    : null,
+                )}
+              />
+              <View style={styles.scoreMeta}>
+                {sportConfig?.sportName && (
+                  <View style={styles.sportBadge}>
+                    <Ionicons name="fitness-outline" size={12} color="#A29BFE" />
+                    <Text style={styles.sportBadgeText}>{sportConfig.sportName}</Text>
+                  </View>
+                )}
+                {(sportConfig?.movementName || detectedMovement) && (
+                  <View style={styles.categoryBadge}>
+                    <Ionicons name="flash-outline" size={12} color="#34D399" />
+                    <Text style={styles.categoryBadgeText}>
+                      {(sportConfig?.movementName || detectedMovement || "").charAt(0).toUpperCase() +
+                        (sportConfig?.movementName || detectedMovement || "").slice(1).replace(/-/g, " ")}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.compactThumbsRow}>
+                  <Pressable
+                    onPress={handleThumbsUp}
+                    style={({ pressed }) => [
+                      styles.compactThumbButton,
+                      feedback?.rating === "up" && styles.thumbButtonActiveUp,
+                      { opacity: pressed ? 0.7 : 1 },
+                    ]}
+                  >
+                    <Ionicons
+                      name={feedback?.rating === "up" ? "thumbs-up" : "thumbs-up-outline"}
+                      size={16}
+                      color={feedback?.rating === "up" ? "#34D399" : "#64748B"}
+                    />
+                  </Pressable>
+                  <Pressable
+                    onPress={handleThumbsDown}
+                    style={({ pressed }) => [
+                      styles.compactThumbButton,
+                      feedback?.rating === "down" && styles.thumbButtonActiveDown,
+                      { opacity: pressed ? 0.7 : 1 },
+                    ]}
+                  >
+                    <Ionicons
+                      name={feedback?.rating === "down" ? "thumbs-down" : "thumbs-down-outline"}
+                      size={16}
+                      color={feedback?.rating === "down" ? "#F87171" : "#64748B"}
+                    />
+                  </Pressable>
+                </View>
+              </View>
+            </View>
           </View>
 
           {wasOverridden && (
@@ -493,75 +543,20 @@ export default function AnalysisDetailScreen() {
 
           {data?.analysis?.status === "completed" && (
             <View style={styles.feedbackSection}>
-              <Text style={styles.sectionTitle}>Your Feedback</Text>
+              <Text style={styles.sectionTitle}>Player's Comment</Text>
               <View style={styles.feedbackCard}>
-                <Text style={styles.feedbackPrompt}>
-                  Was this analysis helpful?
-                </Text>
-                <View style={styles.thumbsRow}>
-                  <Pressable
-                    onPress={handleThumbsUp}
-                    style={({ pressed }) => [
-                      styles.thumbButton,
-                      feedback?.rating === "up" && styles.thumbButtonActiveUp,
-                      { opacity: pressed ? 0.7 : 1 },
-                    ]}
-                  >
-                    <Ionicons
-                      name={feedback?.rating === "up" ? "thumbs-up" : "thumbs-up-outline"}
-                      size={22}
-                      color={feedback?.rating === "up" ? "#34D399" : "#94A3B8"}
-                    />
-                  </Pressable>
-                  <Pressable
-                    onPress={handleThumbsDown}
-                    style={({ pressed }) => [
-                      styles.thumbButton,
-                      feedback?.rating === "down" && styles.thumbButtonActiveDown,
-                      { opacity: pressed ? 0.7 : 1 },
-                    ]}
-                  >
-                    <Ionicons
-                      name={feedback?.rating === "down" ? "thumbs-down" : "thumbs-down-outline"}
-                      size={22}
-                      color={feedback?.rating === "down" ? "#F87171" : "#94A3B8"}
-                    />
-                  </Pressable>
-                </View>
-
-                {feedback && !showCommentInput && (
-                  <Pressable
-                    onPress={() => {
-                      setFeedbackComment(feedback.comment || "");
-                      setShowCommentInput(true);
-                    }}
-                    style={styles.addCommentButton}
-                  >
-                    <Ionicons name="chatbox-outline" size={14} color="#6C5CE7" />
-                    <Text style={styles.addCommentText}>
-                      {feedback.comment ? "Edit comment" : "Add a comment"}
-                    </Text>
-                  </Pressable>
-                )}
-
-                {showCommentInput && (
-                  <View style={styles.commentSection}>
-                    <TextInput
-                      style={styles.commentInput}
-                      placeholder="Share your thoughts..."
-                      placeholderTextColor="#475569"
-                      value={feedbackComment}
-                      onChangeText={setFeedbackComment}
-                      multiline
-                      maxLength={500}
-                    />
+                <View style={styles.commentSection}>
+                  <TextInput
+                    style={styles.commentInput}
+                    placeholder="Add your notes…"
+                    placeholderTextColor="#475569"
+                    value={commentValue}
+                    onChangeText={setFeedbackComment}
+                    multiline
+                    maxLength={500}
+                  />
+                  {commentChanged && (
                     <View style={styles.commentActions}>
-                      <Pressable
-                        onPress={() => setShowCommentInput(false)}
-                        style={styles.cancelButton}
-                      >
-                        <Text style={styles.cancelButtonText}>Cancel</Text>
-                      </Pressable>
                       <Pressable
                         onPress={handleSubmitComment}
                         style={({ pressed }) => [
@@ -572,16 +567,8 @@ export default function AnalysisDetailScreen() {
                         <Text style={styles.submitButtonText}>Save</Text>
                       </Pressable>
                     </View>
-                  </View>
-                )}
-
-                {feedback?.comment && !showCommentInput && (
-                  <View style={styles.existingComment}>
-                    <Text style={styles.existingCommentText}>
-                      "{feedback.comment}"
-                    </Text>
-                  </View>
-                )}
+                  )}
+                </View>
               </View>
             </View>
           )}
@@ -656,8 +643,64 @@ const styles = StyleSheet.create({
     gap: 28,
   },
   scoreSection: {
-    alignItems: "center",
     paddingVertical: 20,
+  },
+  scoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 20,
+  },
+  scoreMeta: {
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  sportBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "#6C5CE712",
+    borderWidth: 1,
+    borderColor: "#6C5CE730",
+  },
+  sportBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#A29BFE",
+  },
+  categoryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "#34D39912",
+    borderWidth: 1,
+    borderColor: "#34D39930",
+  },
+  categoryBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#34D399",
+  },
+  compactThumbsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 4,
+  },
+  compactThumbButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#0A0A1A",
+    alignItems: "center",
+    justifyContent: "center",
   },
   overrideBanner: {
     flexDirection: "row",
@@ -825,26 +868,6 @@ const styles = StyleSheet.create({
     borderColor: "#2A2A5060",
     backgroundColor: "#15152D",
     gap: 14,
-    alignItems: "center",
-  },
-  feedbackPrompt: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
-  },
-  thumbsRow: {
-    flexDirection: "row",
-    gap: 20,
-  },
-  thumbButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A",
-    alignItems: "center",
-    justifyContent: "center",
   },
   thumbButtonActiveUp: {
     borderColor: "#34D39940",
@@ -853,17 +876,6 @@ const styles = StyleSheet.create({
   thumbButtonActiveDown: {
     borderColor: "#F8717140",
     backgroundColor: "#F8717110",
-  },
-  addCommentButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 6,
-  },
-  addCommentText: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: "#6C5CE7",
   },
   commentSection: {
     width: "100%",
@@ -889,16 +901,6 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     gap: 10,
   },
-  cancelButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  cancelButtonText: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: "#64748B",
-  },
   submitButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -909,21 +911,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
     color: "#fff",
-  },
-  existingComment: {
-    width: "100%",
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#0A0A1A40",
-    borderWidth: 1,
-    borderColor: "#2A2A5030",
-  },
-  existingCommentText: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    fontStyle: "italic",
-    color: "#94A3B8",
-    lineHeight: 19,
   },
   processingCard: {
     borderRadius: 20,
