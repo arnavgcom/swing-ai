@@ -28,81 +28,69 @@ function getGreeting(): string {
   return "Good Evening";
 }
 
+const DISPLAY_KEYS = ["consistency", "timing", "stability"];
+
+function findSubScore(subs: Record<string, number>, target: string): number | null {
+  const lower = target.toLowerCase();
+  for (const k of Object.keys(subs)) {
+    if (k.toLowerCase() === lower) return subs[k];
+  }
+  return null;
+}
+
+function filterBySport(analyses: AnalysisSummary[], sportName: string | undefined, movementName: string | undefined): AnalysisSummary[] {
+  if (!sportName) return analyses;
+  const sportLower = sportName.toLowerCase();
+  return analyses.filter((a) => {
+    if (!a.configKey) return false;
+    const keyLower = a.configKey.toLowerCase();
+    if (!keyLower.startsWith(sportLower)) return false;
+    if (movementName) {
+      const movLower = movementName.toLowerCase().replace(/\s+/g, "");
+      if (!keyLower.includes(movLower)) return false;
+    }
+    return true;
+  });
+}
+
 function computeScores(analyses: AnalysisSummary[]) {
   const completed = analyses.filter((a) => a.status === "completed" && a.overallScore != null);
   if (completed.length === 0) {
-    return { overall: null, consistency: null, power: null, focus: null, overallDelta: null, consistencyDelta: null, powerDelta: null };
+    return { overall: null, category: null, subs: [] as { key: string; value: number; delta: number | null }[], overallDelta: null };
   }
 
   const latest = completed[0];
+  const prev = completed.length > 1 ? completed[1] : null;
   const overall = Math.round(latest.overallScore || 0);
-  const subs = latest.subScores || {};
-
-  const subKeys = Object.keys(subs);
-  const consistency = subs["Consistency"] ?? subs["consistency"] ?? (subKeys.length > 0 ? subs[subKeys[0]] : null);
-  const power = subs["Power"] ?? subs["power"] ?? subs["Technique"] ?? subs["technique"] ?? (subKeys.length > 1 ? subs[subKeys[1]] : null);
-
-  let lowestKey = "";
-  let lowestVal = Infinity;
-  for (const k of subKeys) {
-    if (subs[k] < lowestVal) {
-      lowestVal = subs[k];
-      lowestKey = k;
-    }
-  }
-  const focus = lowestKey || null;
-
-  const now = Date.now();
-  const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
-  const olderThanWeek = completed.filter((a) => new Date(a.createdAt).getTime() < oneWeekAgo);
+  const category = latest.detectedMovement || null;
 
   let overallDelta: number | null = null;
-  let consistencyDelta: number | null = null;
-  let powerDelta: number | null = null;
-
-  if (olderThanWeek.length > 0) {
-    const avgOld = olderThanWeek.reduce((s, a) => s + (a.overallScore || 0), 0) / olderThanWeek.length;
-    overallDelta = Math.round(overall - avgOld);
-
-    if (consistency != null) {
-      const oldConsVals = olderThanWeek.map((a) => {
-        const s = a.subScores || {};
-        return s["Consistency"] ?? s["consistency"] ?? (Object.keys(s).length > 0 ? s[Object.keys(s)[0]] : null);
-      }).filter((v): v is number => v != null);
-      if (oldConsVals.length > 0) {
-        consistencyDelta = Math.round(consistency - oldConsVals.reduce((a, b) => a + b, 0) / oldConsVals.length);
-      }
-    }
-    if (power != null) {
-      const oldPowVals = olderThanWeek.map((a) => {
-        const s = a.subScores || {};
-        return s["Power"] ?? s["power"] ?? s["Technique"] ?? s["technique"] ?? (Object.keys(s).length > 1 ? s[Object.keys(s)[1]] : null);
-      }).filter((v): v is number => v != null);
-      if (oldPowVals.length > 0) {
-        powerDelta = Math.round(power - oldPowVals.reduce((a, b) => a + b, 0) / oldPowVals.length);
-      }
-    }
+  if (prev?.overallScore != null) {
+    overallDelta = overall - Math.round(prev.overallScore);
   }
 
-  return {
-    overall,
-    consistency: consistency != null ? Math.round(consistency) : null,
-    power: power != null ? Math.round(power) : null,
-    focus,
-    overallDelta,
-    consistencyDelta,
-    powerDelta,
-  };
+  const latestSubs = latest.subScores || {};
+  const prevSubs = prev?.subScores || {};
+
+  const subs = DISPLAY_KEYS.map((key) => {
+    const value = findSubScore(latestSubs, key);
+    if (value == null) return null;
+    const prevVal = findSubScore(prevSubs, key);
+    const delta = prevVal != null ? Math.round(value) - Math.round(prevVal) : null;
+    return { key, value: Math.round(value), delta };
+  }).filter((s): s is { key: string; value: number; delta: number | null } => s != null);
+
+  return { overall, category, subs, overallDelta };
 }
 
-function DeltaBadge({ value }: { value: number | null }) {
-  if (value == null) return null;
-  const isUp = value >= 0;
+function DeltaBadge({ value, suffix }: { value: number | null; suffix?: string }) {
+  if (value == null || value === 0) return null;
+  const isUp = value > 0;
   return (
     <View style={[deltaStyles.badge, { backgroundColor: isUp ? "#34D39915" : "#F8717115" }]}>
       <Ionicons name={isUp ? "arrow-up" : "arrow-down"} size={10} color={isUp ? "#34D399" : "#F87171"} />
       <Text style={[deltaStyles.text, { color: isUp ? "#34D399" : "#F87171" }]}>
-        {Math.abs(value)}
+        {Math.abs(value)}{suffix || ""}
       </Text>
     </View>
   );
@@ -113,13 +101,17 @@ const deltaStyles = StyleSheet.create({
   text: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
 });
 
+function toTitleCase(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 export default function DashboardScreen() {
   const { user } = useAuth();
-  const { selectedSport } = useSport();
+  const { selectedSport, selectedMovement } = useSport();
 
   const sc = sportColors[selectedSport?.name || ""] || { primary: "#6C5CE7", gradient: "#5A4BD1" };
 
-  const { data: analyses, isLoading, refetch, isRefetching } = useQuery({
+  const { data: allAnalyses, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["analyses-summary"],
     queryFn: fetchAnalysesSummary,
     refetchInterval: 5000,
@@ -127,8 +119,9 @@ export default function DashboardScreen() {
     retry: false,
   });
 
+  const analyses = filterBySport(allAnalyses || [], selectedSport?.name, selectedMovement?.name);
   const firstName = user?.name?.split(" ")[0] || "Athlete";
-  const scores = computeScores(analyses || []);
+  const scores = computeScores(analyses);
 
   return (
     <View style={styles.container}>
@@ -166,53 +159,41 @@ export default function DashboardScreen() {
               >
                 <Text style={styles.glassLabel}>Overall Score</Text>
                 <View style={styles.scoreRow}>
-                  <Text style={styles.scoreBig}>
-                    {scores.overall != null ? scores.overall : "—"}
-                  </Text>
-                  {scores.overallDelta != null && (
-                    <View style={styles.deltaInline}>
-                      <Ionicons
-                        name={scores.overallDelta >= 0 ? "arrow-up" : "arrow-down"}
-                        size={14}
-                        color={scores.overallDelta >= 0 ? "#34D399" : "#F87171"}
-                      />
-                      <Text style={[styles.deltaText, { color: scores.overallDelta >= 0 ? "#34D399" : "#F87171" }]}>
-                        {Math.abs(scores.overallDelta)} this week
+                  <View style={styles.scoreLeft}>
+                    <Text style={styles.scoreBig}>
+                      {scores.overall != null ? scores.overall : "—"}
+                    </Text>
+                    <DeltaBadge value={scores.overallDelta} suffix=" pts" />
+                  </View>
+                  {scores.category && (
+                    <View style={[styles.categoryBadge, { backgroundColor: sc.primary + "18", borderColor: sc.primary + "30" }]}>
+                      <Text style={[styles.categoryText, { color: sc.primary }]} numberOfLines={1}>
+                        {scores.category}
                       </Text>
                     </View>
                   )}
                 </View>
-
-                <View style={styles.subRow}>
-                  <View style={styles.subItem}>
-                    <Text style={styles.subLabel}>Consistency</Text>
-                    <View style={styles.subValueRow}>
-                      <Text style={styles.subValue}>
-                        {scores.consistency != null ? scores.consistency : "—"}
-                      </Text>
-                      <DeltaBadge value={scores.consistencyDelta} />
-                    </View>
-                  </View>
-                  <View style={[styles.subDivider, { backgroundColor: sc.primary + "20" }]} />
-                  <View style={styles.subItem}>
-                    <Text style={styles.subLabel}>Power</Text>
-                    <View style={styles.subValueRow}>
-                      <Text style={styles.subValue}>
-                        {scores.power != null ? scores.power : "—"}
-                      </Text>
-                      <DeltaBadge value={scores.powerDelta} />
-                    </View>
-                  </View>
-                  <View style={[styles.subDivider, { backgroundColor: sc.primary + "20" }]} />
-                  <View style={styles.subItem}>
-                    <Text style={styles.subLabel}>Today's Focus</Text>
-                    <Text style={[styles.focusText, { color: sc.primary }]} numberOfLines={2}>
-                      {scores.focus || "—"}
-                    </Text>
-                  </View>
-                </View>
               </LinearGradient>
             </View>
+
+            {scores.subs.length > 0 && (
+              <View style={styles.subsRow}>
+                {scores.subs.map((sub) => (
+                  <View key={sub.key} style={styles.subCard}>
+                    <LinearGradient
+                      colors={[sc.primary + "10", sc.gradient + "06", "#15152D"]}
+                      style={styles.subCardGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    >
+                      <Text style={styles.subLabel}>{toTitleCase(sub.key)}</Text>
+                      <Text style={styles.subValue}>{sub.value}</Text>
+                      <DeltaBadge value={sub.delta} />
+                    </LinearGradient>
+                  </View>
+                ))}
+              </View>
+            )}
 
             <Pressable
               onPress={() => {
@@ -274,7 +255,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#6C5CE730",
     overflow: "hidden",
-    marginBottom: 24,
+    marginBottom: 16,
   },
   glassCardGradient: {
     padding: 24,
@@ -288,9 +269,13 @@ const styles = StyleSheet.create({
   },
   scoreRow: {
     flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+  },
+  scoreLeft: {
+    flexDirection: "row",
     alignItems: "flex-end",
-    gap: 12,
-    marginBottom: 20,
+    gap: 10,
   },
   scoreBig: {
     fontSize: 56,
@@ -298,33 +283,34 @@ const styles = StyleSheet.create({
     color: "#F8FAFC",
     lineHeight: 62,
   },
-  deltaInline: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingBottom: 10,
+  categoryBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 8,
   },
-  deltaText: {
-    fontSize: 14,
+  categoryText: {
+    fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
-  subRow: {
+  subsRow: {
     flexDirection: "row",
-    backgroundColor: "#0A0A1A60",
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#2A2A5030",
+    gap: 10,
+    marginBottom: 20,
   },
-  subItem: {
+  subCard: {
     flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#6C5CE720",
+    overflow: "hidden",
+  },
+  subCardGradient: {
+    padding: 14,
     alignItems: "center",
     gap: 6,
-  },
-  subValueRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+    borderRadius: 16,
   },
   subLabel: {
     fontSize: 11,
@@ -334,18 +320,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   subValue: {
-    fontSize: 20,
+    fontSize: 22,
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
-  },
-  subDivider: {
-    width: 1,
-    marginVertical: -4,
-  },
-  focusText: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    textAlign: "center" as const,
   },
   uploadButton: {
     borderRadius: 16,

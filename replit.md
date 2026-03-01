@@ -89,9 +89,9 @@ All data is stored entirely on Replit:
 - `app/sport-select.tsx` — Sport selection with 2-column gradient grid cards → movement list
 - `app/(tabs)/_layout.tsx` — Tab navigator (Dashboard, Upload, History) with soft emerald (#34D399) active tab
 - `app/profile.tsx` — Profile screen (edit name, phone, address, country, sports interests, bio, avatar upload, logout)
-- `app/(tabs)/index.tsx` — Dashboard with sport pill, gradient stat cards, analysis list; avatar icon navigates to profile
+- `app/(tabs)/index.tsx` — Dashboard with overall score card (category badge, delta vs previous session), 3 glass-feel sub-cards (Consistency, Timing, Stability with deltas), filtered by selected sport/movement via configKey
 - `app/(tabs)/upload.tsx` — Video upload with gradient background
-- `app/(tabs)/history.tsx` — Analysis history list with gradient background
+- `app/(tabs)/history.tsx` — Analysis history with trend chart, Total/Active/Done stat cards, session cards showing 4 sub-scores (Power, Timing, Stability, Consistency) with deltas, filtered by sport/movement
 - `app/analysis/[id].tsx` — Dynamic analysis detail: fetches sport config by configKey → renders metrics by category, sub-scores, and coaching dynamically
 - `lib/auth-context.tsx` — Auth context provider
 - `lib/sport-context.tsx` — Sport context provider (selected sport/movement, persisted to AsyncStorage)

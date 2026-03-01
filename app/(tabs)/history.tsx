@@ -111,6 +111,31 @@ function toTitleCase(str: string): string {
     .trim();
 }
 
+const HISTORY_DISPLAY_KEYS = ["power", "timing", "stability", "consistency"];
+
+function filterBySport(analyses: AnalysisSummary[], sportName: string | undefined, movementName: string | undefined): AnalysisSummary[] {
+  if (!sportName) return analyses;
+  const sportLower = sportName.toLowerCase();
+  return analyses.filter((a) => {
+    if (!a.configKey) return false;
+    const keyLower = a.configKey.toLowerCase();
+    if (!keyLower.startsWith(sportLower)) return false;
+    if (movementName) {
+      const movLower = movementName.toLowerCase().replace(/\s+/g, "");
+      if (!keyLower.includes(movLower)) return false;
+    }
+    return true;
+  });
+}
+
+function findSubValue(subs: Record<string, number> | null, key: string): number | null {
+  if (!subs) return null;
+  for (const k of Object.keys(subs)) {
+    if (k.toLowerCase() === key.toLowerCase()) return subs[k];
+  }
+  return null;
+}
+
 function SummaryCard({
   item,
   isOwner,
@@ -135,7 +160,9 @@ function SummaryCard({
 
   const score = item.overallScore != null ? Math.round(item.overallScore) : null;
   const subs = item.subScores || {};
-  const subEntries = Object.entries(subs);
+  const subEntries = Object.entries(subs).filter(([key]) =>
+    HISTORY_DISPLAY_KEYS.includes(key.toLowerCase())
+  );
   const movement = item.detectedMovement || item.videoFilename?.split("-")[1] || "";
 
   const currentIndex = allAnalyses.findIndex((a) => a.id === item.id);
@@ -204,8 +231,7 @@ function SummaryCard({
       {subEntries.length > 0 && (
         <View style={summaryStyles.metricsRow}>
           {subEntries.map(([key, val]) => {
-            const prevSubs = prevItem?.subScores;
-            const prevVal = prevSubs?.[key];
+            const prevVal = findSubValue(prevItem?.subScores || null, key);
             const subDelta = prevVal != null ? Math.round(val) - Math.round(prevVal) : null;
             return (
               <View key={key} style={summaryStyles.metricItem}>
@@ -374,17 +400,19 @@ export default function HistoryScreen() {
   const colors = Colors.dark;
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { selectedSport } = useSport();
+  const { selectedSport, selectedMovement } = useSport();
 
   const sc = sportColors[selectedSport?.name || ""] || { primary: "#6C5CE7", gradient: "#5A4BD1" };
 
-  const { data: analyses, isLoading, refetch, isRefetching } = useQuery({
+  const { data: allAnalyses, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["analyses-summary"],
     queryFn: fetchAnalysesSummary,
     refetchInterval: 5000,
     enabled: !!user,
     retry: false,
   });
+
+  const analyses = filterBySport(allAnalyses || [], selectedSport?.name, selectedMovement?.name);
 
   const deleteMutation = useMutation({
     mutationFn: deleteAnalysis,
