@@ -7,7 +7,7 @@
 - **Database**: Replit PostgreSQL via Drizzle ORM — stores users, sports, sport_movements, analyses, metrics, coaching_insights tables
 - **Video Storage**: Local `uploads/` folder on Replit filesystem
 - **ML Pipeline**: Python 3.11 with OpenCV (frame extraction), MediaPipe Tasks API v0.10.32 (pose detection), HSV ball tracking
-- **Auth**: Email/password with express-session + connect-pg-simple (session stored in PostgreSQL); Google login button (placeholder)
+- **Auth**: Email/password + Google OAuth (expo-auth-session) with express-session + connect-pg-simple (session stored in PostgreSQL). Google Client ID via `EXPO_PUBLIC_GOOGLE_CLIENT_ID` env var.
 
 ## Design System
 
