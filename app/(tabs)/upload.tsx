@@ -60,38 +60,79 @@ export default function UploadScreen() {
     },
   });
 
-  const pickVideo = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const handleVideoResult = (result: ImagePicker.ImagePickerResult) => {
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      setSelectedVideo({
+        uri: asset.uri,
+        fileName: asset.fileName || `analysis_${Date.now()}.mp4`,
+        duration: asset.duration ? asset.duration / 1000 : null,
+        fileSize: asset.fileSize || null,
+      });
+    }
+  };
 
+  const launchVideoLibrary = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["videos"],
-        quality: 1,
+        quality: 0.7,
         videoMaxDuration: 30,
         legacy: true,
+        videoExportPreset: ImagePicker.VideoExportPreset.MediumQuality,
       });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        setSelectedVideo({
-          uri: asset.uri,
-          fileName: asset.fileName || `analysis_${Date.now()}.mp4`,
-          duration: asset.duration ? asset.duration / 1000 : null,
-          fileSize: asset.fileSize || null,
-        });
-      }
+      handleVideoResult(result);
     } catch (error: any) {
       const msg = error?.message || "";
       if (error?.code === "ERR_CANCELED" || msg.includes("cancel")) return;
-      if (msg.includes("PHPhotosErrorDomain") || msg.includes("3164")) {
+      if (msg.includes("PHPhotosErrorDomain") || msg.includes("3164") || msg.includes("Could not load")) {
         Alert.alert(
           "Video Access Error",
-          "Could not load this video. Try a shorter or smaller video, or record a new one with your camera.",
+          "iOS could not process this video. Please try recording a new video using the camera option, or pick a shorter/smaller video.",
+          [
+            { text: "Record Video", onPress: launchVideoCamera },
+            { text: "OK", style: "cancel" },
+          ],
         );
       } else {
         Alert.alert("Error", "Could not access your video library. Please try again.");
       }
     }
+  };
+
+  const launchVideoCamera = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Needed", "Camera access is required to record video.");
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["videos"],
+        quality: 0.7,
+        videoMaxDuration: 30,
+        videoExportPreset: ImagePicker.VideoExportPreset.MediumQuality,
+      });
+      handleVideoResult(result);
+    } catch (error: any) {
+      if (error?.code === "ERR_CANCELED") return;
+      Alert.alert("Error", "Could not record video. Please try again.");
+    }
+  };
+
+  const pickVideo = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    if (Platform.OS === "web") {
+      await launchVideoLibrary();
+      return;
+    }
+
+    Alert.alert("Select Video", "Choose how to add your video", [
+      { text: "Record Video", onPress: launchVideoCamera },
+      { text: "Choose from Gallery", onPress: launchVideoLibrary },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
