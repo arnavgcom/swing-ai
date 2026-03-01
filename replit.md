@@ -1,4 +1,4 @@
-# AceX AI — Multi-Sport Performance Analysis
+# Swing AI — Multi-Sport Performance Analysis
 
 ## Architecture
 
@@ -100,7 +100,15 @@ All data is stored entirely on Replit:
 - `constants/colors.ts` — Theme colors (midnight/purple/neon palette) + `sportColors` map
 
 ### Schema
-- `shared/schema.ts` — Drizzle schema: users, sports, sport_movements, analyses, metrics (JSONB metricValues/subScores/configKey), coaching_insights
+- `shared/schema.ts` — Drizzle schema: users (with `role` column: "player"|"admin"), sports, sport_movements, analyses, metrics (JSONB metricValues/subScores/configKey), coaching_insights
+
+## User Roles
+
+- **player** (default): Can only see their own analyses across Dashboard, Analyze, and History tabs
+- **admin**: Can view all users' analyses with uploader names shown on analysis cards
+- **Delete restriction**: Only the owner (uploader) of a video can delete it, regardless of role
+- **Role toggle**: Users can switch between player and admin via a toggle in the Profile screen
+- Profile saves role via `PUT /api/profile` with `role` field
 
 ## Sports & Movements
 

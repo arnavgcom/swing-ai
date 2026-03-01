@@ -12,6 +12,7 @@ interface AuthUser {
   country: string | null;
   sportsInterests: string | null;
   bio: string | null;
+  role: string;
 }
 
 interface AuthContextType {

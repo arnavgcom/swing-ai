@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "AceX AI",
-    "slug": "acex-ai",
+    "name": "Swing AI",
+    "slug": "swing-ai",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "acexai",
+    "scheme": "swingai",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {

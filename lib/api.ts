@@ -3,6 +3,8 @@ import { getApiUrl } from "./query-client";
 
 export interface AnalysisResponse {
   id: string;
+  userId: string | null;
+  userName?: string;
   videoFilename: string;
   videoPath: string;
   status: string;

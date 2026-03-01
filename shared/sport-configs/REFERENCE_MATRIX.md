@@ -1,4 +1,4 @@
-# AceX AI — Sport Configuration Reference Matrix
+# Swing AI — Sport Configuration Reference Matrix
 
 Complete reference for all sport categories, metrics, optimal ranges, sub-scores, and overall score formulas.
 

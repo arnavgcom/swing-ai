@@ -3,6 +3,7 @@ import {
   analyses,
   metrics,
   coachingInsights,
+  users,
   type Analysis,
   type Metric,
   type CoachingInsight,
@@ -18,7 +19,7 @@ export interface IStorage {
     movementId?: string | null,
   ): Promise<Analysis>;
   getAnalysis(id: string): Promise<Analysis | undefined>;
-  getAllAnalyses(userId: string, sportId?: string): Promise<Analysis[]>;
+  getAllAnalyses(userId: string | null, sportId?: string): Promise<Analysis[]>;
   getMetrics(analysisId: string): Promise<Metric | undefined>;
   getCoachingInsights(analysisId: string): Promise<CoachingInsight | undefined>;
   deleteAnalysis(id: string): Promise<void>;
@@ -55,19 +56,37 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllAnalyses(
-    userId: string,
+    userId: string | null,
     sportId?: string,
-  ): Promise<Analysis[]> {
-    const conditions = [eq(analyses.userId, userId)];
+  ): Promise<(Analysis & { userName?: string })[]> {
+    const conditions: any[] = [];
+    if (userId) {
+      conditions.push(eq(analyses.userId, userId));
+    }
     if (sportId) {
       conditions.push(eq(analyses.sportId, sportId));
     }
 
-    return db
-      .select()
+    const rows = await db
+      .select({
+        id: analyses.id,
+        userId: analyses.userId,
+        sportId: analyses.sportId,
+        movementId: analyses.movementId,
+        videoFilename: analyses.videoFilename,
+        videoPath: analyses.videoPath,
+        status: analyses.status,
+        detectedMovement: analyses.detectedMovement,
+        createdAt: analyses.createdAt,
+        updatedAt: analyses.updatedAt,
+        userName: users.name,
+      })
       .from(analyses)
-      .where(and(...conditions))
+      .leftJoin(users, eq(analyses.userId, users.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(analyses.createdAt));
+
+    return rows;
   }
 
   async getMetrics(analysisId: string): Promise<Metric | undefined> {

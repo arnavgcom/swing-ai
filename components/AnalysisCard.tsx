@@ -13,9 +13,10 @@ import type { AnalysisResponse } from "@/lib/api";
 interface AnalysisCardProps {
   analysis: AnalysisResponse;
   onPress: () => void;
+  showUserName?: boolean;
 }
 
-export function AnalysisCard({ analysis, onPress }: AnalysisCardProps) {
+export function AnalysisCard({ analysis, onPress, showUserName }: AnalysisCardProps) {
   const colors = Colors.dark;
 
   const statusConfig = {
@@ -53,6 +54,9 @@ export function AnalysisCard({ analysis, onPress }: AnalysisCardProps) {
         <Text style={styles.filename} numberOfLines={1}>
           {analysis.videoFilename}
         </Text>
+        {showUserName && analysis.userName ? (
+          <Text style={styles.userName} numberOfLines={1}>{analysis.userName}</Text>
+        ) : null}
         <Text style={styles.time}>{timeStr}</Text>
       </View>
       <View style={styles.statusWrap}>
@@ -105,6 +109,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
     color: "#F8FAFC",
+  },
+  userName: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: "#A29BFE",
   },
   time: {
     fontSize: 12,

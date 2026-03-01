@@ -24,6 +24,7 @@ export const users = pgTable("users", {
   country: text("country"),
   sportsInterests: text("sports_interests"),
   bio: text("bio"),
+  role: text("role").default("player").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

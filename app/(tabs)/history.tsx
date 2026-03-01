@@ -57,10 +57,14 @@ export default function HistoryScreen() {
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
 
+  const isAdmin = user?.role === "admin";
+  const isOwner = (item: (typeof analyses)[0]) => item.userId === user?.id;
+
   const renderItem = ({ item }: { item: (typeof analyses)[0] }) => (
     <View style={styles.cardWrapper}>
       <AnalysisCard
         analysis={item}
+        showUserName={isAdmin}
         onPress={() =>
           router.push({
             pathname: "/analysis/[id]",
@@ -68,15 +72,17 @@ export default function HistoryScreen() {
           })
         }
       />
-      <Pressable
-        onPress={() => handleDelete(item.id, item.videoFilename)}
-        style={({ pressed }) => [
-          styles.deleteBtn,
-          { opacity: pressed ? 0.6 : 1 },
-        ]}
-      >
-        <Ionicons name="trash-outline" size={18} color={colors.red} />
-      </Pressable>
+      {isOwner(item) && (
+        <Pressable
+          onPress={() => handleDelete(item.id, item.videoFilename)}
+          style={({ pressed }) => [
+            styles.deleteBtn,
+            { opacity: pressed ? 0.6 : 1 },
+          ]}
+        >
+          <Ionicons name="trash-outline" size={18} color={colors.red} />
+        </Pressable>
+      )}
     </View>
   );
 

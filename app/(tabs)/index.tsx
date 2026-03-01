@@ -70,10 +70,7 @@ export default function DashboardScreen() {
       >
         <View style={styles.topBar}>
           <View style={styles.topBarLeft}>
-            <Text style={styles.greeting}>Hey, {firstName}</Text>
-            <Text style={styles.title}>
-              Ace<Text style={styles.titleAccent}>X</Text> AI
-            </Text>
+            <Text style={styles.greeting}>Welcome {firstName}</Text>
           </View>
           <View style={styles.topBarRight}>
             <Pressable
@@ -188,6 +185,7 @@ export default function DashboardScreen() {
                 <AnalysisCard
                   key={analysis.id}
                   analysis={analysis}
+                  showUserName={user?.role === "admin"}
                   onPress={() =>
                     router.push({
                       pathname: "/analysis/[id]",
@@ -220,17 +218,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   greeting: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: "#64748B",
-  },
-  title: {
     fontSize: 26,
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
-    marginTop: 2,
   },
-  titleAccent: { color: "#34D399" },
   sportPill: {
     borderRadius: 20,
     borderWidth: 1,

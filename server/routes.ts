@@ -7,7 +7,7 @@ import { storage } from "./storage";
 import { processAnalysis } from "./analysis-engine";
 import { requireAuth } from "./auth";
 import { db } from "./db";
-import { sports, sportMovements } from "@shared/schema";
+import { sports, sportMovements, users } from "@shared/schema";
 import { eq, asc } from "drizzle-orm";
 import { getSportConfig, getAllConfigs } from "@shared/sport-configs";
 
@@ -118,7 +118,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.session.userId!;
       const sportId = req.query.sportId as string | undefined;
-      const allAnalyses = await storage.getAllAnalyses(userId, sportId);
+
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+
+      const allAnalyses = isAdmin
+        ? await storage.getAllAnalyses(null, sportId)
+        : await storage.getAllAnalyses(userId, sportId);
       res.json(allAnalyses);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -186,6 +192,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
+      }
+
+      if (analysis.userId !== req.session.userId) {
+        return res.status(403).json({ error: "You can only delete your own analyses" });
       }
 
       if (fs.existsSync(analysis.videoPath)) {

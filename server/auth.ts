@@ -20,6 +20,7 @@ function sanitizeUser(user: User) {
     country: user.country,
     sportsInterests: user.sportsInterests,
     bio: user.bio,
+    role: user.role,
   };
 }
 
@@ -62,7 +63,7 @@ export function setupAuth(app: Express) {
         conString: process.env.DATABASE_URL,
         createTableIfMissing: true,
       }),
-      secret: process.env.SESSION_SECRET || "acexai-dev-secret",
+      secret: process.env.SESSION_SECRET || "swingai-dev-secret",
       resave: false,
       saveUninitialized: false,
       cookie: {
@@ -171,7 +172,7 @@ export function setupAuth(app: Express) {
   if(!h){document.querySelector('p').textContent='Sign in failed. Please try again.';return;}
   var p=new URLSearchParams(h);
   var t=p.get('access_token');
-  if(t){window.location.href='acexai://google-auth?access_token='+encodeURIComponent(t);}
+  if(t){window.location.href='swingai://google-auth?access_token='+encodeURIComponent(t);}
   else{document.querySelector('p').textContent='Sign in failed. No token received.';}
 })();
 </script></body></html>`);
@@ -301,7 +302,7 @@ export function setupAuth(app: Express) {
 
   app.put("/api/profile", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { name, phone, address, country, sportsInterests, bio } = req.body;
+      const { name, phone, address, country, sportsInterests, bio, role } = req.body;
 
       if (name !== undefined && (!name || typeof name !== "string" || !name.trim())) {
         return res.status(400).json({ error: "Name is required" });
@@ -314,6 +315,7 @@ export function setupAuth(app: Express) {
       if (country !== undefined) updates.country = country?.trim() || null;
       if (sportsInterests !== undefined) updates.sportsInterests = sportsInterests?.trim() || null;
       if (bio !== undefined) updates.bio = bio?.trim() || null;
+      if (role !== undefined && (role === "player" || role === "admin")) updates.role = role;
 
       const [updated] = await db
         .update(users)

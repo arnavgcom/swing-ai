@@ -97,7 +97,7 @@ export default function LoginScreen() {
           `&response_type=token` +
           `&scope=${encodeURIComponent("openid profile email")}`;
 
-        const result = await WebBrowser.openAuthSessionAsync(authUrl, "acexai://google-auth");
+        const result = await WebBrowser.openAuthSessionAsync(authUrl, "swingai://google-auth");
 
         if (result.type === "success" && result.url) {
           const urlObj = new URL(result.url);
@@ -180,11 +180,11 @@ export default function LoginScreen() {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               >
-                <Text style={styles.logoLetter}>A</Text>
+                <Text style={styles.logoLetter}>S</Text>
               </LinearGradient>
             </View>
             <Text style={styles.appName}>
-              Ace<Text style={styles.appNameAccent}>X</Text> AI
+              Swing <Text style={styles.appNameAccent}>AI</Text>
             </Text>
             <Text style={styles.tagline}>
               Your AI Performance Coach

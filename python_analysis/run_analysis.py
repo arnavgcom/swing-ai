@@ -6,7 +6,7 @@ import traceback
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AceX AI Sport Analysis")
+    parser = argparse.ArgumentParser(description="Swing AI Sport Analysis")
     parser.add_argument("video_path", help="Path to the video file")
     parser.add_argument("--sport", default="tennis", help="Sport name (e.g., tennis, golf)")
     parser.add_argument("--movement", default="forehand", help="Movement name (e.g., forehand, drive)")

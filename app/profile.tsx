@@ -12,6 +12,7 @@ import {
   Image,
   Modal,
   FlatList,
+  Switch,
 } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -65,6 +66,7 @@ export default function ProfileScreen() {
   const [sportsInterests, setSportsInterests] = useState(user?.sportsInterests || "");
   const [bio, setBio] = useState(user?.bio || "");
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [role, setRole] = useState(user?.role || "player");
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
@@ -79,6 +81,7 @@ export default function ProfileScreen() {
       setAddress(user.address || "");
       setCountry(user.country || "Singapore");
       setBio(user.bio || "");
+      setRole(user.role || "player");
       if (user.sportsInterests) {
         const parsed = user.sportsInterests.split(",").map((s) => s.trim()).filter(Boolean);
         setSelectedSports(parsed);
@@ -212,6 +215,7 @@ export default function ProfileScreen() {
         country: country.trim(),
         sportsInterests: sportsInterests.trim(),
         bio: bio.trim(),
+        role,
       });
       await refreshUser();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -391,6 +395,37 @@ export default function ProfileScreen() {
             placeholder="Tell us about yourself..."
             multiline
           />
+
+          <View style={styles.fieldWrapper}>
+            <Text style={styles.fieldLabel}>Role</Text>
+            <View style={styles.roleToggleRow}>
+              <View style={styles.roleInfo}>
+                <Ionicons
+                  name={role === "admin" ? "shield-checkmark" : "person"}
+                  size={18}
+                  color={role === "admin" ? "#FBBF24" : "#6C5CE7"}
+                />
+                <Text style={styles.roleText}>
+                  {role === "admin" ? "Admin" : "Player"}
+                </Text>
+                <View style={[styles.roleBadge, role === "admin" ? styles.roleBadgeAdmin : styles.roleBadgePlayer]}>
+                  <Text style={[styles.roleBadgeText, role === "admin" ? styles.roleBadgeTextAdmin : styles.roleBadgeTextPlayer]}>
+                    {role === "admin" ? "ADMIN" : "PLAYER"}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={role === "admin"}
+                onValueChange={(val) => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  setRole(val ? "admin" : "player");
+                }}
+                trackColor={{ false: "#2A2A50", true: "#FBBF2440" }}
+                thumbColor={role === "admin" ? "#FBBF24" : "#64748B"}
+                testID="role-toggle"
+              />
+            </View>
+          </View>
         </View>
 
         <Pressable
@@ -733,6 +768,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_500Medium",
     color: "#A29BFE",
+  },
+  roleToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#131328",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  roleInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  roleText: {
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
+    color: "#F8FAFC",
+  },
+  roleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  roleBadgePlayer: {
+    backgroundColor: "#6C5CE720",
+  },
+  roleBadgeAdmin: {
+    backgroundColor: "#FBBF2420",
+  },
+  roleBadgeText: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.5,
+  },
+  roleBadgeTextPlayer: {
+    color: "#A29BFE",
+  },
+  roleBadgeTextAdmin: {
+    color: "#FBBF24",
   },
   saveButton: {
     borderRadius: 14,
