@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Redirect, Stack, useSegments } from "expo-router";
+import { Stack, useSegments, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import {
@@ -20,9 +20,35 @@ import { View, ActivityIndicator } from "react-native";
 SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {
-  const { user, isLoading } = useAuth();
-  const { selectedSport } = useSport();
+  const { user, isLoading: authLoading } = useAuth();
+  const { selectedSport, isLoading: sportLoading } = useSport();
   const segments = useSegments();
+  const router = useRouter();
+  const [navigationReady, setNavigationReady] = useState(false);
+
+  const isLoading = authLoading || sportLoading;
+
+  useEffect(() => {
+    if (!isLoading) {
+      const timer = setTimeout(() => setNavigationReady(true), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading]);
+
+  useEffect(() => {
+    if (!navigationReady) return;
+
+    const inAuthGroup = segments[0] === "login";
+    const inSportSelect = segments[0] === "sport-select";
+
+    if (!user && !inAuthGroup) {
+      router.replace("/login");
+    } else if (user && !selectedSport && !inSportSelect) {
+      router.replace("/sport-select");
+    } else if (user && selectedSport && (inAuthGroup || (inSportSelect && segments.length === 1))) {
+      router.replace("/(tabs)");
+    }
+  }, [user, selectedSport, segments, navigationReady]);
 
   if (isLoading) {
     return (
@@ -37,21 +63,6 @@ function RootNavigator() {
         <ActivityIndicator size="large" color="#6C5CE7" />
       </View>
     );
-  }
-
-  const inAuthGroup = segments[0] === "login";
-  const inSportSelect = segments[0] === "sport-select";
-
-  if (!user && !inAuthGroup) {
-    return <Redirect href="/login" />;
-  }
-
-  if (user && !selectedSport && !inSportSelect) {
-    return <Redirect href="/sport-select" />;
-  }
-
-  if (user && selectedSport && (inAuthGroup || (inSportSelect && segments.length === 1))) {
-    return <Redirect href="/(tabs)" />;
   }
 
   return (

@@ -63,20 +63,26 @@ export default function UploadScreen() {
   const pickVideo = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["videos"],
-      quality: 0.8,
-      videoMaxDuration: 20,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      setSelectedVideo({
-        uri: asset.uri,
-        fileName: asset.fileName || `analysis_${Date.now()}.mp4`,
-        duration: asset.duration ? asset.duration / 1000 : null,
-        fileSize: asset.fileSize || null,
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["videos"],
+        quality: 0.8,
+        videoMaxDuration: 20,
       });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        setSelectedVideo({
+          uri: asset.uri,
+          fileName: asset.fileName || `analysis_${Date.now()}.mp4`,
+          duration: asset.duration ? asset.duration / 1000 : null,
+          fileSize: asset.fileSize || null,
+        });
+      }
+    } catch (error: any) {
+      if (error?.code !== "ERR_CANCELED") {
+        Alert.alert("Error", "Could not access your video library. Please try again.");
+      }
     }
   };
 
