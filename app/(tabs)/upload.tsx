@@ -154,12 +154,14 @@ export default function UploadScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={[styles.title, { color: colors.text }]}>
-          Analyze {movementLabel}
-        </Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Upload a video for AI-powered {selectedSport?.name || "sports"} analysis
-        </Text>
+        <View style={styles.headerSection}>
+          <Text style={[styles.title, { color: colors.text }]}>
+            Analyze {movementLabel}
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Upload a video for AI-powered {selectedSport?.name || "sports"} analysis
+          </Text>
+        </View>
 
         {selectedSport && (
           <View style={[styles.contextBadge, { backgroundColor: sportColor + "10", borderColor: sportColor + "25" }]}>
@@ -326,16 +328,19 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
   },
+  headerSection: {
+    marginTop: 12,
+    marginBottom: 20,
+  },
   title: {
     fontSize: 26,
     fontFamily: "Inter_700Bold",
-    marginBottom: 6,
   },
   subtitle: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
-    lineHeight: 21,
-    marginBottom: 16,
+    marginTop: 10,
+    color: "#94A3B8",
   },
   contextBadge: {
     flexDirection: "row",
@@ -428,21 +433,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
   },
-  tipsSection: { gap: 8 },
+  tipsSection: { gap: 4, marginTop: 12 },
   tipsTitle: {
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   tipRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
   },
   tipIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 7,
     alignItems: "center",
     justifyContent: "center",
   },

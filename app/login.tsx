@@ -170,6 +170,21 @@ export default function LoginScreen() {
 
         <View style={styles.bottomSection}>
           <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              Alert.alert("Coming Soon", "Apple Sign-In will be available soon.");
+            }}
+            style={({ pressed }) => [
+              styles.appleButton,
+              { transform: [{ scale: pressed ? 0.97 : 1 }] },
+            ]}
+            testID="apple-login-button"
+          >
+            <Ionicons name="logo-apple" size={20} color="#F8FAFC" />
+            <Text style={styles.appleText}>Continue with Apple</Text>
+          </Pressable>
+
+          <Pressable
             onPress={handleGooglePress}
             disabled={googleLoading}
             style={({ pressed }) => [
@@ -196,21 +211,6 @@ export default function LoginScreen() {
                 </>
               )}
             </LinearGradient>
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              Alert.alert("Coming Soon", "Apple Sign-In will be available soon.");
-            }}
-            style={({ pressed }) => [
-              styles.appleButton,
-              { transform: [{ scale: pressed ? 0.97 : 1 }] },
-            ]}
-            testID="apple-login-button"
-          >
-            <Ionicons name="logo-apple" size={20} color="#F8FAFC" />
-            <Text style={styles.appleText}>Continue with Apple</Text>
           </Pressable>
 
           <Text style={styles.termsText}>

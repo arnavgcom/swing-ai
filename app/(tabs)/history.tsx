@@ -135,7 +135,7 @@ function SummaryCard({
 
   const score = item.overallScore != null ? Math.round(item.overallScore) : null;
   const subs = item.subScores || {};
-  const subEntries = Object.entries(subs).slice(0, 3);
+  const subEntries = Object.entries(subs);
   const movement = item.detectedMovement || item.videoFilename?.split("-")[1] || "";
 
   const currentIndex = allAnalyses.findIndex((a) => a.id === item.id);
@@ -203,12 +203,29 @@ function SummaryCard({
 
       {subEntries.length > 0 && (
         <View style={summaryStyles.metricsRow}>
-          {subEntries.map(([key, val]) => (
-            <View key={key} style={summaryStyles.metricItem}>
-              <Text style={summaryStyles.metricLabel} numberOfLines={1}>{toTitleCase(key)}</Text>
-              <Text style={summaryStyles.metricValue}>{Math.round(val)}</Text>
-            </View>
-          ))}
+          {subEntries.map(([key, val]) => {
+            const prevSubs = prevItem?.subScores;
+            const prevVal = prevSubs?.[key];
+            const subDelta = prevVal != null ? Math.round(val) - Math.round(prevVal) : null;
+            return (
+              <View key={key} style={summaryStyles.metricItem}>
+                <Text style={summaryStyles.metricLabel} numberOfLines={1}>{toTitleCase(key)}</Text>
+                <Text style={summaryStyles.metricValue}>{Math.round(val)}</Text>
+                {subDelta != null && subDelta !== 0 && (
+                  <View style={summaryStyles.subDeltaRow}>
+                    <Ionicons
+                      name={subDelta > 0 ? "arrow-up" : "arrow-down"}
+                      size={8}
+                      color={subDelta > 0 ? "#34D399" : "#F87171"}
+                    />
+                    <Text style={[summaryStyles.subDeltaText, { color: subDelta > 0 ? "#34D399" : "#F87171" }]}>
+                      {Math.abs(subDelta)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            );
+          })}
         </View>
       )}
 
@@ -283,14 +300,17 @@ const summaryStyles = StyleSheet.create({
   },
   metricsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     marginTop: 12,
-    gap: 8,
+    gap: 6,
   },
   metricItem: {
-    flex: 1,
+    minWidth: "18%" as any,
+    flexGrow: 1,
+    flexBasis: "18%" as any,
     backgroundColor: "#0A0A1A50",
     borderRadius: 10,
-    padding: 10,
+    padding: 8,
     alignItems: "center",
     gap: 2,
     borderWidth: 1,
@@ -307,6 +327,16 @@ const summaryStyles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
+  },
+  subDeltaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    marginTop: 2,
+  },
+  subDeltaText: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
   },
   scoreWrap: {
     alignItems: "flex-end",
@@ -457,43 +487,26 @@ export default function HistoryScreen() {
         </View>
       )}
 
-      {completed.length > 0 && completed[0].subScores && Object.keys(completed[0].subScores).length > 0 && (
-        <View style={styles.breakdownCard}>
-          <LinearGradient
-            colors={[sc.primary + "10", sc.gradient + "06", "#15152D"]}
-            style={styles.breakdownGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Text style={styles.breakdownTitle}>Performance Breakdown</Text>
-            {Object.entries(completed[0].subScores).map(([key, val]) => {
-              const prevSubs = completed.length > 1 ? completed[1].subScores : null;
-              const prevVal = prevSubs?.[key];
-              const delta = prevVal != null ? Math.round(val) - Math.round(prevVal) : null;
-              return (
-                <View key={key} style={styles.breakdownRow}>
-                  <Text style={styles.breakdownLabel}>{toTitleCase(key)}</Text>
-                  <View style={styles.breakdownRight}>
-                    <Text style={styles.breakdownScore}>{Math.round(val)}</Text>
-                    {delta != null && delta !== 0 && (
-                      <View style={[styles.breakdownDelta, { backgroundColor: delta > 0 ? "#34D39914" : "#F8717114" }]}>
-                        <Ionicons
-                          name={delta > 0 ? "arrow-up" : "arrow-down"}
-                          size={10}
-                          color={delta > 0 ? "#34D399" : "#F87171"}
-                        />
-                        <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: delta > 0 ? "#34D399" : "#F87171" }}>
-                          {Math.abs(delta)}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              );
-            })}
-          </LinearGradient>
-        </View>
-      )}
+      <View style={styles.statsRow}>
+        {[
+          { label: "Total", value: totalAnalyses, color: "#6C5CE7", icon: "analytics" as const },
+          { label: "Active", value: processing.length, color: "#60A5FA", icon: "pulse" as const },
+          { label: "Done", value: completed.length, color: "#34D399", icon: "checkmark-circle" as const },
+        ].map((stat) => (
+          <View key={stat.label} style={styles.statCard}>
+            <LinearGradient
+              colors={[stat.color + "14", stat.color + "06"]}
+              style={styles.statCardGradient}
+            >
+              <Ionicons name={stat.icon} size={18} color={stat.color} />
+              <Text style={[styles.statNumber, { color: stat.color }]}>
+                {stat.value}
+              </Text>
+              <Text style={styles.statLabel}>{stat.label}</Text>
+            </LinearGradient>
+          </View>
+        ))}
+      </View>
 
       {analyses && analyses.length > 0 && (
         <Text style={styles.recentTitle}>Recent Sessions</Text>
@@ -604,53 +617,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
-  breakdownCard: {
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#6C5CE720",
-    overflow: "hidden",
+  statsRow: {
+    flexDirection: "row",
+    gap: 10,
     marginBottom: 24,
   },
-  breakdownGradient: {
-    padding: 20,
-    borderRadius: 20,
+  statCard: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: "hidden",
   },
-  breakdownTitle: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
-    marginBottom: 16,
-  },
-  breakdownRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  statCardGradient: {
+    padding: 14,
     alignItems: "center",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#2A2A5015",
+    gap: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#2A2A5030",
   },
-  breakdownLabel: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
-  },
-  breakdownRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  breakdownScore: {
-    fontSize: 18,
+  statNumber: {
+    fontSize: 24,
     fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
   },
-  breakdownDelta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+  statLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+    color: "#64748B",
   },
   recentTitle: {
     fontSize: 16,
