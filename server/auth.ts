@@ -157,6 +157,93 @@ export function setupAuth(app: Express) {
     });
   });
 
+  app.post("/api/auth/google", async (req: Request, res: Response) => {
+    try {
+      const { idToken, accessToken } = req.body;
+
+      if (!idToken && !accessToken) {
+        return res.status(400).json({ error: "No token provided" });
+      }
+
+      let googleUser: { email: string; name: string; picture?: string } | null = null;
+
+      if (idToken) {
+        const verifyRes = await globalThis.fetch(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`,
+        );
+        if (!verifyRes.ok) {
+          return res.status(401).json({ error: "Invalid Google token" });
+        }
+        const payload = await verifyRes.json() as any;
+        googleUser = {
+          email: payload.email,
+          name: payload.name || payload.email.split("@")[0],
+          picture: payload.picture,
+        };
+      } else if (accessToken) {
+        const userInfoRes = await globalThis.fetch(
+          "https://www.googleapis.com/oauth2/v2/userinfo",
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+        );
+        if (!userInfoRes.ok) {
+          return res.status(401).json({ error: "Invalid Google token" });
+        }
+        const payload = await userInfoRes.json() as any;
+        googleUser = {
+          email: payload.email,
+          name: payload.name || payload.email.split("@")[0],
+          picture: payload.picture,
+        };
+      }
+
+      if (!googleUser || !googleUser.email) {
+        return res.status(401).json({ error: "Could not verify Google account" });
+      }
+
+      const [existing] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, googleUser.email.toLowerCase()));
+
+      if (existing) {
+        req.session.userId = existing.id;
+        const updates: Record<string, string | null> = {};
+        if (googleUser.picture && !existing.avatarUrl) {
+          updates.avatarUrl = googleUser.picture;
+        }
+        if (Object.keys(updates).length > 0) {
+          const [updated] = await db
+            .update(users)
+            .set(updates)
+            .where(eq(users.id, existing.id))
+            .returning();
+          return res.json(sanitizeUser(updated));
+        }
+        return res.json(sanitizeUser(existing));
+      }
+
+      const randomPassword = Date.now().toString(36) + Math.random().toString(36).slice(2);
+      const passwordHash = await bcrypt.hash(randomPassword, 12);
+
+      const [newUser] = await db
+        .insert(users)
+        .values({
+          email: googleUser.email.toLowerCase(),
+          name: googleUser.name,
+          passwordHash,
+          avatarUrl: googleUser.picture || null,
+          country: "Singapore",
+        })
+        .returning();
+
+      req.session.userId = newUser.id;
+      res.json(sanitizeUser(newUser));
+    } catch (error: any) {
+      console.error("Google auth error:", error);
+      res.status(500).json({ error: "Google authentication failed" });
+    }
+  });
+
   app.get("/api/auth/me", async (req: Request, res: Response) => {
     if (!req.session.userId) {
       return res.status(401).json({ error: "Not authenticated" });

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -15,13 +15,25 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
+import * as AuthSession from "expo-auth-session";
+import * as WebBrowser from "expo-web-browser";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
+
+WebBrowser.maybeCompleteAuthSession();
+
+const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "";
+
+const discovery = {
+  authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+  tokenEndpoint: "https://oauth2.googleapis.com/token",
+  revocationEndpoint: "https://oauth2.googleapis.com/revoke",
+};
 
 export default function LoginScreen() {
   const colors = Colors.dark;
   const insets = useSafeAreaInsets();
-  const { login, register } = useAuth();
+  const { login, register, googleLogin } = useAuth();
 
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState("");
@@ -29,11 +41,69 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
 
-  const handleGooglePress = () => {
-    Alert.alert("Coming Soon", "Google sign-in will be available in a future update. Use email to get started.");
+  const redirectUri = AuthSession.makeRedirectUri({
+    scheme: "acexai",
+  });
+
+  const [request, response, promptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId: GOOGLE_CLIENT_ID,
+      scopes: ["openid", "profile", "email"],
+      redirectUri,
+      responseType: AuthSession.ResponseType.Token,
+    },
+    discovery,
+  );
+
+  useEffect(() => {
+    if (response?.type === "success") {
+      const { access_token } = response.params;
+      if (access_token) {
+        handleGoogleToken(access_token);
+      }
+    } else if (response?.type === "error") {
+      setGoogleLoading(false);
+      Alert.alert("Google Sign-In Failed", response.error?.message || "Something went wrong");
+    } else if (response?.type === "dismiss") {
+      setGoogleLoading(false);
+    }
+  }, [response]);
+
+  const handleGoogleToken = async (accessToken: string) => {
+    setGoogleLoading(true);
+    try {
+      await googleLogin({ accessToken });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const msg = error?.message?.includes(":")
+        ? error.message.split(":").slice(1).join(":").trim()
+        : error?.message || "Google sign-in failed";
+      Alert.alert("Error", msg);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleGooglePress = async () => {
+    if (!GOOGLE_CLIENT_ID) {
+      Alert.alert(
+        "Setup Required",
+        "Google Sign-In requires a Google Client ID. Please configure EXPO_PUBLIC_GOOGLE_CLIENT_ID in your environment.",
+      );
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setGoogleLoading(true);
+    try {
+      await promptAsync();
+    } catch (e) {
+      setGoogleLoading(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -113,13 +183,24 @@ export default function LoginScreen() {
 
           <Pressable
             onPress={handleGooglePress}
+            disabled={googleLoading}
             style={({ pressed }) => [
               styles.googleButton,
-              { transform: [{ scale: pressed ? 0.97 : 1 }] },
+              {
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+                opacity: googleLoading ? 0.7 : 1,
+              },
             ]}
+            testID="google-login-button"
           >
-            <Ionicons name="logo-google" size={20} color="#fff" />
-            <Text style={styles.googleText}>Continue with Google</Text>
+            {googleLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="logo-google" size={20} color="#fff" />
+                <Text style={styles.googleText}>Continue with Google</Text>
+              </>
+            )}
           </Pressable>
 
           <View style={styles.dividerRow}>
