@@ -34,6 +34,7 @@ function ClassicTabLayout() {
         headerShown: false,
         tabBarActiveTintColor: "#34D399",
         tabBarInactiveTintColor: "#475569",
+        tabBarShowLabel: false,
         tabBarStyle: {
           position: "absolute",
           backgroundColor: isIOS ? "transparent" : "#0A0A1A",

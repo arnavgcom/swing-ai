@@ -103,16 +103,26 @@ const trendStyles = StyleSheet.create({
   dot: { position: "absolute" },
 });
 
+function toTitleCase(str: string): string {
+  return str
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (c) => c.toUpperCase())
+    .replace(/\s+(.)/g, (_, c) => " " + c.toUpperCase())
+    .trim();
+}
+
 function SummaryCard({
   item,
   isOwner,
   onPress,
   onDelete,
+  allAnalyses,
 }: {
   item: AnalysisSummary;
   isOwner: boolean;
   onPress: () => void;
   onDelete: () => void;
+  allAnalyses: AnalysisSummary[];
 }) {
   const date = new Date(item.createdAt);
   const timeStr = date.toLocaleDateString("en-US", {
@@ -127,6 +137,13 @@ function SummaryCard({
   const subs = item.subScores || {};
   const subEntries = Object.entries(subs).slice(0, 3);
   const movement = item.detectedMovement || item.videoFilename?.split("-")[1] || "";
+
+  const currentIndex = allAnalyses.findIndex((a) => a.id === item.id);
+  const prevItem = currentIndex >= 0 && currentIndex < allAnalyses.length - 1 ? allAnalyses[currentIndex + 1] : null;
+  let scoreDelta: number | null = null;
+  if (score != null && prevItem?.overallScore != null) {
+    scoreDelta = score - Math.round(prevItem.overallScore);
+  }
 
   const statusConfig: Record<string, { color: string; label: string }> = {
     pending: { color: "#FBBF24", label: "Pending" },
@@ -152,12 +169,29 @@ function SummaryCard({
         <View style={summaryStyles.cardTopLeft}>
           <Text style={summaryStyles.timeText}>{timeStr}</Text>
           {movement ? (
-            <Text style={summaryStyles.movementText}>{movement}</Text>
+            <Text style={summaryStyles.movementText}>{toTitleCase(movement)}</Text>
           ) : null}
         </View>
         <View style={summaryStyles.cardTopRight}>
           {score != null ? (
-            <Text style={summaryStyles.scoreText}>{score}</Text>
+            <View style={summaryStyles.scoreWrap}>
+              <Text style={summaryStyles.scoreLabel}>Score</Text>
+              <View style={summaryStyles.scoreDeltaRow}>
+                <Text style={summaryStyles.scoreText}>{score}</Text>
+                {scoreDelta != null && scoreDelta !== 0 && (
+                  <View style={summaryStyles.deltaWrap}>
+                    <Ionicons
+                      name={scoreDelta > 0 ? "arrow-up" : "arrow-down"}
+                      size={10}
+                      color={scoreDelta > 0 ? "#34D399" : "#F87171"}
+                    />
+                    <Text style={[summaryStyles.deltaText, { color: scoreDelta > 0 ? "#34D399" : "#F87171" }]}>
+                      {Math.abs(scoreDelta)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
           ) : (
             <View style={[summaryStyles.statusBadge, { backgroundColor: status.color + "14" }]}>
               <Text style={[summaryStyles.statusText, { color: status.color }]}>{status.label}</Text>
@@ -171,7 +205,7 @@ function SummaryCard({
         <View style={summaryStyles.metricsRow}>
           {subEntries.map(([key, val]) => (
             <View key={key} style={summaryStyles.metricItem}>
-              <Text style={summaryStyles.metricLabel} numberOfLines={1}>{key}</Text>
+              <Text style={summaryStyles.metricLabel} numberOfLines={1}>{toTitleCase(key)}</Text>
               <Text style={summaryStyles.metricValue}>{Math.round(val)}</Text>
             </View>
           ))}
@@ -274,6 +308,30 @@ const summaryStyles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
   },
+  scoreWrap: {
+    alignItems: "flex-end",
+  },
+  scoreLabel: {
+    fontSize: 9,
+    fontFamily: "Inter_500Medium",
+    color: "#64748B",
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+  },
+  scoreDeltaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  deltaWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  deltaText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
   deleteBtn: {
     position: "absolute",
     right: 8,
@@ -348,6 +406,7 @@ export default function HistoryScreen() {
     <SummaryCard
       item={item}
       isOwner={isOwner(item)}
+      allAnalyses={analyses || []}
       onPress={() =>
         router.push({
           pathname: "/analysis/[id]",
@@ -398,29 +457,46 @@ export default function HistoryScreen() {
         </View>
       )}
 
-      <View style={styles.statsRow}>
-        {[
-          { label: "Total", value: totalAnalyses, color: "#6C5CE7", icon: "analytics" as const },
-          { label: "Active", value: processing.length, color: "#60A5FA", icon: "pulse" as const },
-          { label: "Done", value: completed.length, color: "#34D399", icon: "checkmark-circle" as const },
-        ].map((stat) => (
-          <View key={stat.label} style={styles.statCard}>
-            <LinearGradient
-              colors={[stat.color + "14", stat.color + "06"]}
-              style={styles.statCardGradient}
-            >
-              <Ionicons name={stat.icon} size={18} color={stat.color} />
-              <Text style={[styles.statNumber, { color: stat.color }]}>
-                {stat.value}
-              </Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
-            </LinearGradient>
-          </View>
-        ))}
-      </View>
+      {completed.length > 0 && completed[0].subScores && Object.keys(completed[0].subScores).length > 0 && (
+        <View style={styles.breakdownCard}>
+          <LinearGradient
+            colors={[sc.primary + "10", sc.gradient + "06", "#15152D"]}
+            style={styles.breakdownGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Text style={styles.breakdownTitle}>Performance Breakdown</Text>
+            {Object.entries(completed[0].subScores).map(([key, val]) => {
+              const prevSubs = completed.length > 1 ? completed[1].subScores : null;
+              const prevVal = prevSubs?.[key];
+              const delta = prevVal != null ? Math.round(val) - Math.round(prevVal) : null;
+              return (
+                <View key={key} style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>{toTitleCase(key)}</Text>
+                  <View style={styles.breakdownRight}>
+                    <Text style={styles.breakdownScore}>{Math.round(val)}</Text>
+                    {delta != null && delta !== 0 && (
+                      <View style={[styles.breakdownDelta, { backgroundColor: delta > 0 ? "#34D39914" : "#F8717114" }]}>
+                        <Ionicons
+                          name={delta > 0 ? "arrow-up" : "arrow-down"}
+                          size={10}
+                          color={delta > 0 ? "#34D399" : "#F87171"}
+                        />
+                        <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: delta > 0 ? "#34D399" : "#F87171" }}>
+                          {Math.abs(delta)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+          </LinearGradient>
+        </View>
+      )}
 
       {analyses && analyses.length > 0 && (
-        <Text style={styles.recentTitle}>Recent Analyses</Text>
+        <Text style={styles.recentTitle}>Recent Sessions</Text>
       )}
     </View>
   );
@@ -469,6 +545,7 @@ export default function HistoryScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0A0A1A" },
   headerSection: {
+    marginTop: 12,
     marginBottom: 20,
   },
   title: {
@@ -479,7 +556,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
-    marginTop: 4,
+    marginTop: 10,
     color: "#94A3B8",
   },
   loadingWrap: {
@@ -527,34 +604,53 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
-  statsRow: {
-    flexDirection: "row",
-    gap: 10,
+  breakdownCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#6C5CE720",
+    overflow: "hidden",
     marginBottom: 24,
   },
-  statCard: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: "hidden",
+  breakdownGradient: {
+    padding: 20,
+    borderRadius: 20,
   },
-  statCardGradient: {
-    padding: 14,
+  breakdownTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#CBD5E1",
+    marginBottom: 16,
+  },
+  breakdownRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#2A2A5030",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2A2A5015",
   },
-  statNumber: {
-    fontSize: 24,
+  breakdownLabel: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
+  },
+  breakdownRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  breakdownScore: {
+    fontSize: 18,
     fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
   },
-  statLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
-    color: "#64748B",
+  breakdownDelta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
   recentTitle: {
     fontSize: 16,

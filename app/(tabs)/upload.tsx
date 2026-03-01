@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
   },
-  tipsSection: { gap: 16 },
+  tipsSection: { gap: 8 },
   tipsTitle: {
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",

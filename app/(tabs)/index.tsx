@@ -256,7 +256,7 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0A0A1A" },
   scroll: { paddingHorizontal: 20, paddingBottom: 100 },
-  greetingSection: { marginBottom: 24 },
+  greetingSection: { marginTop: 12, marginBottom: 24 },
   greeting: {
     fontSize: 26,
     fontFamily: "Inter_700Bold",
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_400Regular",
     color: "#94A3B8",
-    marginTop: 4,
+    marginTop: 10,
   },
   loadingWrap: { paddingTop: 60, alignItems: "center" },
   glassCard: {
