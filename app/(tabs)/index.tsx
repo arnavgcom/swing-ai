@@ -81,10 +81,10 @@ export default function DashboardScreen() {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setSport(null);
               }}
-              style={[styles.sportPill, { borderColor: sc.primary + "50" }]}
+              style={[styles.sportPill, { borderColor: sc.primary + "40" }]}
             >
               <LinearGradient
-                colors={[sc.primary + "20", sc.gradient + "10"]}
+                colors={[sc.primary + "18", sc.gradient + "08"]}
                 style={styles.sportPillGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
@@ -110,14 +110,14 @@ export default function DashboardScreen() {
               {avatarSource ? (
                 <Image source={avatarSource} style={styles.avatarImage} />
               ) : (
-                <Ionicons name="person" size={15} color="#94A3B8" />
+                <Ionicons name="person" size={15} color="#64748B" />
               )}
             </Pressable>
           </View>
         </View>
 
         {selectedMovement && (
-          <View style={[styles.movementBanner, { borderColor: sc.primary + "30" }]}>
+          <View style={[styles.movementBanner, { borderColor: sc.primary + "25" }]}>
             <View style={[styles.movementDot, { backgroundColor: sc.primary }]} />
             <Text style={[styles.movementBannerText, { color: sc.primary }]}>
               {selectedMovement.name} Analysis
@@ -128,12 +128,12 @@ export default function DashboardScreen() {
         <View style={styles.statsRow}>
           {[
             { label: "Total", value: totalAnalyses, color: "#6C5CE7", icon: "analytics" as const },
-            { label: "Active", value: processing.length, color: "#4CC9F0", icon: "pulse" as const },
-            { label: "Done", value: completed.length, color: "#00F5A0", icon: "checkmark-circle" as const },
+            { label: "Active", value: processing.length, color: "#60A5FA", icon: "pulse" as const },
+            { label: "Done", value: completed.length, color: "#34D399", icon: "checkmark-circle" as const },
           ].map((stat) => (
             <View key={stat.label} style={styles.statCard}>
               <LinearGradient
-                colors={[stat.color + "18", stat.color + "08"]}
+                colors={[stat.color + "14", stat.color + "06"]}
                 style={styles.statCardGradient}
               >
                 <Ionicons name={stat.icon} size={18} color={stat.color} />
@@ -153,7 +153,7 @@ export default function DashboardScreen() {
         ) : !analyses || analyses.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIconWrap}>
-              <Ionicons name={selectedSport?.icon as any || "fitness-outline"} size={40} color="#64748B" />
+              <Ionicons name={selectedSport?.icon as any || "fitness-outline"} size={36} color="#475569" />
             </View>
             <Text style={styles.emptyTitle}>No analyses yet</Text>
             <Text style={styles.emptyText}>
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 20,
+    marginBottom: 28,
   },
   topBarLeft: {},
   topBarRight: {
@@ -225,12 +225,12 @@ const styles = StyleSheet.create({
     color: "#64748B",
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
     marginTop: 2,
   },
-  titleAccent: { color: "#00F5A0" },
+  titleAccent: { color: "#34D399" },
   sportPill: {
     borderRadius: 20,
     borderWidth: 1,
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     backgroundColor: "#1A1A36",
     borderWidth: 1,
-    borderColor: "#2A2A50",
+    borderColor: "#2A2A5060",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -273,9 +273,9 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    backgroundColor: "#131328",
+    backgroundColor: "#15152D",
     marginBottom: 16,
   },
   movementDot: {
@@ -290,18 +290,18 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: "row",
     gap: 10,
-    marginBottom: 28,
+    marginBottom: 36,
   },
   statCard: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: "hidden",
   },
   statCardGradient: {
     padding: 14,
     alignItems: "center",
     gap: 6,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#2A2A5030",
   },
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "Inter_400Regular",
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
     color: "#64748B",
@@ -323,18 +323,18 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyIconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: "#131328",
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: "#15152D",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#2A2A50",
+    borderColor: "#2A2A5060",
   },
   emptyTitle: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
+    fontSize: 18,
+    fontFamily: "Inter_600SemiBold",
     color: "#F8FAFC",
     marginTop: 8,
   },
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
     color: "#64748B",
   },
   ctaButton: {
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: "hidden",
     marginTop: 12,
   },
@@ -357,18 +357,18 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 24,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
   },
   ctaText: {
     color: "#fff",
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
   },
-  listSection: { gap: 14 },
+  listSection: { gap: 16 },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#CBD5E1",
   },
-  list: { gap: 10 },
+  list: { gap: 14 },
 });

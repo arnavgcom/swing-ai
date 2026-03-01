@@ -110,7 +110,7 @@ export default function HistoryScreen() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <View style={styles.emptyIconWrap}>
-                <Ionicons name="folder-open-outline" size={40} color="#64748B" />
+                <Ionicons name="folder-open-outline" size={36} color="#475569" />
               </View>
               <Text style={styles.emptyTitle}>No analysis history</Text>
               <Text style={styles.emptyText}>
@@ -128,10 +128,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0A0A1A" },
   header: {
     paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingBottom: 20,
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
   },
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_400Regular",
     marginTop: 4,
-    color: "#CBD5E1",
+    color: "#94A3B8",
   },
   loadingWrap: {
     flex: 1,
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: 20,
-    gap: 10,
+    gap: 14,
   },
   cardWrapper: {
     position: "relative",
@@ -168,15 +168,15 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 20,
-    backgroundColor: "#131328",
+    backgroundColor: "#15152D",
     borderWidth: 1,
-    borderColor: "#2A2A50",
+    borderColor: "#2A2A5060",
     alignItems: "center",
     justifyContent: "center",
   },
   emptyTitle: {
     fontSize: 18,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "Inter_600SemiBold",
     color: "#F8FAFC",
   },
   emptyText: {

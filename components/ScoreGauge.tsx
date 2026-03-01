@@ -43,14 +43,14 @@ export function ScoreGauge({
   }));
 
   const getScoreColor = () => {
-    if (score >= 80) return "#00F5A0";
-    if (score >= 60) return "#4CC9F0";
-    if (score >= 40) return "#FFD93D";
-    return "#FF6B6B";
+    if (score >= 80) return "#34D399";
+    if (score >= 60) return "#60A5FA";
+    if (score >= 40) return "#FBBF24";
+    return "#F87171";
   };
 
   const hasChange = change !== null && change !== undefined;
-  const changeColor = hasChange ? (change >= 0 ? "#00F5A0" : "#FF6B6B") : null;
+  const changeColor = hasChange ? (change >= 0 ? "#34D399" : "#F87171") : null;
 
   return (
     <View style={styles.container}>
@@ -59,7 +59,7 @@ export function ScoreGauge({
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="#2A2A50"
+          stroke="#1E1E3F"
           strokeWidth={strokeWidth}
           fill="none"
           strokeLinecap="round"
@@ -88,7 +88,7 @@ export function ScoreGauge({
         </Text>
         {label && (
           <Text
-            style={[styles.label, { fontSize: size * 0.09 }]}
+            style={[styles.label, { fontSize: size * 0.085 }]}
           >
             {label}
           </Text>
@@ -97,7 +97,7 @@ export function ScoreGauge({
           <View style={styles.changeRow}>
             <Ionicons
               name={change >= 0 ? "caret-up" : "caret-down"}
-              size={12}
+              size={11}
               color={changeColor}
             />
             <Text style={[styles.changeText, { color: changeColor }]}>
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textTransform: "uppercase",
     letterSpacing: 1,
-    color: "#94A3B8",
+    color: "#64748B",
   },
   changeRow: {
     flexDirection: "row",
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   changeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
   },
 });

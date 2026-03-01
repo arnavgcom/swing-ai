@@ -148,7 +148,7 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={["#0A0A1A", "#131340", "#0A0A1A"]}
+        colors={["#0A0A1A", "#111136", "#0A0A1A"]}
         style={StyleSheet.absoluteFill}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
@@ -175,7 +175,7 @@ export default function LoginScreen() {
           <View style={styles.logoSection}>
             <View style={styles.logoMark}>
               <LinearGradient
-                colors={["#6C5CE7", "#00F5A0"]}
+                colors={["#6C5CE7", "#34D399"]}
                 style={styles.logoGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
@@ -222,11 +222,11 @@ export default function LoginScreen() {
           <View style={styles.formSection}>
             {isRegister && (
               <View style={styles.inputWrap}>
-                <Ionicons name="person-outline" size={18} color="#64748B" />
+                <Ionicons name="person-outline" size={18} color="#475569" />
                 <TextInput
                   style={styles.input}
                   placeholder="Full Name"
-                  placeholderTextColor="#4A5568"
+                  placeholderTextColor="#3E4C5E"
                   value={name}
                   onChangeText={setName}
                   autoCapitalize="words"
@@ -236,11 +236,11 @@ export default function LoginScreen() {
             )}
 
             <View style={styles.inputWrap}>
-              <Ionicons name="mail-outline" size={18} color="#64748B" />
+              <Ionicons name="mail-outline" size={18} color="#475569" />
               <TextInput
                 style={styles.input}
                 placeholder="Email"
-                placeholderTextColor="#4A5568"
+                placeholderTextColor="#3E4C5E"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -251,11 +251,11 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.inputWrap}>
-              <Ionicons name="lock-closed-outline" size={18} color="#64748B" />
+              <Ionicons name="lock-closed-outline" size={18} color="#475569" />
               <TextInput
                 style={styles.input}
                 placeholder="Password"
-                placeholderTextColor="#4A5568"
+                placeholderTextColor="#3E4C5E"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
@@ -265,7 +265,7 @@ export default function LoginScreen() {
                 <Ionicons
                   name={showPassword ? "eye-off-outline" : "eye-outline"}
                   size={18}
-                  color="#64748B"
+                  color="#475569"
                 />
               </Pressable>
             </View>
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
     width: 260,
     height: 260,
     borderRadius: 130,
-    backgroundColor: "#6C5CE720",
+    backgroundColor: "#6C5CE712",
   },
   glowOrb2: {
     position: "absolute",
@@ -340,32 +340,32 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: "#00F5A015",
+    backgroundColor: "#34D39908",
   },
-  logoSection: { alignItems: "center", marginBottom: 44 },
+  logoSection: { alignItems: "center", marginBottom: 48 },
   logoMark: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
   logoGradient: {
-    width: 72,
-    height: 72,
+    width: 68,
+    height: 68,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },
   logoLetter: {
-    fontSize: 36,
+    fontSize: 32,
     fontFamily: "Inter_700Bold",
     color: "#fff",
   },
   appName: {
-    fontSize: 36,
+    fontSize: 32,
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
     letterSpacing: -0.5,
   },
   appNameAccent: {
-    color: "#00F5A0",
+    color: "#34D399",
   },
   tagline: {
     fontSize: 15,
@@ -378,12 +378,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    backgroundColor: "#1A1A36",
+    backgroundColor: "#15152D",
     borderWidth: 1,
-    borderColor: "#2A2A50",
+    borderColor: "#2A2A5060",
     borderRadius: 14,
     paddingVertical: 15,
-    marginBottom: 24,
+    marginBottom: 28,
   },
   googleText: {
     fontSize: 15,
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 24,
   },
-  dividerLine: { flex: 1, height: 1, backgroundColor: "#2A2A50" },
+  dividerLine: { flex: 1, height: 1, backgroundColor: "#2A2A5060" },
   dividerText: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
@@ -406,12 +406,12 @@ const styles = StyleSheet.create({
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#131328",
+    backgroundColor: "#15152D",
     borderWidth: 1,
-    borderColor: "#2A2A50",
-    borderRadius: 12,
+    borderColor: "#2A2A5060",
+    borderRadius: 14,
     paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingVertical: 15,
     gap: 10,
   },
   input: {
@@ -422,14 +422,14 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: 6,
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: "hidden",
   },
   submitGradient: {
-    paddingVertical: 15,
+    paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 12,
+    borderRadius: 14,
   },
   submitText: {
     color: "#fff",

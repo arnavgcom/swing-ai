@@ -14,10 +14,12 @@
 - **Theme**: Premium dark midnight theme — always dark, no light mode toggle
 - **Background**: Midnight (#0A0A1A) with subtle gradient (#0F0F2E)
 - **Primary**: Purple (#6C5CE7, light: #A29BFE)
-- **Accent**: Neon green (#00F5A0)
-- **Surfaces**: Dark card (#131328), borders (#2A2A50)
+- **Accent**: Soft emerald (#34D399) — muted, not neon
+- **Secondary accents**: Blue (#60A5FA), Amber (#FBBF24), Red (#F87171)
+- **Surfaces**: Dark card (#15152D), borders (#2A2A5060 — 37% alpha for softness)
 - **Sport-specific colors**: Tennis green, Golf cyan, Pickleball amber, Paddle purple, Badminton red, Table Tennis blue (defined in `sportColors` export in `constants/colors.ts`)
-- **Typography**: Inter font family (400/500/600/700 weights)
+- **Typography**: Inter font family (400/500/600/700 weights) — section titles use 600SemiBold, labels use 400Regular for lighter feel
+- **Cards**: borderRadius 16, soft borders, no harsh lines. AnalysisCard has left accent bar in status color.
 - **All screens use `LinearGradient` backgrounds and consistent dark surface styling**
 
 ## Data Storage
@@ -47,14 +49,14 @@ All data is stored entirely on Replit:
 
 ### Frontend
 - `app/_layout.tsx` — Root layout: auth routing (login → sport-select → tabs)
-- `app/login.tsx` — Login screen: Google button + email/password fallback, purple/neon gradient branding
+- `app/login.tsx` — Login screen: Google button + email/password fallback, purple/emerald gradient branding
 - `app/sport-select.tsx` — Sport selection with 2-column gradient grid cards → movement list
-- `app/(tabs)/_layout.tsx` — Tab navigator (Dashboard, Upload, History) with neon green active tab
+- `app/(tabs)/_layout.tsx` — Tab navigator (Dashboard, Upload, History) with soft emerald (#34D399) active tab
 - `app/profile.tsx` — Profile screen (edit name, phone, address, country, sports interests, bio, avatar upload, logout)
 - `app/(tabs)/index.tsx` — Dashboard with sport pill, gradient stat cards, analysis list; avatar icon navigates to profile
 - `app/(tabs)/upload.tsx` — Video upload with gradient background
 - `app/(tabs)/history.tsx` — Analysis history list with gradient background
-- `app/analysis/[id].tsx` — Analysis detail screen with gradient background, inline video player (expo-video), metric comparison with time period selector (7D/30D/90D/All)
+- `app/analysis/[id].tsx` — Analysis detail: score gauge → hero video (4:3 aspect) → performance breakdown → metrics grids → coaching. Metric comparison with period selector (7D/30D/90D/All). Uses restrained 2-3 color palette across metric grids.
 - `lib/auth-context.tsx` — Auth context provider (login, register, logout, refreshUser, user state with profile fields)
 - `lib/sport-context.tsx` — Sport context provider (selected sport/movement, persisted to AsyncStorage)
 - `lib/query-client.ts` — React Query client with API URL configuration

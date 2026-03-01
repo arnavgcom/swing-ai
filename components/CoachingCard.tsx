@@ -13,8 +13,8 @@ export function CoachingCard({ icon, title, content, color }: CoachingCardProps)
   return (
     <View style={styles.card}>
       <View style={styles.header}>
-        <View style={[styles.iconWrap, { backgroundColor: color + "18" }]}>
-          <Ionicons name={icon} size={18} color={color} />
+        <View style={[styles.iconWrap, { backgroundColor: color + "14" }]}>
+          <Ionicons name={icon} size={16} color={color} />
         </View>
         <Text style={[styles.title, { color }]}>{title}</Text>
       </View>
@@ -26,10 +26,10 @@ export function CoachingCard({ icon, title, content, color }: CoachingCardProps)
 const styles = StyleSheet.create({
   card: {
     padding: 16,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2A2A50",
-    backgroundColor: "#131328",
+    borderColor: "#2A2A5060",
+    backgroundColor: "#15152D",
     gap: 10,
   },
   header: {
@@ -38,22 +38,21 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   iconWrap: {
-    width: 32,
-    height: 32,
+    width: 30,
+    height: 30,
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
   title: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: 0.3,
   },
   content: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     lineHeight: 21,
-    color: "#F8FAFC",
+    color: "#CBD5E1",
   },
 });

@@ -94,7 +94,7 @@ export default function AnalysisDetailScreen() {
     return (
       <View style={[styles.container, styles.center]}>
         <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
-        <Ionicons name="alert-circle-outline" size={48} color="#FF6B6B" />
+        <Ionicons name="alert-circle-outline" size={48} color="#F87171" />
         <Text style={[styles.errorText, { color: "#F8FAFC" }]}>
           Analysis not found
         </Text>
@@ -127,7 +127,7 @@ export default function AnalysisDetailScreen() {
           }}
           style={({ pressed }) => [
             styles.navButton,
-            { backgroundColor: colors.surfaceAlt, opacity: pressed ? 0.7 : 1 },
+            { backgroundColor: "#15152D", opacity: pressed ? 0.7 : 1 },
           ]}
         >
           <Ionicons name="chevron-back" size={22} color={colors.text} />
@@ -143,22 +143,12 @@ export default function AnalysisDetailScreen() {
 
       {isProcessing ? (
         <View style={[styles.container, styles.center]}>
-          <View
-            style={[
-              styles.processingCard,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
+          <View style={styles.processingCard}>
             <ActivityIndicator size="large" color={colors.tint} />
-            <Text style={[styles.processingTitle, { color: colors.text }]}>
+            <Text style={styles.processingTitle}>
               Analyzing Your Forehand
             </Text>
-            <Text
-              style={[
-                styles.processingSubtitle,
-                { color: colors.textSecondary },
-              ]}
-            >
+            <Text style={styles.processingSubtitle}>
               Processing video with pose detection, ball tracking, and motion
               analysis...
             </Text>
@@ -181,7 +171,7 @@ export default function AnalysisDetailScreen() {
                     color={
                       analysis.status === "processing" && i < 3
                         ? colors.tint
-                        : colors.textSecondary
+                        : "#475569"
                     }
                   />
                   <Text
@@ -191,7 +181,7 @@ export default function AnalysisDetailScreen() {
                         color:
                           analysis.status === "processing" && i < 3
                             ? colors.text
-                            : colors.textSecondary,
+                            : "#475569",
                       },
                     ]}
                   >
@@ -208,7 +198,7 @@ export default function AnalysisDetailScreen() {
           <Text style={[styles.errorText, { color: colors.text }]}>
             Analysis failed
           </Text>
-          <Text style={[styles.errorSub, { color: colors.textSecondary }]}>
+          <Text style={[styles.errorSub, { color: "#94A3B8" }]}>
             Please try uploading the video again
           </Text>
         </View>
@@ -226,13 +216,19 @@ export default function AnalysisDetailScreen() {
             />
           </View>
 
-          <View
-            style={[
-              styles.section,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          {videoUrl && (
+            <View style={styles.videoContainer}>
+              <VideoView
+                player={player}
+                style={styles.videoPlayer}
+                contentFit="contain"
+                nativeControls
+              />
+            </View>
+          )}
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
               Performance Breakdown
             </Text>
             <View style={styles.barsContainer}>
@@ -242,24 +238,6 @@ export default function AnalysisDetailScreen() {
               <SubScoreBar label="Follow-through" score={m.followThroughScore} delay={800} change={calcChange(m.followThroughScore, avg?.followThroughScore)} />
             </View>
           </View>
-
-          {videoUrl && (
-            <View
-              style={[
-                styles.section,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-            >
-              <View style={styles.videoWrapper}>
-                <VideoView
-                  player={player}
-                  style={styles.videoPlayer}
-                  contentFit="contain"
-                  nativeControls
-                />
-              </View>
-            </View>
-          )}
 
           <View style={styles.periodRow}>
             {PERIODS.map((p) => (
@@ -292,7 +270,7 @@ export default function AnalysisDetailScreen() {
           </View>
 
           <View style={styles.metricsSection}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            <Text style={styles.sectionTitle}>
               Biomechanics
             </Text>
             <View style={styles.metricsGrid}>
@@ -301,7 +279,7 @@ export default function AnalysisDetailScreen() {
                 label="Wrist Speed"
                 value={m.wristSpeed}
                 unit="m/s"
-                color={colors.tint}
+                color="#6C5CE7"
                 change={calcChange(m.wristSpeed, avg?.wristSpeed)}
               />
               <MetricCard
@@ -309,7 +287,7 @@ export default function AnalysisDetailScreen() {
                 label="Elbow Angle"
                 value={m.elbowAngle}
                 unit="deg"
-                color={colors.blue}
+                color="#60A5FA"
                 change={calcChange(m.elbowAngle, avg?.elbowAngle)}
               />
               <MetricCard
@@ -317,7 +295,7 @@ export default function AnalysisDetailScreen() {
                 label="Shoulder Rotation"
                 value={m.shoulderRotationVelocity}
                 unit="deg/s"
-                color={colors.accent}
+                color="#6C5CE7"
                 change={calcChange(m.shoulderRotationVelocity, avg?.shoulderRotationVelocity)}
               />
               <MetricCard
@@ -325,14 +303,14 @@ export default function AnalysisDetailScreen() {
                 label="Balance"
                 value={m.balanceStabilityScore}
                 unit="/100"
-                color={colors.amber}
+                color="#60A5FA"
                 change={calcChange(m.balanceStabilityScore, avg?.balanceStabilityScore)}
               />
             </View>
           </View>
 
           <View style={styles.metricsSection}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            <Text style={styles.sectionTitle}>
               Ball Metrics
             </Text>
             <View style={styles.metricsGrid}>
@@ -341,7 +319,7 @@ export default function AnalysisDetailScreen() {
                 label="Ball Speed"
                 value={m.ballSpeed}
                 unit="mph"
-                color={colors.red}
+                color="#34D399"
                 change={calcChange(m.ballSpeed, avg?.ballSpeed)}
               />
               <MetricCard
@@ -349,7 +327,7 @@ export default function AnalysisDetailScreen() {
                 label="Trajectory Arc"
                 value={m.ballTrajectoryArc}
                 unit="deg"
-                color={colors.blue}
+                color="#6C5CE7"
                 change={calcChange(m.ballTrajectoryArc, avg?.ballTrajectoryArc)}
               />
               <MetricCard
@@ -357,7 +335,7 @@ export default function AnalysisDetailScreen() {
                 label="Spin Rate"
                 value={m.spinEstimation}
                 unit="rpm"
-                color={colors.accent}
+                color="#34D399"
                 change={calcChange(m.spinEstimation, avg?.spinEstimation)}
               />
               <MetricCard
@@ -365,14 +343,14 @@ export default function AnalysisDetailScreen() {
                 label="Consistency"
                 value={m.shotConsistencyScore}
                 unit="/100"
-                color={colors.tint}
+                color="#6C5CE7"
                 change={calcChange(m.shotConsistencyScore, avg?.shotConsistencyScore)}
               />
             </View>
           </View>
 
           <View style={styles.metricsSection}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            <Text style={styles.sectionTitle}>
               Timing & Rhythm
             </Text>
             <View style={styles.metricsGrid}>
@@ -381,7 +359,7 @@ export default function AnalysisDetailScreen() {
                 label="Backswing"
                 value={m.backswingDuration}
                 unit="s"
-                color={colors.amber}
+                color="#60A5FA"
                 change={calcChange(m.backswingDuration, avg?.backswingDuration)}
               />
               <MetricCard
@@ -389,7 +367,7 @@ export default function AnalysisDetailScreen() {
                 label="Contact Timing"
                 value={m.contactTiming}
                 unit="s"
-                color={colors.red}
+                color="#6C5CE7"
                 change={calcChange(m.contactTiming, avg?.contactTiming)}
               />
               <MetricCard
@@ -397,7 +375,7 @@ export default function AnalysisDetailScreen() {
                 label="Follow-through"
                 value={m.followThroughDuration}
                 unit="s"
-                color={colors.tint}
+                color="#60A5FA"
                 change={calcChange(m.followThroughDuration, avg?.followThroughDuration)}
               />
               <MetricCard
@@ -405,41 +383,30 @@ export default function AnalysisDetailScreen() {
                 label="Rhythm"
                 value={m.rhythmConsistency}
                 unit="/100"
-                color={colors.blue}
+                color="#6C5CE7"
                 change={calcChange(m.rhythmConsistency, avg?.rhythmConsistency)}
               />
             </View>
           </View>
 
-          <View
-            style={[
-              styles.section,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
+          <View style={styles.section}>
             <View style={styles.contactRow}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              <Text style={styles.sectionTitle}>
                 Contact Height
               </Text>
-              <Text style={[styles.contactValue, { color: colors.tint }]}>
+              <Text style={styles.contactValue}>
                 {m.contactHeight}m
               </Text>
             </View>
-            <Text style={[styles.contactHint, { color: colors.textSecondary }]}>
+            <Text style={styles.contactHint}>
               Optimal range: 0.85m - 1.10m above ground
             </Text>
-            <View style={[styles.contactBar, { backgroundColor: colors.surfaceAlt }]}>
-              <View
-                style={[
-                  styles.contactOptimal,
-                  { backgroundColor: colors.tint + "30" },
-                ]}
-              />
+            <View style={styles.contactBar}>
+              <View style={styles.contactOptimal} />
               <View
                 style={[
                   styles.contactMarker,
                   {
-                    backgroundColor: colors.tint,
                     left: `${Math.min(Math.max(((m.contactHeight - 0.5) / 1.0) * 100, 0), 100)}%`,
                   },
                 ]}
@@ -449,35 +416,30 @@ export default function AnalysisDetailScreen() {
 
           {coaching && (
             <View style={styles.coachingSection}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              <Text style={styles.sectionTitle}>
                 Coaching Insights
               </Text>
               <CoachingCard
                 icon="trophy"
                 title="Key Strength"
                 content={coaching.keyStrength}
-                color={colors.tint}
+                color="#34D399"
               />
               <CoachingCard
                 icon="warning"
                 title="Improvement Area"
                 content={coaching.improvementArea}
-                color={colors.amber}
+                color="#FBBF24"
               />
               <CoachingCard
                 icon="bulb"
                 title="Training Suggestion"
                 content={coaching.trainingSuggestion}
-                color={colors.blue}
+                color="#60A5FA"
               />
-              <View
-                style={[
-                  styles.summaryCard,
-                  { backgroundColor: colors.tint + "10", borderColor: colors.tint + "30" },
-                ]}
-              >
-                <Ionicons name="chatbubbles" size={20} color={colors.tint} />
-                <Text style={[styles.summaryText, { color: colors.text }]}>
+              <View style={styles.summaryCard}>
+                <Ionicons name="chatbubbles" size={18} color="#6C5CE7" />
+                <Text style={styles.summaryText}>
                   {coaching.simpleExplanation}
                 </Text>
               </View>
@@ -515,39 +477,44 @@ const styles = StyleSheet.create({
   },
   topTitle: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: "Inter_600SemiBold",
     textAlign: "center",
   },
   scrollContent: {
     paddingHorizontal: 20,
-    gap: 20,
+    gap: 28,
   },
   scoreSection: {
     alignItems: "center",
-    paddingVertical: 16,
+    paddingVertical: 20,
+  },
+  videoContainer: {
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#000",
+    borderWidth: 1,
+    borderColor: "#2A2A5040",
+  },
+  videoPlayer: {
+    width: "100%",
+    aspectRatio: 4 / 3,
   },
   section: {
     borderRadius: 16,
     borderWidth: 1,
-    padding: 18,
-    gap: 16,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#15152D",
+    padding: 22,
+    gap: 18,
   },
   sectionTitle: {
-    fontSize: 17,
-    fontFamily: "Inter_700Bold",
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
   },
   barsContainer: {
-    gap: 14,
-  },
-  videoWrapper: {
-    borderRadius: 12,
-    overflow: "hidden",
-    backgroundColor: "#000",
-  },
-  videoPlayer: {
-    width: "100%",
-    aspectRatio: 16 / 9,
+    gap: 18,
   },
   periodRow: {
     flexDirection: "row",
@@ -558,9 +525,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: "#1A1A36",
+    backgroundColor: "#15152D",
     borderWidth: 1,
-    borderColor: "#2A2A50",
+    borderColor: "#2A2A5060",
   },
   periodPillActive: {
     backgroundColor: "#6C5CE7",
@@ -569,7 +536,7 @@ const styles = StyleSheet.create({
   periodText: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: "#94A3B8",
+    color: "#64748B",
   },
   periodTextActive: {
     color: "#FFFFFF",
@@ -577,16 +544,16 @@ const styles = StyleSheet.create({
   periodHint: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
-    color: "#64748B",
+    color: "#475569",
     marginLeft: 4,
   },
   metricsSection: {
-    gap: 12,
+    gap: 14,
   },
   metricsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
+    gap: 12,
   },
   contactRow: {
     flexDirection: "row",
@@ -596,51 +563,61 @@ const styles = StyleSheet.create({
   contactValue: {
     fontSize: 20,
     fontFamily: "Inter_700Bold",
+    color: "#6C5CE7",
   },
   contactHint: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
+    color: "#64748B",
   },
   contactBar: {
-    height: 12,
-    borderRadius: 6,
+    height: 10,
+    borderRadius: 5,
     overflow: "hidden",
     position: "relative",
+    backgroundColor: "#1E1E3F",
   },
   contactOptimal: {
     position: "absolute",
     left: "35%",
     width: "25%",
     height: "100%",
-    borderRadius: 6,
+    borderRadius: 5,
+    backgroundColor: "#6C5CE720",
   },
   contactMarker: {
     position: "absolute",
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     top: 0,
+    backgroundColor: "#6C5CE7",
   },
   coachingSection: {
-    gap: 12,
+    gap: 14,
   },
   summaryCard: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
     padding: 16,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
+    backgroundColor: "#6C5CE708",
+    borderColor: "#6C5CE720",
   },
   summaryText: {
     flex: 1,
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     lineHeight: 21,
+    color: "#CBD5E1",
   },
   processingCard: {
     borderRadius: 20,
     borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#15152D",
     padding: 28,
     alignItems: "center",
     gap: 14,
@@ -650,12 +627,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: "Inter_700Bold",
     marginTop: 8,
+    color: "#F8FAFC",
   },
   processingSubtitle: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     textAlign: "center",
     lineHeight: 21,
+    color: "#94A3B8",
   },
   processingSteps: {
     gap: 10,

@@ -33,14 +33,14 @@ export function SubScoreBar({ label, score, delay = 0, change }: SubScoreBarProp
   }));
 
   const getColor = () => {
-    if (score >= 80) return "#00F5A0";
-    if (score >= 60) return "#4CC9F0";
-    if (score >= 40) return "#FFD93D";
-    return "#FF6B6B";
+    if (score >= 80) return "#34D399";
+    if (score >= 60) return "#60A5FA";
+    if (score >= 40) return "#FBBF24";
+    return "#F87171";
   };
 
   const hasChange = change !== null && change !== undefined;
-  const changeColor = hasChange ? (change >= 0 ? "#00F5A0" : "#FF6B6B") : null;
+  const changeColor = hasChange ? (change >= 0 ? "#34D399" : "#F87171") : null;
 
   return (
     <View style={styles.container}>
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "Inter_400Regular",
     color: "#F8FAFC",
   },
   scoreRow: {
@@ -103,13 +103,13 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
   },
   track: {
-    height: 8,
-    borderRadius: 4,
+    height: 6,
+    borderRadius: 3,
     overflow: "hidden",
-    backgroundColor: "#22224A",
+    backgroundColor: "#1E1E3F",
   },
   fill: {
     height: "100%",
-    borderRadius: 4,
+    borderRadius: 3,
   },
 });

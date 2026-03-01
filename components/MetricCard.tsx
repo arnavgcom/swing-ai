@@ -17,8 +17,8 @@ export function MetricCard({ icon, label, value, unit, color, change }: MetricCa
   const changeColor =
     change !== null && change !== undefined
       ? change >= 0
-        ? "#00F5A0"
-        : "#FF6B6B"
+        ? "#34D399"
+        : "#F87171"
       : null;
 
   const changeIcon =
@@ -30,8 +30,8 @@ export function MetricCard({ icon, label, value, unit, color, change }: MetricCa
 
   return (
     <View style={styles.card}>
-      <View style={[styles.iconContainer, { backgroundColor: accentColor + "18" }]}>
-        <Ionicons name={icon} size={18} color={accentColor} />
+      <View style={[styles.iconContainer, { backgroundColor: accentColor + "14" }]}>
+        <Ionicons name={icon} size={16} color={accentColor} />
       </View>
       <Text style={styles.label}>{label}</Text>
       <View style={styles.valueRow}>
@@ -40,7 +40,7 @@ export function MetricCard({ icon, label, value, unit, color, change }: MetricCa
       </View>
       {change !== null && change !== undefined && changeColor && changeIcon && (
         <View style={styles.changeRow}>
-          <Ionicons name={changeIcon} size={12} color={changeColor} />
+          <Ionicons name={changeIcon} size={11} color={changeColor} />
           <Text style={[styles.changeText, { color: changeColor }]}>
             {change >= 0 ? "+" : ""}
             {change.toFixed(1)}%
@@ -56,15 +56,15 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: "45%",
     padding: 14,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2A2A50",
-    backgroundColor: "#131328",
+    borderColor: "#2A2A5060",
+    backgroundColor: "#15152D",
     gap: 6,
   },
   iconContainer: {
-    width: 32,
-    height: 32,
+    width: 30,
+    height: 30,
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
@@ -72,10 +72,9 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    color: "#CBD5E1",
+    fontFamily: "Inter_400Regular",
+    letterSpacing: 0.3,
+    color: "#94A3B8",
   },
   valueRow: {
     flexDirection: "row",
@@ -83,14 +82,14 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   value: {
-    fontSize: 22,
+    fontSize: 20,
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
   },
   unit: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#64748B",
   },
   changeRow: {
     flexDirection: "row",
@@ -99,7 +98,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   changeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
   },
 });

@@ -160,7 +160,7 @@ export default function UploadScreen() {
         </Text>
 
         {selectedSport && (
-          <View style={[styles.contextBadge, { backgroundColor: sportColor + "12", borderColor: sportColor + "30" }]}>
+          <View style={[styles.contextBadge, { backgroundColor: sportColor + "10", borderColor: sportColor + "25" }]}>
             <Ionicons name={selectedSport.icon as any} size={16} color={sportColor} />
             <Text style={[styles.contextText, { color: sportColor }]}>
               {selectedSport.name}{selectedMovement ? ` / ${selectedMovement.name}` : " (Auto-detect)"}
@@ -174,8 +174,8 @@ export default function UploadScreen() {
             style={({ pressed }) => [
               styles.uploadZone,
               {
-                borderColor: sportColor,
-                backgroundColor: sportColor + "08",
+                borderColor: sportColor + "60",
+                backgroundColor: sportColor + "06",
                 transform: [{ scale: pressed ? 0.98 : 1 }],
               },
             ]}
@@ -183,10 +183,10 @@ export default function UploadScreen() {
             <View
               style={[
                 styles.uploadIcon,
-                { backgroundColor: sportColor + "18" },
+                { backgroundColor: sportColor + "14" },
               ]}
             >
-              <Ionicons name="cloud-upload" size={36} color={sportColor} />
+              <Ionicons name="cloud-upload" size={32} color={sportColor} />
             </View>
             <Text style={[styles.uploadTitle, { color: colors.text }]}>
               Select Video
@@ -203,8 +203,8 @@ export default function UploadScreen() {
             style={[
               styles.previewCard,
               {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
+                backgroundColor: "#15152D",
+                borderColor: "#2A2A5060",
               },
             ]}
           >
@@ -212,10 +212,10 @@ export default function UploadScreen() {
               <View
                 style={[
                   styles.videoIconWrap,
-                  { backgroundColor: sportColor + "18" },
+                  { backgroundColor: sportColor + "14" },
                 ]}
               >
-                <Ionicons name="videocam" size={28} color={sportColor} />
+                <Ionicons name="videocam" size={24} color={sportColor} />
               </View>
               <Pressable
                 onPress={() => {
@@ -223,7 +223,7 @@ export default function UploadScreen() {
                   setSelectedVideo(null);
                 }}
               >
-                <Ionicons name="close-circle" size={28} color={colors.textSecondary} />
+                <Ionicons name="close-circle" size={26} color="#475569" />
               </Pressable>
             </View>
 
@@ -240,11 +240,9 @@ export default function UploadScreen() {
                   <Ionicons
                     name="time-outline"
                     size={14}
-                    color={colors.textSecondary}
+                    color="#94A3B8"
                   />
-                  <Text
-                    style={[styles.metaText, { color: colors.textSecondary }]}
-                  >
+                  <Text style={styles.metaText}>
                     {selectedVideo.duration.toFixed(1)}s
                   </Text>
                 </View>
@@ -254,11 +252,9 @@ export default function UploadScreen() {
                   <Ionicons
                     name="document-outline"
                     size={14}
-                    color={colors.textSecondary}
+                    color="#94A3B8"
                   />
-                  <Text
-                    style={[styles.metaText, { color: colors.textSecondary }]}
-                  >
+                  <Text style={styles.metaText}>
                     {(selectedVideo.fileSize / (1024 * 1024)).toFixed(1)} MB
                   </Text>
                 </View>
@@ -307,11 +303,11 @@ export default function UploadScreen() {
           ].map((tip, i) => (
             <View key={i} style={styles.tipRow}>
               <View
-                style={[styles.tipIcon, { backgroundColor: colors.surfaceAlt }]}
+                style={[styles.tipIcon, { backgroundColor: "#15152D" }]}
               >
                 <Ionicons name={tip.icon} size={16} color={sportColor} />
               </View>
-              <Text style={[styles.tipText, { color: colors.textSecondary }]}>
+              <Text style={styles.tipText}>
                 {tip.text}
               </Text>
             </View>
@@ -329,7 +325,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontFamily: "Inter_700Bold",
     marginBottom: 6,
   },
@@ -355,7 +351,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
   },
   uploadZone: {
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderStyle: "dashed",
     borderRadius: 20,
     padding: 36,
@@ -364,15 +360,15 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   uploadIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
+    width: 64,
+    height: 64,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 4,
   },
   uploadTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontFamily: "Inter_600SemiBold",
   },
   uploadHint: {
@@ -392,14 +388,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   videoIconWrap: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   fileName: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: "Inter_600SemiBold",
   },
   metaRow: {
@@ -414,6 +410,7 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
   },
   analyzeButton: {
     flexDirection: "row",
@@ -429,10 +426,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
   },
-  tipsSection: { gap: 12 },
+  tipsSection: { gap: 16 },
   tipsTitle: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
     marginBottom: 4,
   },
   tipRow: {
@@ -451,5 +448,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_400Regular",
     flex: 1,
+    color: "#94A3B8",
   },
 });
