@@ -141,7 +141,16 @@ export default function DashboardScreen() {
       >
         <View style={styles.greetingSection}>
           <Text style={styles.greeting}>{getGreeting()}, {firstName}</Text>
-          <Text style={styles.sportLine}>Your {selectedSport?.name || "Sport"} Performance</Text>
+          <View style={styles.sportLineRow}>
+            <Text style={styles.sportLine}>Your {selectedSport?.name || "Sport"} Performance</Text>
+            {scores.category && (
+              <View style={[styles.categoryBadge, { backgroundColor: sc.primary + "18", borderColor: sc.primary + "30" }]}>
+                <Text style={[styles.categoryText, { color: sc.primary }]} numberOfLines={1}>
+                  {toTitleCase(scores.category)}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {isLoading ? (
@@ -160,13 +169,6 @@ export default function DashboardScreen() {
                     </Text>
                     <DeltaBadge value={scores.overallDelta} suffix=" pts" />
                   </View>
-                  {scores.category && (
-                    <View style={[styles.categoryBadge, { backgroundColor: sc.primary + "18", borderColor: sc.primary + "30" }]}>
-                      <Text style={[styles.categoryText, { color: sc.primary }]} numberOfLines={1}>
-                        {toTitleCase(scores.category)}
-                      </Text>
-                    </View>
-                  )}
                 </View>
               </View>
             </View>
@@ -235,11 +237,16 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
   },
+  sportLineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+  },
   sportLine: {
     fontSize: 15,
     fontFamily: "Inter_400Regular",
     color: "#94A3B8",
-    marginTop: 10,
   },
   loadingWrap: { paddingTop: 60, alignItems: "center" },
   glassCard: {

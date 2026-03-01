@@ -321,70 +321,41 @@ export default function AnalysisDetailScreen() {
           ]}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.scoreSection}>
-            <View style={styles.scoreRow}>
-              <ScoreGauge
-                score={m.overallScore}
-                size={160}
-                label="Score"
-                change={calcChange(
-                  m.overallScore,
-                  avgSubScores
-                    ? Object.values(avgSubScores).reduce(
-                        (a, b) => a + b,
-                        0,
-                      ) / Math.max(Object.keys(avgSubScores).length, 1)
-                    : null,
-                )}
-              />
-              <View style={styles.scoreMeta}>
-                {sportConfig?.sportName && (
-                  <View style={styles.sportBadge}>
-                    <Ionicons name="fitness-outline" size={12} color="#A29BFE" />
-                    <Text style={styles.sportBadgeText}>{sportConfig.sportName}</Text>
-                  </View>
-                )}
-                {(sportConfig?.movementName || detectedMovement) && (
-                  <View style={styles.categoryBadge}>
-                    <Ionicons name="flash-outline" size={12} color="#34D399" />
-                    <Text style={styles.categoryBadgeText}>
-                      {(sportConfig?.movementName || detectedMovement || "").charAt(0).toUpperCase() +
-                        (sportConfig?.movementName || detectedMovement || "").slice(1).replace(/-/g, " ")}
-                    </Text>
-                  </View>
-                )}
-                <View style={styles.compactThumbsRow}>
-                  <Pressable
-                    onPress={handleThumbsUp}
-                    style={({ pressed }) => [
-                      styles.compactThumbButton,
-                      feedback?.rating === "up" && styles.thumbButtonActiveUp,
-                      { opacity: pressed ? 0.7 : 1 },
-                    ]}
-                  >
-                    <Ionicons
-                      name={feedback?.rating === "up" ? "thumbs-up" : "thumbs-up-outline"}
-                      size={16}
-                      color={feedback?.rating === "up" ? "#34D399" : "#64748B"}
-                    />
-                  </Pressable>
-                  <Pressable
-                    onPress={handleThumbsDown}
-                    style={({ pressed }) => [
-                      styles.compactThumbButton,
-                      feedback?.rating === "down" && styles.thumbButtonActiveDown,
-                      { opacity: pressed ? 0.7 : 1 },
-                    ]}
-                  >
-                    <Ionicons
-                      name={feedback?.rating === "down" ? "thumbs-down" : "thumbs-down-outline"}
-                      size={16}
-                      color={feedback?.rating === "down" ? "#F87171" : "#64748B"}
-                    />
-                  </Pressable>
+          {(sportConfig?.sportName || sportConfig?.movementName || detectedMovement) && (
+            <View style={styles.badgesRow}>
+              {sportConfig?.sportName && (
+                <View style={styles.sportBadge}>
+                  <Ionicons name="fitness-outline" size={12} color="#A29BFE" />
+                  <Text style={styles.sportBadgeText}>{sportConfig.sportName}</Text>
                 </View>
-              </View>
+              )}
+              {(sportConfig?.movementName || detectedMovement) && (
+                <View style={styles.categoryBadge}>
+                  <Ionicons name="flash-outline" size={12} color="#34D399" />
+                  <Text style={styles.categoryBadgeText}>
+                    {(sportConfig?.movementName || detectedMovement || "").charAt(0).toUpperCase() +
+                      (sportConfig?.movementName || detectedMovement || "").slice(1).replace(/-/g, " ")}
+                  </Text>
+                </View>
+              )}
             </View>
+          )}
+
+          <View style={styles.scoreSection}>
+            <ScoreGauge
+              score={m.overallScore}
+              size={160}
+              label="Score"
+              change={calcChange(
+                m.overallScore,
+                avgSubScores
+                  ? Object.values(avgSubScores).reduce(
+                      (a, b) => a + b,
+                      0,
+                    ) / Math.max(Object.keys(avgSubScores).length, 1)
+                  : null,
+              )}
+            />
           </View>
 
           {wasOverridden && (
@@ -398,6 +369,39 @@ export default function AnalysisDetailScreen() {
                 </Text>{" "}
                 — results adjusted accordingly
               </Text>
+            </View>
+          )}
+
+          {data?.analysis?.status === "completed" && (
+            <View style={styles.compactThumbsRow}>
+              <Pressable
+                onPress={handleThumbsUp}
+                style={({ pressed }) => [
+                  styles.compactThumbButton,
+                  feedback?.rating === "up" && styles.thumbButtonActiveUp,
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Ionicons
+                  name={feedback?.rating === "up" ? "thumbs-up" : "thumbs-up-outline"}
+                  size={16}
+                  color={feedback?.rating === "up" ? "#34D399" : "#64748B"}
+                />
+              </Pressable>
+              <Pressable
+                onPress={handleThumbsDown}
+                style={({ pressed }) => [
+                  styles.compactThumbButton,
+                  feedback?.rating === "down" && styles.thumbButtonActiveDown,
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Ionicons
+                  name={feedback?.rating === "down" ? "thumbs-down" : "thumbs-down-outline"}
+                  size={16}
+                  color={feedback?.rating === "down" ? "#F87171" : "#64748B"}
+                />
+              </Pressable>
             </View>
           )}
 
@@ -642,18 +646,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     gap: 28,
   },
-  scoreSection: {
-    paddingVertical: 20,
-  },
-  scoreRow: {
+  badgesRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 20,
-  },
-  scoreMeta: {
-    alignItems: "flex-start",
+    justifyContent: "flex-end",
     gap: 8,
+  },
+  scoreSection: {
+    alignItems: "center",
+    paddingVertical: 20,
   },
   sportBadge: {
     flexDirection: "row",
@@ -689,8 +689,8 @@ const styles = StyleSheet.create({
   },
   compactThumbsRow: {
     flexDirection: "row",
-    gap: 8,
-    marginTop: 4,
+    justifyContent: "flex-end",
+    gap: 6,
   },
   compactThumbButton: {
     width: 36,
