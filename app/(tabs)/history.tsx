@@ -19,16 +19,20 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { fetchAnalyses, deleteAnalysis } from "@/lib/api";
 import { AnalysisCard } from "@/components/AnalysisCard";
+import { useAuth } from "@/lib/auth-context";
 
 export default function HistoryScreen() {
   const colors = Colors.dark;
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const { data: analyses, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["analyses"],
     queryFn: fetchAnalyses,
     refetchInterval: 5000,
+    enabled: !!user,
+    retry: false,
   });
 
   const deleteMutation = useMutation({

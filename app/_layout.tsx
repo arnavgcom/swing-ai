@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Redirect, Stack, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -22,6 +22,8 @@ SplashScreen.preventAutoHideAsync();
 function RootNavigator() {
   const { user, isLoading } = useAuth();
   const { selectedSport } = useSport();
+  const segments = useSegments();
+
   if (isLoading) {
     return (
       <View
@@ -37,25 +39,30 @@ function RootNavigator() {
     );
   }
 
+  const inAuthGroup = segments[0] === "login";
+  const inSportSelect = segments[0] === "sport-select";
+
+  if (!user && !inAuthGroup) {
+    return <Redirect href="/login" />;
+  }
+
+  if (user && !selectedSport && !inSportSelect) {
+    return <Redirect href="/sport-select" />;
+  }
+
+  if (user && selectedSport && (inAuthGroup || (inSportSelect && segments.length === 1))) {
+    return <Redirect href="/(tabs)" />;
+  }
+
   return (
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
-      {!user ? (
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-      ) : !selectedSport ? (
-        <Stack.Screen name="sport-select" options={{ headerShown: false }} />
-      ) : (
-        <>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="analysis/[id]"
-            options={{ headerShown: false, animation: "slide_from_right" }}
-          />
-          <Stack.Screen
-            name="sport-select"
-            options={{ headerShown: false, animation: "slide_from_bottom" }}
-          />
-        </>
-      )}
+      <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="sport-select" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="analysis/[id]"
+        options={{ headerShown: false, animation: "slide_from_right" }}
+      />
     </Stack>
   );
 }

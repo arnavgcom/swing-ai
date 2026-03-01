@@ -33,6 +33,8 @@ export default function DashboardScreen() {
     queryKey: ["analyses"],
     queryFn: fetchAnalyses,
     refetchInterval: 5000,
+    enabled: !!user,
+    retry: false,
   });
 
   const completed = analyses?.filter((a) => a.status === "completed") || [];
