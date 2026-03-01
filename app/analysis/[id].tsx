@@ -321,8 +321,40 @@ export default function AnalysisDetailScreen() {
           ]}
           showsVerticalScrollIndicator={false}
         >
-          {(sportConfig?.sportName || sportConfig?.movementName || detectedMovement) && (
-            <View style={styles.badgesRow}>
+          <View style={styles.topMetaRow}>
+            {data?.analysis?.status === "completed" && (
+              <View style={styles.compactThumbsRow}>
+                <Pressable
+                  onPress={handleThumbsUp}
+                  style={({ pressed }) => [
+                    styles.compactThumbButton,
+                    feedback?.rating === "up" && styles.thumbButtonActiveUp,
+                    { opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Ionicons
+                    name={feedback?.rating === "up" ? "thumbs-up" : "thumbs-up-outline"}
+                    size={16}
+                    color={feedback?.rating === "up" ? "#34D399" : "#64748B"}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={handleThumbsDown}
+                  style={({ pressed }) => [
+                    styles.compactThumbButton,
+                    feedback?.rating === "down" && styles.thumbButtonActiveDown,
+                    { opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Ionicons
+                    name={feedback?.rating === "down" ? "thumbs-down" : "thumbs-down-outline"}
+                    size={16}
+                    color={feedback?.rating === "down" ? "#F87171" : "#64748B"}
+                  />
+                </Pressable>
+              </View>
+            )}
+            <View style={styles.badgesGroup}>
               {sportConfig?.sportName && (
                 <View style={styles.sportBadge}>
                   <Ionicons name="fitness-outline" size={12} color="#A29BFE" />
@@ -339,7 +371,7 @@ export default function AnalysisDetailScreen() {
                 </View>
               )}
             </View>
-          )}
+          </View>
 
           <View style={styles.scoreSection}>
             <ScoreGauge
@@ -369,39 +401,6 @@ export default function AnalysisDetailScreen() {
                 </Text>{" "}
                 — results adjusted accordingly
               </Text>
-            </View>
-          )}
-
-          {data?.analysis?.status === "completed" && (
-            <View style={styles.compactThumbsRow}>
-              <Pressable
-                onPress={handleThumbsUp}
-                style={({ pressed }) => [
-                  styles.compactThumbButton,
-                  feedback?.rating === "up" && styles.thumbButtonActiveUp,
-                  { opacity: pressed ? 0.7 : 1 },
-                ]}
-              >
-                <Ionicons
-                  name={feedback?.rating === "up" ? "thumbs-up" : "thumbs-up-outline"}
-                  size={16}
-                  color={feedback?.rating === "up" ? "#34D399" : "#64748B"}
-                />
-              </Pressable>
-              <Pressable
-                onPress={handleThumbsDown}
-                style={({ pressed }) => [
-                  styles.compactThumbButton,
-                  feedback?.rating === "down" && styles.thumbButtonActiveDown,
-                  { opacity: pressed ? 0.7 : 1 },
-                ]}
-              >
-                <Ionicons
-                  name={feedback?.rating === "down" ? "thumbs-down" : "thumbs-down-outline"}
-                  size={16}
-                  color={feedback?.rating === "down" ? "#F87171" : "#64748B"}
-                />
-              </Pressable>
             </View>
           )}
 
@@ -646,9 +645,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     gap: 28,
   },
-  badgesRow: {
+  topMetaRow: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  badgesGroup: {
+    flexDirection: "row",
     gap: 8,
   },
   scoreSection: {
@@ -689,8 +692,7 @@ const styles = StyleSheet.create({
   },
   compactThumbsRow: {
     flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 6,
+    gap: 4,
   },
   compactThumbButton: {
     width: 36,
