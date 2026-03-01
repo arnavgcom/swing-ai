@@ -54,7 +54,9 @@ export interface AnalysisDetail {
 
 export async function fetchAnalyses(): Promise<AnalysisResponse[]> {
   const baseUrl = getApiUrl();
-  const res = await fetch(`${baseUrl}api/analyses`);
+  const res = await fetch(`${baseUrl}api/analyses`, {
+    credentials: "include",
+  });
   if (!res.ok) throw new Error("Failed to fetch analyses");
   return res.json();
 }
@@ -63,7 +65,9 @@ export async function fetchAnalysisDetail(
   id: string,
 ): Promise<AnalysisDetail> {
   const baseUrl = getApiUrl();
-  const res = await fetch(`${baseUrl}api/analyses/${id}`);
+  const res = await fetch(`${baseUrl}api/analyses/${id}`, {
+    credentials: "include",
+  });
   if (!res.ok) throw new Error("Failed to fetch analysis");
   return res.json();
 }
@@ -72,6 +76,7 @@ export async function deleteAnalysis(id: string): Promise<void> {
   const baseUrl = getApiUrl();
   const res = await fetch(`${baseUrl}api/analyses/${id}`, {
     method: "DELETE",
+    credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to delete analysis");
 }
@@ -79,6 +84,8 @@ export async function deleteAnalysis(id: string): Promise<void> {
 export async function uploadVideo(
   uri: string,
   filename: string,
+  sportId?: string | null,
+  movementId?: string | null,
 ): Promise<{ id: string }> {
   const baseUrl = getApiUrl();
   const formData = new FormData();
@@ -87,10 +94,13 @@ export async function uploadVideo(
   const file = new File(uri);
 
   formData.append("video", file as any, filename);
+  if (sportId) formData.append("sportId", sportId);
+  if (movementId) formData.append("movementId", movementId);
 
   const res = await fetch(`${baseUrl}api/upload`, {
     method: "POST",
     body: formData,
+    credentials: "include",
   });
 
   if (!res.ok) {

@@ -13,17 +13,58 @@ import {
 } from "@expo-google-fonts/inter";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
+import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { SportProvider, useSport } from "@/lib/sport-context";
+import {
+  View,
+  ActivityIndicator,
+  useColorScheme,
+} from "react-native";
+import Colors from "@/constants/colors";
 
 SplashScreen.preventAutoHideAsync();
 
-function RootLayoutNav() {
+function RootNavigator() {
+  const { user, isLoading } = useAuth();
+  const { selectedSport } = useSport();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const colors = isDark ? Colors.dark : Colors.light;
+
+  if (isLoading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: colors.background,
+        }}
+      >
+        <ActivityIndicator size="large" color={colors.tint} />
+      </View>
+    );
+  }
+
   return (
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="analysis/[id]"
-        options={{ headerShown: false, animation: "slide_from_right" }}
-      />
+      {!user ? (
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+      ) : !selectedSport ? (
+        <Stack.Screen name="sport-select" options={{ headerShown: false }} />
+      ) : (
+        <>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="analysis/[id]"
+            options={{ headerShown: false, animation: "slide_from_right" }}
+          />
+          <Stack.Screen
+            name="sport-select"
+            options={{ headerShown: false, animation: "slide_from_bottom" }}
+          />
+        </>
+      )}
     </Stack>
   );
 }
@@ -47,11 +88,15 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <GestureHandlerRootView>
-          <KeyboardProvider>
-            <RootLayoutNav />
-          </KeyboardProvider>
-        </GestureHandlerRootView>
+        <AuthProvider>
+          <SportProvider>
+            <GestureHandlerRootView>
+              <KeyboardProvider>
+                <RootNavigator />
+              </KeyboardProvider>
+            </GestureHandlerRootView>
+          </SportProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );

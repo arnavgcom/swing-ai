@@ -1,6 +1,8 @@
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { setupAuth } from "./auth";
+import { seedSports } from "./seed-sports";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -229,8 +231,11 @@ function setupErrorHandler(app: express.Application) {
   setupCors(app);
   setupBodyParsing(app);
   setupRequestLogging(app);
+  setupAuth(app);
 
   configureExpoAndLanding(app);
+
+  await seedSports();
 
   const server = await registerRoutes(app);
 

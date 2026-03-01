@@ -18,12 +18,18 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { fetchAnalyses } from "@/lib/api";
 import { AnalysisCard } from "@/components/AnalysisCard";
+import { useAuth } from "@/lib/auth-context";
+import { useSport } from "@/lib/sport-context";
 
 export default function DashboardScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
+  const { user, logout } = useAuth();
+  const { selectedSport, selectedMovement, setSport } = useSport();
+
+  const sportColor = selectedSport?.color || colors.tint;
 
   const { data: analyses, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["analyses"],
@@ -39,6 +45,8 @@ export default function DashboardScreen() {
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
 
+  const firstName = user?.name?.split(" ")[0] || "Athlete";
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
@@ -51,27 +59,66 @@ export default function DashboardScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <Text style={[styles.greeting, { color: colors.textSecondary }]}>
-            Tennis Forehand
-          </Text>
-          <Text style={[styles.title, { color: colors.text }]}>
-            CourtVision
-          </Text>
+        <View style={styles.topBar}>
+          <View style={styles.topBarLeft}>
+            <Text style={[styles.greeting, { color: colors.textSecondary }]}>
+              Hey, {firstName}
+            </Text>
+            <Text style={[styles.title, { color: colors.text }]}>
+              CourtVision
+            </Text>
+          </View>
+          <View style={styles.topBarRight}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setSport(null);
+              }}
+              style={[styles.sportPill, { backgroundColor: sportColor + "18", borderColor: sportColor + "40" }]}
+            >
+              <Ionicons
+                name={selectedSport?.icon as any || "fitness-outline"}
+                size={14}
+                color={sportColor}
+              />
+              <Text style={[styles.sportPillText, { color: sportColor }]}>
+                {selectedSport?.name || "Sport"}
+              </Text>
+              <Ionicons name="swap-horizontal" size={12} color={sportColor} />
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                logout();
+              }}
+              style={[styles.avatarCircle, { backgroundColor: colors.surfaceAlt }]}
+            >
+              <Ionicons name="person" size={16} color={colors.textSecondary} />
+            </Pressable>
+          </View>
         </View>
+
+        {selectedMovement && (
+          <View style={[styles.movementBanner, { backgroundColor: sportColor + "10", borderColor: sportColor + "25" }]}>
+            <Ionicons name={selectedMovement.icon as any} size={16} color={sportColor} />
+            <Text style={[styles.movementBannerText, { color: sportColor }]}>
+              Analyzing: {selectedMovement.name}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.statsRow}>
           <View
             style={[
               styles.statCard,
-              { backgroundColor: colors.tint + "15", borderColor: colors.tint + "30" },
+              { backgroundColor: sportColor + "15", borderColor: sportColor + "30" },
             ]}
           >
-            <Ionicons name="analytics" size={20} color={colors.tint} />
-            <Text style={[styles.statNumber, { color: colors.tint }]}>
+            <Ionicons name="analytics" size={20} color={sportColor} />
+            <Text style={[styles.statNumber, { color: sportColor }]}>
               {totalAnalyses}
             </Text>
-            <Text style={[styles.statLabel, { color: colors.tint }]}>
+            <Text style={[styles.statLabel, { color: sportColor }]}>
               Total
             </Text>
           </View>
@@ -107,16 +154,16 @@ export default function DashboardScreen() {
 
         {isLoading ? (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={colors.tint} />
+            <ActivityIndicator size="large" color={sportColor} />
           </View>
         ) : !analyses || analyses.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="tennisball-outline" size={48} color={colors.textSecondary} />
+            <Ionicons name={selectedSport?.icon as any || "fitness-outline"} size={48} color={colors.textSecondary} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>
               No analyses yet
             </Text>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              Upload a forehand video to get started with your performance analysis
+              Upload a {selectedMovement?.name?.toLowerCase() || selectedSport?.name?.toLowerCase() || "sport"} video to get started
             </Text>
             <Pressable
               onPress={() => {
@@ -126,7 +173,7 @@ export default function DashboardScreen() {
               style={({ pressed }) => [
                 styles.ctaButton,
                 {
-                  backgroundColor: colors.tint,
+                  backgroundColor: sportColor,
                   transform: [{ scale: pressed ? 0.96 : 1 }],
                 },
               ]}
@@ -162,25 +209,62 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1 },
+  scroll: { paddingHorizontal: 20 },
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 20,
   },
-  scroll: {
-    paddingHorizontal: 20,
-  },
-  header: {
-    marginBottom: 24,
+  topBarLeft: {},
+  topBarRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   greeting: {
     fontSize: 14,
     fontFamily: "Inter_500Medium",
-    textTransform: "uppercase",
-    letterSpacing: 1.5,
   },
   title: {
     fontSize: 28,
     fontFamily: "Inter_700Bold",
-    marginTop: 4,
+    marginTop: 2,
+  },
+  sportPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  sportPillText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  avatarCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  movementBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  movementBannerText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
   },
   statsRow: {
     flexDirection: "row",
@@ -202,7 +286,7 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 11,
     fontFamily: "Inter_500Medium",
-    textTransform: "uppercase",
+    textTransform: "uppercase" as const,
     letterSpacing: 0.5,
   },
   loadingWrap: {
@@ -240,14 +324,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
   },
-  listSection: {
-    gap: 14,
-  },
+  listSection: { gap: 14 },
   sectionTitle: {
     fontSize: 18,
     fontFamily: "Inter_700Bold",
   },
-  list: {
-    gap: 10,
-  },
+  list: { gap: 10 },
 });

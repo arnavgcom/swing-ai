@@ -5,6 +5,10 @@ import path from "path";
 import fs from "fs";
 import { storage } from "./storage";
 import { processAnalysis } from "./analysis-engine";
+import { requireAuth } from "./auth";
+import { db } from "./db";
+import { sports, sportMovements } from "@shared/schema";
+import { eq, asc } from "drizzle-orm";
 
 const uploadDir = path.resolve(process.cwd(), "uploads");
 if (!fs.existsSync(uploadDir)) {
@@ -36,8 +40,34 @@ const upload = multer({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.get("/api/sports", async (_req: Request, res: Response) => {
+    try {
+      const allSports = await db
+        .select()
+        .from(sports)
+        .orderBy(asc(sports.sortOrder));
+      res.json(allSports);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/sports/:sportId/movements", async (req: Request, res: Response) => {
+    try {
+      const movements = await db
+        .select()
+        .from(sportMovements)
+        .where(eq(sportMovements.sportId, req.params.sportId))
+        .orderBy(asc(sportMovements.sortOrder));
+      res.json(movements);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post(
     "/api/upload",
+    requireAuth,
     upload.single("video"),
     async (req: Request, res: Response) => {
       try {
@@ -45,9 +75,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ error: "No video file provided" });
         }
 
+        const userId = req.session.userId!;
+        const sportId = req.body?.sportId || null;
+        const movementId = req.body?.movementId || null;
+
         const analysis = await storage.createAnalysis(
           req.file.originalname,
           req.file.path,
+          userId,
+          sportId,
+          movementId,
         );
 
         processAnalysis(analysis.id).catch(console.error);
@@ -64,16 +101,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  app.get("/api/analyses", async (_req: Request, res: Response) => {
+  app.get("/api/analyses", requireAuth, async (req: Request, res: Response) => {
     try {
-      const allAnalyses = await storage.getAllAnalyses();
+      const userId = req.session.userId!;
+      const sportId = req.query.sportId as string | undefined;
+      const allAnalyses = await storage.getAllAnalyses(userId, sportId);
       res.json(allAnalyses);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/analyses/:id", async (req: Request, res: Response) => {
+  app.get("/api/analyses/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -93,7 +132,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/analyses/:id", async (req: Request, res: Response) => {
+  app.delete("/api/analyses/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {

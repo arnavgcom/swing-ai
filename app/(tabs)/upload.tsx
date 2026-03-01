@@ -17,6 +17,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import Colors from "@/constants/colors";
 import { uploadVideo } from "@/lib/api";
+import { useSport } from "@/lib/sport-context";
 
 export default function UploadScreen() {
   const colorScheme = useColorScheme();
@@ -24,6 +25,9 @@ export default function UploadScreen() {
   const colors = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const { selectedSport, selectedMovement } = useSport();
+
+  const sportColor = selectedSport?.color || colors.tint;
 
   const [selectedVideo, setSelectedVideo] = useState<{
     uri: string;
@@ -35,7 +39,12 @@ export default function UploadScreen() {
   const uploadMutation = useMutation({
     mutationFn: () => {
       if (!selectedVideo) throw new Error("No video selected");
-      return uploadVideo(selectedVideo.uri, selectedVideo.fileName);
+      return uploadVideo(
+        selectedVideo.uri,
+        selectedVideo.fileName,
+        selectedSport?.id,
+        selectedMovement?.id,
+      );
     },
     onSuccess: (data) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -65,7 +74,7 @@ export default function UploadScreen() {
       const asset = result.assets[0];
       setSelectedVideo({
         uri: asset.uri,
-        fileName: asset.fileName || `forehand_${Date.now()}.mp4`,
+        fileName: asset.fileName || `analysis_${Date.now()}.mp4`,
         duration: asset.duration ? asset.duration / 1000 : null,
         fileSize: asset.fileSize || null,
       });
@@ -73,6 +82,7 @@ export default function UploadScreen() {
   };
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
+  const movementLabel = selectedMovement?.name || selectedSport?.name || "Performance";
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -83,11 +93,20 @@ export default function UploadScreen() {
         ]}
       >
         <Text style={[styles.title, { color: colors.text }]}>
-          Analyze Forehand
+          Analyze {movementLabel}
         </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Upload a video of your tennis forehand for AI-powered analysis
+          Upload a video for AI-powered {selectedSport?.name || "sports"} analysis
         </Text>
+
+        {selectedSport && (
+          <View style={[styles.contextBadge, { backgroundColor: sportColor + "12", borderColor: sportColor + "30" }]}>
+            <Ionicons name={selectedSport.icon as any} size={16} color={sportColor} />
+            <Text style={[styles.contextText, { color: sportColor }]}>
+              {selectedSport.name}{selectedMovement ? ` / ${selectedMovement.name}` : " (Auto-detect)"}
+            </Text>
+          </View>
+        )}
 
         {!selectedVideo ? (
           <Pressable
@@ -95,8 +114,8 @@ export default function UploadScreen() {
             style={({ pressed }) => [
               styles.uploadZone,
               {
-                borderColor: colors.tint,
-                backgroundColor: colors.tint + "08",
+                borderColor: sportColor,
+                backgroundColor: sportColor + "08",
                 transform: [{ scale: pressed ? 0.98 : 1 }],
               },
             ]}
@@ -104,10 +123,10 @@ export default function UploadScreen() {
             <View
               style={[
                 styles.uploadIcon,
-                { backgroundColor: colors.tint + "18" },
+                { backgroundColor: sportColor + "18" },
               ]}
             >
-              <Ionicons name="cloud-upload" size={36} color={colors.tint} />
+              <Ionicons name="cloud-upload" size={36} color={sportColor} />
             </View>
             <Text style={[styles.uploadTitle, { color: colors.text }]}>
               Select Video
@@ -133,10 +152,10 @@ export default function UploadScreen() {
               <View
                 style={[
                   styles.videoIconWrap,
-                  { backgroundColor: colors.tint + "18" },
+                  { backgroundColor: sportColor + "18" },
                 ]}
               >
-                <Ionicons name="videocam" size={28} color={colors.tint} />
+                <Ionicons name="videocam" size={28} color={sportColor} />
               </View>
               <Pressable
                 onPress={() => {
@@ -199,8 +218,8 @@ export default function UploadScreen() {
               styles.analyzeButton,
               {
                 backgroundColor: uploadMutation.isPending
-                  ? colors.tint + "80"
-                  : colors.tint,
+                  ? sportColor + "80"
+                  : sportColor,
                 transform: [{ scale: pressed ? 0.96 : 1 }],
               },
             ]}
@@ -230,7 +249,7 @@ export default function UploadScreen() {
               <View
                 style={[styles.tipIcon, { backgroundColor: colors.surfaceAlt }]}
               >
-                <Ionicons name={tip.icon} size={16} color={colors.tint} />
+                <Ionicons name={tip.icon} size={16} color={sportColor} />
               </View>
               <Text style={[styles.tipText, { color: colors.textSecondary }]}>
                 {tip.text}
@@ -244,9 +263,7 @@ export default function UploadScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   content: {
     flex: 1,
     paddingHorizontal: 20,
@@ -260,7 +277,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     lineHeight: 21,
-    marginBottom: 28,
+    marginBottom: 16,
+  },
+  contextBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  contextText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
   },
   uploadZone: {
     borderWidth: 2,
@@ -337,9 +369,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
   },
-  tipsSection: {
-    gap: 12,
-  },
+  tipsSection: { gap: 12 },
   tipsTitle: {
     fontSize: 16,
     fontFamily: "Inter_700Bold",
