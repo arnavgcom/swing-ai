@@ -79,6 +79,14 @@ All data is stored entirely on Replit:
 - **Node**: express, express-session, connect-pg-simple, bcryptjs, multer, drizzle-orm, @tanstack/react-query, expo-router, expo-linear-gradient
 - **Python**: opencv-python-headless, mediapipe (0.10.32), numpy
 
+## Deployment
+
+- **Target**: Autoscale (Cloud Run)
+- **Build**: `npm run expo:static:build && npm run server:build`
+- **Run**: `PORT=8081 npm run server:prod` — Express listens on 8081 in production (mapped to external port 80 for healthchecks)
+- **Dev ports**: Express on 5000, Expo dev server on 8081
+- **Healthcheck**: Root `/` serves landing page (200 OK)
+
 ## Workflows
 
 - `Start Backend` — `npm run server:dev` (port 5000)
