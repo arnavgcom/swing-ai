@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -10,6 +10,8 @@ import {
   Alert,
   Platform,
   Image,
+  Modal,
+  FlatList,
 } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,29 +23,67 @@ import { useAuth } from "@/lib/auth-context";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 import { fetch } from "expo/fetch";
 
+const APP_SPORTS = [
+  "Tennis",
+  "Golf",
+  "Pickleball",
+  "Paddle",
+  "Badminton",
+  "Table Tennis",
+];
+
+const COUNTRIES = [
+  "Singapore",
+  "Australia",
+  "Canada",
+  "China",
+  "France",
+  "Germany",
+  "India",
+  "Indonesia",
+  "Japan",
+  "Malaysia",
+  "New Zealand",
+  "Philippines",
+  "South Korea",
+  "Thailand",
+  "United Arab Emirates",
+  "United Kingdom",
+  "United States",
+  "Vietnam",
+];
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout, refreshUser } = useAuth();
   const webTopInset = Platform.OS === "web" ? 67 : 0;
 
   const [name, setName] = useState(user?.name || "");
-  const [phone, setPhone] = useState(user?.phone || "");
+  const [phone, setPhone] = useState(user?.phone || "+65 ");
   const [address, setAddress] = useState(user?.address || "");
-  const [country, setCountry] = useState(user?.country || "");
+  const [country, setCountry] = useState(user?.country || "Singapore");
   const [sportsInterests, setSportsInterests] = useState(user?.sportsInterests || "");
   const [bio, setBio] = useState(user?.bio || "");
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [showSportsPicker, setShowSportsPicker] = useState(false);
+  const [selectedSports, setSelectedSports] = useState<string[]>([]);
+
   useEffect(() => {
     if (user) {
       setName(user.name || "");
-      setPhone(user.phone || "");
+      setPhone(user.phone || "+65 ");
       setAddress(user.address || "");
-      setCountry(user.country || "");
-      setSportsInterests(user.sportsInterests || "");
+      setCountry(user.country || "Singapore");
       setBio(user.bio || "");
+      if (user.sportsInterests) {
+        const parsed = user.sportsInterests.split(",").map((s) => s.trim()).filter(Boolean);
+        setSelectedSports(parsed);
+        setSportsInterests(user.sportsInterests);
+      }
       if (user.avatarUrl) {
         const baseUrl = getApiUrl();
         setAvatarUri(`${baseUrl}${user.avatarUrl.replace(/^\//, "")}`);
@@ -51,11 +91,21 @@ export default function ProfileScreen() {
     }
   }, [user]);
 
+  const toggleSport = (sport: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedSports((prev) => {
+      const next = prev.includes(sport)
+        ? prev.filter((s) => s !== sport)
+        : [...prev, sport];
+      setSportsInterests(next.join(", "));
+      return next;
+    });
+  };
+
   const pickImage = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-      const actionOptions = ["Take Photo", "Choose from Gallery", "Cancel"];
       if (Platform.OS === "web") {
         await launchGallery();
         return;
@@ -269,7 +319,7 @@ export default function ProfileScreen() {
             value={phone}
             onChangeText={setPhone}
             icon="call-outline"
-            placeholder="+1 (555) 123-4567"
+            placeholder="+65 9123 4567"
             keyboardType="phone-pad"
           />
           <ProfileField
@@ -277,22 +327,62 @@ export default function ProfileScreen() {
             value={address}
             onChangeText={setAddress}
             icon="location-outline"
-            placeholder="123 Main St, City"
+            placeholder="Block 123, Orchard Road, #01-01"
           />
-          <ProfileField
-            label="Country"
-            value={country}
-            onChangeText={setCountry}
-            icon="globe-outline"
-            placeholder="United States"
-          />
-          <ProfileField
-            label="Sports Interests"
-            value={sportsInterests}
-            onChangeText={setSportsInterests}
-            icon="fitness-outline"
-            placeholder="Tennis, Cricket, Basketball..."
-          />
+
+          <View style={styles.fieldWrapper}>
+            <Text style={styles.fieldLabel}>Country</Text>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setShowCountryPicker(true);
+              }}
+              style={styles.fieldInput}
+              testID="field-country"
+            >
+              <Ionicons name="globe-outline" size={18} color="#6C5CE7" />
+              <Text style={[styles.dropdownText, !country && styles.dropdownPlaceholder]}>
+                {country || "Select country"}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color="#64748B" />
+            </Pressable>
+          </View>
+
+          <View style={styles.fieldWrapper}>
+            <Text style={styles.fieldLabel}>Sports Interests</Text>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setShowSportsPicker(true);
+              }}
+              style={styles.fieldInput}
+              testID="field-sports-interests"
+            >
+              <Ionicons name="fitness-outline" size={18} color="#6C5CE7" />
+              <Text
+                style={[styles.dropdownText, selectedSports.length === 0 && styles.dropdownPlaceholder]}
+                numberOfLines={1}
+              >
+                {selectedSports.length > 0 ? selectedSports.join(", ") : "Select sports"}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color="#64748B" />
+            </Pressable>
+            {selectedSports.length > 0 && (
+              <View style={styles.chipRow}>
+                {selectedSports.map((sport) => (
+                  <Pressable
+                    key={sport}
+                    onPress={() => toggleSport(sport)}
+                    style={styles.chip}
+                  >
+                    <Text style={styles.chipText}>{sport}</Text>
+                    <Ionicons name="close-circle" size={14} color="#A29BFE" />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
+
           <ProfileField
             label="Bio"
             value={bio}
@@ -341,7 +431,98 @@ export default function ProfileScreen() {
           <Text style={styles.logoutText}>Logout</Text>
         </Pressable>
       </ScrollView>
+
+      <PickerModal
+        visible={showCountryPicker}
+        title="Select Country"
+        items={COUNTRIES}
+        selectedItems={country ? [country] : []}
+        multiSelect={false}
+        onSelect={(item) => {
+          setCountry(item);
+          setShowCountryPicker(false);
+        }}
+        onClose={() => setShowCountryPicker(false)}
+      />
+
+      <PickerModal
+        visible={showSportsPicker}
+        title="Select Sports"
+        items={APP_SPORTS}
+        selectedItems={selectedSports}
+        multiSelect
+        onSelect={(item) => toggleSport(item)}
+        onClose={() => setShowSportsPicker(false)}
+      />
     </View>
+  );
+}
+
+function PickerModal({
+  visible,
+  title,
+  items,
+  selectedItems,
+  multiSelect,
+  onSelect,
+  onClose,
+}: {
+  visible: boolean;
+  title: string;
+  items: string[];
+  selectedItems: string[];
+  multiSelect: boolean;
+  onSelect: (item: string) => void;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable
+          style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}
+          onPress={() => {}}
+        >
+          <View style={styles.modalHandle} />
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{title}</Text>
+            {multiSelect && (
+              <Pressable onPress={onClose} style={styles.modalDoneButton}>
+                <Text style={styles.modalDoneText}>Done</Text>
+              </Pressable>
+            )}
+          </View>
+          <FlatList
+            data={items}
+            keyExtractor={(item) => item}
+            scrollEnabled={items.length > 6}
+            style={styles.modalList}
+            renderItem={({ item }) => {
+              const isSelected = selectedItems.includes(item);
+              return (
+                <Pressable
+                  onPress={() => onSelect(item)}
+                  style={[styles.modalItem, isSelected && styles.modalItemSelected]}
+                >
+                  <Text style={[styles.modalItemText, isSelected && styles.modalItemTextSelected]}>
+                    {item}
+                  </Text>
+                  {isSelected && (
+                    <Ionicons name="checkmark-circle" size={22} color="#6C5CE7" />
+                  )}
+                </Pressable>
+              );
+            }}
+          />
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -522,6 +703,37 @@ const styles = StyleSheet.create({
     minHeight: 60,
     textAlignVertical: "top" as const,
   },
+  dropdownText: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+    color: "#F8FAFC",
+  },
+  dropdownPlaceholder: {
+    color: "#4A4A6A",
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#6C5CE720",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#6C5CE740",
+  },
+  chipText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: "#A29BFE",
+  },
   saveButton: {
     borderRadius: 14,
     overflow: "hidden",
@@ -555,5 +767,74 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
     color: "#EF4444",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#131328",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 12,
+    maxHeight: "70%",
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#4A4A6A",
+    alignSelf: "center",
+    marginBottom: 12,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2A2A50",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+  },
+  modalDoneButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#6C5CE720",
+  },
+  modalDoneText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#6C5CE7",
+  },
+  modalList: {
+    paddingHorizontal: 12,
+  },
+  modalItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  modalItemSelected: {
+    backgroundColor: "#6C5CE715",
+  },
+  modalItemText: {
+    fontSize: 16,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  modalItemTextSelected: {
+    color: "#F8FAFC",
+    fontFamily: "Inter_600SemiBold",
   },
 });
