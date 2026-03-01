@@ -97,7 +97,7 @@ function DeltaBadge({ value, suffix }: { value: number | null; suffix?: string }
 }
 
 const deltaStyles = StyleSheet.create({
-  badge: { flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
+  badge: { flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, marginBottom: -1 },
   text: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
 });
 

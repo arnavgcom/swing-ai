@@ -401,6 +401,7 @@ const summaryStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 1,
+    paddingBottom: 1,
   },
   subDeltaText: {
     fontSize: 9,
@@ -425,6 +426,7 @@ const summaryStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
+    paddingBottom: 2,
   },
   deltaText: {
     fontSize: 11,
