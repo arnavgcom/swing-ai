@@ -5,7 +5,7 @@
 - **Frontend**: Expo React Native (port 8081) — Login, Sport Selection, 3-tab layout (Dashboard, Upload/Analyze, History), Analysis Detail screen
 - **Backend**: Express/Node.js (port 5000) — REST API for auth, sports, uploads, analysis CRUD, sport configs, static landing page
 - **Database**: Replit PostgreSQL via Drizzle ORM — stores users, sports, sport_movements, analyses, metrics (JSONB), coaching_insights tables
-- **Video Storage**: Local `uploads/` folder on Replit filesystem
+- **Video Storage**: Local `uploads/` folder on Replit filesystem. Files renamed to `Sport-Category-UserName-YYYYMMDD-HHMMSS-xxxx.ext` on upload (e.g., `Tennis-Forehand-JohnSmith-20260301-143022-a1b2.mp4`)
 - **ML Pipeline**: Python 3.11 with OpenCV (frame extraction), MediaPipe Tasks API v0.10.32 (pose detection), HSV ball tracking — pluggable per-sport analyzers with automatic movement classification
 - **Auth**: Email/password + Google OAuth (WebBrowser.openAuthSessionAsync + backend bridge page at `/api/auth/google/mobile-callback`) with express-session + connect-pg-simple (session stored in PostgreSQL). Google Client ID via `EXPO_PUBLIC_GOOGLE_CLIENT_ID` env var.
 

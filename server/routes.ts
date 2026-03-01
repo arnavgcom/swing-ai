@@ -92,9 +92,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const sportId = req.body?.sportId || null;
         const movementId = req.body?.movementId || null;
 
+        let finalFilename = req.file.filename;
+        let finalPath = req.file.path;
+        const ext = path.extname(req.file.originalname) || path.extname(req.file.filename);
+
+        try {
+          const slugify = (s: string) => s.replace(/[^a-zA-Z0-9]/g, "").substring(0, 40);
+
+          const [user] = await db.select().from(users).where(eq(users.id, userId));
+          let sportName = "";
+          let movementName = "";
+
+          if (sportId) {
+            const [sport] = await db.select().from(sports).where(eq(sports.id, sportId));
+            if (sport) sportName = sport.name;
+          }
+          if (movementId) {
+            const [movement] = await db.select().from(sportMovements).where(eq(sportMovements.id, movementId));
+            if (movement) movementName = movement.name;
+          }
+
+          const parts: string[] = [];
+          if (sportName) parts.push(slugify(sportName));
+          if (movementName) parts.push(slugify(movementName));
+          if (user) parts.push(slugify(user.name || "User"));
+
+          if (parts.length > 0) {
+            const now = new Date();
+            const datePart = now.getFullYear().toString() +
+              String(now.getMonth() + 1).padStart(2, "0") +
+              String(now.getDate()).padStart(2, "0");
+            const timePart = String(now.getHours()).padStart(2, "0") +
+              String(now.getMinutes()).padStart(2, "0") +
+              String(now.getSeconds()).padStart(2, "0");
+            const uniqueSuffix = Math.random().toString(36).substring(2, 6);
+
+            const descriptiveName = `${parts.join("-")}-${datePart}-${timePart}-${uniqueSuffix}${ext}`;
+            const newPath = path.join(uploadDir, descriptiveName);
+
+            if (!fs.existsSync(newPath)) {
+              fs.renameSync(finalPath, newPath);
+              finalFilename = descriptiveName;
+              finalPath = newPath;
+            }
+          }
+        } catch (renameErr) {
+          console.error("File rename failed, using original name:", renameErr);
+        }
+
         const analysis = await storage.createAnalysis(
-          req.file.originalname,
-          req.file.path,
+          finalFilename,
+          finalPath,
           userId,
           sportId,
           movementId,
