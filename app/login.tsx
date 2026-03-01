@@ -18,6 +18,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as WebBrowser from "expo-web-browser";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
+import { getApiUrl } from "@/lib/query-client";
 
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "";
 
@@ -63,31 +64,50 @@ export default function LoginScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setGoogleLoading(true);
     try {
-      const redirectUri = Platform.select({
-        web: typeof window !== "undefined" ? window.location.origin + "/login" : "",
-        default: "https://auth.expo.io/@anonymous/acex-ai",
-      }) || "";
+      if (Platform.OS === "web") {
+        const redirectUri = typeof window !== "undefined" ? window.location.origin + "/login" : "";
+        const authUrl =
+          `https://accounts.google.com/o/oauth2/v2/auth?` +
+          `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
+          `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+          `&response_type=token` +
+          `&scope=${encodeURIComponent("openid profile email")}`;
 
-      const authUrl =
-        `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-        `&response_type=token` +
-        `&scope=${encodeURIComponent("openid profile email")}`;
+        const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+        if (result.type === "success" && result.url) {
+          const urlFragment = result.url.split("#")[1];
+          if (urlFragment) {
+            const params = new URLSearchParams(urlFragment);
+            const accessToken = params.get("access_token");
+            if (accessToken) {
+              await handleGoogleToken(accessToken);
+              return;
+            }
+          }
+          Alert.alert("Error", "Could not get access token from Google");
+        }
+      } else {
+        const apiBase = getApiUrl();
+        const callbackUrl = new URL("/api/auth/google/mobile-callback", apiBase).href;
 
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+        const authUrl =
+          `https://accounts.google.com/o/oauth2/v2/auth?` +
+          `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
+          `&redirect_uri=${encodeURIComponent(callbackUrl)}` +
+          `&response_type=token` +
+          `&scope=${encodeURIComponent("openid profile email")}`;
 
-      if (result.type === "success" && result.url) {
-        const urlFragment = result.url.split("#")[1];
-        if (urlFragment) {
-          const params = new URLSearchParams(urlFragment);
-          const accessToken = params.get("access_token");
+        const result = await WebBrowser.openAuthSessionAsync(authUrl, "acexai://google-auth");
+
+        if (result.type === "success" && result.url) {
+          const urlObj = new URL(result.url);
+          const accessToken = urlObj.searchParams.get("access_token");
           if (accessToken) {
             await handleGoogleToken(accessToken);
             return;
           }
+          Alert.alert("Error", "Could not get access token from Google");
         }
-        Alert.alert("Error", "Could not get access token from Google");
       }
     } catch (e: any) {
       Alert.alert("Error", e?.message || "Google sign-in failed");

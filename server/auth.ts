@@ -157,6 +157,26 @@ export function setupAuth(app: Express) {
     });
   });
 
+  app.get("/api/auth/google/mobile-callback", (_req: Request, res: Response) => {
+    res.send(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Signing in...</title>
+<style>body{background:#0A0A1A;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+.loader{text-align:center}.spinner{width:40px;height:40px;border:3px solid #333;border-top:3px solid #6C5CE7;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}</style></head>
+<body><div class="loader"><div class="spinner"></div><p>Completing sign in...</p></div>
+<script>
+(function(){
+  var h=window.location.hash.substring(1);
+  if(!h){document.querySelector('p').textContent='Sign in failed. Please try again.';return;}
+  var p=new URLSearchParams(h);
+  var t=p.get('access_token');
+  if(t){window.location.href='acexai://google-auth?access_token='+encodeURIComponent(t);}
+  else{document.querySelector('p').textContent='Sign in failed. No token received.';}
+})();
+</script></body></html>`);
+  });
+
   app.post("/api/auth/google", async (req: Request, res: Response) => {
     try {
       const { idToken, accessToken } = req.body;
