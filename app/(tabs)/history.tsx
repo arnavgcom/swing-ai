@@ -23,14 +23,15 @@ import { useSport } from "@/lib/sport-context";
 import { sportColors } from "@/constants/colors";
 import { TabHeader } from "@/components/TabHeader";
 
-function TrendChart({ data }: { data: number[] }) {
+function TrendChart({ data, dates }: { data: number[]; dates: string[] }) {
   if (data.length === 0) return null;
 
   const maxVal = Math.max(...data, 1);
   const minVal = Math.min(...data, 0);
   const range = Math.max(maxVal - minVal, 10);
-  const chartHeight = 100;
-  const chartWidth = 280;
+  const chartHeight = 50;
+  const yLabelWidth = 28;
+  const chartWidth = 260;
   const stepX = data.length > 1 ? chartWidth / (data.length - 1) : 0;
 
   const points = data.map((val, i) => ({
@@ -38,52 +39,66 @@ function TrendChart({ data }: { data: number[] }) {
     y: chartHeight - ((val - minVal) / range) * chartHeight,
   }));
 
+  const yMax = Math.round(maxVal);
+  const yMin = Math.round(minVal);
+
   return (
     <View style={trendStyles.container}>
-      <View style={trendStyles.gridLine} />
-      <View style={[trendStyles.gridLine, { top: "50%" }]} />
-      <View style={{ width: chartWidth, height: chartHeight, position: "relative" }}>
-        {points.map((point, i) => {
-          if (i === 0) return null;
-          const prev = points[i - 1];
-          const dx = point.x - prev.x;
-          const dy = point.y - prev.y;
-          const length = Math.sqrt(dx * dx + dy * dy);
-          const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-          return (
+      <View style={trendStyles.chartRow}>
+        <View style={trendStyles.yAxis}>
+          <Text style={trendStyles.yLabel}>{yMax}</Text>
+          <Text style={trendStyles.yLabel}>{yMin}</Text>
+        </View>
+        <View style={{ width: chartWidth, height: chartHeight, position: "relative" }}>
+          <View style={trendStyles.gridLine} />
+          <View style={[trendStyles.gridLine, { top: chartHeight - 1 }]} />
+          {points.map((point, i) => {
+            if (i === 0) return null;
+            const prev = points[i - 1];
+            const dx = point.x - prev.x;
+            const dy = point.y - prev.y;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+            return (
+              <View
+                key={`line-${i}`}
+                style={{
+                  position: "absolute",
+                  left: prev.x,
+                  top: prev.y,
+                  width: length,
+                  height: 2,
+                  backgroundColor: "#34D399",
+                  transform: [{ rotate: `${angle}deg` }],
+                  transformOrigin: "left center",
+                  opacity: 0.8,
+                }}
+              />
+            );
+          })}
+          {points.map((point, i) => (
             <View
-              key={`line-${i}`}
-              style={{
-                position: "absolute",
-                left: prev.x,
-                top: prev.y,
-                width: length,
-                height: 2,
-                backgroundColor: "#34D399",
-                transform: [{ rotate: `${angle}deg` }],
-                transformOrigin: "left center",
-                opacity: 0.8,
-              }}
+              key={`dot-${i}`}
+              style={[
+                trendStyles.dot,
+                {
+                  backgroundColor: i === points.length - 1 ? "#34D399" : "#34D39960",
+                  width: i === points.length - 1 ? 8 : 6,
+                  height: i === points.length - 1 ? 8 : 6,
+                  borderRadius: i === points.length - 1 ? 4 : 3,
+                  left: point.x - (i === points.length - 1 ? 4 : 3),
+                  top: point.y - (i === points.length - 1 ? 4 : 3),
+                },
+              ]}
             />
-          );
-        })}
-        {points.map((point, i) => (
-          <View
-            key={`dot-${i}`}
-            style={[
-              trendStyles.dot,
-              {
-                left: point.x - 4,
-                top: point.y - 4,
-                backgroundColor: i === points.length - 1 ? "#34D399" : "#34D39960",
-                width: i === points.length - 1 ? 10 : 8,
-                height: i === points.length - 1 ? 10 : 8,
-                borderRadius: i === points.length - 1 ? 5 : 4,
-                left: point.x - (i === points.length - 1 ? 5 : 4),
-                top: point.y - (i === points.length - 1 ? 5 : 4),
-              },
-            ]}
-          />
+          ))}
+        </View>
+      </View>
+      <View style={[trendStyles.xAxis, { marginLeft: yLabelWidth }]}>
+        {dates.map((d, i) => (
+          <Text key={i} style={[trendStyles.xLabel, i === 0 ? { textAlign: "left" as const } : i === dates.length - 1 ? { textAlign: "right" as const } : {}]}>
+            {d}
+          </Text>
         ))}
       </View>
     </View>
@@ -91,16 +106,40 @@ function TrendChart({ data }: { data: number[] }) {
 }
 
 const trendStyles = StyleSheet.create({
-  container: { position: "relative", alignItems: "center", paddingVertical: 12 },
+  container: { paddingVertical: 8 },
+  chartRow: { flexDirection: "row", alignItems: "stretch" },
+  yAxis: {
+    width: 28,
+    justifyContent: "space-between",
+    paddingRight: 4,
+  },
+  yLabel: {
+    fontSize: 9,
+    fontFamily: "Inter_400Regular",
+    color: "#64748B",
+    textAlign: "right" as const,
+  },
   gridLine: {
     position: "absolute",
-    left: 16,
-    right: 16,
-    top: "25%",
+    left: 0,
+    right: 0,
+    top: 0,
     height: 1,
     backgroundColor: "#2A2A5020",
   },
   dot: { position: "absolute" },
+  xAxis: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
+  xLabel: {
+    fontSize: 9,
+    fontFamily: "Inter_400Regular",
+    color: "#64748B",
+    flex: 1,
+    textAlign: "center" as const,
+  },
 });
 
 function toTitleCase(str: string): string {
@@ -236,19 +275,21 @@ function SummaryCard({
             return (
               <View key={key} style={summaryStyles.metricItem}>
                 <Text style={summaryStyles.metricLabel} numberOfLines={1}>{toTitleCase(key)}</Text>
-                <Text style={summaryStyles.metricValue}>{Math.round(val)}</Text>
-                {subDelta != null && subDelta !== 0 && (
-                  <View style={summaryStyles.subDeltaRow}>
-                    <Ionicons
-                      name={subDelta > 0 ? "arrow-up" : "arrow-down"}
-                      size={8}
-                      color={subDelta > 0 ? "#34D399" : "#F87171"}
-                    />
-                    <Text style={[summaryStyles.subDeltaText, { color: subDelta > 0 ? "#34D399" : "#F87171" }]}>
-                      {Math.abs(subDelta)}
-                    </Text>
-                  </View>
-                )}
+                <View style={summaryStyles.metricValueRow}>
+                  <Text style={summaryStyles.metricValue}>{Math.round(val)}</Text>
+                  {subDelta != null && subDelta !== 0 && (
+                    <View style={summaryStyles.subDeltaRow}>
+                      <Ionicons
+                        name={subDelta > 0 ? "arrow-up" : "arrow-down"}
+                        size={7}
+                        color={subDelta > 0 ? "#34D399" : "#F87171"}
+                      />
+                      <Text style={[summaryStyles.subDeltaText, { color: subDelta > 0 ? "#34D399" : "#F87171" }]}>
+                        {Math.abs(subDelta)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               </View>
             );
           })}
@@ -267,7 +308,7 @@ function SummaryCard({
           ]}
           hitSlop={8}
         >
-          <Ionicons name="trash-outline" size={16} color="#F87171" />
+          <Ionicons name="trash-outline" size={13} color="#F87171" />
         </Pressable>
       )}
     </Pressable>
@@ -354,14 +395,18 @@ const summaryStyles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
   },
+  metricValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
   subDeltaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
-    marginTop: 2,
+    gap: 1,
   },
   subDeltaText: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: "Inter_600SemiBold",
   },
   scoreWrap: {
@@ -390,9 +435,9 @@ const summaryStyles = StyleSheet.create({
   },
   deleteBtn: {
     position: "absolute",
-    right: 8,
-    bottom: 8,
-    padding: 6,
+    right: 6,
+    top: 6,
+    padding: 4,
   },
 });
 
@@ -441,11 +486,15 @@ export default function HistoryScreen() {
   const completed = analyses?.filter((a) => a.status === "completed") || [];
   const processing = analyses?.filter((a) => a.status === "processing" || a.status === "pending") || [];
 
-  const trendScores = completed
+  const trendItems = completed
     .filter((a) => a.overallScore != null)
     .slice(0, 7)
-    .reverse()
-    .map((a) => Math.round(a.overallScore || 0));
+    .reverse();
+  const trendScores = trendItems.map((a) => Math.round(a.overallScore || 0));
+  const trendDates = trendItems.map((a) => {
+    const d = new Date(a.createdAt);
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  });
 
   const latestScore = completed.length > 0 && completed[0].overallScore != null
     ? Math.round(completed[0].overallScore)
@@ -491,7 +540,7 @@ export default function HistoryScreen() {
             end={{ x: 1, y: 1 }}
           >
             <View style={styles.trendHeader}>
-              <Text style={styles.trendLabel}>Overall Score</Text>
+              <Text style={styles.trendLabel}>Trend</Text>
               <View style={styles.trendScoreRow}>
                 <Text style={styles.trendScore}>
                   {latestScore != null ? latestScore : "—"}
@@ -500,41 +549,58 @@ export default function HistoryScreen() {
                   <View style={styles.trendDelta}>
                     <Ionicons
                       name={scoreDelta >= 0 ? "arrow-up" : "arrow-down"}
-                      size={12}
+                      size={11}
                       color={scoreDelta >= 0 ? "#34D399" : "#F87171"}
                     />
                     <Text style={[styles.trendDeltaText, { color: scoreDelta >= 0 ? "#34D399" : "#F87171" }]}>
-                      {Math.abs(scoreDelta)} this week
+                      {Math.abs(scoreDelta)}
                     </Text>
                   </View>
                 )}
               </View>
             </View>
-            <TrendChart data={trendScores} />
+            <TrendChart data={trendScores} dates={trendDates} />
           </LinearGradient>
         </View>
       )}
 
-      <View style={styles.statsRow}>
-        {[
-          { label: "Total", value: totalAnalyses, color: "#6C5CE7", icon: "analytics" as const },
-          { label: "Active", value: processing.length, color: "#60A5FA", icon: "pulse" as const },
-          { label: "Done", value: completed.length, color: "#34D399", icon: "checkmark-circle" as const },
-        ].map((stat) => (
-          <View key={stat.label} style={styles.statCard}>
-            <LinearGradient
-              colors={[stat.color + "14", stat.color + "06"]}
-              style={styles.statCardGradient}
-            >
-              <Ionicons name={stat.icon} size={18} color={stat.color} />
-              <Text style={[styles.statNumber, { color: stat.color }]}>
-                {stat.value}
-              </Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
-            </LinearGradient>
-          </View>
-        ))}
-      </View>
+      {completed.length > 0 && completed[0].subScores && Object.keys(completed[0].subScores).length > 0 && (
+        <View style={styles.breakdownCard}>
+          <LinearGradient
+            colors={[sc.primary + "10", sc.gradient + "06", "#15152D"]}
+            style={styles.breakdownGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Text style={styles.breakdownTitle}>Performance Breakdown</Text>
+            {Object.entries(completed[0].subScores).map(([key, val]) => {
+              const prevSubs = completed.length > 1 ? completed[1]?.subScores : null;
+              const prevVal = findSubValue(prevSubs || null, key);
+              const delta = prevVal != null ? Math.round(val) - Math.round(prevVal) : null;
+              return (
+                <View key={key} style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>{toTitleCase(key)}</Text>
+                  <View style={styles.breakdownRight}>
+                    <Text style={styles.breakdownValue}>{Math.round(val)}</Text>
+                    {delta != null && delta !== 0 && (
+                      <View style={[styles.breakdownDelta, { backgroundColor: delta > 0 ? "#34D39912" : "#F8717112" }]}>
+                        <Ionicons
+                          name={delta > 0 ? "arrow-up" : "arrow-down"}
+                          size={10}
+                          color={delta > 0 ? "#34D399" : "#F87171"}
+                        />
+                        <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: delta > 0 ? "#34D399" : "#F87171" }}>
+                          {Math.abs(delta)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+          </LinearGradient>
+        </View>
+      )}
 
       {analyses && analyses.length > 0 && (
         <Text style={styles.recentTitle}>Recent Sessions</Text>
@@ -586,7 +652,7 @@ export default function HistoryScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0A0A1A" },
   headerSection: {
-    marginTop: 12,
+    marginTop: 20,
     marginBottom: 20,
   },
   title: {
@@ -645,34 +711,53 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
-  statsRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 24,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  statCardGradient: {
-    padding: 14,
-    alignItems: "center",
-    gap: 6,
-    borderRadius: 16,
+  breakdownCard: {
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: "#2A2A5030",
+    overflow: "hidden",
+    marginBottom: 24,
   },
-  statNumber: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
+  breakdownGradient: {
+    padding: 20,
+    borderRadius: 20,
+    gap: 14,
   },
-  statLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
+  breakdownTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#94A3B8",
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
-    color: "#64748B",
+    marginBottom: 2,
+  },
+  breakdownRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  breakdownLabel: {
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
+    color: "#CBD5E1",
+  },
+  breakdownRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  breakdownValue: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+  },
+  breakdownDelta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
   recentTitle: {
     fontSize: 16,

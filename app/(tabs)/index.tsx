@@ -181,14 +181,14 @@ export default function DashboardScreen() {
                 {scores.subs.map((sub) => (
                   <View key={sub.key} style={styles.subCard}>
                     <LinearGradient
-                      colors={[sc.primary + "10", sc.gradient + "06", "#15152D"]}
+                      colors={[sc.primary + "14", sc.primary + "06"]}
                       style={styles.subCardGradient}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
                     >
                       <Text style={styles.subLabel}>{toTitleCase(sub.key)}</Text>
-                      <Text style={styles.subValue}>{sub.value}</Text>
-                      <DeltaBadge value={sub.delta} />
+                      <View style={styles.subValueRow}>
+                        <Text style={[styles.subValue, { color: sc.primary }]}>{sub.value}</Text>
+                        <DeltaBadge value={sub.delta} />
+                      </View>
                     </LinearGradient>
                   </View>
                 ))}
@@ -237,7 +237,7 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0A0A1A" },
   scroll: { paddingHorizontal: 20, paddingBottom: 100 },
-  greetingSection: { marginTop: 12, marginBottom: 24 },
+  greetingSection: { marginTop: 20, marginBottom: 28 },
   greeting: {
     fontSize: 26,
     fontFamily: "Inter_700Bold",
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   scoreLeft: {
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 10,
+    gap: 8,
   },
   scoreBig: {
     fontSize: 56,
@@ -302,8 +302,6 @@ const styles = StyleSheet.create({
   subCard: {
     flex: 1,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#6C5CE720",
     overflow: "hidden",
   },
   subCardGradient: {
@@ -311,18 +309,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#2A2A5030",
   },
   subLabel: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontFamily: "Inter_400Regular",
     textTransform: "uppercase" as const,
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
+    color: "#64748B",
+  },
+  subValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   subValue: {
-    fontSize: 22,
+    fontSize: 24,
     fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
   },
   uploadButton: {
     borderRadius: 16,
