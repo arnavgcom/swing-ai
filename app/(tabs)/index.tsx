@@ -168,7 +168,7 @@ export default function DashboardScreen() {
                   {scores.category && (
                     <View style={[styles.categoryBadge, { backgroundColor: sc.primary + "18", borderColor: sc.primary + "30" }]}>
                       <Text style={[styles.categoryText, { color: sc.primary }]} numberOfLines={1}>
-                        {scores.category}
+                        {toTitleCase(scores.category)}
                       </Text>
                     </View>
                   )}
@@ -184,7 +184,7 @@ export default function DashboardScreen() {
                       colors={[sc.primary + "14", sc.primary + "06"]}
                       style={styles.subCardGradient}
                     >
-                      <Text style={styles.subLabel}>{toTitleCase(sub.key)}</Text>
+                      <Text style={styles.subLabel} numberOfLines={1}>{toTitleCase(sub.key)}</Text>
                       <View style={styles.subValueRow}>
                         <Text style={[styles.subValue, { color: sc.primary }]}>{sub.value}</Text>
                         <DeltaBadge value={sub.delta} />
@@ -251,15 +251,16 @@ const styles = StyleSheet.create({
   },
   loadingWrap: { paddingTop: 60, alignItems: "center" },
   glassCard: {
-    borderRadius: 20,
+    backgroundColor: "#15152D",
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#6C5CE730",
+    borderColor: "#2A2A5040",
     overflow: "hidden",
     marginBottom: 16,
   },
   glassCardGradient: {
     padding: 24,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   glassLabel: {
     fontSize: 14,
@@ -269,7 +270,7 @@ const styles = StyleSheet.create({
   },
   scoreRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
   },
   scoreLeft: {
@@ -288,7 +289,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 10,
     borderWidth: 1,
-    marginTop: 8,
   },
   categoryText: {
     fontSize: 13,
@@ -310,18 +310,17 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2A2A5030",
+    borderColor: "#2A2A5040",
+    backgroundColor: "#15152D",
   },
   subLabel: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
-    textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
     color: "#64748B",
   },
   subValueRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     gap: 4,
   },
   subValue: {
