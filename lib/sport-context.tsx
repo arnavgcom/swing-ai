@@ -28,8 +28,8 @@ const SportContext = createContext<SportContextType>({
   setMovement: () => {},
 });
 
-const SPORT_KEY = "courtvision_selected_sport";
-const MOVEMENT_KEY = "courtvision_selected_movement";
+const SPORT_KEY = "acexai_selected_sport";
+const MOVEMENT_KEY = "acexai_selected_movement";
 
 export function SportProvider({ children }: { children: React.ReactNode }) {
   const [selectedSport, setSelectedSport] = useState<SelectedSport | null>(null);

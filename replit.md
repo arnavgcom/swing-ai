@@ -1,4 +1,4 @@
-# CourtVision — Multi-Sport Performance Analysis
+# AceX AI — Multi-Sport Performance Analysis
 
 ## Architecture
 

@@ -86,7 +86,7 @@ export default function LoginScreen() {
               <Ionicons name="analytics" size={40} color={colors.tint} />
             </View>
             <Text style={[styles.appName, { color: colors.text }]}>
-              CourtVision
+              AceX AI
             </Text>
             <Text style={[styles.tagline, { color: colors.textSecondary }]}>
               AI-Powered Sports Performance Analysis

@@ -65,7 +65,7 @@ export default function DashboardScreen() {
               Hey, {firstName}
             </Text>
             <Text style={[styles.title, { color: colors.text }]}>
-              CourtVision
+              AceX AI
             </Text>
           </View>
           <View style={styles.topBarRight}>

@@ -21,7 +21,7 @@ export function setupAuth(app: Express) {
         conString: process.env.DATABASE_URL,
         createTableIfMissing: true,
       }),
-      secret: process.env.SESSION_SECRET || "courtvision-dev-secret",
+      secret: process.env.SESSION_SECRET || "acexai-dev-secret",
       resave: false,
       saveUninitialized: false,
       cookie: {
