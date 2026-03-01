@@ -151,12 +151,7 @@ export default function DashboardScreen() {
         ) : (
           <>
             <View style={styles.glassCard}>
-              <LinearGradient
-                colors={[sc.primary + "12", sc.gradient + "08", "#15152D"]}
-                style={styles.glassCardGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
+              <View style={styles.glassCardInner}>
                 <Text style={styles.glassLabel}>Overall Score</Text>
                 <View style={styles.scoreRow}>
                   <View style={styles.scoreLeft}>
@@ -173,23 +168,20 @@ export default function DashboardScreen() {
                     </View>
                   )}
                 </View>
-              </LinearGradient>
+              </View>
             </View>
 
             {scores.subs.length > 0 && (
               <View style={styles.subsRow}>
                 {scores.subs.map((sub) => (
                   <View key={sub.key} style={styles.subCard}>
-                    <LinearGradient
-                      colors={[sc.primary + "14", sc.primary + "06"]}
-                      style={styles.subCardGradient}
-                    >
+                    <View style={styles.subCardInner}>
                       <Text style={styles.subLabel} numberOfLines={1}>{toTitleCase(sub.key)}</Text>
                       <View style={styles.subValueRow}>
-                        <Text style={[styles.subValue, { color: sc.primary }]}>{sub.value}</Text>
+                        <Text style={styles.subValue}>{sub.value}</Text>
                         <DeltaBadge value={sub.delta} />
                       </View>
-                    </LinearGradient>
+                    </View>
                   </View>
                 ))}
               </View>
@@ -258,9 +250,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 16,
   },
-  glassCardGradient: {
+  glassCardInner: {
     padding: 24,
-    borderRadius: 16,
   },
   glassLabel: {
     fontSize: 14,
@@ -304,7 +295,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
   },
-  subCardGradient: {
+  subCardInner: {
     padding: 14,
     alignItems: "center",
     gap: 6,
@@ -326,6 +317,7 @@ const styles = StyleSheet.create({
   subValue: {
     fontSize: 24,
     fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
   },
   uploadButton: {
     borderRadius: 16,
