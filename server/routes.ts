@@ -141,10 +141,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const metricsData = await storage.getMetrics(req.params.id);
       const insights = await storage.getCoachingInsights(req.params.id);
 
+      let selectedMovementName: string | null = null;
+      if (analysis.movementId) {
+        const [movement] = await db
+          .select()
+          .from(sportMovements)
+          .where(eq(sportMovements.id, analysis.movementId));
+        if (movement) {
+          selectedMovementName = movement.name;
+        }
+      }
+
       res.json({
         analysis,
         metrics: metricsData || null,
         coaching: insights || null,
+        selectedMovementName,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

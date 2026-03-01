@@ -15,6 +15,9 @@ interface PythonResult {
     trainingSuggestion: string;
     simpleExplanation: string;
   };
+  detectedMovement?: string;
+  movementOverridden?: boolean;
+  userSelectedMovement?: string;
   error?: string;
 }
 
@@ -114,9 +117,18 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       sportName,
       movementName,
     );
-    console.log(
-      `Python analysis complete. Overall score: ${result.overallScore}`,
-    );
+    const actualMovement = result.detectedMovement || movementName;
+    const wasOverridden = result.movementOverridden || false;
+
+    if (wasOverridden) {
+      console.log(
+        `Movement override: user selected "${movementName}" but detected "${actualMovement}". Score: ${result.overallScore}`,
+      );
+    } else {
+      console.log(
+        `Python analysis complete. Overall score: ${result.overallScore}`,
+      );
+    }
 
     await db.insert(metrics).values({
       analysisId,
@@ -135,7 +147,7 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       .update(analyses)
       .set({
         status: "completed",
-        detectedMovement: movementName,
+        detectedMovement: actualMovement,
         updatedAt: new Date(),
       })
       .where(eq(analyses.id, analysisId));

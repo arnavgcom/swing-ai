@@ -8,6 +8,7 @@ export interface AnalysisResponse {
   videoFilename: string;
   videoPath: string;
   status: string;
+  detectedMovement: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,6 +35,7 @@ export interface AnalysisDetail {
   analysis: AnalysisResponse;
   metrics: MetricsResponse | null;
   coaching: CoachingResponse | null;
+  selectedMovementName: string | null;
 }
 
 export interface SportCategoryConfig {

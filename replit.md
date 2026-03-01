@@ -6,7 +6,7 @@
 - **Backend**: Express/Node.js (port 5000) — REST API for auth, sports, uploads, analysis CRUD, sport configs, static landing page
 - **Database**: Replit PostgreSQL via Drizzle ORM — stores users, sports, sport_movements, analyses, metrics (JSONB), coaching_insights tables
 - **Video Storage**: Local `uploads/` folder on Replit filesystem
-- **ML Pipeline**: Python 3.11 with OpenCV (frame extraction), MediaPipe Tasks API v0.10.32 (pose detection), HSV ball tracking — pluggable per-sport analyzers
+- **ML Pipeline**: Python 3.11 with OpenCV (frame extraction), MediaPipe Tasks API v0.10.32 (pose detection), HSV ball tracking — pluggable per-sport analyzers with automatic movement classification
 - **Auth**: Email/password + Google OAuth (WebBrowser.openAuthSessionAsync + backend bridge page at `/api/auth/google/mobile-callback`) with express-session + connect-pg-simple (session stored in PostgreSQL). Google Client ID via `EXPO_PUBLIC_GOOGLE_CLIENT_ID` env var.
 
 ## Sport-Agnostic Architecture
@@ -14,6 +14,7 @@
 Each sport+movement combination (e.g., "Tennis/Forehand", "Golf/Drive") is a **sport category** with a unique `configKey` (e.g., `tennis-forehand`, `golf-drive`). The system is pluggable:
 
 - **Config Layer** (`shared/sport-configs/`): TypeScript config per sport category defining metrics, sub-scores, units, icons, colors, optimal ranges, and scoring weights
+- **Movement Classifier** (`python_analysis/movement_classifier.py`): Automatic movement detection using pose landmark analysis (cross-body motion, wrist speeds, overhead/serve detection, swing arc). Overrides user selection if mismatch detected.
 - **Python Analyzers** (`python_analysis/sports/`): One analyzer class per sport category inheriting from `BaseAnalyzer` — computes sport-specific metrics from pose data
 - **Database**: `metrics` table uses JSONB columns (`metricValues`, `subScores`) + `configKey` varchar — no fixed metric columns
 - **Frontend**: Analysis detail screen fetches the sport config via API and renders metrics/scores dynamically — no hardcoded labels

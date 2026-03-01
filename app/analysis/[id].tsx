@@ -210,6 +210,14 @@ export default function AnalysisDetailScreen() {
   const movementLabel =
     sportConfig?.movementName || analysis.detectedMovement || "Movement";
 
+  const selectedMovement = data?.selectedMovementName;
+  const detectedMovement = analysis.detectedMovement;
+  const wasOverridden =
+    selectedMovement &&
+    detectedMovement &&
+    selectedMovement.toLowerCase().replace(/\s+/g, "-") !==
+      detectedMovement.toLowerCase().replace(/\s+/g, "-");
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -328,6 +336,20 @@ export default function AnalysisDetailScreen() {
               )}
             />
           </View>
+
+          {wasOverridden && (
+            <View style={styles.overrideBanner}>
+              <Ionicons name="information-circle" size={18} color="#60A5FA" />
+              <Text style={styles.overrideBannerText}>
+                We detected this as a{" "}
+                <Text style={styles.overrideHighlight}>
+                  {detectedMovement!.charAt(0).toUpperCase() +
+                    detectedMovement!.slice(1).replace(/-/g, " ")}
+                </Text>{" "}
+                — results adjusted accordingly
+              </Text>
+            </View>
+          )}
 
           {sportConfig && m.subScores && (
             <View style={styles.section}>
@@ -636,6 +658,27 @@ const styles = StyleSheet.create({
   scoreSection: {
     alignItems: "center",
     paddingVertical: 20,
+  },
+  overrideBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: "#60A5FA10",
+    borderWidth: 1,
+    borderColor: "#60A5FA25",
+  },
+  overrideBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 19,
+    color: "#94A3B8",
+  },
+  overrideHighlight: {
+    fontFamily: "Inter_600SemiBold",
+    color: "#60A5FA",
   },
   videoSection: {
     gap: 10,
