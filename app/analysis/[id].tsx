@@ -303,6 +303,28 @@ export default function AnalysisDetailScreen() {
             </View>
           </View>
         </View>
+      ) : analysis.status === "rejected" ? (
+        <View style={[styles.container, styles.center]}>
+          <View style={styles.rejectedIconWrap}>
+            <Ionicons name="warning" size={48} color="#FBBF24" />
+          </View>
+          <Text style={[styles.errorText, { color: colors.text }]}>
+            Video Rejected
+          </Text>
+          <Text style={[styles.rejectionReason, { color: "#94A3B8" }]}>
+            {analysis.rejectionReason || "Video content does not match the selected sport."}
+          </Text>
+          <Pressable
+            onPress={() => router.push("/(tabs)/upload")}
+            style={({ pressed }) => [
+              styles.tryAgainButton,
+              { opacity: pressed ? 0.8 : 1 },
+            ]}
+          >
+            <Ionicons name="refresh" size={18} color="#FFF" />
+            <Text style={styles.tryAgainText}>Try Again</Text>
+          </Pressable>
+        </View>
       ) : analysis.status === "failed" ? (
         <View style={[styles.container, styles.center]}>
           <Ionicons name="alert-circle" size={48} color={colors.red} />
@@ -960,6 +982,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     marginTop: 4,
+  },
+  rejectedIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#FBBF2414",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  rejectionReason: {
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+    marginTop: 8,
+    textAlign: "center",
+    paddingHorizontal: 32,
+    lineHeight: 22,
+  },
+  tryAgainButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#6C5CE7",
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 14,
+    marginTop: 24,
+  },
+  tryAgainText: {
+    color: "#FFF",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 15,
   },
   backButton: {
     paddingHorizontal: 24,

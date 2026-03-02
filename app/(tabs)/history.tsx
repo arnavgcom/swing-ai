@@ -242,6 +242,7 @@ function SummaryCard({
     processing: { color: "#60A5FA", label: "Processing" },
     completed: { color: "#34D399", label: "Completed" },
     failed: { color: "#F87171", label: "Failed" },
+    rejected: { color: "#FBBF24", label: "Rejected" },
   };
   const status = statusConfig[item.status] || statusConfig.pending;
 

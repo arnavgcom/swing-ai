@@ -14,6 +14,89 @@ SPORT_MOVEMENTS = {
 
 RACQUET_SPORTS = {"tennis", "pickleball", "paddle", "badminton", "tabletennis"}
 
+MIN_VALID_POSES = 5
+MIN_WRIST_SPEED_RACQUET = 0.08
+MIN_SWING_ARC_RACQUET = 0.05
+MIN_WRIST_SPEED_GOLF = 0.04
+MIN_SWING_ARC_GOLF = 0.03
+
+
+def validate_sport_match(
+    pose_data: List[Optional[Dict]],
+    sport: str,
+    fps: float = 30.0,
+    frame_width: int = 1920,
+    frame_height: int = 1080,
+) -> Dict:
+    sport = sport.lower().replace(" ", "").replace("_", "")
+
+    valid_poses = [p for p in pose_data if p is not None]
+    total_frames = len(pose_data)
+    min_required = max(MIN_VALID_POSES, int(total_frames * 0.1))
+
+    if len(valid_poses) < min_required:
+        return {
+            "valid": False,
+            "reason": "No human body detected in the video. Please upload a video where you are clearly visible.",
+            "confidence": 0.0,
+        }
+
+    wrist_visible = 0
+    shoulder_visible = 0
+    for p in valid_poses:
+        rw = p.get("right_wrist")
+        lw = p.get("left_wrist")
+        rs = p.get("right_shoulder")
+        ls = p.get("left_shoulder")
+        if (rw and rw.get("visibility", 0) > 0.4) or (lw and lw.get("visibility", 0) > 0.4):
+            wrist_visible += 1
+        if (rs and rs.get("visibility", 0) > 0.4) or (ls and ls.get("visibility", 0) > 0.4):
+            shoulder_visible += 1
+
+    if wrist_visible < min_required:
+        return {
+            "valid": False,
+            "reason": "Could not clearly see your arms/hands in the video. Please ensure your upper body is visible.",
+            "confidence": 0.1,
+        }
+
+    if shoulder_visible < min_required:
+        return {
+            "valid": False,
+            "reason": "Could not clearly detect your shoulders. Please ensure your upper body is fully visible.",
+            "confidence": 0.1,
+        }
+
+    features = _extract_features(pose_data, fps, frame_width, frame_height)
+
+    sport_label = sport
+    if sport in ("tabletennis",):
+        sport_label = "table tennis"
+
+    if sport in RACQUET_SPORTS:
+        if features["max_wrist_speed"] < MIN_WRIST_SPEED_RACQUET and features["swing_arc_ratio"] < MIN_SWING_ARC_RACQUET:
+            return {
+                "valid": False,
+                "reason": f"Video does not appear to contain a {sport_label} movement. No swinging motion detected.",
+                "confidence": 0.2,
+            }
+
+        confidence = min(1.0, (features["max_wrist_speed"] / 0.3 + features["swing_arc_ratio"] / 0.15) / 2)
+        return {"valid": True, "reason": "", "confidence": confidence}
+
+    elif sport == "golf":
+        if features["max_wrist_speed"] < MIN_WRIST_SPEED_GOLF and features["swing_arc_ratio"] < MIN_SWING_ARC_GOLF:
+            return {
+                "valid": False,
+                "reason": "Video does not appear to contain a golf swing. No swing motion detected.",
+                "confidence": 0.2,
+            }
+
+        confidence = min(1.0, (features["max_wrist_speed"] / 0.2 + features["swing_arc_ratio"] / 0.1) / 2)
+        return {"valid": True, "reason": "", "confidence": confidence}
+
+    return {"valid": True, "reason": "", "confidence": 0.5}
+
 
 def classify_movement(
     pose_data: List[Optional[Dict]],

@@ -26,7 +26,7 @@ def main():
         import cv2
         from python_analysis.pose_detector import PoseDetector
         from python_analysis.ball_tracker import BallTracker
-        from python_analysis.movement_classifier import classify_movement
+        from python_analysis.movement_classifier import classify_movement, validate_sport_match
         from python_analysis.sports.registry import get_analyzer
 
         cap = cv2.VideoCapture(args.video_path)
@@ -52,6 +52,18 @@ def main():
             pose_data.append(landmarks)
         cap2.release()
         detector.close()
+
+        validation = validate_sport_match(
+            pose_data, sport, fps, frame_width, frame_height
+        )
+
+        if not validation["valid"]:
+            print(json.dumps({
+                "rejected": True,
+                "rejectionReason": validation["reason"],
+                "confidence": validation["confidence"],
+            }))
+            sys.exit(0)
 
         classified = classify_movement(
             pose_data, sport, fps, frame_width, frame_height

@@ -64,6 +64,7 @@ export const analyses = pgTable("analyses", {
   videoPath: text("video_path").notNull(),
   status: text("status").notNull().default("pending"),
   detectedMovement: text("detected_movement"),
+  rejectionReason: text("rejection_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

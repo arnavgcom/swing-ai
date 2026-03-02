@@ -18,6 +18,8 @@ interface PythonResult {
   detectedMovement?: string;
   movementOverridden?: boolean;
   userSelectedMovement?: string;
+  rejected?: boolean;
+  rejectionReason?: string;
   error?: string;
 }
 
@@ -55,6 +57,10 @@ function runPythonAnalysis(
           const result = JSON.parse(stdout.trim());
           if (result.error) {
             reject(new Error(result.error));
+            return;
+          }
+          if (result.rejected) {
+            resolve(result as PythonResult);
             return;
           }
           resolve(result as PythonResult);
@@ -117,6 +123,22 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       sportName,
       movementName,
     );
+
+    if (result.rejected) {
+      console.log(
+        `Analysis ${analysisId} rejected: ${result.rejectionReason}`,
+      );
+      await db
+        .update(analyses)
+        .set({
+          status: "rejected",
+          rejectionReason: result.rejectionReason || "Video content does not match the selected sport.",
+          updatedAt: new Date(),
+        })
+        .where(eq(analyses.id, analysisId));
+      return;
+    }
+
     const actualMovement = result.detectedMovement || movementName;
     const wasOverridden = result.movementOverridden || false;
 

@@ -9,6 +9,7 @@ export interface AnalysisResponse {
   videoPath: string;
   status: string;
   detectedMovement: string | null;
+  rejectionReason: string | null;
   createdAt: string;
   updatedAt: string;
 }
