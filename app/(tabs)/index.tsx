@@ -22,10 +22,21 @@ import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
 import { MetricCard } from "@/components/MetricCard";
 
-const SUB_SCORE_META: Record<string, { icon: keyof typeof Ionicons.glyphMap; label: string; color: string }> = {
-  consistency: { icon: "pulse-outline", label: "Consistency", color: "#6C5CE7" },
+const SUB_SCORE_META: Record<
+  string,
+  { icon: keyof typeof Ionicons.glyphMap; label: string; color: string }
+> = {
+  consistency: {
+    icon: "pulse-outline",
+    label: "Consistency",
+    color: "#6C5CE7",
+  },
   timing: { icon: "timer-outline", label: "Timing", color: "#60A5FA" },
-  stability: { icon: "shield-checkmark-outline", label: "Stability", color: "#34D399" },
+  stability: {
+    icon: "shield-checkmark-outline",
+    label: "Stability",
+    color: "#34D399",
+  },
 };
 
 function getGreeting(): string {
@@ -37,7 +48,10 @@ function getGreeting(): string {
 
 const DISPLAY_KEYS = ["consistency", "timing", "stability"];
 
-function findSubScore(subs: Record<string, number>, target: string): number | null {
+function findSubScore(
+  subs: Record<string, number>,
+  target: string,
+): number | null {
   const lower = target.toLowerCase();
   for (const k of Object.keys(subs)) {
     if (k.toLowerCase() === lower) return subs[k];
@@ -45,7 +59,11 @@ function findSubScore(subs: Record<string, number>, target: string): number | nu
   return null;
 }
 
-function filterBySport(analyses: AnalysisSummary[], sportName: string | undefined, movementName: string | undefined): AnalysisSummary[] {
+function filterBySport(
+  analyses: AnalysisSummary[],
+  sportName: string | undefined,
+  movementName: string | undefined,
+): AnalysisSummary[] {
   if (!sportName) return analyses;
   const sportLower = sportName.toLowerCase();
   return analyses.filter((a) => {
@@ -61,9 +79,16 @@ function filterBySport(analyses: AnalysisSummary[], sportName: string | undefine
 }
 
 function computeScores(analyses: AnalysisSummary[]) {
-  const completed = analyses.filter((a) => a.status === "completed" && a.overallScore != null);
+  const completed = analyses.filter(
+    (a) => a.status === "completed" && a.overallScore != null,
+  );
   if (completed.length === 0) {
-    return { overall: null, category: null, subs: [] as { key: string; value: number; delta: number | null }[], overallDelta: null };
+    return {
+      overall: null,
+      category: null,
+      subs: [] as { key: string; value: number; delta: number | null }[],
+      overallDelta: null,
+    };
   }
 
   const latest = completed[0];
@@ -83,28 +108,55 @@ function computeScores(analyses: AnalysisSummary[]) {
     const value = findSubScore(latestSubs, key);
     if (value == null) return null;
     const prevVal = findSubScore(prevSubs, key);
-    const delta = prevVal != null ? Math.round(value) - Math.round(prevVal) : null;
+    const delta =
+      prevVal != null ? Math.round(value) - Math.round(prevVal) : null;
     return { key, value: Math.round(value), delta };
-  }).filter((s): s is { key: string; value: number; delta: number | null } => s != null);
+  }).filter(
+    (s): s is { key: string; value: number; delta: number | null } => s != null,
+  );
 
   return { overall, category, subs, overallDelta };
 }
 
-function DeltaBadge({ value, suffix }: { value: number | null; suffix?: string }) {
+function DeltaBadge({
+  value,
+  suffix,
+}: {
+  value: number | null;
+  suffix?: string;
+}) {
   if (value == null || value === 0) return null;
   const isUp = value > 0;
   return (
-    <View style={[deltaStyles.badge, { backgroundColor: isUp ? "#34D39915" : "#F8717115" }]}>
-      <Ionicons name={isUp ? "arrow-up" : "arrow-down"} size={10} color={isUp ? "#34D399" : "#F87171"} />
+    <View
+      style={[
+        deltaStyles.badge,
+        { backgroundColor: isUp ? "#34D39915" : "#F8717115" },
+      ]}
+    >
+      <Ionicons
+        name={isUp ? "arrow-up" : "arrow-down"}
+        size={10}
+        color={isUp ? "#34D399" : "#F87171"}
+      />
       <Text style={[deltaStyles.text, { color: isUp ? "#34D399" : "#F87171" }]}>
-        {Math.abs(value)}{suffix || ""}
+        {Math.abs(value)}
+        {suffix || ""}
       </Text>
     </View>
   );
 }
 
 const deltaStyles = StyleSheet.create({
-  badge: { flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, marginBottom: -1 },
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginBottom: -1,
+  },
   text: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
 });
 
@@ -116,9 +168,17 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const { selectedSport, selectedMovement } = useSport();
 
-  const sc = sportColors[selectedSport?.name || ""] || { primary: "#6C5CE7", gradient: "#5A4BD1" };
+  const sc = sportColors[selectedSport?.name || ""] || {
+    primary: "#6C5CE7",
+    gradient: "#5A4BD1",
+  };
 
-  const { data: allAnalyses, isLoading, refetch, isRefetching } = useQuery({
+  const {
+    data: allAnalyses,
+    isLoading,
+    refetch,
+    isRefetching,
+  } = useQuery({
     queryKey: ["analyses-summary"],
     queryFn: fetchAnalysesSummary,
     refetchInterval: 5000,
@@ -126,7 +186,11 @@ export default function DashboardScreen() {
     retry: false,
   });
 
-  const analyses = filterBySport(allAnalyses || [], selectedSport?.name, selectedMovement?.name);
+  const analyses = filterBySport(
+    allAnalyses || [],
+    selectedSport?.name,
+    selectedMovement?.name,
+  );
   const firstName = user?.name?.split(" ")[0] || "Athlete";
   const scores = computeScores(analyses);
 
@@ -142,17 +206,36 @@ export default function DashboardScreen() {
       <ScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#6C5CE7" />
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={refetch}
+            tintColor="#6C5CE7"
+          />
         }
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.greetingSection}>
-          <Text style={styles.greeting}>{getGreeting()}, {firstName}</Text>
+          <Text style={styles.greeting}>
+            {getGreeting()}, {firstName}
+          </Text>
           <View style={styles.sportLineRow}>
-            <Text style={styles.sportLine}>Your {selectedSport?.name || "Sport"} Performance</Text>
+            <Text style={styles.sportLine}>
+              Your {selectedSport?.name || "Sport"} Performance
+            </Text>
             {scores.category && (
-              <View style={[styles.categoryBadge, { backgroundColor: sc.primary + "18", borderColor: sc.primary + "30" }]}>
-                <Text style={[styles.categoryText, { color: sc.primary }]} numberOfLines={1}>
+              <View
+                style={[
+                  styles.categoryBadge,
+                  {
+                    backgroundColor: sc.primary + "18",
+                    borderColor: sc.primary + "30",
+                  },
+                ]}
+              >
+                <Text
+                  style={[styles.categoryText, { color: sc.primary }]}
+                  numberOfLines={1}
+                >
                   {toTitleCase(scores.category)}
                 </Text>
               </View>
@@ -183,7 +266,11 @@ export default function DashboardScreen() {
             {scores.subs.length > 0 && (
               <View style={styles.subsRow}>
                 {scores.subs.map((sub) => {
-                  const meta = SUB_SCORE_META[sub.key] || { icon: "analytics-outline" as const, label: toTitleCase(sub.key), color: "#6C5CE7" };
+                  const meta = SUB_SCORE_META[sub.key] || {
+                    icon: "analytics-outline" as const,
+                    label: toTitleCase(sub.key),
+                    color: "#6C5CE7",
+                  };
                   return (
                     <MetricCard
                       key={sub.key}
@@ -222,11 +309,16 @@ export default function DashboardScreen() {
             {(!analyses || analyses.length === 0) && (
               <View style={styles.emptyState}>
                 <View style={styles.emptyIconWrap}>
-                  <Ionicons name={(selectedSport?.icon as any) || "fitness-outline"} size={36} color="#475569" />
+                  <Ionicons
+                    name={(selectedSport?.icon as any) || "fitness-outline"}
+                    size={36}
+                    color="#475569"
+                  />
                 </View>
                 <Text style={styles.emptyTitle}>No analyses yet</Text>
                 <Text style={styles.emptyText}>
-                  Upload a {selectedSport?.name?.toLowerCase() || "sport"} video to get started
+                  Upload a {selectedSport?.name?.toLowerCase() || "sport"} video
+                  to get started
                 </Text>
               </View>
             )}
