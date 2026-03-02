@@ -46,7 +46,13 @@ function TrendChart({ data, dates }: { data: number[]; dates: string[] }) {
           <Text style={trendStyles.yLabel}>{yMax}</Text>
           <Text style={trendStyles.yLabel}>{yMin}</Text>
         </View>
-        <View style={{ width: chartWidth, height: chartHeight, position: "relative" }}>
+        <View
+          style={{
+            width: chartWidth,
+            height: chartHeight,
+            position: "relative",
+          }}
+        >
           <View style={trendStyles.gridLine} />
           <View style={[trendStyles.gridLine, { top: chartHeight - 1 }]} />
           {points.map((point, i) => {
@@ -79,7 +85,8 @@ function TrendChart({ data, dates }: { data: number[]; dates: string[] }) {
               style={[
                 trendStyles.dot,
                 {
-                  backgroundColor: i === points.length - 1 ? "#34D399" : "#34D39960",
+                  backgroundColor:
+                    i === points.length - 1 ? "#34D399" : "#34D39960",
                   width: i === points.length - 1 ? 8 : 6,
                   height: i === points.length - 1 ? 8 : 6,
                   borderRadius: i === points.length - 1 ? 4 : 3,
@@ -93,7 +100,17 @@ function TrendChart({ data, dates }: { data: number[]; dates: string[] }) {
       </View>
       <View style={[trendStyles.xAxis, { marginLeft: yLabelWidth }]}>
         {dates.map((d, i) => (
-          <Text key={i} style={[trendStyles.xLabel, i === 0 ? { textAlign: "left" as const } : i === dates.length - 1 ? { textAlign: "right" as const } : {}]}>
+          <Text
+            key={i}
+            style={[
+              trendStyles.xLabel,
+              i === 0
+                ? { textAlign: "left" as const }
+                : i === dates.length - 1
+                  ? { textAlign: "right" as const }
+                  : {},
+            ]}
+          >
             {d}
           </Text>
         ))}
@@ -149,7 +166,11 @@ function toTitleCase(str: string): string {
 
 const HISTORY_DISPLAY_KEYS = ["power", "timing", "stability", "consistency"];
 
-function filterBySport(analyses: AnalysisSummary[], sportName: string | undefined, movementName: string | undefined): AnalysisSummary[] {
+function filterBySport(
+  analyses: AnalysisSummary[],
+  sportName: string | undefined,
+  movementName: string | undefined,
+): AnalysisSummary[] {
   if (!sportName) return analyses;
   const sportLower = sportName.toLowerCase();
   return analyses.filter((a) => {
@@ -164,7 +185,10 @@ function filterBySport(analyses: AnalysisSummary[], sportName: string | undefine
   });
 }
 
-function findSubValue(subs: Record<string, number> | null, key: string): number | null {
+function findSubValue(
+  subs: Record<string, number> | null,
+  key: string,
+): number | null {
   if (!subs) return null;
   for (const k of Object.keys(subs)) {
     if (k.toLowerCase() === key.toLowerCase()) return subs[k];
@@ -194,15 +218,20 @@ function SummaryCard({
     minute: "2-digit",
   });
 
-  const score = item.overallScore != null ? Math.round(item.overallScore) : null;
+  const score =
+    item.overallScore != null ? Math.round(item.overallScore) : null;
   const subs = item.subScores || {};
   const subEntries = Object.entries(subs).filter(([key]) =>
-    HISTORY_DISPLAY_KEYS.includes(key.toLowerCase())
+    HISTORY_DISPLAY_KEYS.includes(key.toLowerCase()),
   );
-  const movement = item.detectedMovement || item.videoFilename?.split("-")[1] || "";
+  const movement =
+    item.detectedMovement || item.videoFilename?.split("-")[1] || "";
 
   const currentIndex = allAnalyses.findIndex((a) => a.id === item.id);
-  const prevItem = currentIndex >= 0 && currentIndex < allAnalyses.length - 1 ? allAnalyses[currentIndex + 1] : null;
+  const prevItem =
+    currentIndex >= 0 && currentIndex < allAnalyses.length - 1
+      ? allAnalyses[currentIndex + 1]
+      : null;
   let scoreDelta: number | null = null;
   if (score != null && prevItem?.overallScore != null) {
     scoreDelta = score - Math.round(prevItem.overallScore);
@@ -227,12 +256,16 @@ function SummaryCard({
         { transform: [{ scale: pressed ? 0.98 : 1 }] },
       ]}
     >
-      <View style={[summaryStyles.accentBar, { backgroundColor: status.color }]} />
+      <View
+        style={[summaryStyles.accentBar, { backgroundColor: status.color }]}
+      />
       <View style={summaryStyles.cardTop}>
         <View style={summaryStyles.cardTopLeft}>
           <Text style={summaryStyles.timeText}>{timeStr}</Text>
           {movement ? (
-            <Text style={summaryStyles.movementText}>{toTitleCase(movement)}</Text>
+            <Text style={summaryStyles.movementText}>
+              {toTitleCase(movement)}
+            </Text>
           ) : null}
         </View>
         <View style={summaryStyles.cardTopRight}>
@@ -240,7 +273,6 @@ function SummaryCard({
             <View style={summaryStyles.scoreWrap}>
               <Text style={summaryStyles.scoreLabel}>Score</Text>
               <View style={summaryStyles.scoreDeltaRow}>
-                <Text style={summaryStyles.scoreText}>{score}</Text>
                 {scoreDelta != null && scoreDelta !== 0 && (
                   <View style={summaryStyles.deltaWrap}>
                     <Ionicons
@@ -248,16 +280,29 @@ function SummaryCard({
                       size={10}
                       color={scoreDelta > 0 ? "#34D399" : "#F87171"}
                     />
-                    <Text style={[summaryStyles.deltaText, { color: scoreDelta > 0 ? "#34D399" : "#F87171" }]}>
+                    <Text
+                      style={[
+                        summaryStyles.deltaText,
+                        { color: scoreDelta > 0 ? "#34D399" : "#F87171" },
+                      ]}
+                    >
                       {Math.abs(scoreDelta)}
                     </Text>
                   </View>
                 )}
+                <Text style={summaryStyles.scoreText}>{score}</Text>
               </View>
             </View>
           ) : (
-            <View style={[summaryStyles.statusBadge, { backgroundColor: status.color + "14" }]}>
-              <Text style={[summaryStyles.statusText, { color: status.color }]}>{status.label}</Text>
+            <View
+              style={[
+                summaryStyles.statusBadge,
+                { backgroundColor: status.color + "14" },
+              ]}
+            >
+              <Text style={[summaryStyles.statusText, { color: status.color }]}>
+                {status.label}
+              </Text>
             </View>
           )}
           <Ionicons name="chevron-forward" size={16} color="#475569" />
@@ -268,12 +313,17 @@ function SummaryCard({
         <View style={summaryStyles.metricsRow}>
           {subEntries.map(([key, val]) => {
             const prevVal = findSubValue(prevItem?.subScores || null, key);
-            const subDelta = prevVal != null ? Math.round(val) - Math.round(prevVal) : null;
+            const subDelta =
+              prevVal != null ? Math.round(val) - Math.round(prevVal) : null;
             return (
               <View key={key} style={summaryStyles.metricItem}>
-                <Text style={summaryStyles.metricLabel} numberOfLines={1}>{toTitleCase(key)}</Text>
+                <Text style={summaryStyles.metricLabel} numberOfLines={1}>
+                  {toTitleCase(key)}
+                </Text>
                 <View style={summaryStyles.metricValueRow}>
-                  <Text style={summaryStyles.metricValue}>{Math.round(val)}</Text>
+                  <Text style={summaryStyles.metricValue}>
+                    {Math.round(val)}
+                  </Text>
                   {subDelta != null && subDelta !== 0 && (
                     <View style={summaryStyles.subDeltaRow}>
                       <Ionicons
@@ -281,7 +331,12 @@ function SummaryCard({
                         size={7}
                         color={subDelta > 0 ? "#34D399" : "#F87171"}
                       />
-                      <Text style={[summaryStyles.subDeltaText, { color: subDelta > 0 ? "#34D399" : "#F87171" }]}>
+                      <Text
+                        style={[
+                          summaryStyles.subDeltaText,
+                          { color: subDelta > 0 ? "#34D399" : "#F87171" },
+                        ]}
+                      >
                         {Math.abs(subDelta)}
                       </Text>
                     </View>
@@ -426,7 +481,7 @@ const summaryStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
-    paddingBottom: 2,
+    paddingBottom: 4,
   },
   deltaText: {
     fontSize: 11,
@@ -445,8 +500,12 @@ export default function HistoryScreen() {
   const { user } = useAuth();
   const { selectedSport, selectedMovement } = useSport();
 
-
-  const { data: allAnalyses, isLoading, refetch, isRefetching } = useQuery({
+  const {
+    data: allAnalyses,
+    isLoading,
+    refetch,
+    isRefetching,
+  } = useQuery({
     queryKey: ["analyses-summary"],
     queryFn: fetchAnalysesSummary,
     refetchInterval: 5000,
@@ -454,7 +513,11 @@ export default function HistoryScreen() {
     retry: false,
   });
 
-  const analyses = filterBySport(allAnalyses || [], selectedSport?.name, selectedMovement?.name);
+  const analyses = filterBySport(
+    allAnalyses || [],
+    selectedSport?.name,
+    selectedMovement?.name,
+  );
 
   const deleteMutation = useMutation({
     mutationFn: deleteAnalysis,
@@ -481,7 +544,10 @@ export default function HistoryScreen() {
 
   const totalAnalyses = analyses?.length || 0;
   const completed = analyses?.filter((a) => a.status === "completed") || [];
-  const processing = analyses?.filter((a) => a.status === "processing" || a.status === "pending") || [];
+  const processing =
+    analyses?.filter(
+      (a) => a.status === "processing" || a.status === "pending",
+    ) || [];
 
   const trendItems = completed
     .filter((a) => a.overallScore != null)
@@ -492,7 +558,6 @@ export default function HistoryScreen() {
     const d = new Date(a.createdAt);
     return `${d.getMonth() + 1}/${d.getDate()}`;
   });
-
 
   const renderItem = ({ item }: { item: AnalysisSummary }) => (
     <SummaryCard
@@ -527,9 +592,24 @@ export default function HistoryScreen() {
 
       <View style={styles.statsRow}>
         {[
-          { label: "Total", value: totalAnalyses, color: "#6C5CE7", icon: "analytics" as const },
-          { label: "In Progress", value: processing.length, color: "#60A5FA", icon: "pulse" as const },
-          { label: "Done", value: completed.length, color: "#34D399", icon: "checkmark-circle" as const },
+          {
+            label: "Total",
+            value: totalAnalyses,
+            color: "#6C5CE7",
+            icon: "analytics" as const,
+          },
+          {
+            label: "In Progress",
+            value: processing.length,
+            color: "#60A5FA",
+            icon: "pulse" as const,
+          },
+          {
+            label: "Done",
+            value: completed.length,
+            color: "#34D399",
+            icon: "checkmark-circle" as const,
+          },
         ].map((stat) => (
           <View key={stat.label} style={styles.statCard}>
             <LinearGradient
@@ -572,14 +652,22 @@ export default function HistoryScreen() {
           renderItem={renderItem}
           contentContainerStyle={[styles.list, { paddingBottom: 100 }]}
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#6C5CE7" />
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={refetch}
+              tintColor="#6C5CE7"
+            />
           }
           scrollEnabled={true}
           ListHeaderComponent={ListHeader}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <View style={styles.emptyIconWrap}>
-                <Ionicons name="folder-open-outline" size={36} color="#475569" />
+                <Ionicons
+                  name="folder-open-outline"
+                  size={36}
+                  color="#475569"
+                />
               </View>
               <Text style={styles.emptyTitle}>No analysis history</Text>
               <Text style={styles.emptyText}>
