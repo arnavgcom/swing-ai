@@ -168,12 +168,17 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       return;
     }
 
+    const metricValues = { ...result.metricValues };
+    if (result.shotCount != null) {
+      metricValues.shotCount = result.shotCount;
+    }
+
     await db.insert(metrics).values({
       analysisId,
       configKey: result.configKey || configKey,
       overallScore: result.overallScore,
       subScores: result.subScores,
-      metricValues: result.metricValues,
+      metricValues,
     });
 
     await db.insert(coachingInsights).values({

@@ -69,7 +69,7 @@ def main():
             }))
             sys.exit(0)
 
-        classified = classify_movement(
+        classified, shot_count = classify_movement(
             pose_data, sport, fps, frame_width, frame_height
         )
 
@@ -93,6 +93,7 @@ def main():
         result["detectedMovement"] = detected_movement
         result["movementOverridden"] = movement_overridden
         result["userSelectedMovement"] = movement
+        result["shotCount"] = shot_count
 
         print(json.dumps(result))
         sys.exit(0)

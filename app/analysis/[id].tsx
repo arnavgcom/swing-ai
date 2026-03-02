@@ -392,6 +392,14 @@ export default function AnalysisDetailScreen() {
                   </Text>
                 </View>
               )}
+              {data?.metrics?.metricValues?.shotCount != null && data.metrics.metricValues.shotCount > 1 && (
+                <View style={styles.shotCountBadge}>
+                  <Ionicons name="videocam-outline" size={12} color="#60A5FA" />
+                  <Text style={styles.shotCountBadgeText}>
+                    {data.metrics.metricValues.shotCount} shots
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
 
@@ -711,6 +719,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     color: "#34D399",
+  },
+  shotCountBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "#60A5FA12",
+    borderWidth: 1,
+    borderColor: "#60A5FA30",
+  },
+  shotCountBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#60A5FA",
   },
   compactThumbsRow: {
     flexDirection: "row",

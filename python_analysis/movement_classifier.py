@@ -261,22 +261,172 @@ def _compute_sport_penalties(
     return penalties
 
 
+def _segment_swings(
+    pose_data: List[Optional[Dict]],
+    fps: float,
+    frame_width: int,
+    frame_height: int,
+) -> List[Tuple[int, int]]:
+    dt = 1.0 / fps if fps > 0 else 1.0 / 30.0
+    speeds = []
+    prev_rw = None
+    prev_lw = None
+
+    for p in pose_data:
+        if p is None:
+            prev_rw = None
+            prev_lw = None
+            speeds.append(0.0)
+            continue
+
+        rw = p.get("right_wrist")
+        lw = p.get("left_wrist")
+        frame_speed = 0.0
+
+        if rw and rw.get("visibility", 0) > 0.4:
+            if prev_rw is not None:
+                s = math.sqrt((rw["x"] - prev_rw[0]) ** 2 + (rw["y"] - prev_rw[1]) ** 2) / (frame_width * dt)
+                frame_speed = max(frame_speed, s)
+            prev_rw = (rw["x"], rw["y"])
+        else:
+            prev_rw = None
+
+        if lw and lw.get("visibility", 0) > 0.4:
+            if prev_lw is not None:
+                s = math.sqrt((lw["x"] - prev_lw[0]) ** 2 + (lw["y"] - prev_lw[1]) ** 2) / (frame_width * dt)
+                frame_speed = max(frame_speed, s)
+            prev_lw = (lw["x"], lw["y"])
+        else:
+            prev_lw = None
+
+        speeds.append(frame_speed)
+
+    if len(speeds) < 10:
+        return [(0, len(pose_data) - 1)]
+
+    window = min(7, len(speeds) // 3)
+    if window < 3:
+        window = 3
+    smoothed = []
+    half_w = window // 2
+    for i in range(len(speeds)):
+        start_i = max(0, i - half_w)
+        end_i = min(len(speeds), i + half_w + 1)
+        smoothed.append(float(np.mean(speeds[start_i:end_i])))
+
+    non_zero = [s for s in smoothed if s > 0]
+    if not non_zero:
+        return [(0, len(pose_data) - 1)]
+
+    median_speed = float(np.median(non_zero))
+    peak_threshold = max(median_speed * 2.0, 0.03)
+
+    peaks = []
+    for i in range(1, len(smoothed) - 1):
+        if smoothed[i] > peak_threshold:
+            if smoothed[i] >= smoothed[i - 1] and smoothed[i] >= smoothed[i + 1]:
+                peaks.append(i)
+
+    if not peaks:
+        above = [i for i, s in enumerate(smoothed) if s > peak_threshold]
+        if above:
+            peaks = [above[len(above) // 2]]
+        else:
+            return [(0, len(pose_data) - 1)]
+
+    min_window_frames = int(0.3 * fps)
+    max_window_frames = int(3.0 * fps)
+
+    segments: List[Tuple[int, int]] = []
+    for peak in peaks:
+        peak_val = smoothed[peak]
+        drop_threshold = peak_val * 0.3
+
+        start = peak
+        while start > 0 and smoothed[start - 1] > drop_threshold:
+            start -= 1
+            if peak - start > max_window_frames:
+                break
+
+        end = peak
+        while end < len(smoothed) - 1 and smoothed[end + 1] > drop_threshold:
+            end += 1
+            if end - peak > max_window_frames:
+                break
+
+        half_min = min_window_frames // 2
+        if end - start < min_window_frames:
+            center = (start + end) // 2
+            start = max(0, center - half_min)
+            end = min(len(pose_data) - 1, center + half_min)
+
+        segments.append((start, end))
+
+    merged: List[Tuple[int, int]] = []
+    for seg in sorted(segments):
+        if merged and seg[0] <= merged[-1][1] + int(0.2 * fps):
+            merged[-1] = (merged[-1][0], max(merged[-1][1], seg[1]))
+        else:
+            merged.append(seg)
+
+    return merged if merged else [(0, len(pose_data) - 1)]
+
+
 def classify_movement(
     pose_data: List[Optional[Dict]],
     sport: str,
     fps: float = 30.0,
     frame_width: int = 1920,
     frame_height: int = 1080,
-) -> str:
+) -> Tuple[str, int]:
     sport = sport.lower().replace(" ", "").replace("_", "")
 
-    if sport in RACQUET_SPORTS:
-        return _classify_racquet_sport(pose_data, sport, fps, frame_width, frame_height)
-    elif sport == "golf":
-        return _classify_golf(pose_data, fps, frame_width, frame_height)
-    else:
+    segments = _segment_swings(pose_data, fps, frame_width, frame_height)
+    shot_count = len(segments)
+
+    global_dominant_side = None
+    if sport in RACQUET_SPORTS or sport == "golf":
+        global_features = _extract_features(pose_data, fps, frame_width, frame_height)
+        global_dominant_side = global_features.get("dominant_side", "right")
+
+    if shot_count <= 1:
+        if sport in RACQUET_SPORTS:
+            return _classify_racquet_sport(pose_data, sport, fps, frame_width, frame_height, global_dominant_side), shot_count
+        elif sport == "golf":
+            return _classify_golf(pose_data, fps, frame_width, frame_height), shot_count
+        else:
+            movements = SPORT_MOVEMENTS.get(sport, [])
+            return (movements[0] if movements else "unknown"), shot_count
+
+    classifications: List[str] = []
+    for start, end in segments:
+        segment_data = pose_data[start:end + 1]
+        valid_in_segment = [p for p in segment_data if p is not None]
+        if len(valid_in_segment) < 3:
+            continue
+
+        if sport in RACQUET_SPORTS:
+            cls = _classify_racquet_sport(segment_data, sport, fps, frame_width, frame_height, global_dominant_side)
+        elif sport == "golf":
+            cls = _classify_golf(segment_data, fps, frame_width, frame_height)
+        else:
+            movements = SPORT_MOVEMENTS.get(sport, [])
+            cls = movements[0] if movements else "unknown"
+        classifications.append(cls)
+
+    if not classifications:
+        if sport in RACQUET_SPORTS:
+            return _classify_racquet_sport(pose_data, sport, fps, frame_width, frame_height, global_dominant_side), shot_count
+        elif sport == "golf":
+            return _classify_golf(pose_data, fps, frame_width, frame_height), shot_count
         movements = SPORT_MOVEMENTS.get(sport, [])
-        return movements[0] if movements else "unknown"
+        return (movements[0] if movements else "unknown"), shot_count
+
+    from collections import Counter
+    counts = Counter(classifications)
+    dominant = counts.most_common(1)[0][0]
+
+    return dominant, shot_count
 
 
 def _classify_racquet_sport(
@@ -285,12 +435,19 @@ def _classify_racquet_sport(
     fps: float,
     frame_width: int,
     frame_height: int,
+    override_dominant_side: Optional[str] = None,
 ) -> str:
     valid_poses = [p for p in pose_data if p is not None]
     if len(valid_poses) < 5:
         return SPORT_MOVEMENTS.get(sport, ["forehand"])[0]
 
     features = _extract_features(pose_data, fps, frame_width, frame_height)
+
+    if override_dominant_side is not None:
+        features["dominant_side"] = override_dominant_side
+        features["is_cross_body"] = _detect_cross_body(
+            pose_data, frame_width, override_dominant_side
+        )
 
     if features["is_serve"]:
         return "serve"
@@ -476,7 +633,7 @@ def _extract_features(
 
     is_compact_forward = swing_arc_ratio < 0.2 and max_wrist_speed < 0.35
 
-    is_cross_body = _detect_cross_body(pose_data, frame_width)
+    is_cross_body = _detect_cross_body(pose_data, frame_width, dominant_side)
 
     is_downward_motion = False
     if wrist_heights and len(wrist_heights) > 5:
@@ -506,8 +663,10 @@ def _extract_features(
 def _detect_cross_body(
     pose_data: List[Optional[Dict]],
     frame_width: int,
+    dominant_side: str = "right",
 ) -> bool:
-    wrist_body_offsets = []
+    right_offsets = []
+    left_offsets = []
 
     for p in pose_data:
         if p is None:
@@ -527,56 +686,44 @@ def _detect_cross_body(
         if shoulder_width < 10:
             continue
 
-        r_visible = rw and rw.get("visibility", 0) > 0.4
-        l_visible = lw and lw.get("visibility", 0) > 0.4
-
-        if r_visible:
+        if rw and rw.get("visibility", 0) > 0.4:
             offset = (rw["x"] - body_center_x) / shoulder_width
-            wrist_body_offsets.append(("right", offset))
-        if l_visible:
+            right_offsets.append(offset)
+        if lw and lw.get("visibility", 0) > 0.4:
             offset = (lw["x"] - body_center_x) / shoulder_width
-            wrist_body_offsets.append(("left", offset))
+            left_offsets.append(offset)
 
-    if len(wrist_body_offsets) < 5:
+    if dominant_side == "right":
+        dom_offsets = right_offsets
+    else:
+        dom_offsets = left_offsets
+
+    if len(dom_offsets) < 5:
         return False
 
-    right_offsets = [o for side, o in wrist_body_offsets if side == "right"]
-    left_offsets = [o for side, o in wrist_body_offsets if side == "left"]
+    if dominant_side == "right":
+        cross_count = sum(1 for o in dom_offsets if o < -0.5)
+    else:
+        cross_count = sum(1 for o in dom_offsets if o > 0.5)
 
-    right_cross_count = sum(1 for o in right_offsets if o < -0.3)
-    left_cross_count = sum(1 for o in left_offsets if o > 0.3)
-
-    right_total = len(right_offsets) if right_offsets else 1
-    left_total = len(left_offsets) if left_offsets else 1
-
-    right_cross_ratio = right_cross_count / right_total
-    left_cross_ratio = left_cross_count / left_total
-
-    cross_threshold = 0.15
-
-    if right_cross_ratio > cross_threshold or left_cross_ratio > cross_threshold:
+    cross_ratio = cross_count / len(dom_offsets)
+    if cross_ratio > 0.25:
         return True
 
-    right_range = max(right_offsets) - min(right_offsets) if len(right_offsets) > 2 else 0
-    left_range = max(left_offsets) - min(left_offsets) if len(left_offsets) > 2 else 0
+    if len(dom_offsets) >= 5:
+        n = len(dom_offsets)
+        first_third = dom_offsets[:n // 3]
+        last_third = dom_offsets[-(n // 3):]
 
-    active_side_offsets = right_offsets if right_range > left_range else left_offsets
-    if not active_side_offsets or len(active_side_offsets) < 5:
-        return False
-
-    n = len(active_side_offsets)
-    first_third = active_side_offsets[:n // 3]
-    last_third = active_side_offsets[-(n // 3):]
-
-    if first_third and last_third:
-        start_mean = float(np.mean(first_third))
-        end_mean = float(np.mean(last_third))
-        if active_side_offsets is right_offsets:
-            if start_mean > 0.2 and end_mean < -0.1:
-                return True
-        else:
-            if start_mean < -0.2 and end_mean > 0.1:
-                return True
+        if first_third and last_third:
+            start_mean = float(np.mean(first_third))
+            end_mean = float(np.mean(last_third))
+            if dominant_side == "right":
+                if start_mean > 0.3 and end_mean < -0.2:
+                    return True
+            else:
+                if start_mean < -0.3 and end_mean > 0.2:
+                    return True
 
     return False
 
