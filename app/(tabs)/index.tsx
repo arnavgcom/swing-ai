@@ -20,6 +20,13 @@ import type { AnalysisSummary } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
+import { MetricCard } from "@/components/MetricCard";
+
+const SUB_SCORE_META: Record<string, { icon: keyof typeof Ionicons.glyphMap; label: string; color: string }> = {
+  consistency: { icon: "pulse-outline", label: "Consistency", color: "#6C5CE7" },
+  timing: { icon: "timer-outline", label: "Timing", color: "#60A5FA" },
+  stability: { icon: "shield-checkmark-outline", label: "Stability", color: "#34D399" },
+};
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -175,17 +182,19 @@ export default function DashboardScreen() {
 
             {scores.subs.length > 0 && (
               <View style={styles.subsRow}>
-                {scores.subs.map((sub) => (
-                  <View key={sub.key} style={styles.subCard}>
-                    <View style={styles.subCardInner}>
-                      <Text style={styles.subLabel} numberOfLines={1}>{toTitleCase(sub.key)}</Text>
-                      <View style={styles.subValueRow}>
-                        <Text style={styles.subValue}>{sub.value}</Text>
-                        <DeltaBadge value={sub.delta} />
-                      </View>
-                    </View>
-                  </View>
-                ))}
+                {scores.subs.map((sub) => {
+                  const meta = SUB_SCORE_META[sub.key] || { icon: "analytics-outline" as const, label: toTitleCase(sub.key), color: "#6C5CE7" };
+                  return (
+                    <MetricCard
+                      key={sub.key}
+                      icon={meta.icon}
+                      label={meta.label}
+                      value={sub.value ?? 0}
+                      color={meta.color}
+                      change={sub.delta}
+                    />
+                  );
+                })}
               </View>
             )}
 
@@ -296,35 +305,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     marginBottom: 20,
-  },
-  subCard: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  subCardInner: {
-    padding: 14,
-    alignItems: "center",
-    gap: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#2A2A5040",
-    backgroundColor: "#15152D",
-  },
-  subLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: "#64748B",
-  },
-  subValueRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 4,
-  },
-  subValue: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
   },
   uploadButton: {
     borderRadius: 16,
