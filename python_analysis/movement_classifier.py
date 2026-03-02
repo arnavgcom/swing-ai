@@ -81,9 +81,6 @@ def validate_sport_match(
                 "confidence": 0.2,
             }
 
-        confidence = min(1.0, (features["max_wrist_speed"] / 0.3 + features["swing_arc_ratio"] / 0.15) / 2)
-        return {"valid": True, "reason": "", "confidence": confidence}
-
     elif sport == "golf":
         if features["max_wrist_speed"] < MIN_WRIST_SPEED_GOLF and features["swing_arc_ratio"] < MIN_SWING_ARC_GOLF:
             return {
@@ -92,10 +89,143 @@ def validate_sport_match(
                 "confidence": 0.2,
             }
 
-        confidence = min(1.0, (features["max_wrist_speed"] / 0.2 + features["swing_arc_ratio"] / 0.1) / 2)
-        return {"valid": True, "reason": "", "confidence": confidence}
+    penalties = _compute_sport_penalties(pose_data, features, sport, fps, frame_width, frame_height)
+    total_penalty = sum(p["score"] for p in penalties)
 
-    return {"valid": True, "reason": "", "confidence": 0.5}
+    if total_penalty >= 4.0:
+        reasons = [p["reason"] for p in penalties if p["score"] >= 1.0]
+        reason_text = reasons[0] if reasons else f"Video motion pattern does not match {sport_label}."
+        return {
+            "valid": False,
+            "reason": reason_text,
+            "confidence": max(0.0, 1.0 - total_penalty / 5.0),
+        }
+
+    confidence = max(0.1, 1.0 - total_penalty / 5.0)
+    return {"valid": True, "reason": "", "confidence": confidence}
+
+
+def _compute_sport_penalties(
+    pose_data: List[Optional[Dict]],
+    features: Dict,
+    sport: str,
+    fps: float,
+    frame_width: int,
+    frame_height: int,
+) -> List[Dict]:
+    penalties: List[Dict] = []
+
+    all_speeds = []
+    if features.get("max_rw_speed", 0) > 0 or features.get("max_lw_speed", 0) > 0:
+        rw_speeds = []
+        lw_speeds = []
+        dt = 1.0 / fps if fps > 0 else 1.0 / 30.0
+        prev_rw = None
+        prev_lw = None
+        for p in pose_data:
+            if p is None:
+                prev_rw = None
+                prev_lw = None
+                continue
+            rw = p.get("right_wrist")
+            lw = p.get("left_wrist")
+            if rw and rw.get("visibility", 0) > 0.4:
+                if prev_rw is not None:
+                    speed = math.sqrt((rw["x"] - prev_rw[0]) ** 2 + (rw["y"] - prev_rw[1]) ** 2) / (frame_width * dt)
+                    rw_speeds.append(speed)
+                    all_speeds.append(speed)
+                prev_rw = (rw["x"], rw["y"])
+            else:
+                prev_rw = None
+            if lw and lw.get("visibility", 0) > 0.4:
+                if prev_lw is not None:
+                    speed = math.sqrt((lw["x"] - prev_lw[0]) ** 2 + (lw["y"] - prev_lw[1]) ** 2) / (frame_width * dt)
+                    lw_speeds.append(speed)
+                    all_speeds.append(speed)
+                prev_lw = (lw["x"], lw["y"])
+            else:
+                prev_lw = None
+
+    if all_speeds and len(all_speeds) > 5:
+        avg_speed = float(np.mean(all_speeds))
+        max_speed = max(all_speeds)
+        if avg_speed > 0:
+            peak_ratio = max_speed / avg_speed
+            if peak_ratio < 1.5:
+                penalties.append({
+                    "score": 1.5,
+                    "reason": f"Video shows continuous rhythmic motion rather than a {sport} swing. Sport movements have a distinct wind-up and strike phase.",
+                })
+
+        above_avg_count = sum(1 for s in all_speeds if s > avg_speed * 0.7)
+        continuous_ratio = above_avg_count / len(all_speeds)
+        if continuous_ratio > 0.85:
+            penalties.append({
+                "score": 1.0,
+                "reason": f"Video shows sustained movement throughout rather than a distinct {sport} swing motion.",
+            })
+
+    two_handed_sports = {"tennis", "golf"}
+    if sport in RACQUET_SPORTS or sport == "golf":
+        if sport not in two_handed_sports:
+            max_rw = features.get("max_rw_speed", 0)
+            max_lw = features.get("max_lw_speed", 0)
+            dominant = max(max_rw, max_lw)
+            non_dominant = min(max_rw, max_lw)
+            if non_dominant > 0 and dominant > 0:
+                arm_ratio = dominant / non_dominant
+                if arm_ratio < 1.2 and dominant > 0.1:
+                    penalties.append({
+                        "score": 1.0,
+                        "reason": f"Both arms are moving equally — {sport} swings are typically dominated by one arm.",
+                    })
+
+    hip_movements = []
+    prev_hip = None
+    for p in pose_data:
+        if p is None:
+            prev_hip = None
+            continue
+        lh = p.get("left_hip")
+        rh = p.get("right_hip")
+        if lh and rh and lh.get("visibility", 0) > 0.4 and rh.get("visibility", 0) > 0.4:
+            hip_center = ((lh["x"] + rh["x"]) / 2, (lh["y"] + rh["y"]) / 2)
+            if prev_hip is not None:
+                hip_disp = math.sqrt((hip_center[0] - prev_hip[0]) ** 2 + (hip_center[1] - prev_hip[1]) ** 2)
+                hip_movements.append(hip_disp)
+            prev_hip = hip_center
+        else:
+            prev_hip = None
+
+    if hip_movements and len(hip_movements) > 5:
+        total_hip_range = sum(hip_movements)
+        total_wrist_range = 0
+        rw_positions = []
+        for p in pose_data:
+            if p is None:
+                continue
+            rw = p.get("right_wrist")
+            lw = p.get("left_wrist")
+            w = rw if (rw and rw.get("visibility", 0) > 0.4) else lw
+            if w:
+                rw_positions.append((w["x"], w["y"]))
+        if len(rw_positions) > 2:
+            for i in range(1, len(rw_positions)):
+                total_wrist_range += math.sqrt(
+                    (rw_positions[i][0] - rw_positions[i-1][0]) ** 2 +
+                    (rw_positions[i][1] - rw_positions[i-1][1]) ** 2
+                )
+
+        if total_wrist_range > 0:
+            hip_wrist_ratio = total_hip_range / total_wrist_range
+            hip_threshold = 0.9 if sport in ("golf", "tennis") else 0.7
+            if hip_wrist_ratio > hip_threshold:
+                penalties.append({
+                    "score": 1.5,
+                    "reason": f"Video shows full-body movement (legs and hips moving as much as arms) rather than a {sport} swing.",
+                })
+
+    return penalties
 
 
 def classify_movement(

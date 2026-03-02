@@ -152,6 +152,22 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       );
     }
 
+    if (result.overallScore != null && result.overallScore < 15) {
+      const sportLabel = sportName.charAt(0).toUpperCase() + sportName.slice(1);
+      console.log(
+        `Analysis ${analysisId} auto-rejected: score ${result.overallScore} below minimum threshold`,
+      );
+      await db
+        .update(analyses)
+        .set({
+          status: "rejected",
+          rejectionReason: `The video content could not be reliably analyzed as a ${sportLabel} movement. Please upload a clearer video of your ${sportLabel} technique.`,
+          updatedAt: new Date(),
+        })
+        .where(eq(analyses.id, analysisId));
+      return;
+    }
+
     await db.insert(metrics).values({
       analysisId,
       configKey: result.configKey || configKey,
