@@ -27,6 +27,7 @@ def validate_sport_match(
     fps: float = 30.0,
     frame_width: int = 1920,
     frame_height: int = 1080,
+    bg_features: Optional[Dict] = None,
 ) -> Dict:
     sport = sport.lower().replace(" ", "").replace("_", "")
 
@@ -89,7 +90,7 @@ def validate_sport_match(
                 "confidence": 0.2,
             }
 
-    penalties = _compute_sport_penalties(pose_data, features, sport, fps, frame_width, frame_height)
+    penalties = _compute_sport_penalties(pose_data, features, sport, fps, frame_width, frame_height, bg_features)
     total_penalty = sum(p["score"] for p in penalties)
 
     if total_penalty >= 4.0:
@@ -112,6 +113,7 @@ def _compute_sport_penalties(
     fps: float,
     frame_width: int,
     frame_height: int,
+    bg_features: Optional[Dict] = None,
 ) -> List[Dict]:
     penalties: List[Dict] = []
 
@@ -223,6 +225,37 @@ def _compute_sport_penalties(
                 penalties.append({
                     "score": 1.5,
                     "reason": f"Video shows full-body movement (legs and hips moving as much as arms) rather than a {sport} swing.",
+                })
+
+    if bg_features is not None and bg_features.get("sufficient", False):
+        green = bg_features.get("green_ratio", 0)
+        brown = bg_features.get("brown_ratio", 0)
+        blue = bg_features.get("blue_ratio", 0)
+        court_lines = bg_features.get("court_lines_detected", False)
+        brightness_var = bg_features.get("brightness_variance", 50.0)
+        brightness_mean = bg_features.get("brightness_mean", 128.0)
+
+        if sport == "golf":
+            if green < 0.05 and not court_lines and brightness_var < 1500:
+                penalties.append({
+                    "score": 1.0,
+                    "reason": "Background does not appear to be a golf course or driving range.",
+                })
+
+        elif sport == "tennis":
+            has_court_colors = green > 0.10 or brown > 0.10 or blue > 0.10
+            if not has_court_colors and not court_lines:
+                penalties.append({
+                    "score": 0.8,
+                    "reason": "Background does not appear to be a tennis court.",
+                })
+
+        elif sport in ("tabletennis", "badminton"):
+            is_outdoor = green > 0.20 and brightness_var > 2000 and brightness_mean > 150
+            if is_outdoor:
+                penalties.append({
+                    "score": 0.5,
+                    "reason": f"Background appears to be outdoors, which is unusual for {sport}.",
                 })
 
     return penalties

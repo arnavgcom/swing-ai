@@ -27,6 +27,7 @@ def main():
         from python_analysis.pose_detector import PoseDetector
         from python_analysis.ball_tracker import BallTracker
         from python_analysis.movement_classifier import classify_movement, validate_sport_match
+        from python_analysis.background_analyzer import analyze_background
         from python_analysis.sports.registry import get_analyzer
 
         cap = cv2.VideoCapture(args.video_path)
@@ -53,8 +54,11 @@ def main():
         cap2.release()
         detector.close()
 
+        bg_features = analyze_background(args.video_path, pose_data)
+
         validation = validate_sport_match(
-            pose_data, sport, fps, frame_width, frame_height
+            pose_data, sport, fps, frame_width, frame_height,
+            bg_features=bg_features,
         )
 
         if not validation["valid"]:
