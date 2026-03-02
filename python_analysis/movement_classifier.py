@@ -384,14 +384,9 @@ def classify_movement(
     segments = _segment_swings(pose_data, fps, frame_width, frame_height)
     shot_count = len(segments)
 
-    global_dominant_side = None
-    if sport in RACQUET_SPORTS or sport == "golf":
-        global_features = _extract_features(pose_data, fps, frame_width, frame_height)
-        global_dominant_side = global_features.get("dominant_side", "right")
-
     if shot_count <= 1:
         if sport in RACQUET_SPORTS:
-            return _classify_racquet_sport(pose_data, sport, fps, frame_width, frame_height, global_dominant_side), shot_count
+            return _classify_racquet_sport(pose_data, sport, fps, frame_width, frame_height), shot_count
         elif sport == "golf":
             return _classify_golf(pose_data, fps, frame_width, frame_height), shot_count
         else:
@@ -406,7 +401,7 @@ def classify_movement(
             continue
 
         if sport in RACQUET_SPORTS:
-            cls = _classify_racquet_sport(segment_data, sport, fps, frame_width, frame_height, global_dominant_side)
+            cls = _classify_racquet_sport(segment_data, sport, fps, frame_width, frame_height)
         elif sport == "golf":
             cls = _classify_golf(segment_data, fps, frame_width, frame_height)
         else:
@@ -416,7 +411,7 @@ def classify_movement(
 
     if not classifications:
         if sport in RACQUET_SPORTS:
-            return _classify_racquet_sport(pose_data, sport, fps, frame_width, frame_height, global_dominant_side), shot_count
+            return _classify_racquet_sport(pose_data, sport, fps, frame_width, frame_height), shot_count
         elif sport == "golf":
             return _classify_golf(pose_data, fps, frame_width, frame_height), shot_count
         movements = SPORT_MOVEMENTS.get(sport, [])
@@ -435,19 +430,12 @@ def _classify_racquet_sport(
     fps: float,
     frame_width: int,
     frame_height: int,
-    override_dominant_side: Optional[str] = None,
 ) -> str:
     valid_poses = [p for p in pose_data if p is not None]
     if len(valid_poses) < 5:
         return SPORT_MOVEMENTS.get(sport, ["forehand"])[0]
 
     features = _extract_features(pose_data, fps, frame_width, frame_height)
-
-    if override_dominant_side is not None:
-        features["dominant_side"] = override_dominant_side
-        features["is_cross_body"] = _detect_cross_body(
-            pose_data, frame_width, override_dominant_side
-        )
 
     if features["is_serve"]:
         return "serve"
@@ -663,10 +651,9 @@ def _extract_features(
 def _detect_cross_body(
     pose_data: List[Optional[Dict]],
     frame_width: int,
-    dominant_side: str = "right",
+    _dominant_side: str = "right",
 ) -> bool:
-    right_offsets = []
-    left_offsets = []
+    frame_data: List[Dict] = []
 
     for p in pose_data:
         if p is None:
@@ -686,46 +673,79 @@ def _detect_cross_body(
         if shoulder_width < 10:
             continue
 
-        if rw and rw.get("visibility", 0) > 0.4:
-            offset = (rw["x"] - body_center_x) / shoulder_width
-            right_offsets.append(offset)
-        if lw and lw.get("visibility", 0) > 0.4:
-            offset = (lw["x"] - body_center_x) / shoulder_width
-            left_offsets.append(offset)
+        entry: Dict = {"cx": body_center_x, "sw": shoulder_width}
 
-    if dominant_side == "right":
-        dom_offsets = right_offsets
-    else:
-        dom_offsets = left_offsets
+        r_vis = rw and rw.get("visibility", 0) > 0.4
+        l_vis = lw and lw.get("visibility", 0) > 0.4
 
-    if len(dom_offsets) < 5:
+        if r_vis:
+            entry["rx"] = rw["x"]
+        if l_vis:
+            entry["lx"] = lw["x"]
+
+        frame_data.append(entry)
+
+    if len(frame_data) < 5:
         return False
 
-    if dominant_side == "right":
-        cross_count = sum(1 for o in dom_offsets if o < -0.5)
-    else:
-        cross_count = sum(1 for o in dom_offsets if o > 0.5)
+    rw_speeds = []
+    lw_speeds = []
+    for i in range(1, len(frame_data)):
+        cur = frame_data[i]
+        prev = frame_data[i - 1]
+        avg_sw = (cur["sw"] + prev["sw"]) / 2
+        if avg_sw < 10:
+            continue
+        if "rx" in cur and "rx" in prev:
+            rw_speeds.append((i, abs(cur["rx"] - prev["rx"]) / avg_sw))
+        if "lx" in cur and "lx" in prev:
+            lw_speeds.append((i, abs(cur["lx"] - prev["lx"]) / avg_sw))
 
-    cross_ratio = cross_count / len(dom_offsets)
-    if cross_ratio > 0.25:
-        return True
+    best_frame_idx = None
+    best_speed = 0.0
+    best_wrist = None
 
-    if len(dom_offsets) >= 5:
-        n = len(dom_offsets)
-        first_third = dom_offsets[:n // 3]
-        last_third = dom_offsets[-(n // 3):]
+    for idx, speed in rw_speeds:
+        if speed > best_speed:
+            best_speed = speed
+            best_frame_idx = idx
+            best_wrist = "right"
+    for idx, speed in lw_speeds:
+        if speed > best_speed:
+            best_speed = speed
+            best_frame_idx = idx
+            best_wrist = "left"
 
-        if first_third and last_third:
-            start_mean = float(np.mean(first_third))
-            end_mean = float(np.mean(last_third))
-            if dominant_side == "right":
-                if start_mean > 0.3 and end_mean < -0.2:
-                    return True
-            else:
-                if start_mean < -0.3 and end_mean > 0.2:
-                    return True
+    if best_frame_idx is None or best_wrist is None or best_speed < 0.3:
+        return False
 
-    return False
+    window = max(2, len(frame_data) // 6)
+    contact_start = best_frame_idx
+    contact_end = min(len(frame_data), best_frame_idx + window + 1)
+    contact_frames = frame_data[contact_start:contact_end]
+
+    cross_votes = 0
+    total_votes = 0
+
+    for f in contact_frames:
+        cx = f["cx"]
+        sw = f["sw"]
+        wrist_key = "rx" if best_wrist == "right" else "lx"
+        if wrist_key not in f:
+            continue
+
+        offset = (f[wrist_key] - cx) / sw
+        total_votes += 1
+
+        if best_wrist == "right" and offset < -0.3:
+            cross_votes += 1
+        elif best_wrist == "left" and offset > 0.3:
+            cross_votes += 1
+
+    if total_votes < 2:
+        return False
+
+    return cross_votes / total_votes > 0.3
 
 
 def _detect_serve(
