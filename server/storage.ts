@@ -3,12 +3,35 @@ import {
   analyses,
   metrics,
   coachingInsights,
+  analysisShotAnnotations,
   users,
   type Analysis,
   type Metric,
   type CoachingInsight,
 } from "@shared/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
+
+export interface AnalysisMetadataInput {
+  capturedAt?: Date | null;
+  sourceApp?: string | null;
+  videoDurationSec?: number | null;
+  videoFps?: number | null;
+  videoWidth?: number | null;
+  videoHeight?: number | null;
+  videoRotation?: number | null;
+  videoCodec?: string | null;
+  videoBitrateKbps?: number | null;
+  fileSizeBytes?: number | null;
+  containerFormat?: string | null;
+  gpsLat?: number | null;
+  gpsLng?: number | null;
+  gpsAltM?: number | null;
+  gpsSpeedMps?: number | null;
+  gpsHeadingDeg?: number | null;
+  gpsAccuracyM?: number | null;
+  gpsTimestamp?: Date | null;
+  gpsSource?: string | null;
+}
 
 export interface IStorage {
   createAnalysis(
@@ -17,6 +40,7 @@ export interface IStorage {
     userId?: string | null,
     sportId?: string | null,
     movementId?: string | null,
+    metadata?: AnalysisMetadataInput,
   ): Promise<Analysis>;
   getAnalysis(id: string): Promise<Analysis | undefined>;
   getAllAnalyses(userId: string | null, sportId?: string): Promise<Analysis[]>;
@@ -32,6 +56,7 @@ export class DatabaseStorage implements IStorage {
     userId?: string | null,
     sportId?: string | null,
     movementId?: string | null,
+    metadata?: AnalysisMetadataInput,
   ): Promise<Analysis> {
     const [analysis] = await db
       .insert(analyses)
@@ -42,6 +67,25 @@ export class DatabaseStorage implements IStorage {
         userId: userId || null,
         sportId: sportId || null,
         movementId: movementId || null,
+        capturedAt: metadata?.capturedAt ?? null,
+        sourceApp: metadata?.sourceApp ?? null,
+        videoDurationSec: metadata?.videoDurationSec ?? null,
+        videoFps: metadata?.videoFps ?? null,
+        videoWidth: metadata?.videoWidth ?? null,
+        videoHeight: metadata?.videoHeight ?? null,
+        videoRotation: metadata?.videoRotation ?? null,
+        videoCodec: metadata?.videoCodec ?? null,
+        videoBitrateKbps: metadata?.videoBitrateKbps ?? null,
+        fileSizeBytes: metadata?.fileSizeBytes ?? null,
+        containerFormat: metadata?.containerFormat ?? null,
+        gpsLat: metadata?.gpsLat ?? null,
+        gpsLng: metadata?.gpsLng ?? null,
+        gpsAltM: metadata?.gpsAltM ?? null,
+        gpsSpeedMps: metadata?.gpsSpeedMps ?? null,
+        gpsHeadingDeg: metadata?.gpsHeadingDeg ?? null,
+        gpsAccuracyM: metadata?.gpsAccuracyM ?? null,
+        gpsTimestamp: metadata?.gpsTimestamp ?? null,
+        gpsSource: metadata?.gpsSource ?? null,
       })
       .returning();
     return analysis;
@@ -77,6 +121,9 @@ export class DatabaseStorage implements IStorage {
         videoPath: analyses.videoPath,
         status: analyses.status,
         detectedMovement: analyses.detectedMovement,
+        capturedAt: analyses.capturedAt,
+        gpsLat: analyses.gpsLat,
+        gpsLng: analyses.gpsLng,
         createdAt: analyses.createdAt,
         updatedAt: analyses.updatedAt,
         userName: users.name,
@@ -84,7 +131,7 @@ export class DatabaseStorage implements IStorage {
       .from(analyses)
       .leftJoin(users, eq(analyses.userId, users.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(analyses.createdAt));
+      .orderBy(sql`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`);
 
     return rows;
   }
@@ -117,12 +164,12 @@ export class DatabaseStorage implements IStorage {
     const conditions = [
       sql`a.user_id = ${userId}`,
       sql`a.status = 'completed'`,
-      sql`a.created_at < ${beforeDate}`,
+      sql`coalesce(a.captured_at, a.created_at) < ${beforeDate}`,
     ];
 
     if (periodDays !== null) {
       const startDate = new Date(beforeDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
-      conditions.push(sql`a.created_at >= ${startDate}`);
+      conditions.push(sql`coalesce(a.captured_at, a.created_at) >= ${startDate}`);
     }
 
     if (sportId) {
@@ -197,6 +244,9 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(coachingInsights)
       .where(eq(coachingInsights.analysisId, id));
+    await db
+      .delete(analysisShotAnnotations)
+      .where(eq(analysisShotAnnotations.analysisId, id));
     await db.delete(metrics).where(eq(metrics.analysisId, id));
     await db.delete(analyses).where(eq(analyses.id, id));
   }

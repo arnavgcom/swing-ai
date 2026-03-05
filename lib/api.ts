@@ -1,4 +1,5 @@
 import { fetch } from "expo/fetch";
+import { File } from "expo-file-system";
 import { getApiUrl } from "./query-client";
 
 export interface AnalysisResponse {
@@ -10,6 +11,9 @@ export interface AnalysisResponse {
   status: string;
   detectedMovement: string | null;
   rejectionReason: string | null;
+  capturedAt?: string | null;
+  gpsLat?: number | null;
+  gpsLng?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -67,6 +71,157 @@ export interface ComparisonResponse {
     subScores: Record<string, number>;
   } | null;
   count: number;
+}
+
+export interface AnalysisDiagnosticsResponse {
+  videoDurationSec: number;
+  videoQuality: string;
+  fps: number;
+  resolution: {
+    width: number;
+    height: number;
+  };
+  fileSizeBytes: number;
+  bitrateKbps: number;
+  totalFrames: number;
+  framesUsedForMetrics: number;
+  framesConsideredForScoring: number;
+  activeTimeSec: number;
+  idleTimeSec: number;
+  activeTimePct: number;
+  idleTimePct: number;
+  poseCoveragePct: number;
+  wristOcclusionPct: number;
+  shoulderOcclusionPct: number;
+  shotsDetected: number;
+  shotsConsideredForScoring: number;
+  shotSegments: Array<{
+    index: number;
+    startFrame: number;
+    endFrame: number;
+    label: string;
+    frames: number;
+    includedForScoring: boolean;
+    classificationDebug?: {
+      dominantSide?: string;
+      isCrossBody?: boolean;
+      isServe?: boolean;
+      isCompactForward?: boolean;
+      isOverhead?: boolean;
+      isDownwardMotion?: boolean;
+      maxWristSpeed?: number;
+      rightWristSpeed?: number;
+      leftWristSpeed?: number;
+      swingArcRatio?: number;
+      contactHeightRatio?: number;
+    };
+  }>;
+  excludedShots: {
+    count: number;
+    reasons: string[];
+  };
+  movementTypeCounts: Record<string, number>;
+  aiConfidencePct: number;
+  detectedMovement: string;
+  classificationRationale: string;
+  validation: {
+    valid: boolean;
+    confidence: number;
+    reason: string;
+  };
+}
+
+export interface VideoMetadataResponse {
+  capturedAt?: string | null;
+  gpsLat?: number | null;
+  gpsLng?: number | null;
+  gpsAltM?: number | null;
+  gpsSource?: string | null;
+}
+
+export interface AnalysisShotAnnotationResponse {
+  id: string;
+  analysisId: string;
+  userId: string;
+  totalShots: number;
+  orderedShotLabels: string[];
+  usedForScoringShotIndexes: number[];
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function fetchMyShotAnnotations(): Promise<AnalysisShotAnnotationResponse[]> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/shot-annotations`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch shot annotations");
+  return res.json();
+}
+
+export interface ShotReportResponse {
+  analysisId: string;
+  totalShots: number;
+  shots: AnalysisDiagnosticsResponse["shotSegments"];
+  shotsUsedForScoring: AnalysisDiagnosticsResponse["shotSegments"];
+  manualAnnotation: AnalysisShotAnnotationResponse | null;
+}
+
+export interface DiscrepancySummaryResponse {
+  summary: {
+    videosAnnotated: number;
+    totalManualShots: number;
+    totalMismatches: number;
+    mismatchRatePct: number;
+  };
+  trend7d: Array<{
+    day: string;
+    mismatchRatePct: number;
+  }>;
+  topVideos: Array<{
+    analysisId: string;
+    videoName: string;
+    userName?: string | null;
+    createdAt: string;
+    sportName: string;
+    movementName: string;
+    autoShots: number;
+    manualShots: number;
+    mismatches: number;
+    mismatchRatePct: number;
+  }>;
+  labelConfusions: Array<{
+    from: string;
+    to: string;
+    count: number;
+  }>;
+  debug?: {
+    source: string;
+    completedVideos?: number;
+    annotationsFetched?: number;
+    annotatedUsed?: number;
+  };
+}
+
+function normalizeShotLabel(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/-+/g, "-");
+}
+
+function normalizeMovementToken(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function isAutoDetectMovement(value: unknown): boolean {
+  const normalized = normalizeMovementToken(value);
+  return normalized === "" || normalized === "auto" || normalized === "autodetect";
 }
 
 export async function fetchAnalyses(): Promise<AnalysisResponse[]> {
@@ -127,6 +282,267 @@ export async function fetchComparison(
   return res.json();
 }
 
+export async function fetchAnalysisDiagnostics(
+  id: string,
+): Promise<AnalysisDiagnosticsResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/analyses/${id}/diagnostics`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch diagnostics");
+  return res.json();
+}
+
+export async function fetchAnalysisVideoMetadata(
+  id: string,
+): Promise<VideoMetadataResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/analyses/${id}/video-metadata`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch video metadata");
+  return res.json();
+}
+
+export async function fetchAnalysisShotAnnotation(
+  id: string,
+): Promise<AnalysisShotAnnotationResponse | null> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/analyses/${id}/shot-annotation`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch shot annotation");
+  return res.json();
+}
+
+export async function saveAnalysisShotAnnotation(
+  id: string,
+  payload: {
+    totalShots: number;
+    orderedShotLabels: string[];
+    usedForScoringShotIndexes: number[];
+    notes?: string;
+  },
+): Promise<AnalysisShotAnnotationResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/analyses/${id}/shot-annotation`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    let message = "Failed to save shot annotation";
+    try {
+      const data = await res.json();
+      message = data?.error || message;
+    } catch {
+      const text = await res.text();
+      if (text) message = text;
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+export async function fetchShotReport(id: string): Promise<ShotReportResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/analyses/${id}/shot-report`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch shot report");
+  return res.json();
+}
+
+export async function fetchDiscrepancySummary(
+  sportName?: string,
+  movementName?: string | null,
+  playerId?: string,
+): Promise<DiscrepancySummaryResponse> {
+  const baseUrl = getApiUrl();
+  const params = new URLSearchParams();
+  if (sportName) {
+    params.set("sportName", sportName);
+  }
+  if (!isAutoDetectMovement(movementName)) {
+    params.set("movementName", String(movementName));
+  }
+  if (playerId && playerId !== "all") {
+    params.set("playerId", playerId);
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const primary = await fetch(`${baseUrl}api/discrepancy-summary${query}`, {
+    credentials: "include",
+  });
+
+  if (primary.ok) {
+    const data = await primary.json();
+    return {
+      ...data,
+      debug: {
+        source: "server-primary",
+        ...(data?.debug || {}),
+      },
+    };
+  }
+
+  const fallback = await fetch(`${baseUrl}api/analyses/discrepancy-summary${query}`, {
+    credentials: "include",
+  });
+
+  if (fallback.ok) {
+    const data = await fallback.json();
+    return {
+      ...data,
+      debug: {
+        source: "server-legacy",
+        ...(data?.debug || {}),
+      },
+    };
+  }
+
+  const summaries = await fetchAnalysesSummary();
+  const sportLower = String(sportName || "").trim().toLowerCase();
+  const movementFilter = normalizeMovementToken(movementName);
+  const applyMovementFilter = !isAutoDetectMovement(movementName);
+  const filtered = summaries.filter((item) => {
+    if (item.status !== "completed") return false;
+    const key = String(item.configKey || "").toLowerCase();
+
+    if (sportLower) {
+      if (key && !key.startsWith(sportLower)) return false;
+    }
+
+    if (!applyMovementFilter) return true;
+
+    const detected = normalizeMovementToken(item.detectedMovement);
+    const configToken = normalizeMovementToken(item.configKey);
+    return detected === movementFilter || configToken.includes(movementFilter);
+  });
+
+  const recent = filtered.slice(0, 30);
+  let allAnnotations: AnalysisShotAnnotationResponse[] = [];
+  try {
+    allAnnotations = await fetchMyShotAnnotations();
+  } catch {
+    allAnnotations = [];
+  }
+
+  const annotationByAnalysisId = new Map(
+    allAnnotations.map((item) => [item.analysisId, item]),
+  );
+
+  const annotations = recent.map((analysis) => ({
+    analysis,
+    annotation: annotationByAnalysisId.get(analysis.id) || null,
+  }));
+
+  const confusionMap = new Map<string, number>();
+  const trendAccumulator = new Map<string, { mismatches: number; manualShots: number }>();
+  const topVideos: DiscrepancySummaryResponse["topVideos"] = [];
+  const annotationsFetched = annotations.filter((item) => !!item.annotation).length;
+  let videosAnnotated = 0;
+  let totalManualShots = 0;
+  let totalMismatches = 0;
+
+  for (const { analysis, annotation } of annotations) {
+    if (!annotation || !Array.isArray(annotation.orderedShotLabels) || annotation.orderedShotLabels.length === 0) {
+      continue;
+    }
+
+    const manualLabels = annotation.orderedShotLabels.map((label) => normalizeShotLabel(label));
+    const fallbackDetected = normalizeShotLabel(analysis.detectedMovement || "unknown");
+    const autoLabels = Array.from({ length: manualLabels.length }, () => fallbackDetected);
+
+    let mismatches = 0;
+    for (let index = 0; index < manualLabels.length; index += 1) {
+      if (manualLabels[index] !== autoLabels[index]) {
+        mismatches += 1;
+        const key = `${autoLabels[index]}=>${manualLabels[index]}`;
+        confusionMap.set(key, (confusionMap.get(key) || 0) + 1);
+      }
+    }
+
+    const mismatchRatePct = Number(((mismatches / Math.max(manualLabels.length, 1)) * 100).toFixed(1));
+    const movementName = analysis.detectedMovement || "Unknown";
+
+    videosAnnotated += 1;
+    totalManualShots += manualLabels.length;
+    totalMismatches += mismatches;
+
+    const dayKey = new Date(analysis.createdAt).toISOString().slice(0, 10);
+    const existing = trendAccumulator.get(dayKey) || { mismatches: 0, manualShots: 0 };
+    trendAccumulator.set(dayKey, {
+      mismatches: existing.mismatches + mismatches,
+      manualShots: existing.manualShots + manualLabels.length,
+    });
+
+    topVideos.push({
+      analysisId: analysis.id,
+      videoName: analysis.videoFilename,
+      createdAt: analysis.createdAt,
+      sportName: sportName || "All Sports",
+      movementName,
+      autoShots: autoLabels.length,
+      manualShots: manualLabels.length,
+      mismatches,
+      mismatchRatePct,
+    });
+  }
+
+  const rankedVideos = [...topVideos].sort((a, b) => {
+    if (b.mismatchRatePct !== a.mismatchRatePct) {
+      return b.mismatchRatePct - a.mismatchRatePct;
+    }
+    return b.mismatches - a.mismatches;
+  });
+
+  const trend7d: DiscrepancySummaryResponse["trend7d"] = [];
+  for (let offset = 6; offset >= 0; offset -= 1) {
+    const date = new Date();
+    date.setUTCDate(date.getUTCDate() - offset);
+    const day = date.toISOString().slice(0, 10);
+    const dayData = trendAccumulator.get(day);
+    const mismatchRatePct = dayData
+      ? Number(((dayData.mismatches / Math.max(dayData.manualShots, 1)) * 100).toFixed(1))
+      : 0;
+    trend7d.push({ day, mismatchRatePct });
+  }
+
+  const labelConfusions = Array.from(confusionMap.entries())
+    .map(([pair, count]) => {
+      const [from, to] = pair.split("=>");
+      return { from, to, count };
+    })
+    .filter((item) => {
+      if (!applyMovementFilter) return true;
+      return (
+        normalizeMovementToken(item.from) === movementFilter ||
+        normalizeMovementToken(item.to) === movementFilter
+      );
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+
+  return {
+    summary: {
+      videosAnnotated,
+      totalManualShots,
+      totalMismatches,
+      mismatchRatePct: Number(((totalMismatches / Math.max(totalManualShots, 1)) * 100).toFixed(1)),
+    },
+    trend7d,
+    topVideos: rankedVideos,
+    labelConfusions,
+    debug: {
+      source: "client-fallback",
+      completedVideos: recent.length,
+      annotationsFetched,
+      annotatedUsed: videosAnnotated,
+    },
+  };
+}
+
 export async function deleteAnalysis(id: string): Promise<void> {
   const baseUrl = getApiUrl();
   const res = await fetch(`${baseUrl}api/analyses/${id}`, {
@@ -141,16 +557,16 @@ export async function uploadVideo(
   filename: string,
   sportId?: string | null,
   movementId?: string | null,
+  targetUserId?: string | null,
 ): Promise<{ id: string }> {
   const baseUrl = getApiUrl();
   const formData = new FormData();
 
-  const { File } = await import("expo-file-system");
   const file = new File(uri);
-
   formData.append("video", file as any, filename);
   if (sportId) formData.append("sportId", sportId);
   if (movementId) formData.append("movementId", movementId);
+  if (targetUserId) formData.append("targetUserId", targetUserId);
 
   const res = await fetch(`${baseUrl}api/upload`, {
     method: "POST",

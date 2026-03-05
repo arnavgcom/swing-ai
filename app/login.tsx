@@ -7,157 +7,84 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  TextInput,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import * as WebBrowser from "expo-web-browser";
+import { router } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
-import { getApiUrl } from "@/lib/query-client";
-
-const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "";
-
-function GoogleIcon({ size = 20 }: { size?: number }) {
-  const r = size / 2;
-  const stroke = size * 0.22;
-  return (
-    <View style={{ width: size, height: size, position: "relative" }}>
-      <View
-        style={{
-          width: size,
-          height: size,
-          borderRadius: r,
-          borderWidth: stroke,
-          borderColor: "transparent",
-          borderTopColor: "#EA4335",
-          borderRightColor: "#FBBC05",
-          borderBottomColor: "#34A853",
-          borderLeftColor: "#4285F4",
-          position: "absolute",
-        }}
-      />
-      <View
-        style={{
-          position: "absolute",
-          right: 0,
-          top: size * 0.28,
-          width: size * 0.52,
-          height: stroke,
-          backgroundColor: "#FBBC05",
-          borderTopRightRadius: stroke / 2,
-          borderBottomRightRadius: stroke / 2,
-        }}
-      />
-    </View>
-  );
-}
+import { useSport } from "@/lib/sport-context";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { googleLogin } = useAuth();
-  const [googleLoading, setGoogleLoading] = useState(false);
+  const { login, register } = useAuth();
+  const { setSport, setMovement } = useSport();
+
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
   const webBottomInset = Platform.OS === "web" ? 34 : 0;
 
-  const handleGoogleToken = async (accessToken: string) => {
-    setGoogleLoading(true);
-    try {
-      await googleLogin({ accessToken });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error: any) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = error?.message?.includes(":")
-        ? error.message.split(":").slice(1).join(":").trim()
-        : error?.message || "Google sign-in failed";
-      Alert.alert("Error", msg);
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
+  const handleLocalAuth = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-  const handleGooglePress = async () => {
-    if (!GOOGLE_CLIENT_ID) {
+    if (!email.trim() || !password.trim() || (isSignUpMode && !fullName.trim())) {
       Alert.alert(
-        "Setup Required",
-        "Google Sign-In requires a Google Client ID. Please configure EXPO_PUBLIC_GOOGLE_CLIENT_ID in your environment.",
+        "Required",
+        isSignUpMode
+          ? "Please enter full name, email, and password."
+          : "Please enter email and password.",
       );
       return;
     }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setGoogleLoading(true);
+
+    setAuthLoading(true);
     try {
-      if (Platform.OS === "web") {
-        const redirectUri = typeof window !== "undefined" ? window.location.origin + "/login" : "";
-        const authUrl =
-          `https://accounts.google.com/o/oauth2/v2/auth?` +
-          `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
-          `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-          `&response_type=token` +
-          `&scope=${encodeURIComponent("openid profile email")}`;
-
-        const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-        if (result.type === "success" && result.url) {
-          const urlFragment = result.url.split("#")[1];
-          if (urlFragment) {
-            const params = new URLSearchParams(urlFragment);
-            const accessToken = params.get("access_token");
-            if (accessToken) {
-              await handleGoogleToken(accessToken);
-              return;
-            }
-          }
-          Alert.alert("Error", "Could not get access token from Google");
-        }
+      if (isSignUpMode) {
+        await register(email.trim(), fullName.trim(), password);
       } else {
-        const apiBase = getApiUrl();
-        const callbackUrl = new URL("/api/auth/google/mobile-callback", apiBase).href;
-
-        const authUrl =
-          `https://accounts.google.com/o/oauth2/v2/auth?` +
-          `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
-          `&redirect_uri=${encodeURIComponent(callbackUrl)}` +
-          `&response_type=token` +
-          `&scope=${encodeURIComponent("openid profile email")}`;
-
-        const result = await WebBrowser.openAuthSessionAsync(authUrl, "swingai://google-auth");
-
-        if (result.type === "success" && result.url) {
-          const urlObj = new URL(result.url);
-          const accessToken = urlObj.searchParams.get("access_token");
-          if (accessToken) {
-            await handleGoogleToken(accessToken);
-            return;
-          }
-          Alert.alert("Error", "Could not get access token from Google");
-        }
+        await login(email.trim(), password);
       }
+
+      setSport(null);
+      setMovement(null);
+      router.replace("/sport-select");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Google sign-in failed");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        isSignUpMode ? "Sign Up Failed" : "Login Failed",
+        e?.message || "Unable to continue",
+      );
     } finally {
-      setGoogleLoading(false);
+      setAuthLoading(false);
     }
   };
 
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={["#0A0A1A", "#111136", "#0A0A1A"]}
+        colors={["#040611", "#0B1122", "#03060E"]}
         style={StyleSheet.absoluteFill}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
       />
 
-      <View style={styles.glowOrb1} />
-      <View style={styles.glowOrb2} />
+      <View style={styles.glowOrbTop} />
+      <View style={styles.glowOrbBottom} />
 
       <View
         style={[
           styles.content,
           {
             paddingTop: insets.top + webTopInset,
-            paddingBottom: insets.bottom + 40 + webBottomInset,
+            paddingBottom: insets.bottom + 28 + webBottomInset,
           },
         ]}
       >
@@ -165,153 +92,204 @@ export default function LoginScreen() {
           <Text style={styles.appName}>
             Swing <Text style={styles.appNameAccent}>AI</Text>
           </Text>
-          <Text style={styles.tagline}>Improve Every Swing</Text>
+          <Text style={styles.tagline}>Precision coaching for every swing</Text>
         </View>
 
-        <View style={styles.bottomSection}>
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              Alert.alert("Coming Soon", "Apple Sign-In will be available soon.");
-            }}
-            style={({ pressed }) => [
-              styles.appleButton,
-              { transform: [{ scale: pressed ? 0.97 : 1 }] },
-            ]}
-            testID="apple-login-button"
-          >
-            <Ionicons name="logo-apple" size={20} color="#F8FAFC" />
-            <Text style={styles.appleText}>Continue with Apple</Text>
-          </Pressable>
+        <View style={styles.authCard}>
+          <Text style={styles.cardTitle}>{isSignUpMode ? "Create Account" : "Login"}</Text>
+
+          {isSignUpMode && (
+            <View style={styles.inputWrap}>
+              <Ionicons name="person-outline" size={18} color="#9CA3AF" />
+              <TextInput
+                value={fullName}
+                onChangeText={setFullName}
+                placeholder="Full Name"
+                placeholderTextColor="#6B7280"
+                autoCapitalize="words"
+                autoCorrect={false}
+                style={styles.input}
+                returnKeyType="next"
+                testID="signup-name"
+              />
+            </View>
+          )}
+
+          <View style={styles.inputWrap}>
+            <Ionicons name="mail-outline" size={18} color="#9CA3AF" />
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Email"
+              placeholderTextColor="#6B7280"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoCorrect={false}
+              style={styles.input}
+              returnKeyType="next"
+              testID="auth-email"
+            />
+          </View>
+
+          <View style={styles.inputWrap}>
+            <Ionicons name="lock-closed-outline" size={18} color="#9CA3AF" />
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Password"
+              placeholderTextColor="#6B7280"
+              secureTextEntry
+              style={styles.input}
+              returnKeyType="go"
+              onSubmitEditing={handleLocalAuth}
+              testID="auth-password"
+            />
+          </View>
 
           <Pressable
-            onPress={handleGooglePress}
-            disabled={googleLoading}
+            onPress={handleLocalAuth}
+            disabled={authLoading}
             style={({ pressed }) => [
-              styles.googleButton,
+              styles.primaryButton,
               {
-                transform: [{ scale: pressed ? 0.97 : 1 }],
-                opacity: googleLoading ? 0.7 : 1,
+                transform: [{ scale: pressed ? 0.98 : 1 }],
+                opacity: authLoading ? 0.7 : 1,
               },
             ]}
-            testID="google-login-button"
+            testID="local-auth-button"
           >
-            <LinearGradient
-              colors={["#6C5CE7", "#A29BFE"]}
-              style={styles.googleGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
-              {googleLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <GoogleIcon size={22} />
-                  <Text style={styles.googleText}>Continue with Google</Text>
-                </>
-              )}
-            </LinearGradient>
+            {authLoading ? (
+              <ActivityIndicator size="small" color="#22C55E" />
+            ) : (
+              <>
+                <Ionicons name="arrow-forward-circle" size={20} color="#22C55E" />
+                <Text style={styles.primaryButtonText}>
+                  {isSignUpMode ? "Sign Up" : "Login"}
+                </Text>
+              </>
+            )}
           </Pressable>
 
-          <Text style={styles.termsText}>
-            By continuing, you agree to our Terms of Service
-          </Text>
+          <Pressable
+            onPress={() => setIsSignUpMode((prev) => !prev)}
+            style={styles.modeToggle}
+            testID="auth-mode-toggle"
+          >
+            <Text style={styles.modeToggleText}>
+              {isSignUpMode
+                ? "Already have an account? Login"
+                : "New here? Create an account"}
+            </Text>
+          </Pressable>
         </View>
+
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0A0A1A" },
+  container: { flex: 1, backgroundColor: "#050914" },
   content: {
     flex: 1,
-    paddingHorizontal: 32,
-    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    justifyContent: "center",
+    gap: 18,
   },
-  glowOrb1: {
+  glowOrbTop: {
     position: "absolute",
-    top: -80,
-    right: -60,
+    top: -90,
+    right: -30,
     width: 260,
     height: 260,
     borderRadius: 130,
-    backgroundColor: "#6C5CE712",
+    backgroundColor: "#34D39912",
   },
-  glowOrb2: {
+  glowOrbBottom: {
     position: "absolute",
-    bottom: 60,
-    left: -80,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: "#34D39908",
+    bottom: -80,
+    left: -40,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: "#60A5FA14",
   },
   brandingSection: {
-    flex: 1,
     alignItems: "center",
-    justifyContent: "center",
-    paddingBottom: 60,
+    marginBottom: 4,
   },
   appName: {
-    fontSize: 48,
+    fontSize: 46,
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
-    letterSpacing: -1,
+    letterSpacing: -1.2,
   },
   appNameAccent: {
-    color: "#34D399",
+    color: "#22C55E",
   },
   tagline: {
-    fontSize: 17,
+    marginTop: 8,
+    fontSize: 14,
     fontFamily: "Inter_400Regular",
     color: "#94A3B8",
-    marginTop: 10,
-    letterSpacing: 0.3,
   },
-  bottomSection: {
-    alignItems: "center",
-    gap: 16,
-  },
-  googleButton: {
-    width: "100%",
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  googleGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    paddingVertical: 17,
-    borderRadius: 16,
-  },
-  googleText: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-    color: "#fff",
-  },
-  appleButton: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    backgroundColor: "#15152D",
+  authCard: {
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    borderRadius: 16,
-    paddingVertical: 17,
+    borderColor: "#33415566",
+    backgroundColor: "#0F172A99",
+    padding: 18,
+    gap: 10,
   },
-  appleText: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+  cardTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
+    marginBottom: 4,
   },
-  termsText: {
-    fontSize: 12,
+  inputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#33415599",
+    backgroundColor: "#0B1221",
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === "web" ? 12 : 10,
+  },
+  input: {
+    flex: 1,
+    color: "#F8FAFC",
+    fontSize: 15,
     fontFamily: "Inter_400Regular",
-    color: "#475569",
-    textAlign: "center" as const,
+    paddingVertical: 0,
+  },
+  primaryButton: {
+    marginTop: 4,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#22C55E",
+    backgroundColor: "transparent",
+    paddingVertical: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  primaryButtonText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#22C55E",
+  },
+  modeToggle: {
+    alignItems: "center",
+    paddingTop: 4,
+    paddingBottom: 2,
+  },
+  modeToggleText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: "#93C5FD",
   },
 });

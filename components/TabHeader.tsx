@@ -28,12 +28,18 @@ export function TabHeader() {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           router.push("/profile");
         }}
-        style={[styles.iconCircle, avatarSource && styles.iconCircleWithImage]}
+        style={[
+          styles.iconCircle,
+          avatarSource && {
+            borderColor: sc.primary,
+            borderWidth: 2,
+          },
+        ]}
       >
         {avatarSource ? (
           <Image source={avatarSource} style={styles.avatarImage} />
         ) : (
-          <Ionicons name="person" size={16} color="#94A3B8" />
+          <Ionicons name="person" size={16} color={sc.primary} />
         )}
       </Pressable>
 
@@ -72,10 +78,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
-  },
-  iconCircleWithImage: {
-    borderColor: "#6C5CE7",
-    borderWidth: 2,
   },
   avatarImage: {
     width: 38,

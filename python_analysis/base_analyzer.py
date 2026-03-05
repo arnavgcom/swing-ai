@@ -14,7 +14,11 @@ class BaseAnalyzer(ABC):
         self.pose_detector = PoseDetector()
         self.ball_tracker = BallTracker()
 
-    def analyze_video(self, video_path: str) -> Dict:
+    def analyze_video(
+        self,
+        video_path: str,
+        include_frame_ranges: Optional[List[Tuple[int, int]]] = None,
+    ) -> Dict:
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise ValueError(f"Cannot open video: {video_path}")
@@ -27,26 +31,51 @@ class BaseAnalyzer(ABC):
 
         pose_data: List[Optional[Dict]] = []
         frame_idx = 0
+        analyzed_frames = 0
+
+        normalized_ranges: Optional[List[Tuple[int, int]]] = None
+        if include_frame_ranges:
+            normalized_ranges = sorted(
+                [
+                    (max(0, int(start)), max(0, int(end)))
+                    for start, end in include_frame_ranges
+                    if int(end) >= int(start)
+                ],
+                key=lambda item: item[0],
+            )
 
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
 
+            if normalized_ranges is not None:
+                in_range = False
+                for start, end in normalized_ranges:
+                    if start <= frame_idx <= end:
+                        in_range = True
+                        break
+                    if frame_idx < start:
+                        break
+                if not in_range:
+                    frame_idx += 1
+                    continue
+
             landmarks = self.pose_detector.detect(frame)
             pose_data.append(landmarks)
 
             self.ball_tracker.detect(frame, frame_idx)
             frame_idx += 1
+            analyzed_frames += 1
 
         cap.release()
 
         video_info = {
             "fps": fps,
-            "total_frames": total_frames,
+            "total_frames": analyzed_frames if analyzed_frames > 0 else total_frames,
             "frame_width": frame_width,
             "frame_height": frame_height,
-            "duration": duration,
+            "duration": (analyzed_frames / fps) if analyzed_frames > 0 else duration,
         }
 
         metrics = self._compute_metrics(pose_data, video_info)

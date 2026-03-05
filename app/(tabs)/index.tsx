@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Platform,
+  Modal,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
@@ -15,49 +16,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { sportColors } from "@/constants/colors";
-import { fetchAnalysesSummary } from "@/lib/api";
+import { fetchAnalysesSummary, fetchDiscrepancySummary } from "@/lib/api";
 import type { AnalysisSummary } from "@/lib/api";
+import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
-import { MetricCard } from "@/components/MetricCard";
-
-const SUB_SCORE_META: Record<
-  string,
-  { icon: keyof typeof Ionicons.glyphMap; label: string; color: string }
-> = {
-  consistency: {
-    icon: "pulse-outline",
-    label: "Consistency",
-    color: "#6C5CE7",
-  },
-  timing: { icon: "timer-outline", label: "Timing", color: "#60A5FA" },
-  stability: {
-    icon: "shield-checkmark-outline",
-    label: "Stability",
-    color: "#34D399",
-  },
-};
-
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return "Good Morning";
-  if (h < 17) return "Good Afternoon";
-  return "Good Evening";
-}
-
-const DISPLAY_KEYS = ["consistency", "timing", "stability"];
-
-function findSubScore(
-  subs: Record<string, number>,
-  target: string,
-): number | null {
-  const lower = target.toLowerCase();
-  for (const k of Object.keys(subs)) {
-    if (k.toLowerCase() === lower) return subs[k];
-  }
-  return null;
-}
 
 function filterBySport(
   analyses: AnalysisSummary[],
@@ -78,95 +42,109 @@ function filterBySport(
   });
 }
 
-function computeScores(analyses: AnalysisSummary[]) {
-  const completed = analyses.filter(
-    (a) => a.status === "completed" && a.overallScore != null,
-  );
-  if (completed.length === 0) {
-    return {
-      overall: null,
-      category: null,
-      subs: [] as { key: string; value: number; delta: number | null }[],
-      overallDelta: null,
-    };
-  }
-
-  const latest = completed[0];
-  const prev = completed.length > 1 ? completed[1] : null;
-  const overall = Math.round(latest.overallScore || 0);
-  const category = latest.detectedMovement || null;
-
-  let overallDelta: number | null = null;
-  if (prev?.overallScore != null) {
-    overallDelta = overall - Math.round(prev.overallScore);
-  }
-
-  const latestSubs = latest.subScores || {};
-  const prevSubs = prev?.subScores || {};
-
-  const subs = DISPLAY_KEYS.map((key) => {
-    const value = findSubScore(latestSubs, key);
-    if (value == null) return null;
-    const prevVal = findSubScore(prevSubs, key);
-    const delta =
-      prevVal != null ? Math.round(value) - Math.round(prevVal) : null;
-    return { key, value: Math.round(value), delta };
-  }).filter(
-    (s): s is { key: string; value: number; delta: number | null } => s != null,
-  );
-
-  return { overall, category, subs, overallDelta };
+function formatLabel(label: string): string {
+  return label
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
-function DeltaBadge({
-  value,
-  suffix,
-}: {
-  value: number | null;
-  suffix?: string;
-}) {
-  if (value == null || value === 0) return null;
-  const isUp = value > 0;
-  return (
-    <View
-      style={[
-        deltaStyles.badge,
-        { backgroundColor: isUp ? "#34D39915" : "#F8717115" },
-      ]}
-    >
-      <Ionicons
-        name={isUp ? "arrow-up" : "arrow-down"}
-        size={10}
-        color={isUp ? "#34D399" : "#F87171"}
-      />
-      <Text style={[deltaStyles.text, { color: isUp ? "#34D399" : "#F87171" }]}>
-        {Math.abs(value)}
-        {suffix || ""}
-      </Text>
-    </View>
-  );
+function formatMovementBadgeLabel(movementName?: string | null): string {
+  if (!movementName) return "Auto detect";
+  return formatLabel(movementName);
 }
 
-const deltaStyles = StyleSheet.create({
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    marginBottom: -1,
-  },
-  text: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-});
+function toWeekdayInitial(day: string): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  const initials = ["S", "M", "T", "W", "T", "F", "S"];
+  return initials[date.getUTCDay()] || "-";
+}
 
-function toTitleCase(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1);
+function formatDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown date";
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function getMismatchPalette(rate: number): { bg: string; border: string; text: string } {
+  if (rate < 10) {
+    return { bg: "#052E1A", border: "#166534", text: "#34D399" };
+  }
+  if (rate <= 25) {
+    return { bg: "#3F2A07", border: "#92400E", text: "#FBBF24" };
+  }
+  return { bg: "#3F1114", border: "#7F1D1D", text: "#F87171" };
+}
+
+function getPlayerDisplayName(u: {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}): string {
+  const fullName = String(u.name || "").trim();
+  return fullName || String(u.email || "").trim() || "Unknown";
 }
 
 export default function DashboardScreen() {
   const { user } = useAuth();
   const { selectedSport, selectedMovement } = useSport();
+  const isAdmin = user?.role === "admin";
+  const [userList, setUserList] = React.useState<Array<{id:string,name:string,email:string,role:string}>>([]);
+  const [selectedPlayerId, setSelectedPlayerId] = React.useState<string>("all");
+  const [showPlayerDropdown, setShowPlayerDropdown] = React.useState(false);
+  React.useEffect(() => {
+    if (!isAdmin) {
+      setSelectedPlayerId("all");
+      setShowPlayerDropdown(false);
+      setUserList([]);
+      return;
+    }
+
+    (async () => {
+      try {
+        const baseUrl = getApiUrl();
+        const res = await fetch(`${baseUrl}api/users`, { credentials: "include" });
+        if (res.ok) {
+          const users = await res.json();
+          if (Array.isArray(users) && users.length > 0) {
+            setUserList(users);
+          } else if (user) {
+            setUserList([
+              {
+                id: user.id,
+                name: user.name || "",
+                email: user.email || "",
+                role: user.role || "player",
+              },
+            ]);
+          } else {
+            setUserList([]);
+          }
+        }
+      } catch (e) {
+        if (user) {
+          setUserList([
+            {
+              id: user.id,
+              name: user.name || "",
+              email: user.email || "",
+              role: user.role || "player",
+            },
+          ]);
+        } else {
+          setUserList([]);
+        }
+      }
+    })();
+  }, [isAdmin, user]);
 
   const sc = sportColors[selectedSport?.name || ""] || {
     primary: "#6C5CE7",
@@ -186,14 +164,48 @@ export default function DashboardScreen() {
     retry: false,
   });
 
-  const analyses = filterBySport(
+  const {
+    data: discrepancy,
+    isLoading: discrepancyLoading,
+    isError: discrepancyIsError,
+    refetch: refetchDiscrepancy,
+    isRefetching: discrepancyRefetching,
+  } = useQuery({
+    queryKey: [
+      "discrepancy-summary",
+      selectedSport?.name || "all",
+      selectedMovement?.name || "auto-detect",
+      isAdmin ? selectedPlayerId : user?.id || "self",
+    ],
+    queryFn: () =>
+      fetchDiscrepancySummary(
+        selectedSport?.name,
+        selectedMovement?.name,
+        isAdmin ? selectedPlayerId : user?.id,
+      ),
+    enabled: !!user,
+    retry: false,
+  });
+
+  let filteredAnalyses = filterBySport(
     allAnalyses || [],
     selectedSport?.name,
     selectedMovement?.name,
   );
-  const firstName = user?.name?.split(" ")[0] || "Athlete";
-  const scores = computeScores(analyses);
-
+  if (isAdmin && selectedPlayerId !== "all") {
+    filteredAnalyses = filteredAnalyses.filter(a => a.userId === selectedPlayerId);
+  } else if (!isAdmin && user?.id) {
+    filteredAnalyses = filteredAnalyses.filter(a => a.userId === user.id);
+  }
+  const isAutoDetectMode = !selectedMovement?.name;
+  const selectedPlayerLabel =
+    selectedPlayerId === "all"
+      ? "All"
+      : (() => {
+          const selected = userList.find((u) => u.id === selectedPlayerId);
+          return selected ? getPlayerDisplayName(selected) : "All";
+        })();
+  const playerFilterLabel = isAdmin ? selectedPlayerLabel : user?.name || "Player";
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -207,41 +219,134 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scroll}
         refreshControl={
           <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={refetch}
+            refreshing={isRefetching || discrepancyRefetching}
+            onRefresh={() => {
+              refetch();
+              refetchDiscrepancy();
+            }}
             tintColor="#6C5CE7"
           />
         }
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.greetingSection}>
-          <Text style={styles.greeting}>
-            {getGreeting()}, {firstName}
-          </Text>
+          <Text style={styles.greeting}>Hi Vikram,</Text>
+          <Text style={styles.greetingSubtitle}>Ready to improve your game today?</Text>
           <View style={styles.sportLineRow}>
-            <Text style={styles.sportLine}>
-              Your {selectedSport?.name || "Sport"} Performance
-            </Text>
-            {scores.category && (
-              <View
+            {isAdmin ? (
+              <Pressable
+                onPress={() => setShowPlayerDropdown((prev) => !prev)}
                 style={[
-                  styles.categoryBadge,
+                  styles.playerDropdown,
                   {
-                    backgroundColor: sc.primary + "18",
-                    borderColor: sc.primary + "30",
+                    borderColor: `${sc.primary}55`,
+                    backgroundColor: `${sc.primary}12`,
                   },
                 ]}
               >
+                <Ionicons name="people" size={15} color={sc.primary} />
+                <Text style={[styles.playerDropdownText, { color: sc.primary }]} numberOfLines={1}>
+                  {playerFilterLabel}
+                </Text>
+                <Ionicons
+                  name={showPlayerDropdown ? "chevron-up" : "chevron-down"}
+                  size={14}
+                  color={sc.primary}
+                />
+              </Pressable>
+            ) : (
+              <View
+                style={[
+                  styles.playerDropdown,
+                  styles.playerDropdownReadonly,
+                  {
+                    borderColor: `${sc.primary}55`,
+                    backgroundColor: `${sc.primary}12`,
+                  },
+                ]}
+              >
+                <Ionicons name="people" size={15} color={sc.primary} />
+                <Text style={[styles.playerDropdownText, { color: sc.primary }]} numberOfLines={1}>
+                  {playerFilterLabel}
+                </Text>
+              </View>
+            )}
+            {selectedSport?.name && (
+              <View
+                style={[
+                  styles.movementBadge,
+                  isAutoDetectMode && {
+                    backgroundColor: `${sc.primary}12`,
+                    borderColor: `${sc.primary}30`,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="flash-outline"
+                  size={11}
+                  color={isAutoDetectMode ? sc.primary : "#34D399"}
+                />
                 <Text
-                  style={[styles.categoryText, { color: sc.primary }]}
-                  numberOfLines={1}
+                  style={[
+                    styles.movementBadgeText,
+                    isAutoDetectMode && { color: sc.primary },
+                  ]}
                 >
-                  {toTitleCase(scores.category)}
+                  {formatMovementBadgeLabel(selectedMovement?.name)}
                 </Text>
               </View>
             )}
           </View>
         </View>
+
+        {isAdmin && showPlayerDropdown && (
+          <Modal
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowPlayerDropdown(false)}
+          >
+            <Pressable
+              style={styles.playerDropdownOverlay}
+              onPress={() => setShowPlayerDropdown(false)}
+            >
+              <Pressable
+                style={styles.playerDropdownMenu}
+                onPress={() => {}}
+              >
+                {[
+                  { id: "all", name: "All" },
+                  ...userList.map((u) => ({ id: u.id, name: getPlayerDisplayName(u) })),
+                ].map((option) => (
+                  <Pressable
+                    key={option.id}
+                    onPress={() => {
+                      setSelectedPlayerId(option.id);
+                      setShowPlayerDropdown(false);
+                    }}
+                    style={[
+                      styles.playerDropdownItem,
+                      option.id === selectedPlayerId && {
+                        backgroundColor: `${sc.primary}18`,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.playerDropdownItemText,
+                        option.id === selectedPlayerId && { color: sc.primary },
+                      ]}
+                    >
+                      {option.name}
+                    </Text>
+                    {option.id === selectedPlayerId ? (
+                      <Ionicons name="checkmark" size={15} color={sc.primary} />
+                    ) : null}
+                  </Pressable>
+                ))}
+              </Pressable>
+            </Pressable>
+          </Modal>
+        )}
 
         {isLoading ? (
           <View style={styles.loadingWrap}>
@@ -249,64 +354,156 @@ export default function DashboardScreen() {
           </View>
         ) : (
           <>
-            <View style={styles.glassCard}>
-              <View style={styles.glassCardInner}>
-                <Text style={styles.glassLabel}>Overall Score</Text>
-                <View style={styles.scoreRow}>
-                  <View style={styles.scoreLeft}>
-                    <Text style={styles.scoreBig}>
-                      {scores.overall != null ? scores.overall : "—"}
+            {(discrepancyLoading || discrepancyIsError || !!discrepancy) && (
+              <View style={styles.discrepancyCard}>
+                <View style={styles.discrepancyHeader}>
+                  <Text style={styles.discrepancyTitle}>Discrepancy Report</Text>
+                  {!discrepancyLoading && !discrepancyIsError && discrepancy && (
+                    <Text style={[styles.discrepancyRate, { color: sc.primary }]}> 
+                      {discrepancy.summary.mismatchRatePct.toFixed(1)}%
                     </Text>
-                    <DeltaBadge value={scores.overallDelta} suffix=" pts" />
-                  </View>
+                  )}
                 </View>
-              </View>
-            </View>
 
-            {scores.subs.length > 0 && (
-              <View style={styles.subsRow}>
-                {scores.subs.map((sub) => {
-                  const meta = SUB_SCORE_META[sub.key] || {
-                    icon: "analytics-outline" as const,
-                    label: toTitleCase(sub.key),
-                    color: "#6C5CE7",
-                  };
-                  return (
-                    <MetricCard
-                      key={sub.key}
-                      icon={meta.icon}
-                      label={meta.label}
-                      value={sub.value ?? 0}
-                      color={meta.color}
-                      change={sub.delta}
-                    />
-                  );
-                })}
+                {discrepancyLoading && (
+                  <Text style={styles.discrepancyStateText}>Loading discrepancy data…</Text>
+                )}
+
+                {discrepancyIsError && (
+                  <Text style={styles.discrepancyStateText}>
+                    Could not load discrepancy data yet. Pull to refresh after backend restart.
+                  </Text>
+                )}
+
+                {!discrepancyLoading && !discrepancyIsError && discrepancy && discrepancy.summary.videosAnnotated === 0 && (
+                  <Text style={styles.discrepancyStateText}>
+                    No annotated videos found for this sport/movement selection yet.
+                  </Text>
+                )}
+
+                {!discrepancyLoading && !discrepancyIsError && discrepancy && discrepancy.summary.videosAnnotated > 0 && (
+                  <>
+                    {discrepancy.trend7d.length > 0 && (
+                      <View style={styles.discrepancyTrendCard}>
+                        <View style={styles.discrepancyTrendHeader}>
+                          <Text style={styles.discrepancyTrendTitle}>Last 7 Days</Text>
+                          <Text style={[styles.discrepancyTrendValue, { color: sc.primary }]}> 
+                            {discrepancy.trend7d[discrepancy.trend7d.length - 1]?.mismatchRatePct.toFixed(1)}%
+                          </Text>
+                        </View>
+                        <View style={styles.discrepancyTrendBars}>
+                          {(() => {
+                            const maxRate = Math.max(
+                              ...discrepancy.trend7d.map((point) => point.mismatchRatePct),
+                              1,
+                            );
+                            return discrepancy.trend7d.map((point) => {
+                              const barHeight = Math.max(
+                                6,
+                                Math.round((point.mismatchRatePct / maxRate) * 28),
+                              );
+                              return (
+                                <View key={point.day} style={styles.discrepancyTrendBarItem}>
+                                  <View
+                                    style={[
+                                      styles.discrepancyTrendBar,
+                                      {
+                                        height: barHeight,
+                                        backgroundColor:
+                                          point.mismatchRatePct > 0
+                                            ? `${sc.primary}CC`
+                                            : "#334155",
+                                      },
+                                    ]}
+                                  />
+                                </View>
+                              );
+                            });
+                          })()}
+                        </View>
+                        <View style={styles.discrepancyTrendLabels}>
+                          {discrepancy.trend7d.map((point) => (
+                            <Text key={`label-${point.day}`} style={styles.discrepancyTrendLabelText}>
+                              {toWeekdayInitial(point.day)}
+                            </Text>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+
+                    <View style={styles.discrepancyList}>
+                      {discrepancy.topVideos.filter((item) => item.mismatches > 0).map((item) => (
+                        <View key={item.analysisId} style={styles.discrepancyRow}>
+                          <View style={styles.discrepancyRowLeft}>
+                            <View style={styles.discrepancyTopLine}>
+                              <Text style={styles.discrepancyVideoName} numberOfLines={1}>
+                                {String(item.userName || "Player")}
+                              </Text>
+                            </View>
+                            <Text style={styles.discrepancyMeta} numberOfLines={1}>
+                              {`${String(item.sportName || "Sport")} • ${formatLabel(item.movementName)}`}
+                            </Text>
+                            <Text style={styles.discrepancyMetaSecondary}>
+                              {formatDateTime(item.createdAt)}
+                            </Text>
+                            <Text style={styles.discrepancyMetaSecondary}>
+                              {`${item.mismatches}/${item.manualShots} shots mismatched`}
+                            </Text>
+                          </View>
+                          <View style={styles.discrepancyRowRight}>
+                            {(() => {
+                              const palette = getMismatchPalette(item.mismatchRatePct);
+                              return (
+                                <View
+                                  style={[
+                                    styles.discrepancyRateBadge,
+                                    { backgroundColor: palette.bg, borderColor: palette.border },
+                                  ]}
+                                >
+                                  <Text style={[styles.discrepancyRateText, { color: palette.text }]}> 
+                                    {item.mismatchRatePct.toFixed(1)}%
+                                  </Text>
+                                </View>
+                              );
+                            })()}
+                            <Pressable
+                              onPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                router.push({
+                                  pathname: "/analysis/[id]",
+                                  params: { id: item.analysisId },
+                                });
+                              }}
+                              style={({ pressed }) => [
+                                styles.discrepancyReviewButton,
+                                { borderColor: `${sc.primary}66` },
+                                { opacity: pressed ? 0.75 : 1 },
+                              ]}
+                            >
+                              <Text style={[styles.discrepancyReviewText, { color: sc.primary }]}>Review</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+
+                    {discrepancy.topVideos.filter((item) => item.mismatches > 0).length === 0 && (
+                      <Text style={styles.discrepancyStateText}>
+                        No discrepancy videos found for this selection.
+                      </Text>
+                    )}
+
+                    {discrepancy.labelConfusions.length > 0 && (
+                      <Text style={styles.discrepancyConfusionText}>
+                        Top confusion{selectedMovement?.name ? ` (involving ${formatLabel(selectedMovement.name)})` : ""}: {formatLabel(discrepancy.labelConfusions[0].from)} → {formatLabel(discrepancy.labelConfusions[0].to)} ({discrepancy.labelConfusions[0].count})
+                      </Text>
+                    )}
+                  </>
+                )}
               </View>
             )}
 
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                router.push("/(tabs)/upload");
-              }}
-              style={({ pressed }) => [
-                styles.uploadButton,
-                { transform: [{ scale: pressed ? 0.97 : 1 }] },
-              ]}
-            >
-              <LinearGradient
-                colors={["#6C5CE7", "#A29BFE"]}
-                style={styles.uploadGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <Ionicons name="add" size={22} color="#fff" />
-                <Text style={styles.uploadText}>Upload Video</Text>
-              </LinearGradient>
-            </Pressable>
-
-            {(!analyses || analyses.length === 0) && (
+            {filteredAnalyses.length === 0 && (
               <View style={styles.emptyState}>
                 <View style={styles.emptyIconWrap}>
                   <Ionicons
@@ -338,83 +535,241 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
   },
+  greetingSubtitle: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    marginTop: 10,
+    color: "#94A3B8",
+  },
   sportLineRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 10,
+    marginTop: 14,
   },
   sportLine: {
     fontSize: 15,
     fontFamily: "Inter_400Regular",
     color: "#94A3B8",
   },
-  loadingWrap: { paddingTop: 60, alignItems: "center" },
-  glassCard: {
-    backgroundColor: "#15152D",
-    borderRadius: 16,
+  movementBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "#34D39912",
     borderWidth: 1,
-    borderColor: "#2A2A5040",
+    borderColor: "#34D39930",
+  },
+  movementBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#34D399",
+  },
+  playerDropdown: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    maxWidth: "55%",
+  },
+  playerDropdownText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    maxWidth: 140,
+  },
+  playerDropdownReadonly: {
+    justifyContent: "flex-start",
+  },
+  playerDropdownOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "flex-start",
+    paddingTop: 170,
+    paddingHorizontal: 20,
+  },
+  playerDropdownMenu: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#15152D",
+    maxHeight: 260,
     overflow: "hidden",
-    marginBottom: 16,
   },
-  glassCardInner: {
-    padding: 24,
-  },
-  glassLabel: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
-    marginBottom: 4,
-  },
-  scoreRow: {
+  playerDropdownItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 11,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  scoreLeft: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 8,
-  },
-  scoreBig: {
-    fontSize: 56,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
-    lineHeight: 62,
-  },
-  categoryBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  categoryText: {
+  playerDropdownItemText: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Inter_500Medium",
+    color: "#CBD5E1",
   },
-  subsRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 20,
-  },
-  uploadButton: {
+  loadingWrap: { paddingTop: 60, alignItems: "center" },
+  discrepancyCard: {
     borderRadius: 16,
-    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#15152D",
+    padding: 14,
+    gap: 12,
     marginBottom: 24,
   },
-  uploadGradient: {
+  discrepancyHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: 16,
+    justifyContent: "space-between",
   },
-  uploadText: {
-    color: "#fff",
-    fontSize: 16,
+  discrepancyTitle: {
+    fontSize: 15,
     fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
+  },
+  discrepancyRate: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+  },
+  discrepancyStateText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
+  },
+  discrepancyTrendCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2A2A5035",
+    backgroundColor: "#0A0A1A90",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  discrepancyTrendHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  discrepancyTrendTitle: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
+  },
+  discrepancyTrendValue: {
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+  },
+  discrepancyTrendBars: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 6,
+    height: 32,
+  },
+  discrepancyTrendBarItem: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+  discrepancyTrendBar: {
+    width: "100%",
+    borderRadius: 6,
+  },
+  discrepancyTrendLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  discrepancyTrendLabelText: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 10,
+    fontFamily: "Inter_500Medium",
+    color: "#64748B",
+  },
+  discrepancyList: {
+    gap: 8,
+  },
+  discrepancyRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    justifyContent: "space-between",
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2A2A5035",
+    backgroundColor: "#0A0A1A80",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  discrepancyRowLeft: {
+    flex: 1,
+    gap: 2,
+  },
+  discrepancyRowRight: {
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    minHeight: 64,
+  },
+  discrepancyTopLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  discrepancyVideoName: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#E2E8F0",
+    flex: 1,
+  },
+  discrepancyMeta: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  discrepancyMetaSecondary: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#CBD5E1",
+  },
+  discrepancyUploader: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#A29BFE",
+  },
+  discrepancyRateBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  discrepancyRateText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  discrepancyReviewButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: "#101025",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  discrepancyReviewText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  discrepancyConfusionText: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#CBD5E1",
   },
   emptyState: {
     alignItems: "center",

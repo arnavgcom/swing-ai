@@ -27,7 +27,8 @@ export function AnalysisCard({ analysis, onPress, showUserName }: AnalysisCardPr
   };
 
   const status = statusConfig[analysis.status as keyof typeof statusConfig] || statusConfig.pending;
-  const date = new Date(analysis.createdAt);
+  const videoDate = analysis.capturedAt || analysis.createdAt;
+  const date = new Date(videoDate);
   const timeStr = date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",

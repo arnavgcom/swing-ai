@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Modal,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
@@ -18,13 +19,65 @@ import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
 import { uploadVideo } from "@/lib/api";
+import { getApiUrl } from "@/lib/query-client";
+import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
+
+function getPlayerDisplayName(u: {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}): string {
+  const fullName = String(u.name || "").trim();
+  return fullName || String(u.email || "").trim() || "Unknown";
+}
+
+function formatMovementBadgeLabel(movementName?: string | null): string {
+  if (!movementName) return "Auto detect";
+  return movementName
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function toFileToken(value: string, fallback: string): string {
+  const cleaned = String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9\s]/g, "")
+    .replace(/\s+/g, " ");
+  return cleaned || fallback;
+}
+
+function getTimestampParts(now: Date): { date: string; time: string } {
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mi = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  return {
+    date: `${yyyy}${mm}${dd}`,
+    time: `${hh}${mi}${ss}`,
+  };
+}
+
+function getFileExtension(asset: ImagePicker.ImagePickerAsset): string {
+  const fileNameExt = asset.fileName?.match(/\.([a-zA-Z0-9]+)$/)?.[1];
+  if (fileNameExt) return fileNameExt.toLowerCase();
+  const uriExt = asset.uri?.split("?")[0]?.match(/\.([a-zA-Z0-9]+)$/)?.[1];
+  if (uriExt) return uriExt.toLowerCase();
+  return "mp4";
+}
 
 export default function UploadScreen() {
   const colors = Colors.dark;
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { selectedSport, selectedMovement } = useSport();
 
   const sportColor = selectedSport?.color || colors.tint;
@@ -35,6 +88,76 @@ export default function UploadScreen() {
     duration: number | null;
     fileSize: number | null;
   } | null>(null);
+  const [userList, setUserList] = useState<
+    Array<{ id: string; name: string; email: string; role: string }>
+  >([]);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
+  const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
+
+  React.useEffect(() => {
+    if (!user) {
+      setUserList([]);
+      setSelectedPlayerId("");
+      setShowPlayerDropdown(false);
+      return;
+    }
+
+    if (!isAdmin) {
+      setUserList([
+        {
+          id: user.id,
+          name: user.name || "",
+          email: user.email || "",
+          role: user.role || "player",
+        },
+      ]);
+      setSelectedPlayerId(user.id);
+      setShowPlayerDropdown(false);
+      return;
+    }
+
+    if (!selectedPlayerId) {
+      setSelectedPlayerId(user.id);
+    }
+
+    let active = true;
+    (async () => {
+      try {
+        const baseUrl = getApiUrl();
+        const res = await fetch(`${baseUrl}api/users`, { credentials: "include" });
+        if (!active) return;
+        if (res.ok) {
+          const users = await res.json();
+          if (Array.isArray(users) && users.length > 0) {
+            setUserList(users);
+            return;
+          }
+        }
+        setUserList([
+          {
+            id: user.id,
+            name: user.name || "",
+            email: user.email || "",
+            role: user.role || "player",
+          },
+        ]);
+      } catch {
+        if (!active) return;
+        setUserList([
+          {
+            id: user.id,
+            name: user.name || "",
+            email: user.email || "",
+            role: user.role || "player",
+          },
+        ]);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [user, isAdmin]);
 
   const uploadMutation = useMutation({
     mutationFn: () => {
@@ -44,6 +167,7 @@ export default function UploadScreen() {
         selectedVideo.fileName,
         selectedSport?.id,
         selectedMovement?.id,
+        selectedPlayerId || user?.id,
       );
     },
     onSuccess: (data) => {
@@ -64,9 +188,20 @@ export default function UploadScreen() {
   const handleVideoResult = (result: ImagePicker.ImagePickerResult) => {
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
+      const targetUser = userList.find((u) => u.id === (selectedPlayerId || user?.id));
+      const fullNameToken = toFileToken(
+        targetUser?.name || user?.name || targetUser?.email || user?.email || "Player",
+        "Player",
+      );
+      const sportToken = toFileToken(selectedSport?.name || "Sport", "Sport");
+      const categoryToken = toFileToken(selectedMovement?.name || "AutoDetect", "AutoDetect");
+      const { date, time } = getTimestampParts(new Date());
+      const extension = getFileExtension(asset);
+      const generatedFileName = `${fullNameToken}-${sportToken}-${categoryToken}-${date}-${time}.${extension}`;
+
       setSelectedVideo({
         uri: asset.uri,
-        fileName: asset.fileName || `analysis_${Date.now()}.mp4`,
+        fileName: generatedFileName,
         duration: asset.duration ? asset.duration / 1000 : null,
         fileSize: asset.fileSize || null,
       });
@@ -138,6 +273,18 @@ export default function UploadScreen() {
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
   const movementLabel = selectedMovement?.name || selectedSport?.name || "Performance";
+  const isAutoDetectMode = !selectedMovement?.name;
+  const selectedPlayerLabel =
+    (() => {
+      const selected = userList.find((u) => u.id === selectedPlayerId);
+      return selected ? getPlayerDisplayName(selected) : getPlayerDisplayName({
+        id: user?.id || "",
+        name: user?.name || "",
+        email: user?.email || "",
+        role: user?.role || "player",
+      });
+    })() ||
+    "Select player";
 
   return (
     <View style={styles.container}>
@@ -163,13 +310,107 @@ export default function UploadScreen() {
           </Text>
         </View>
 
-        {selectedSport && (
-          <View style={[styles.contextBadge, { backgroundColor: sportColor + "10", borderColor: sportColor + "25" }]}>
-            <Ionicons name={selectedSport.icon as any} size={16} color={sportColor} />
-            <Text style={[styles.contextText, { color: sportColor }]}>
-              {selectedSport.name}{selectedMovement ? ` / ${selectedMovement.name}` : " (Auto-detect)"}
-            </Text>
-          </View>
+        <View style={styles.topControlsRow}>
+          {isAdmin ? (
+            <Pressable
+              onPress={() => setShowPlayerDropdown((prev) => !prev)}
+              style={[
+                styles.playerDropdown,
+                {
+                  borderColor: `${sportColor}55`,
+                  backgroundColor: `${sportColor}12`,
+                },
+              ]}
+            >
+              <Ionicons name="people" size={15} color={sportColor} />
+              <Text
+                style={[styles.playerDropdownText, { color: sportColor }]}
+                numberOfLines={1}
+              >
+                {selectedPlayerLabel}
+              </Text>
+              <Ionicons
+                name={showPlayerDropdown ? "chevron-up" : "chevron-down"}
+                size={14}
+                color={sportColor}
+              />
+            </Pressable>
+          ) : (
+            <View
+              style={[
+                styles.playerDropdown,
+                styles.playerDropdownReadonly,
+                {
+                  borderColor: `${sportColor}55`,
+                  backgroundColor: `${sportColor}12`,
+                },
+              ]}
+            >
+              <Ionicons name="people" size={15} color={sportColor} />
+              <Text
+                style={[styles.playerDropdownText, { color: sportColor }]}
+                numberOfLines={1}
+              >
+                {selectedPlayerLabel}
+              </Text>
+            </View>
+          )}
+
+          {selectedSport && (
+            <View style={[styles.contextBadge, { backgroundColor: sportColor + "10", borderColor: sportColor + "25" }]}>
+              <Ionicons
+                name="flash-outline"
+                size={11}
+                color={isAutoDetectMode ? sportColor : "#34D399"}
+              />
+              <Text style={[styles.contextText, { color: sportColor }]}> 
+                {formatMovementBadgeLabel(selectedMovement?.name)}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {isAdmin && showPlayerDropdown && (
+          <Modal
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowPlayerDropdown(false)}
+          >
+            <Pressable
+              style={styles.playerDropdownOverlay}
+              onPress={() => setShowPlayerDropdown(false)}
+            >
+              <Pressable style={styles.playerDropdownMenu} onPress={() => {}}>
+                {userList.map((option) => (
+                  <Pressable
+                    key={option.id}
+                    onPress={() => {
+                      setSelectedPlayerId(option.id);
+                      setShowPlayerDropdown(false);
+                    }}
+                    style={[
+                      styles.playerDropdownItem,
+                      option.id === selectedPlayerId && {
+                        backgroundColor: `${sportColor}18`,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.playerDropdownItemText,
+                        option.id === selectedPlayerId && { color: sportColor },
+                      ]}
+                    >
+                      {getPlayerDisplayName(option)}
+                    </Text>
+                    {option.id === selectedPlayerId ? (
+                      <Ionicons name="checkmark" size={15} color={sportColor} />
+                    ) : null}
+                  </Pressable>
+                ))}
+              </Pressable>
+            </Pressable>
+          </Modal>
         )}
 
         {!selectedVideo ? (
@@ -342,20 +583,72 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: "#94A3B8",
   },
+  topControlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+    gap: 10,
+  },
   contextBadge: {
     flexDirection: "row",
     alignItems: "center",
-    alignSelf: "flex-start",
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
     borderWidth: 1,
-    marginBottom: 20,
+    maxWidth: "58%",
   },
   contextText: {
     fontSize: 13,
     fontFamily: "Inter_500Medium",
+  },
+  playerDropdown: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    maxWidth: "55%",
+  },
+  playerDropdownText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    maxWidth: 180,
+  },
+  playerDropdownReadonly: {
+    paddingRight: 10,
+  },
+  playerDropdownOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "flex-start",
+    paddingTop: 200,
+    paddingHorizontal: 20,
+  },
+  playerDropdownMenu: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#15152D",
+    maxHeight: 300,
+    overflow: "hidden",
+  },
+  playerDropdownItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  playerDropdownItemText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: "#CBD5E1",
   },
   uploadZone: {
     borderWidth: 1.5,

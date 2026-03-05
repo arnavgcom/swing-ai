@@ -4,6 +4,7 @@ import {
   Text,
   View,
   ScrollView,
+  KeyboardAvoidingView,
   Pressable,
   TextInput,
   ActivityIndicator,
@@ -21,7 +22,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "@/lib/auth-context";
-import { getApiUrl, apiRequest } from "@/lib/query-client";
+import { getApiUrl, apiRequest, queryClient } from "@/lib/query-client";
 import { fetch } from "expo/fetch";
 
 const APP_SPORTS = [
@@ -69,10 +70,17 @@ export default function ProfileScreen() {
   const [role, setRole] = useState(user?.role || "player");
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
 
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [showSportsPicker, setShowSportsPicker] = useState(false);
   const [selectedSports, setSelectedSports] = useState<string[]>([]);
+  const [showCreatePlayerModal, setShowCreatePlayerModal] = useState(false);
+  const [newPlayerEmail, setNewPlayerEmail] = useState("");
+  const [newPlayerName, setNewPlayerName] = useState("");
+  const [newPlayerPassword, setNewPlayerPassword] = useState("");
+  const [creatingPlayer, setCreatingPlayer] = useState(false);
+  const [createPlayerError, setCreatePlayerError] = useState("");
 
   useEffect(() => {
     if (user) {
@@ -93,6 +101,12 @@ export default function ProfileScreen() {
       }
     }
   }, [user]);
+
+  useEffect(() => {
+    if (role !== "admin" && showCreatePlayerModal) {
+      setShowCreatePlayerModal(false);
+    }
+  }, [role, showCreatePlayerModal]);
 
   const toggleSport = (sport: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -231,6 +245,86 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleClearHistory = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      "Clear History",
+      "This will permanently delete all your analysis history. This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear History",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await apiRequest("DELETE", "/api/analyses");
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              if (Platform.OS === "web") {
+                globalThis.alert("History cleared successfully");
+              } else {
+                Alert.alert("Done", "History cleared successfully");
+              }
+            } catch (e) {
+              Alert.alert("Error", "Failed to clear history");
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleRecalculateMetrics = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      "Recalc. Metrics/Scores",
+      "This will rerun analysis classification, shot counting, metrics/scores, and coaching insights for your uploaded videos.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Recalculate",
+          onPress: async () => {
+            setRecalculating(true);
+            try {
+              const res = await apiRequest("POST", "/api/analyses/recalculate");
+              const data = await res.json();
+              await queryClient.invalidateQueries({ queryKey: ["analyses-summary"] });
+              await queryClient.refetchQueries({ queryKey: ["analyses-summary"] });
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              const relinked = data.autoRelinkedAnalyses ?? 0;
+              const skipped = data.skippedAnalyses ?? 0;
+              const firstSkipReason =
+                Array.isArray(data.skippedDetails) && data.skippedDetails.length > 0
+                  ? data.skippedDetails[0]?.reason
+                  : null;
+              const message =
+                relinked > 0
+                  ? `Pipeline started for ${data.queuedAnalyses ?? 0} analysis record(s). Auto-relinked ${relinked} renamed file(s).`
+                  : skipped > 0
+                    ? `Pipeline started for ${data.queuedAnalyses ?? 0} analysis record(s). ${skipped} skipped${firstSkipReason ? `: ${firstSkipReason}` : ""}.`
+                    : `Pipeline started for ${data.queuedAnalyses ?? 0} analysis record(s).`;
+              if (Platform.OS === "web") {
+                globalThis.alert(message);
+              } else {
+                Alert.alert("Started", message);
+              }
+            } catch (e) {
+              const reason = e instanceof Error ? e.message : "Unknown error";
+              if (reason.includes("401")) {
+                Alert.alert("Session Expired", "Please log in again and retry recalculation.");
+              } else if (reason.includes("404")) {
+                Alert.alert("Endpoint Not Found", "Recalculation endpoint is unavailable. Please restart the API server and retry.");
+              } else {
+                Alert.alert("Error", `Failed to start recalculation: ${reason}`);
+              }
+            } finally {
+              setRecalculating(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleLogout = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert("Logout", "Are you sure you want to log out?", [
@@ -244,6 +338,59 @@ export default function ProfileScreen() {
       },
     ]);
   };
+
+  const handleCreatePlayer = async () => {
+    setCreatePlayerError("");
+    const email = newPlayerEmail.trim();
+    const name = newPlayerName.trim();
+    const password = newPlayerPassword;
+
+    if (!email || !name || !password) {
+      setCreatePlayerError("Email, full name, and password are required");
+      return;
+    }
+
+    if (password.length < 6) {
+      setCreatePlayerError("Password must be at least 6 characters");
+      return;
+    }
+
+    setCreatingPlayer(true);
+    try {
+      const baseUrl = getApiUrl();
+      const res = await fetch(`${baseUrl}api/admin/players`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          email,
+          name,
+          password,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setCreatePlayerError(
+          data?.error || `Failed to create player (HTTP ${res.status})`,
+        );
+        return;
+      }
+
+      setShowCreatePlayerModal(false);
+      setNewPlayerEmail("");
+      setNewPlayerName("");
+      setNewPlayerPassword("");
+      Alert.alert("Player Created", "New player profile created successfully.");
+    } catch {
+      setCreatePlayerError("Failed to create player");
+    } finally {
+      setCreatingPlayer(false);
+    }
+  };
+
+  const canClearHistory = false;
+  const showClearHistory = false;
 
   return (
     <View style={styles.container}>
@@ -272,11 +419,16 @@ export default function ProfileScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={styles.formContainer}
+        behavior={Platform.OS === "ios" ? "padding" : Platform.OS === "android" ? "height" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 16 : 0}
       >
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
         <Pressable onPress={pickImage} style={styles.avatarSection} testID="avatar-picker">
           <View style={styles.avatarContainer}>
             {avatarUri ? (
@@ -428,6 +580,196 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Only show Recalc button for admins */}
+        {role === "admin" && (
+          <Pressable
+            onPress={handleRecalculateMetrics}
+            disabled={recalculating}
+            style={({ pressed }) => [
+              styles.recalculateButton,
+              recalculating && styles.recalculateButtonDisabled,
+              { transform: [{ scale: pressed ? 0.97 : 1 }] },
+            ]}
+            testID="recalculate-metrics"
+          >
+            {recalculating ? (
+              <ActivityIndicator size="small" color="#6C5CE7" />
+            ) : (
+              <Ionicons name="refresh" size={20} color="#6C5CE7" />
+            )}
+            <Text style={styles.recalculateText}>Recalc. Metrics/Scores</Text>
+          </Pressable>
+          )}
+
+          {/* Admin-only: Create Player Modal Trigger */}
+          {role === "admin" && (
+            <Pressable
+              onPress={() => setShowCreatePlayerModal(true)}
+              style={({ pressed }) => [
+                styles.saveButton,
+                { transform: [{ scale: pressed ? 0.97 : 1 }] },
+              ]}
+              testID="create-player-trigger"
+            >
+              <View style={styles.saveContent}>
+                <Ionicons name="person-add" size={20} color="#6C5CE7" />
+                <Text style={styles.saveText}>Add New Player</Text>
+              </View>
+            </Pressable>
+          )}
+
+          {/* Modal Dialog for Creating Player */}
+          {role === "admin" && showCreatePlayerModal && (
+            <Modal
+              visible={showCreatePlayerModal}
+              transparent
+              animationType="slide"
+              onRequestClose={() => setShowCreatePlayerModal(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <Pressable
+                  style={styles.modalBackdrop}
+                  onPress={() => setShowCreatePlayerModal(false)}
+                />
+                <KeyboardAvoidingView
+                  style={styles.createPlayerKeyboardWrap}
+                  behavior={Platform.OS === "ios" ? "padding" : undefined}
+                  keyboardVerticalOffset={Platform.OS === "ios" ? insets.bottom + 12 : 0}
+                >
+                <Pressable
+                  style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}
+                  onPress={() => {}}
+                >
+                  <View style={styles.modalHandle} />
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Create New Player</Text>
+                  </View>
+                  <ScrollView
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={styles.createPlayerFormContent}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    <View style={styles.createPlayerFields}>
+                    <View style={styles.fieldWrapper}>
+                      <Text style={styles.fieldLabel}>Email</Text>
+                      <View style={styles.fieldInput}>
+                        <Ionicons name="mail-outline" size={18} color="#6C5CE7" />
+                        <TextInput
+                          value={newPlayerEmail}
+                          onChangeText={(text) => {
+                            setNewPlayerEmail(text);
+                            if (createPlayerError) setCreatePlayerError("");
+                          }}
+                          placeholder="player@email.com"
+                          placeholderTextColor="#4A4A6A"
+                          style={styles.textInput}
+                          keyboardType="email-address"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          testID="new-player-email"
+                        />
+                      </View>
+                    </View>
+                    <View style={styles.fieldWrapper}>
+                      <Text style={styles.fieldLabel}>Full Name</Text>
+                      <View style={styles.fieldInput}>
+                        <Ionicons name="person-outline" size={18} color="#6C5CE7" />
+                        <TextInput
+                          value={newPlayerName}
+                          onChangeText={(text) => {
+                            setNewPlayerName(text);
+                            if (createPlayerError) setCreatePlayerError("");
+                          }}
+                          placeholder="Player Name"
+                          placeholderTextColor="#4A4A6A"
+                          style={styles.textInput}
+                          autoCapitalize="words"
+                          autoCorrect={false}
+                          testID="new-player-name"
+                        />
+                      </View>
+                    </View>
+                    <View style={styles.fieldWrapper}>
+                      <Text style={styles.fieldLabel}>Password</Text>
+                      <View style={styles.fieldInput}>
+                        <Ionicons name="lock-closed-outline" size={18} color="#6C5CE7" />
+                        <TextInput
+                          value={newPlayerPassword}
+                          onChangeText={(text) => {
+                            setNewPlayerPassword(text);
+                            if (createPlayerError) setCreatePlayerError("");
+                          }}
+                          placeholder="At least 6 characters"
+                          placeholderTextColor="#4A4A6A"
+                          style={styles.textInput}
+                          secureTextEntry
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          testID="new-player-password"
+                        />
+                      </View>
+                    </View>
+                    {createPlayerError ? (
+                      <Text style={{ color: "#EF4444", marginTop: 4 }}>{createPlayerError}</Text>
+                    ) : null}
+                    </View>
+                  </ScrollView>
+
+                  <View style={styles.createPlayerFooter}>
+                    <Pressable
+                      onPress={handleCreatePlayer}
+                      disabled={creatingPlayer}
+                      style={({ pressed }) => [
+                        styles.saveButton,
+                        { transform: [{ scale: pressed ? 0.97 : 1 }], opacity: creatingPlayer ? 0.7 : 1 },
+                      ]}
+                      testID="create-player-submit"
+                    >
+                      <View style={styles.saveContent}>
+                        {creatingPlayer ? (
+                          <ActivityIndicator size="small" color="#6C5CE7" />
+                        ) : (
+                          <>
+                            <Ionicons name="checkmark-circle" size={20} color="#6C5CE7" />
+                            <Text style={styles.saveText}>Create Player</Text>
+                          </>
+                        )}
+                      </View>
+                    </Pressable>
+                  </View>
+                </Pressable>
+                </KeyboardAvoidingView>
+              </View>
+            </Modal>
+          )}
+
+        {showClearHistory && (
+          <Pressable
+            onPress={handleClearHistory}
+            disabled={!canClearHistory}
+            style={({ pressed }) => [
+              styles.clearHistoryButton,
+              !canClearHistory && styles.clearHistoryButtonDisabled,
+              { transform: [{ scale: pressed ? 0.97 : 1 }] },
+            ]}
+            testID="clear-history"
+          >
+            <Ionicons
+              name="trash-outline"
+              size={20}
+              color={canClearHistory ? "#EF4444" : "#64748B"}
+            />
+            <Text
+              style={[
+                styles.clearHistoryText,
+                !canClearHistory && styles.clearHistoryTextDisabled,
+              ]}
+            >
+              Clear History
+            </Text>
+          </Pressable>
+        )}
+
         <Pressable
           onPress={saveProfile}
           disabled={saving}
@@ -437,35 +779,31 @@ export default function ProfileScreen() {
           ]}
           testID="save-profile"
         >
-          <LinearGradient
-            colors={["#6C5CE7", "#A29BFE"]}
-            style={styles.saveGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          >
+          <View style={styles.saveContent}>
             {saving ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color="#6C5CE7" />
             ) : (
               <>
-                <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                <Ionicons name="checkmark-circle" size={20} color="#6C5CE7" />
                 <Text style={styles.saveText}>Save Changes</Text>
               </>
             )}
-          </LinearGradient>
+          </View>
         </Pressable>
 
-        <Pressable
-          onPress={handleLogout}
-          style={({ pressed }) => [
-            styles.logoutButton,
-            { transform: [{ scale: pressed ? 0.97 : 1 }] },
-          ]}
-          testID="logout-button"
-        >
-          <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-          <Text style={styles.logoutText}>Logout</Text>
-        </Pressable>
-      </ScrollView>
+          <Pressable
+            onPress={handleLogout}
+            style={({ pressed }) => [
+              styles.logoutButton,
+              { transform: [{ scale: pressed ? 0.97 : 1 }] },
+            ]}
+            testID="logout-button"
+          >
+            <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+            <Text style={styles.logoutText}>Logout</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <PickerModal
         visible={showCountryPicker}
@@ -608,6 +946,9 @@ function ProfileField({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0A0A1A" },
+  formContainer: {
+    flex: 1,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -812,23 +1153,72 @@ const styles = StyleSheet.create({
   roleBadgeTextAdmin: {
     color: "#FBBF24",
   },
-  saveButton: {
-    borderRadius: 14,
-    overflow: "hidden",
-    marginBottom: 16,
-  },
-  saveGradient: {
+  recalculateButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     paddingVertical: 16,
     borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#6C5CE740",
+    backgroundColor: "#6C5CE720",
+    marginBottom: 12,
+  },
+  recalculateButtonDisabled: {
+    opacity: 0.7,
+  },
+  recalculateText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#6C5CE7",
+  },
+  clearHistoryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#EF444430",
+    backgroundColor: "#EF444410",
+    marginBottom: 12,
+  },
+  clearHistoryText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#EF4444",
+  },
+  clearHistoryButtonDisabled: {
+    borderColor: "#2A2A50",
+    backgroundColor: "#131328",
+    opacity: 0.7,
+  },
+  clearHistoryTextDisabled: {
+    color: "#64748B",
+  },
+  saveButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#6C5CE740",
+    backgroundColor: "#6C5CE720",
+    borderRadius: 14,
+    marginBottom: 16,
+  },
+  saveContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 16,
   },
   saveText: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#6C5CE7",
   },
   logoutButton: {
     flexDirection: "row",
@@ -851,12 +1241,32 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "flex-end",
   },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  createPlayerKeyboardWrap: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
   modalContent: {
     backgroundColor: "#131328",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 12,
-    maxHeight: "70%",
+    maxHeight: "84%",
+    minHeight: 430,
+  },
+  createPlayerFormContent: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  createPlayerFields: {
+    gap: 16,
+  },
+  createPlayerFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 6,
   },
   modalHandle: {
     width: 40,
@@ -869,7 +1279,7 @@ const styles = StyleSheet.create({
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,

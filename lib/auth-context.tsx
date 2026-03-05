@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { getApiUrl, apiRequest } from "./query-client";
-import { fetch } from "expo/fetch";
+import { apiRequest } from "./query-client";
 
 interface AuthUser {
   id: string;
@@ -18,9 +17,10 @@ interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   register: (email: string, name: string, password: string) => Promise<void>;
   googleLogin: (tokens: { idToken?: string; accessToken?: string }) => Promise<void>;
+  localBypassLogin: () => void;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -31,6 +31,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => {},
   register: async () => {},
   googleLogin: async () => {},
+  localBypassLogin: () => {},
   logout: async () => {},
   refreshUser: async () => {},
 });
@@ -41,10 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkAuth = async () => {
     try {
-      const baseUrl = getApiUrl();
-      const res = await fetch(`${baseUrl}api/auth/me`, {
-        credentials: "include",
-      });
+      const res = await apiRequest("GET", "/api/auth/me");
       if (res.ok) {
         const data = await res.json();
         setUser(data);
@@ -61,10 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = useCallback(async () => {
     try {
-      const baseUrl = getApiUrl();
-      const res = await fetch(`${baseUrl}api/auth/me`, {
-        credentials: "include",
-      });
+      const res = await apiRequest("GET", "/api/auth/me");
       if (res.ok) {
         const data = await res.json();
         setUser(data);
@@ -72,8 +67,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {}
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await apiRequest("POST", "/api/auth/login", { email, password });
+  const login = useCallback(async (identifier: string, password: string) => {
+    const res = await apiRequest("POST", "/api/auth/login", { identifier, password });
     const data = await res.json();
     setUser(data);
   }, []);
@@ -90,13 +85,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(data);
   }, []);
 
+  const localBypassLogin = useCallback(() => {
+    setUser({
+      id: "local-bypass-user",
+      email: "local.user@swingai.dev",
+      name: "Local User",
+      avatarUrl: null,
+      phone: null,
+      address: null,
+      country: null,
+      sportsInterests: null,
+      bio: null,
+      role: "user",
+    });
+  }, []);
+
   const logout = useCallback(async () => {
     await apiRequest("POST", "/api/auth/logout");
     setUser(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, googleLogin, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, googleLogin, localBypassLogin, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

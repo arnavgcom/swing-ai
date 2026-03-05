@@ -1,4 +1,5 @@
-import React from "react";
+
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,14 +9,20 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
+  TextInput,
+  ScrollView,
+  Modal,
 } from "react-native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fetchAnalysesSummary, deleteAnalysis } from "@/lib/api";
 import type { AnalysisSummary } from "@/lib/api";
+import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
@@ -196,20 +203,81 @@ function findSubValue(
   return null;
 }
 
+function normalizeText(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.toLowerCase().trim();
+}
+
+function getVideoDate(item: Pick<AnalysisSummary, "capturedAt" | "createdAt">): string {
+  return item.capturedAt || item.createdAt;
+}
+
+function formatSessionSearchDate(createdAt: string): string[] {
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return [createdAt];
+  return [
+    createdAt,
+    createdAt.slice(0, 10),
+    date.toLocaleDateString("en-US"),
+    date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
+    date.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }),
+  ];
+}
+
+function getAnalysisSearchText(item: AnalysisSummary): string {
+  const movement = item.detectedMovement || "";
+  const config = item.configKey || "";
+  const configParts = config.split("-").join(" ");
+  const dateTokens = formatSessionSearchDate(getVideoDate(item));
+
+  return normalizeText(
+    [
+      item.videoFilename,
+      item.userName,
+      item.userId,
+      movement,
+      movement.replace(/-/g, " "),
+      config,
+      configParts,
+      ...dateTokens,
+    ].join(" "),
+  );
+}
+
+function matchesAnalysisSearch(item: AnalysisSummary, query: string): boolean {
+  const q = normalizeText(query);
+  if (!q) return true;
+  return getAnalysisSearchText(item).includes(q);
+}
+
 function SummaryCard({
   item,
   isOwner,
+  isAdmin,
+  isHighlighted,
+  highlightColor,
   onPress,
   onDelete,
   allAnalyses,
 }: {
   item: AnalysisSummary;
   isOwner: boolean;
+  isAdmin: boolean;
+  isHighlighted: boolean;
+  highlightColor: string;
   onPress: () => void;
   onDelete: () => void;
   allAnalyses: AnalysisSummary[];
 }) {
-  const date = new Date(item.createdAt);
+  const date = new Date(getVideoDate(item));
   const timeStr = date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -254,6 +322,15 @@ function SummaryCard({
       }}
       style={({ pressed }) => [
         summaryStyles.card,
+        isHighlighted && {
+          borderColor: `${highlightColor}AA`,
+          borderWidth: 1.5,
+          shadowColor: highlightColor,
+          shadowOpacity: 0.22,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 5,
+        },
         { transform: [{ scale: pressed ? 0.98 : 1 }] },
       ]}
     >
@@ -263,10 +340,18 @@ function SummaryCard({
       <View style={summaryStyles.cardTop}>
         <View style={summaryStyles.cardTopLeft}>
           <Text style={summaryStyles.timeText}>{timeStr}</Text>
-          {movement ? (
-            <Text style={summaryStyles.movementText}>
-              {toTitleCase(movement)}
+          {isAdmin && item.userName ? (
+            <Text style={summaryStyles.playerNameText} numberOfLines={1}>
+              {item.userName}
             </Text>
+          ) : null}
+          {movement ? (
+            <View style={summaryStyles.movementBadge}>
+              <Ionicons name="flash-outline" size={11} color="#34D399" />
+              <Text style={summaryStyles.movementBadgeText}>
+                {toTitleCase(movement).replace(/-/g, " ")}
+              </Text>
+            </View>
           ) : null}
         </View>
         <View style={summaryStyles.cardTopRight}>
@@ -312,39 +397,38 @@ function SummaryCard({
 
       {subEntries.length > 0 && (
         <View style={summaryStyles.metricsRow}>
-          {subEntries.map(([key, val]) => {
-            const prevVal = findSubValue(prevItem?.subScores || null, key);
-            const subDelta =
-              prevVal != null ? Math.round(val) - Math.round(prevVal) : null;
-            return (
-              <View key={key} style={summaryStyles.metricItem}>
-                <Text style={summaryStyles.metricLabel} numberOfLines={1}>
-                  {toTitleCase(key)}
-                </Text>
-                <View style={summaryStyles.metricValueRow}>
-                  <Text style={summaryStyles.metricValue}>
-                    {Math.round(val)}
+            {subEntries.map(([key, val]) => {
+              const prevVal = findSubValue(prevItem?.subScores || null, key);
+              const subDelta = prevVal != null ? Math.round(val) - Math.round(prevVal) : null;
+              return (
+                <View key={key} style={summaryStyles.metricItem}>
+                  <Text style={summaryStyles.metricLabel} numberOfLines={1}>
+                    {toTitleCase(key)}
                   </Text>
-                  {subDelta != null && subDelta !== 0 && (
-                    <View style={summaryStyles.subDeltaRow}>
-                      <Ionicons
-                        name={subDelta > 0 ? "arrow-up" : "arrow-down"}
-                        size={7}
-                        color={subDelta > 0 ? "#34D399" : "#F87171"}
-                      />
-                      <Text
-                        style={[
-                          summaryStyles.subDeltaText,
-                          { color: subDelta > 0 ? "#34D399" : "#F87171" },
-                        ]}
-                      >
-                        {Math.abs(subDelta)}
-                      </Text>
-                    </View>
-                  )}
+                  <View style={summaryStyles.metricValueRow}>
+                    <Text style={summaryStyles.metricValue}>
+                      {Math.round(val)}
+                    </Text>
+                    {subDelta != null && subDelta !== 0 && (
+                      <View style={summaryStyles.subDeltaRow}>
+                        <Ionicons
+                          name={subDelta > 0 ? "arrow-up" : "arrow-down"}
+                          size={7}
+                          color={subDelta > 0 ? "#34D399" : "#F87171"}
+                        />
+                        <Text
+                          style={[
+                            summaryStyles.subDeltaText,
+                            { color: subDelta > 0 ? "#34D399" : "#F87171" },
+                          ]}
+                        >
+                          {Math.abs(subDelta)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </View>
-            );
+              );
           })}
         </View>
       )}
@@ -399,10 +483,28 @@ const summaryStyles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     color: "#94A3B8",
   },
-  movementText: {
-    fontSize: 14,
+  playerNameText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: "#A29BFE",
+  },
+  movementBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    marginTop: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 9,
+    backgroundColor: "#34D39912",
+    borderWidth: 1,
+    borderColor: "#34D39930",
+  },
+  movementBadgeText: {
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: "#34D399",
   },
   scoreText: {
     fontSize: 28,
@@ -499,7 +601,85 @@ const summaryStyles = StyleSheet.create({
 export default function HistoryScreen() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { selectedSport, selectedMovement } = useSport();
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string>("all");
+  const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
+  const [userList, setUserList] = useState<
+    Array<{ id: string; name: string; email: string; role: string }>
+  >([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [lastWorkedAnalysisId, setLastWorkedAnalysisId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setSelectedPlayerId("all");
+      setShowPlayerDropdown(false);
+      setUserList([]);
+      return;
+    }
+
+    let active = true;
+    (async () => {
+      try {
+        const baseUrl = getApiUrl();
+        const res = await fetch(`${baseUrl}api/users`, { credentials: "include" });
+        if (active && res.ok) {
+          const users = await res.json();
+          if (Array.isArray(users) && users.length > 0) {
+            setUserList(users);
+          } else if (user) {
+            setUserList([
+              {
+                id: user.id,
+                name: user.name || "",
+                email: user.email || "",
+                role: user.role || "player",
+              },
+            ]);
+          } else {
+            setUserList([]);
+          }
+        }
+      } catch {
+        if (active) {
+          if (user) {
+            setUserList([
+              {
+                id: user.id,
+                name: user.name || "",
+                email: user.email || "",
+                role: user.role || "player",
+              },
+            ]);
+          } else {
+            setUserList([]);
+          }
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [isAdmin, user]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      AsyncStorage.getItem("swingai_last_worked_analysis_id")
+        .then((value) => {
+          if (active) setLastWorkedAnalysisId(value);
+        })
+        .catch(() => {
+          if (active) setLastWorkedAnalysisId(null);
+        });
+
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
 
   const {
     data: allAnalyses,
@@ -514,11 +694,25 @@ export default function HistoryScreen() {
     retry: false,
   });
 
-  const analyses = filterBySport(
+  const analysesBySport = filterBySport(
     allAnalyses || [],
     selectedSport?.name,
     selectedMovement?.name,
   );
+
+  const filteredAnalyses = useMemo(() => {
+    let result = analysesBySport.filter((item) =>
+      matchesAnalysisSearch(item, searchQuery),
+    );
+
+    if (isAdmin && selectedPlayerId !== "all") {
+      result = result.filter((item) => item.userId === selectedPlayerId);
+    } else if (!isAdmin && user?.id) {
+      result = result.filter((item) => item.userId === user.id);
+    }
+
+    return result;
+  }, [analysesBySport, searchQuery, isAdmin, selectedPlayerId, user?.id]);
 
   const deleteMutation = useMutation({
     mutationFn: deleteAnalysis,
@@ -540,13 +734,13 @@ export default function HistoryScreen() {
     ]);
   };
 
-  const isAdmin = user?.role === "admin";
   const isOwner = (item: AnalysisSummary) => item.userId === user?.id;
 
-  const totalAnalyses = analyses?.length || 0;
-  const completed = analyses?.filter((a) => a.status === "completed") || [];
+  const totalAnalyses = filteredAnalyses?.length || 0;
+  const completed =
+    filteredAnalyses?.filter((a) => a.status === "completed") || [];
   const processing =
-    analyses?.filter(
+    filteredAnalyses?.filter(
       (a) => a.status === "processing" || a.status === "pending",
     ) || [];
 
@@ -556,15 +750,44 @@ export default function HistoryScreen() {
     .reverse();
   const trendScores = trendItems.map((a) => Math.round(a.overallScore || 0));
   const trendDates = trendItems.map((a) => {
-    const d = new Date(a.createdAt);
+    const d = new Date(getVideoDate(a));
     return `${d.getMonth() + 1}/${d.getDate()}`;
   });
+
+  const historyHighlightColor = selectedSport?.color || "#34D399";
+  const historyMovementLabel = selectedMovement?.name
+    ? toTitleCase(selectedMovement.name.replace(/-/g, " "))
+    : "Auto detect";
+
+  const getPlayerDisplayName = (u: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  }) => {
+    const fullName = String(u.name || "").trim();
+    return fullName || String(u.email || "").trim() || "Unknown";
+  };
+
+  const selectedPlayerLabel =
+    selectedPlayerId === "all"
+      ? "All"
+      : (() => {
+          const selected = userList.find((u) => u.id === selectedPlayerId);
+          return selected ? getPlayerDisplayName(selected) : "All";
+        })();
+  const playerFilterLabel = isAdmin
+    ? selectedPlayerLabel
+    : user?.name || "Player";
 
   const renderItem = ({ item }: { item: AnalysisSummary }) => (
     <SummaryCard
       item={item}
       isOwner={isOwner(item)}
-      allAnalyses={analyses || []}
+      isAdmin={isAdmin}
+      isHighlighted={item.id === lastWorkedAnalysisId}
+      highlightColor={historyHighlightColor}
+      allAnalyses={filteredAnalyses || []}
       onPress={() =>
         router.push({
           pathname: "/analysis/[id]",
@@ -575,12 +798,153 @@ export default function HistoryScreen() {
     />
   );
 
-  const ListHeader = () => (
+  const listHeader = (
     <View>
       <View style={styles.headerSection}>
-        <Text style={styles.title}>History</Text>
-        <Text style={styles.subtitle}>Track your progress over time</Text>
+        <Text style={styles.title}>Track Progress</Text>
       </View>
+
+      <View style={styles.searchWrap}>
+        <Ionicons name="search" size={16} color="#64748B" />
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search"
+          placeholderTextColor="#64748B"
+          style={styles.searchInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+          returnKeyType="search"
+        />
+      </View>
+
+      <View style={styles.topControlsRow}>
+        {isAdmin ? (
+          <Pressable
+            onPress={() => setShowPlayerDropdown((prev) => !prev)}
+            style={[
+              styles.playerDropdown,
+              {
+                borderColor: `${historyHighlightColor}55`,
+                backgroundColor: `${historyHighlightColor}12`,
+              },
+            ]}
+          >
+            <Ionicons name="people" size={15} color={historyHighlightColor} />
+            <Text
+              style={[styles.playerDropdownText, { color: historyHighlightColor }]}
+              numberOfLines={1}
+            >
+              {selectedPlayerLabel}
+            </Text>
+            <Ionicons
+              name={showPlayerDropdown ? "chevron-up" : "chevron-down"}
+              size={14}
+              color={historyHighlightColor}
+            />
+          </Pressable>
+        ) : (
+          <View
+            style={[
+              styles.playerDropdown,
+              styles.playerDropdownReadonly,
+              {
+                borderColor: `${historyHighlightColor}55`,
+                backgroundColor: `${historyHighlightColor}12`,
+              },
+            ]}
+          >
+            <Ionicons name="people" size={15} color={historyHighlightColor} />
+            <Text
+              style={[styles.playerDropdownText, { color: historyHighlightColor }]}
+              numberOfLines={1}
+            >
+              {playerFilterLabel}
+            </Text>
+          </View>
+        )}
+
+        <View
+          style={[
+            styles.subcategoryBadge,
+            {
+              backgroundColor: `${historyHighlightColor}12`,
+              borderColor: `${historyHighlightColor}40`,
+            },
+          ]}
+        >
+          <Ionicons
+            name="flash-outline"
+            size={11}
+            color={historyHighlightColor}
+          />
+          <Text
+            style={[
+              styles.subcategoryBadgeText,
+              { color: historyHighlightColor },
+            ]}
+            numberOfLines={1}
+          >
+            {historyMovementLabel}
+          </Text>
+        </View>
+      </View>
+
+      {isAdmin && showPlayerDropdown && (
+        <Modal
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowPlayerDropdown(false)}
+        >
+          <Pressable
+            style={styles.playerDropdownOverlay}
+            onPress={() => setShowPlayerDropdown(false)}
+          >
+            <Pressable
+              style={styles.playerDropdownMenu}
+              onPress={() => {}}
+            >
+              {[
+                { id: "all", name: "All" },
+                ...userList.map((u) => ({ id: u.id, name: getPlayerDisplayName(u) })),
+              ].map((option) => (
+                <Pressable
+                  key={option.id}
+                  onPress={() => {
+                    setSelectedPlayerId(option.id);
+                    setShowPlayerDropdown(false);
+                  }}
+                  style={[
+                    styles.playerDropdownItem,
+                    option.id === selectedPlayerId && {
+                      backgroundColor: `${historyHighlightColor}18`,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.playerDropdownItemText,
+                      option.id === selectedPlayerId && {
+                        color: historyHighlightColor,
+                      },
+                    ]}
+                  >
+                    {option.name}
+                  </Text>
+                  {option.id === selectedPlayerId ? (
+                    <Ionicons
+                      name="checkmark"
+                      size={15}
+                      color={historyHighlightColor}
+                    />
+                  ) : null}
+                </Pressable>
+              ))}
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
 
       {trendScores.length > 1 && (
         <View style={styles.trendCard}>
@@ -627,7 +991,7 @@ export default function HistoryScreen() {
         ))}
       </View>
 
-      {analyses && analyses.length > 0 && (
+      {filteredAnalyses.length > 0 && (
         <Text style={styles.recentTitle}>Recent Sessions</Text>
       )}
     </View>
@@ -648,10 +1012,11 @@ export default function HistoryScreen() {
         </View>
       ) : (
         <FlatList
-          data={analyses || []}
+          data={filteredAnalyses}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={[styles.list, { paddingBottom: 100 }]}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
@@ -659,8 +1024,8 @@ export default function HistoryScreen() {
               tintColor="#6C5CE7"
             />
           }
-          scrollEnabled={true}
-          ListHeaderComponent={ListHeader}
+          scrollEnabled
+          ListHeaderComponent={listHeader}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <View style={styles.emptyIconWrap}>
@@ -672,7 +1037,9 @@ export default function HistoryScreen() {
               </View>
               <Text style={styles.emptyTitle}>No analysis history</Text>
               <Text style={styles.emptyText}>
-                Upload and analyze videos to see them here
+                {searchQuery.trim()
+                  ? "No sessions match your search"
+                  : "Upload and analyze videos to see them here"}
               </Text>
             </View>
           }
@@ -686,23 +1053,102 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0A0A1A" },
   headerSection: {
     marginTop: 20,
-    marginBottom: 20,
+    marginBottom: 10,
   },
   title: {
-    fontSize: 26,
+    fontSize: 24,
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
   },
-  subtitle: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    marginTop: 10,
-    color: "#94A3B8",
+  topControlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 12,
+  },
+  playerDropdown: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    maxWidth: "58%",
+  },
+  playerDropdownText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    maxWidth: 130,
+  },
+  playerDropdownReadonly: {
+    justifyContent: "flex-start",
+  },
+  playerDropdownOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "flex-start",
+    paddingTop: 140,
+    paddingHorizontal: 20,
+  },
+  playerDropdownMenu: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#15152D",
+    maxHeight: 260,
+    overflow: "hidden",
+  },
+  playerDropdownItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  playerDropdownItemText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: "#CBD5E1",
+  },
+  subcategoryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    maxWidth: "58%",
+  },
+  subcategoryBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
   },
   loadingWrap: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  searchWrap: {
+    backgroundColor: "#15152D",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A5040",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  searchInput: {
+    flex: 1,
+    color: "#E2E8F0",
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    paddingVertical: 0,
   },
   trendCard: {
     backgroundColor: "#15152D",

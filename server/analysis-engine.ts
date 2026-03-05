@@ -3,12 +3,15 @@ import { analyses, metrics, coachingInsights, sportMovements, sports } from "@sh
 import { eq } from "drizzle-orm";
 import { execFile } from "child_process";
 import { getConfigKey } from "@shared/sport-configs";
+import fs from "fs";
+import path from "path";
 
 interface PythonResult {
   configKey: string;
   overallScore: number;
   subScores: Record<string, number>;
   metricValues: Record<string, number>;
+  shotCount?: number;
   coaching: {
     keyStrength: string;
     improvementArea: string;
@@ -23,14 +26,36 @@ interface PythonResult {
   error?: string;
 }
 
+function resolvePythonExecutable(): string {
+  const envExecutable = process.env.PYTHON_EXECUTABLE;
+  if (envExecutable && fs.existsSync(envExecutable)) {
+    return envExecutable;
+  }
+
+  const localCandidates = [
+    path.resolve(process.cwd(), ".venv", "bin", "python3"),
+    path.resolve(process.cwd(), ".venv", "bin", "python"),
+  ];
+
+  for (const candidate of localCandidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return "python3";
+}
+
 function runPythonAnalysis(
   videoPath: string,
   sportName: string,
   movementName: string,
 ): Promise<PythonResult> {
   return new Promise((resolve, reject) => {
+    const pythonExecutable = resolvePythonExecutable();
+
     execFile(
-      "python3",
+      pythonExecutable,
       [
         "-m",
         "python_analysis.run_analysis",
@@ -78,7 +103,7 @@ export async function processAnalysis(analysisId: string): Promise<void> {
   try {
     await db
       .update(analyses)
-      .set({ status: "processing", updatedAt: new Date() })
+      .set({ status: "processing", rejectionReason: null, updatedAt: new Date() })
       .where(eq(analyses.id, analysisId));
 
     const [analysis] = await db
@@ -173,17 +198,22 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       metricValues.shotCount = result.shotCount;
     }
 
-    await db.insert(metrics).values({
-      analysisId,
-      configKey: result.configKey || configKey,
-      overallScore: result.overallScore,
-      subScores: result.subScores,
-      metricValues,
-    });
+    await db.transaction(async (tx) => {
+      await tx.delete(coachingInsights).where(eq(coachingInsights.analysisId, analysisId));
+      await tx.delete(metrics).where(eq(metrics.analysisId, analysisId));
 
-    await db.insert(coachingInsights).values({
-      analysisId,
-      ...result.coaching,
+      await tx.insert(metrics).values({
+        analysisId,
+        configKey: result.configKey || configKey,
+        overallScore: result.overallScore,
+        subScores: result.subScores,
+        metricValues,
+      });
+
+      await tx.insert(coachingInsights).values({
+        analysisId,
+        ...result.coaching,
+      });
     });
 
     await db
@@ -191,6 +221,7 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       .set({
         status: "completed",
         detectedMovement: actualMovement,
+        rejectionReason: null,
         updatedAt: new Date(),
       })
       .where(eq(analyses.id, analysisId));

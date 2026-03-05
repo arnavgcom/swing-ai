@@ -1,0 +1,57 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "check-api-port",
+			"type": "shell",
+			"command": "lsof -nP -iTCP:5000 -sTCP:LISTEN",
+			"isBackground": false
+		},
+		{
+			"label": "inspect-video-discrepancy",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"-e",
+				"const {Client}=require('pg');(async()=>{const cs=process.env.DATABASE_URL;if(!cs){console.error('NO_DATABASE_URL');process.exit(2);}const c=new Client({connectionString:cs});await c.connect();const filename='Tennis-Arnav Gupta-20260303-231703-xctk.mp4';const q=`select a.id,a.video_filename,a.detected_movement,a.created_at,ann.ordered_shot_labels,ann.updated_at as ann_updated,d.mismatches,d.mismatch_rate_pct,d.auto_shots,d.manual_shots,d.confusion_pairs from analyses a left join analysis_shot_annotations ann on ann.analysis_id=a.id left join analysis_shot_discrepancies d on d.analysis_id=a.id and d.user_id=ann.user_id where a.video_filename=$1 order by a.created_at desc limit 5`;const r=await c.query(q,[filename]);console.log(JSON.stringify(r.rows,null,2));await c.end();})().catch(e=>{console.error('ERR',e.message);process.exit(1);});"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "run-swing-ai-server-dev",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"server:dev"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "run-swing-ai-server-dev",
+			"type": "shell",
+			"command": "npm run server:dev",
+			"isBackground": true
+		},
+		{
+			"label": "tmp-check-api-port-5000",
+			"type": "shell",
+			"command": "lsof",
+			"args": [
+				"-nP",
+				"-iTCP:5000",
+				"-sTCP:LISTEN"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "tmp-inspect-shot-labels",
+			"type": "shell",
+			"command": "/Users/vikramgupta/workspace/swing-ai/.venv/bin/python",
+			"args": [
+				"scripts/inspect_shot_labels.py"
+			],
+			"isBackground": false
+		}
+	]
+}

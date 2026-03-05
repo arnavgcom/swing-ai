@@ -20,7 +20,7 @@ function NativeTabLayout() {
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="history">
         <Icon sf={{ default: "clock", selected: "clock.fill" }} />
-        <Label>History</Label>
+        <Label>Track</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
@@ -89,7 +89,7 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="history"
         options={{
-          title: "History",
+          title: "Track",
           tabBarIcon: ({ color }) => (
             <Ionicons name="time-outline" size={22} color={color} />
           ),
