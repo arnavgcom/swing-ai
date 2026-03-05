@@ -19,7 +19,7 @@ import {
   metrics,
   coachingInsights,
 } from "@shared/schema";
-import { eq, asc, and, desc, sql } from "drizzle-orm";
+import { eq, asc, and, desc, inArray, sql } from "drizzle-orm";
 import { getSportConfig, getAllConfigs } from "@shared/sport-configs";
 
 const uploadDir = path.resolve(process.cwd(), "uploads");
@@ -412,6 +412,116 @@ async function resolveAutoLabelsForAnalysis(
   }
 
   return autoLabels;
+}
+
+async function resolveSportAndMovementNames(
+  analysis: typeof analyses.$inferSelect,
+): Promise<{ sportName: string; movementName: string }> {
+  let sportName = "Tennis";
+  let movementName = analysis.detectedMovement || "forehand";
+
+  if (analysis.sportId) {
+    const [sport] = await db.select().from(sports).where(eq(sports.id, analysis.sportId));
+    if (sport?.name) {
+      sportName = sport.name;
+    }
+  }
+
+  if (analysis.movementId) {
+    const [movement] = await db
+      .select()
+      .from(sportMovements)
+      .where(eq(sportMovements.id, analysis.movementId));
+    if (movement?.name) {
+      movementName = movement.name;
+    }
+  }
+
+  return { sportName, movementName };
+}
+
+async function refreshDiscrepancySnapshotsForAnalysis(
+  analysisId: string,
+): Promise<{ refreshed: number; skipped: number }> {
+  const [analysis] = await db
+    .select()
+    .from(analyses)
+    .where(eq(analyses.id, analysisId))
+    .limit(1);
+
+  if (!analysis) {
+    return { refreshed: 0, skipped: 1 };
+  }
+
+  const annotations = await db
+    .select()
+    .from(analysisShotAnnotations)
+    .where(eq(analysisShotAnnotations.analysisId, analysisId));
+
+  if (annotations.length === 0) {
+    return { refreshed: 0, skipped: 0 };
+  }
+
+  const { sportName, movementName } = await resolveSportAndMovementNames(analysis);
+
+  let refreshed = 0;
+  let skipped = 0;
+
+  for (const annotation of annotations) {
+    const manualLabels = (annotation.orderedShotLabels || []).map((label) =>
+      normalizeShotLabel(label),
+    );
+
+    try {
+      const autoLabels = await resolveAutoLabelsForAnalysis(
+        analysis,
+        sportName,
+        movementName,
+        manualLabels,
+      );
+      const snapshot = computeDiscrepancySnapshot(autoLabels, manualLabels);
+
+      await db
+        .insert(analysisShotDiscrepancies)
+        .values({
+          analysisId,
+          userId: annotation.userId,
+          videoName: analysis.videoFilename,
+          sportName,
+          movementName,
+          autoShots: snapshot.autoShots,
+          manualShots: snapshot.manualShots,
+          mismatches: snapshot.mismatches,
+          mismatchRatePct: snapshot.mismatchRatePct,
+          labelMismatches: snapshot.labelMismatches,
+          countMismatch: snapshot.countMismatch,
+          confusionPairs: snapshot.confusionPairs,
+        })
+        .onConflictDoUpdate({
+          target: [analysisShotDiscrepancies.analysisId, analysisShotDiscrepancies.userId],
+          set: {
+            videoName: analysis.videoFilename,
+            sportName,
+            movementName,
+            autoShots: snapshot.autoShots,
+            manualShots: snapshot.manualShots,
+            mismatches: snapshot.mismatches,
+            mismatchRatePct: snapshot.mismatchRatePct,
+            labelMismatches: snapshot.labelMismatches,
+            countMismatch: snapshot.countMismatch,
+            confusionPairs: snapshot.confusionPairs,
+            updatedAt: new Date(),
+          },
+        });
+
+      refreshed += 1;
+    } catch (error) {
+      skipped += 1;
+      console.warn(`Discrepancy refresh failed for analysis ${analysisId}, user ${annotation.userId}:`, error);
+    }
+  }
+
+  return { refreshed, skipped };
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -941,18 +1051,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .orderBy(desc(analysisShotAnnotations.updatedAt))
         .limit(1);
 
-      let sportName = "Tennis";
-      let movementName = analysis.detectedMovement || "forehand";
-
-      if (analysis.sportId) {
-        const [sport] = await db.select().from(sports).where(eq(sports.id, analysis.sportId));
-        if (sport) sportName = sport.name;
-      }
-
-      if (analysis.movementId) {
-        const [movement] = await db.select().from(sportMovements).where(eq(sportMovements.id, analysis.movementId));
-        if (movement) movementName = movement.name;
-      }
+      const { sportName, movementName } = await resolveSportAndMovementNames(analysis);
 
       const manualLabels = (saved?.orderedShotLabels || orderedShotLabels).map((label) =>
         normalizeShotLabel(label),
@@ -1439,8 +1538,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/analyses/recalculate", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      await markStaleProcessingAsFailed(userId);
-      const userAnalyses = await storage.getAllAnalyses(userId);
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+
+      await markStaleProcessingAsFailed(isAdmin ? undefined : userId);
+      const userAnalyses = isAdmin
+        ? await storage.getAllAnalyses(null)
+        : await storage.getAllAnalyses(userId);
 
       type UploadCandidate = {
         filename: string;
@@ -1598,11 +1702,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const ids = runnableAnalyses.map((analysis) => analysis.id);
+      const annotationRows = ids.length
+        ? await db
+            .select({
+              analysisId: analysisShotAnnotations.analysisId,
+              userId: analysisShotAnnotations.userId,
+            })
+            .from(analysisShotAnnotations)
+            .where(inArray(analysisShotAnnotations.analysisId, ids))
+        : [];
+      const analysesWithAnnotationsQueued = new Set(
+        annotationRows.map((row) => row.analysisId),
+      ).size;
 
       void (async () => {
         for (const id of ids) {
           try {
             await processAnalysis(id);
+            const snapshotResult = await refreshDiscrepancySnapshotsForAnalysis(id);
+            if (snapshotResult.refreshed > 0 || snapshotResult.skipped > 0) {
+              console.log(
+                `Discrepancy refresh for ${id}: refreshed=${snapshotResult.refreshed}, skipped=${snapshotResult.skipped}`,
+              );
+            }
           } catch (err) {
             console.error(`Recalculate failed for ${id}:`, err);
           }
@@ -1611,11 +1733,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         message: "Recalculation started",
+        scope: isAdmin ? "all" : "user",
         totalAnalyses: userAnalyses.length,
         queuedAnalyses: ids.length,
         autoRelinkedAnalyses,
         skippedAnalyses: userAnalyses.length - ids.length,
         skippedDetails,
+        willRefreshDiscrepancies: true,
+        queuedDiscrepancySnapshots: annotationRows.length,
+        analysesWithAnnotationsQueued,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -1659,14 +1785,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .where(eq(analyses.id, analysisId));
 
-      void processAnalysis(analysisId).catch((err) => {
-        console.error(`Relink+recalculate failed for ${analysisId}:`, err);
-      });
+      const relinkAnnotationRows = await db
+        .select({
+          analysisId: analysisShotAnnotations.analysisId,
+          userId: analysisShotAnnotations.userId,
+        })
+        .from(analysisShotAnnotations)
+        .where(eq(analysisShotAnnotations.analysisId, analysisId));
+
+      void (async () => {
+        try {
+          await processAnalysis(analysisId);
+          const snapshotResult = await refreshDiscrepancySnapshotsForAnalysis(analysisId);
+          if (snapshotResult.refreshed > 0 || snapshotResult.skipped > 0) {
+            console.log(
+              `Discrepancy refresh for ${analysisId}: refreshed=${snapshotResult.refreshed}, skipped=${snapshotResult.skipped}`,
+            );
+          }
+        } catch (err) {
+          console.error(`Relink+recalculate failed for ${analysisId}:`, err);
+        }
+      })();
 
       res.json({
         message: "Relinked and recalculation started",
         analysisId,
         filename: safeFilename,
+        willRefreshDiscrepancies: true,
+        queuedDiscrepancySnapshots: relinkAnnotationRows.length,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

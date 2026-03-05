@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 SPORT_MOVEMENTS = {
@@ -431,19 +431,105 @@ def classify_segment_movement(
     frame_width: int = 1920,
     frame_height: int = 1080,
 ) -> str:
+    diagnostics = classify_segment_movement_with_diagnostics(
+        segment_data,
+        sport,
+        fps,
+        frame_width,
+        frame_height,
+    )
+    return str(diagnostics.get("label", "unknown"))
+
+
+def classify_segment_movement_with_diagnostics(
+    segment_data: List[Optional[Dict]],
+    sport: str,
+    fps: float = 30.0,
+    frame_width: int = 1920,
+    frame_height: int = 1080,
+) -> Dict[str, Any]:
     sport = sport.lower().replace(" ", "").replace("_", "")
 
     valid_in_segment = [p for p in segment_data if p is not None]
     if len(valid_in_segment) < 3:
-        return "unknown"
+        return {
+            "label": "unknown",
+            "confidence": 0.0,
+            "reasons": ["insufficient_pose_frames"],
+            "keyFeatures": {},
+        }
 
     if sport in RACQUET_SPORTS:
-        return _classify_racquet_sport(segment_data, sport, fps, frame_width, frame_height)
+        features = _extract_features(segment_data, fps, frame_width, frame_height)
+
+        if features.get("is_serve", False):
+            return {
+                "label": "serve",
+                "confidence": 0.9,
+                "reasons": ["serve_motion_detected"],
+                "keyFeatures": {
+                    "is_serve": True,
+                    "swing_arc_ratio": float(features.get("swing_arc_ratio", 0.0)),
+                    "max_wrist_speed": float(features.get("max_wrist_speed", 0.0)),
+                },
+            }
+
+        if sport == "tennis" and features.get("is_compact_forward", False) and float(features.get("swing_arc_ratio", 0.0)) < 0.2:
+            return {
+                "label": "volley",
+                "confidence": 0.85,
+                "reasons": ["compact_forward_motion"],
+                "keyFeatures": {
+                    "is_compact_forward": bool(features.get("is_compact_forward", False)),
+                    "swing_arc_ratio": float(features.get("swing_arc_ratio", 0.0)),
+                    "max_wrist_speed": float(features.get("max_wrist_speed", 0.0)),
+                },
+            }
+
+        if sport == "tennis":
+            label, confidence, reasons = _classify_tennis_forehand_backhand(features)
+            return {
+                "label": label,
+                "confidence": confidence,
+                "reasons": reasons,
+                "keyFeatures": {
+                    "is_cross_body": bool(features.get("is_cross_body", False)),
+                    "dominant_side": str(features.get("dominant_side", "right")),
+                    "dominant_side_confidence": float(features.get("dominant_side_confidence", 0.0)),
+                    "max_rw_speed": float(features.get("max_rw_speed", 0.0)),
+                    "max_lw_speed": float(features.get("max_lw_speed", 0.0)),
+                    "swing_arc_ratio": float(features.get("swing_arc_ratio", 0.0)),
+                    "is_compact_forward": bool(features.get("is_compact_forward", False)),
+                },
+            }
+
+        label = _classify_racquet_sport(segment_data, sport, fps, frame_width, frame_height)
+        return {
+            "label": label,
+            "confidence": 0.7,
+            "reasons": ["racquet_sport_rule"],
+            "keyFeatures": {
+                "swing_arc_ratio": float(features.get("swing_arc_ratio", 0.0)),
+                "max_wrist_speed": float(features.get("max_wrist_speed", 0.0)),
+            },
+        }
+
     if sport == "golf":
-        return _classify_golf(segment_data, fps, frame_width, frame_height)
+        label = _classify_golf(segment_data, fps, frame_width, frame_height)
+        return {
+            "label": label,
+            "confidence": 0.75,
+            "reasons": ["golf_rule"],
+            "keyFeatures": {},
+        }
 
     movements = SPORT_MOVEMENTS.get(sport, [])
-    return movements[0] if movements else "unknown"
+    return {
+        "label": movements[0] if movements else "unknown",
+        "confidence": 0.5,
+        "reasons": ["default_movement"],
+        "keyFeatures": {},
+    }
 
 
 def _classify_racquet_sport(
@@ -515,24 +601,77 @@ def _classify_forehand_backhand(features: Dict, sport: str) -> str:
     if sport == "tennis":
         if features["is_compact_forward"] and features["swing_arc_ratio"] < 0.2:
             return "volley"
-
-        if features["is_cross_body"]:
-            dominant_side = features.get("dominant_side", "right")
-            max_rw = float(features.get("max_rw_speed", 0.0))
-            max_lw = float(features.get("max_lw_speed", 0.0))
-            swing_arc = float(features.get("swing_arc_ratio", 0.0))
-
-            # Forehand follow-through can cross body; require stronger non-dominant evidence
-            # before assigning backhand.
-            if dominant_side == "right" and max_rw >= max_lw * 1.45 and swing_arc < 0.24:
-                return "forehand"
-            if dominant_side == "left" and max_lw >= max_rw * 1.45 and swing_arc < 0.24:
-                return "forehand"
+        label, _, _ = _classify_tennis_forehand_backhand(features)
+        return label
 
     if features["is_cross_body"]:
         return "backhand"
     else:
         return "forehand"
+
+
+def _classify_tennis_forehand_backhand(features: Dict) -> Tuple[str, float, List[str]]:
+    reasons: List[str] = []
+    forehand_score = 0.4
+    backhand_score = 0.4
+
+    dominant_side = str(features.get("dominant_side", "right"))
+    dominant_conf = float(features.get("dominant_side_confidence", 0.0))
+    max_rw = float(features.get("max_rw_speed", 0.0))
+    max_lw = float(features.get("max_lw_speed", 0.0))
+    swing_arc = float(features.get("swing_arc_ratio", 0.0))
+    is_cross_body = bool(features.get("is_cross_body", False))
+    is_compact_forward = bool(features.get("is_compact_forward", False))
+
+    speed_ratio_rw_lw = max_rw / max(max_lw, 1e-6)
+    speed_ratio_lw_rw = max_lw / max(max_rw, 1e-6)
+
+    if is_cross_body:
+        backhand_score += 0.55
+        reasons.append("cross_body_motion")
+    else:
+        forehand_score += 0.35
+        reasons.append("non_cross_body_motion")
+
+    side_weight = 0.35 * max(0.3, dominant_conf)
+    if dominant_side == "right":
+        if speed_ratio_rw_lw >= 1.3:
+            forehand_score += side_weight
+            reasons.append("right_wrist_speed_dominant")
+        elif speed_ratio_rw_lw <= 0.8:
+            backhand_score += side_weight * 0.75
+            reasons.append("left_wrist_speed_dominant")
+    else:
+        if speed_ratio_lw_rw >= 1.3:
+            forehand_score += side_weight
+            reasons.append("left_wrist_speed_dominant")
+        elif speed_ratio_lw_rw <= 0.8:
+            backhand_score += side_weight * 0.75
+            reasons.append("right_wrist_speed_dominant")
+
+    if swing_arc < 0.24:
+        forehand_score += 0.2
+        reasons.append("compact_arc_forehand_like")
+    else:
+        backhand_score += 0.12
+        reasons.append("wider_arc_backhand_risk")
+
+    if is_compact_forward:
+        forehand_score += 0.08
+        reasons.append("compact_forward_pattern")
+
+    gap = abs(forehand_score - backhand_score)
+    total = max(forehand_score + backhand_score, 1e-6)
+    confidence = 0.5 + min(0.45, gap / total)
+
+    if gap < 0.14:
+        # Bias ambiguous tennis strokes to forehand to avoid over-calling backhand
+        # when a forehand follow-through crosses the torso.
+        reasons.append("ambiguous_bias_forehand")
+        return "forehand", float(confidence), reasons
+
+    label = "forehand" if forehand_score >= backhand_score else "backhand"
+    return label, float(confidence), reasons
 
 
 def _classify_golf(
@@ -647,7 +786,7 @@ def _extract_features(
     is_overhead = avg_wrist_height > 0.15
     is_serve = _detect_serve(wrist_heights, pose_data, frame_height)
 
-    dominant_side = _determine_dominant_side(
+    dominant_side, dominant_side_confidence = _determine_dominant_side(
         right_wrist_positions, left_wrist_positions,
         right_wrist_speeds, left_wrist_speeds,
         right_vis_count, left_vis_count,
@@ -669,6 +808,7 @@ def _extract_features(
 
     return {
         "dominant_side": dominant_side,
+        "dominant_side_confidence": dominant_side_confidence,
         "max_wrist_speed": max_wrist_speed,
         "swing_arc_ratio": swing_arc_ratio,
         "avg_wrist_height": avg_wrist_height,
@@ -798,7 +938,7 @@ def _detect_cross_body(
     if total_votes < 3:
         return False
 
-    return cross_votes / total_votes >= 0.60
+    return cross_votes / total_votes >= 0.72
 
 
 def _detect_serve(
@@ -848,7 +988,7 @@ def _determine_dominant_side(
     left_vis: int,
     pose_data: List[Optional[Dict]],
     frame_width: int,
-) -> str:
+) -> Tuple[str, float]:
     score_right = 0.0
     score_left = 0.0
 
@@ -912,9 +1052,13 @@ def _determine_dominant_side(
         elif l_extension > r_extension * 1.2:
             score_left += 1.5
 
-    if score_right > score_left:
-        return "right"
-    elif score_left > score_right:
-        return "left"
+    total = score_right + score_left
+    confidence = 0.0 if total <= 0 else min(1.0, abs(score_right - score_left) / total)
 
-    return "right" if right_vis >= left_vis else "left"
+    if score_right > score_left:
+        return "right", float(confidence)
+    elif score_left > score_right:
+        return "left", float(confidence)
+
+    fallback_side = "right" if right_vis >= left_vis else "left"
+    return fallback_side, max(0.1, float(confidence))

@@ -142,6 +142,7 @@ def main():
         from python_analysis.movement_classifier import (
             classify_movement,
             classify_segment_movement,
+            classify_segment_movement_with_diagnostics,
             validate_sport_match,
             _segment_swings,
             _extract_features,
@@ -235,8 +236,6 @@ def main():
         )
 
         segments = _segment_swings(pose_data, fps, frame_width, frame_height)
-        movement_per_segment: List[str] = []
-        scoring_frames = 0
         shot_segments: List[Dict[str, Any]] = []
         excluded_shot_reasons: List[str] = []
 
@@ -266,29 +265,30 @@ def main():
                 frame_width,
                 frame_height,
             )
+            diag = classify_segment_movement_with_diagnostics(
+                segment_data,
+                sport,
+                fps,
+                frame_width,
+                frame_height,
+            )
+            cls = str(diag.get("label", cls))
             segment_features = _extract_features(
                 segment_data,
                 fps,
                 frame_width,
                 frame_height,
             )
-            included_for_scoring = cls == dominant_movement
-            if included_for_scoring:
-                scoring_frames += len(valid_segment)
-            else:
-                excluded_shot_reasons.append(
-                    f"Shot {seg_idx + 1} excluded: labeled {cls}, dominant movement is {dominant_movement}"
-                )
-
-            movement_per_segment.append(cls)
             shot_segments.append(
                 {
                     "index": seg_idx + 1,
                     "startFrame": int(start),
                     "endFrame": int(end),
                     "label": cls,
+                    "rawLabel": cls,
+                    "confidence": float(diag.get("confidence", 0.0)),
                     "frames": len(segment_data),
-                    "includedForScoring": included_for_scoring,
+                    "includedForScoring": False,
                     "classificationDebug": {
                         "dominantSide": segment_features.get("dominant_side"),
                         "isCrossBody": bool(segment_features.get("is_cross_body", False)),
@@ -301,12 +301,54 @@ def main():
                         "leftWristSpeed": round(float(segment_features.get("max_lw_speed", 0.0)), 4),
                         "swingArcRatio": round(float(segment_features.get("swing_arc_ratio", 0.0)), 4),
                         "contactHeightRatio": round(float(segment_features.get("contact_height_ratio", 0.0)), 4),
+                        "reasons": list(diag.get("reasons", [])),
                     },
                 }
             )
 
+        target_drill_label = movement if movement in ("forehand", "backhand") else (
+            dominant_movement if dominant_movement in ("forehand", "backhand") else ""
+        )
+
+        if sport == "tennis" and target_drill_label in ("forehand", "backhand"):
+            opposite = "backhand" if target_drill_label == "forehand" else "forehand"
+            opposite_confident = [
+                s for s in shot_segments
+                if str(s.get("label", "unknown")) == opposite and float(s.get("confidence", 0.0)) >= 0.90
+            ]
+            if len(opposite_confident) < 3:
+                for s in shot_segments:
+                    if str(s.get("label", "unknown")) == opposite:
+                        s["label"] = target_drill_label
+                        dbg = s.get("classificationDebug", {})
+                        reasons = list(dbg.get("reasons", []))
+                        reasons.append("drill_prior_normalized")
+                        dbg["reasons"] = reasons
+                        s["classificationDebug"] = dbg
+
+        movement_per_segment: List[str] = [
+            str(seg.get("label", "unknown"))
+            for seg in shot_segments
+            if str(seg.get("label", "unknown")) != "unknown"
+        ]
         movement_counts = dict(Counter(movement_per_segment))
-        top_candidates = _to_top_candidates(dominant_movement, movement_counts)
+        dominant_movement_for_report = dominant_movement
+        if movement_counts:
+            dominant_movement_for_report = max(movement_counts, key=movement_counts.get)
+
+        scoring_frames = 0
+        for seg in shot_segments:
+            included_for_scoring = str(seg.get("label", "unknown")) == dominant_movement_for_report
+            seg["includedForScoring"] = included_for_scoring
+            segment_valid_frames = int(seg.get("frames", 0))
+            if included_for_scoring:
+                scoring_frames += segment_valid_frames
+            else:
+                excluded_shot_reasons.append(
+                    f"Shot {seg.get('index')} excluded: labeled {seg.get('label')}, dominant movement is {dominant_movement_for_report}"
+                )
+
+        top_candidates = _to_top_candidates(dominant_movement_for_report, movement_counts)
 
         total_frame_count = int(total_frames if total_frames > 0 else len(pose_data))
         active_frame_count = int(sum((seg["endFrame"] - seg["startFrame"] + 1) for seg in shot_segments if seg.get("includedForScoring")))
@@ -346,7 +388,7 @@ def main():
         )
 
         features = _extract_features(pose_data, fps, frame_width, frame_height)
-        rationale = _build_rationale(sport, dominant_movement, movement_counts, features)
+        rationale = _build_rationale(sport, dominant_movement_for_report, movement_counts, features)
 
         bitrate_kbps = (
             (file_size_bytes * 8 / 1000.0) / duration_seconds
@@ -383,7 +425,7 @@ def main():
             },
             "movementTypeCounts": movement_counts,
             "aiConfidencePct": ai_confidence_pct,
-            "detectedMovement": dominant_movement,
+            "detectedMovement": dominant_movement_for_report,
             "classificationRationale": rationale,
             "validation": {
                 "valid": bool(validation.get("valid", True)),
