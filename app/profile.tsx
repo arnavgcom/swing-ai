@@ -55,6 +55,8 @@ const COUNTRIES = [
   "Vietnam",
 ];
 
+const DOMINANT_PROFILES = ["Right", "Left"];
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout, refreshUser } = useAuth();
@@ -65,6 +67,11 @@ export default function ProfileScreen() {
   const [address, setAddress] = useState(user?.address || "");
   const [country, setCountry] = useState(user?.country || "Singapore");
   const [sportsInterests, setSportsInterests] = useState(user?.sportsInterests || "");
+  const [dominantProfile, setDominantProfile] = useState(
+    user?.dominantProfile
+      ? user.dominantProfile.charAt(0).toUpperCase() + user.dominantProfile.slice(1).toLowerCase()
+      : "",
+  );
   const [bio, setBio] = useState(user?.bio || "");
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [role, setRole] = useState(user?.role || "player");
@@ -73,6 +80,7 @@ export default function ProfileScreen() {
   const [recalculating, setRecalculating] = useState(false);
 
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [showDominantProfilePicker, setShowDominantProfilePicker] = useState(false);
   const [showSportsPicker, setShowSportsPicker] = useState(false);
   const [selectedSports, setSelectedSports] = useState<string[]>([]);
   const [showCreatePlayerModal, setShowCreatePlayerModal] = useState(false);
@@ -88,6 +96,11 @@ export default function ProfileScreen() {
       setPhone(user.phone || "+65 ");
       setAddress(user.address || "");
       setCountry(user.country || "Singapore");
+      setDominantProfile(
+        user.dominantProfile
+          ? user.dominantProfile.charAt(0).toUpperCase() + user.dominantProfile.slice(1).toLowerCase()
+          : "",
+      );
       setBio(user.bio || "");
       setRole(user.role || "player");
       if (user.sportsInterests) {
@@ -227,6 +240,7 @@ export default function ProfileScreen() {
         phone: phone.trim(),
         address: address.trim(),
         country: country.trim(),
+        dominantProfile: dominantProfile.trim(),
         sportsInterests: sportsInterests.trim(),
         bio: bio.trim(),
         role,
@@ -499,6 +513,24 @@ export default function ProfileScreen() {
               <Ionicons name="globe-outline" size={18} color="#6C5CE7" />
               <Text style={[styles.dropdownText, !country && styles.dropdownPlaceholder]}>
                 {country || "Select country"}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color="#64748B" />
+            </Pressable>
+          </View>
+
+          <View style={styles.fieldWrapper}>
+            <Text style={styles.fieldLabel}>Dominant Profile</Text>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setShowDominantProfilePicker(true);
+              }}
+              style={styles.fieldInput}
+              testID="field-dominant-profile"
+            >
+              <Ionicons name="hand-left-outline" size={18} color="#6C5CE7" />
+              <Text style={[styles.dropdownText, !dominantProfile && styles.dropdownPlaceholder]}>
+                {dominantProfile || "Select dominant profile"}
               </Text>
               <Ionicons name="chevron-down" size={16} color="#64748B" />
             </Pressable>
@@ -816,6 +848,19 @@ export default function ProfileScreen() {
           setShowCountryPicker(false);
         }}
         onClose={() => setShowCountryPicker(false)}
+      />
+
+      <PickerModal
+        visible={showDominantProfilePicker}
+        title="Select Dominant Profile"
+        items={DOMINANT_PROFILES}
+        selectedItems={dominantProfile ? [dominantProfile] : []}
+        multiSelect={false}
+        onSelect={(item) => {
+          setDominantProfile(item);
+          setShowDominantProfilePicker(false);
+        }}
+        onClose={() => setShowDominantProfilePicker(false)}
       />
 
       <PickerModal

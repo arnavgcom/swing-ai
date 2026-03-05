@@ -9,6 +9,7 @@ interface AuthUser {
   phone: string | null;
   address: string | null;
   country: string | null;
+  dominantProfile: string | null;
   sportsInterests: string | null;
   bio: string | null;
   role: string;
@@ -94,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       phone: null,
       address: null,
       country: null,
+      dominantProfile: null,
       sportsInterests: null,
       bio: null,
       role: "user",

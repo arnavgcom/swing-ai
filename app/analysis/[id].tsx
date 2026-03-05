@@ -619,7 +619,7 @@ export default function AnalysisDetailScreen() {
     analysis.status === "pending" || analysis.status === "processing";
 
   const movementLabel =
-    sportConfig?.movementName || analysis.detectedMovement || "Movement";
+    analysis.detectedMovement || sportConfig?.movementName || "Movement";
 
   const sportThemeColor =
     (sportConfig?.sportName && sportColors[sportConfig.sportName]?.primary) ||
@@ -817,12 +817,12 @@ export default function AnalysisDetailScreen() {
                   </Text>
                 </View>
               )}
-              {(sportConfig?.movementName || detectedMovement) && (
+              {(detectedMovement || sportConfig?.movementName) && (
                 <View style={styles.categoryBadge}>
                   <Ionicons name="flash-outline" size={12} color="#34D399" />
                   <Text style={styles.categoryBadgeText}>
-                    {(sportConfig?.movementName || detectedMovement || "").charAt(0).toUpperCase() +
-                      (sportConfig?.movementName || detectedMovement || "").slice(1).replace(/-/g, " ")}
+                    {(detectedMovement || sportConfig?.movementName || "").charAt(0).toUpperCase() +
+                      (detectedMovement || sportConfig?.movementName || "").slice(1).replace(/-/g, " ")}
                   </Text>
                 </View>
               )}

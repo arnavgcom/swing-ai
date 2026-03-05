@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { analyses, metrics, coachingInsights, sportMovements, sports } from "@shared/schema";
+import { analyses, metrics, coachingInsights, sportMovements, sports, users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { execFile } from "child_process";
 import { getConfigKey } from "@shared/sport-configs";
@@ -50,21 +50,29 @@ function runPythonAnalysis(
   videoPath: string,
   sportName: string,
   movementName: string,
+  dominantProfile?: string | null,
 ): Promise<PythonResult> {
   return new Promise((resolve, reject) => {
     const pythonExecutable = resolvePythonExecutable();
 
+    const args = [
+      "-m",
+      "python_analysis.run_analysis",
+      videoPath,
+      "--sport",
+      sportName.toLowerCase(),
+      "--movement",
+      movementName.toLowerCase().replace(/\s+/g, "-"),
+    ];
+
+    const dominant = String(dominantProfile || "").trim().toLowerCase();
+    if (dominant === "right" || dominant === "left") {
+      args.push("--dominant-profile", dominant);
+    }
+
     execFile(
       pythonExecutable,
-      [
-        "-m",
-        "python_analysis.run_analysis",
-        videoPath,
-        "--sport",
-        sportName.toLowerCase(),
-        "--movement",
-        movementName.toLowerCase().replace(/\s+/g, "-"),
-      ],
+      args,
       {
         cwd: process.cwd(),
         timeout: 120000,
@@ -116,7 +124,7 @@ export async function processAnalysis(analysisId: string): Promise<void> {
     }
 
     let sportName = "tennis";
-    let movementName = "forehand";
+    let movementName = "auto-detect";
 
     if (analysis.movementId) {
       const [movement] = await db
@@ -138,6 +146,16 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       }
     }
 
+    let dominantProfile: string | null = null;
+    if (analysis.userId) {
+      const [profile] = await db
+        .select({ dominantProfile: users.dominantProfile })
+        .from(users)
+        .where(eq(users.id, analysis.userId))
+        .limit(1);
+      dominantProfile = profile?.dominantProfile ?? null;
+    }
+
     const configKey = getConfigKey(sportName, movementName);
 
     console.log(
@@ -147,6 +165,7 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       analysis.videoPath,
       sportName,
       movementName,
+      dominantProfile,
     );
 
     if (result.rejected) {

@@ -378,6 +378,7 @@ def classify_movement(
     fps: float = 30.0,
     frame_width: int = 1920,
     frame_height: int = 1080,
+    preferred_dominant_side: Optional[str] = None,
 ) -> Tuple[str, int]:
     sport = sport.lower().replace(" ", "").replace("_", "")
 
@@ -386,7 +387,14 @@ def classify_movement(
 
     if shot_count <= 1:
         if sport in RACQUET_SPORTS:
-            return _classify_racquet_sport(pose_data, sport, fps, frame_width, frame_height), shot_count
+            return _classify_racquet_sport(
+                pose_data,
+                sport,
+                fps,
+                frame_width,
+                frame_height,
+                preferred_dominant_side,
+            ), shot_count
         elif sport == "golf":
             return _classify_golf(pose_data, fps, frame_width, frame_height), shot_count
         else:
@@ -401,7 +409,14 @@ def classify_movement(
             continue
 
         if sport in RACQUET_SPORTS:
-            cls = _classify_racquet_sport(segment_data, sport, fps, frame_width, frame_height)
+            cls = _classify_racquet_sport(
+                segment_data,
+                sport,
+                fps,
+                frame_width,
+                frame_height,
+                preferred_dominant_side,
+            )
         elif sport == "golf":
             cls = _classify_golf(segment_data, fps, frame_width, frame_height)
         else:
@@ -411,7 +426,14 @@ def classify_movement(
 
     if not classifications:
         if sport in RACQUET_SPORTS:
-            return _classify_racquet_sport(pose_data, sport, fps, frame_width, frame_height), shot_count
+            return _classify_racquet_sport(
+                pose_data,
+                sport,
+                fps,
+                frame_width,
+                frame_height,
+                preferred_dominant_side,
+            ), shot_count
         elif sport == "golf":
             return _classify_golf(pose_data, fps, frame_width, frame_height), shot_count
         movements = SPORT_MOVEMENTS.get(sport, [])
@@ -430,6 +452,7 @@ def classify_segment_movement(
     fps: float = 30.0,
     frame_width: int = 1920,
     frame_height: int = 1080,
+    preferred_dominant_side: Optional[str] = None,
 ) -> str:
     diagnostics = classify_segment_movement_with_diagnostics(
         segment_data,
@@ -437,6 +460,7 @@ def classify_segment_movement(
         fps,
         frame_width,
         frame_height,
+        preferred_dominant_side,
     )
     return str(diagnostics.get("label", "unknown"))
 
@@ -447,6 +471,7 @@ def classify_segment_movement_with_diagnostics(
     fps: float = 30.0,
     frame_width: int = 1920,
     frame_height: int = 1080,
+    preferred_dominant_side: Optional[str] = None,
 ) -> Dict[str, Any]:
     sport = sport.lower().replace(" ", "").replace("_", "")
 
@@ -460,7 +485,13 @@ def classify_segment_movement_with_diagnostics(
         }
 
     if sport in RACQUET_SPORTS:
-        features = _extract_features(segment_data, fps, frame_width, frame_height)
+        features = _extract_features(
+            segment_data,
+            fps,
+            frame_width,
+            frame_height,
+            preferred_dominant_side,
+        )
 
         if features.get("is_serve", False):
             return {
@@ -538,12 +569,19 @@ def _classify_racquet_sport(
     fps: float,
     frame_width: int,
     frame_height: int,
+    preferred_dominant_side: Optional[str] = None,
 ) -> str:
     valid_poses = [p for p in pose_data if p is not None]
     if len(valid_poses) < 5:
         return SPORT_MOVEMENTS.get(sport, ["forehand"])[0]
 
-    features = _extract_features(pose_data, fps, frame_width, frame_height)
+    features = _extract_features(
+        pose_data,
+        fps,
+        frame_width,
+        frame_height,
+        preferred_dominant_side,
+    )
 
     if features["is_serve"]:
         return "serve"
@@ -622,6 +660,10 @@ def _classify_tennis_forehand_backhand(features: Dict) -> Tuple[str, float, List
     swing_arc = float(features.get("swing_arc_ratio", 0.0))
     is_cross_body = bool(features.get("is_cross_body", False))
     is_compact_forward = bool(features.get("is_compact_forward", False))
+    dominant_wrist_median_offset = float(features.get("dominant_wrist_median_offset", 0.0))
+    dominant_wrist_opposite_ratio = float(features.get("dominant_wrist_opposite_ratio", 0.0))
+    dominant_wrist_same_ratio = float(features.get("dominant_wrist_same_ratio", 0.0))
+    shoulder_rotation_delta_deg = float(features.get("shoulder_rotation_delta_deg", 0.0))
 
     speed_ratio_rw_lw = max_rw / max(max_lw, 1e-6)
     speed_ratio_lw_rw = max_lw / max(max_rw, 1e-6)
@@ -630,7 +672,9 @@ def _classify_tennis_forehand_backhand(features: Dict) -> Tuple[str, float, List
         backhand_score += 0.55
         reasons.append("cross_body_motion")
     else:
-        forehand_score += 0.35
+        # Non-cross-body is weak evidence for forehand in real-world clips;
+        # keep this signal modest so wide-arc and wrist parity can still vote backhand.
+        forehand_score += 0.24
         reasons.append("non_cross_body_motion")
 
     side_weight = 0.35 * max(0.3, dominant_conf)
@@ -650,11 +694,51 @@ def _classify_tennis_forehand_backhand(features: Dict) -> Tuple[str, float, List
             reasons.append("right_wrist_speed_dominant")
 
     if swing_arc < 0.24:
-        forehand_score += 0.2
+        forehand_score += 0.14
         reasons.append("compact_arc_forehand_like")
     else:
-        backhand_score += 0.12
+        backhand_score += 0.18
         reasons.append("wider_arc_backhand_risk")
+
+    # If the dominant/non-dominant wrist speeds are close and arc is wide,
+    # this is often a two-handed or neutral-prep backhand pattern.
+    dominant_speed_ratio = speed_ratio_rw_lw if dominant_side == "right" else speed_ratio_lw_rw
+    if swing_arc >= 0.30 and 0.85 <= dominant_speed_ratio <= 1.20:
+        backhand_score += 0.10
+        reasons.append("wrist_speed_parity_backhand_hint")
+
+    # Contact-side profile: dominant wrist spending more time on opposite body side
+    # is a strong backhand cue, while persistent same-side contact leans forehand.
+    if dominant_wrist_opposite_ratio >= 0.42:
+        backhand_score += 0.12
+        reasons.append("opposite_side_contact_profile")
+    elif dominant_wrist_same_ratio >= 0.70:
+        forehand_score += 0.10
+        reasons.append("same_side_contact_profile")
+
+    if dominant_wrist_median_offset <= -0.10:
+        backhand_score += 0.08
+        reasons.append("median_contact_opposite_side")
+    elif dominant_wrist_median_offset >= 0.12:
+        forehand_score += 0.08
+        reasons.append("median_contact_same_side")
+
+    # Torso rotation direction near swing completion can help separate FH/BH on compact clips.
+    if abs(shoulder_rotation_delta_deg) >= 8.0:
+        if dominant_side == "right":
+            if shoulder_rotation_delta_deg > 0:
+                backhand_score += 0.08
+                reasons.append("torso_rotation_backhand_hint")
+            else:
+                forehand_score += 0.03
+                reasons.append("torso_rotation_forehand_hint")
+        else:
+            if shoulder_rotation_delta_deg < 0:
+                backhand_score += 0.04
+                reasons.append("torso_rotation_backhand_hint")
+            else:
+                forehand_score += 0.03
+                reasons.append("torso_rotation_forehand_hint")
 
     if is_compact_forward:
         forehand_score += 0.08
@@ -702,6 +786,7 @@ def _extract_features(
     fps: float,
     frame_width: int,
     frame_height: int,
+    preferred_dominant_side: Optional[str] = None,
 ) -> Dict:
     dt = 1.0 / fps if fps > 0 else 1.0 / 30.0
 
@@ -709,6 +794,8 @@ def _extract_features(
     left_wrist_positions = []
     right_wrist_speeds = []
     left_wrist_speeds = []
+    right_wrist_offsets = []
+    left_wrist_offsets = []
     shoulder_angles = []
     wrist_heights = []
     contact_heights = []
@@ -754,10 +841,18 @@ def _extract_features(
             prev_lw = None
 
         if rs and ls and rs.get("visibility", 0) > 0.4 and ls.get("visibility", 0) > 0.4:
+            shoulder_width = abs(rs["x"] - ls["x"])
+            body_center_x = (rs["x"] + ls["x"]) / 2
             angle = math.degrees(
                 math.atan2(rs["y"] - ls["y"], rs["x"] - ls["x"])
             )
             shoulder_angles.append(angle)
+
+            if shoulder_width > 1:
+                if rw and rw.get("visibility", 0) > 0.4:
+                    right_wrist_offsets.append((rw["x"] - body_center_x) / shoulder_width)
+                if lw and lw.get("visibility", 0) > 0.4:
+                    left_wrist_offsets.append((lw["x"] - body_center_x) / shoulder_width)
 
         wrist = rw if (rw and rw.get("visibility", 0) > 0.4) else lw
         shoulder = rs if (rs and rs.get("visibility", 0) > 0.4) else ls
@@ -791,11 +886,33 @@ def _extract_features(
         right_wrist_speeds, left_wrist_speeds,
         right_vis_count, left_vis_count,
         pose_data, frame_width,
+        preferred_dominant_side,
     )
 
     is_compact_forward = swing_arc_ratio < 0.2 and max_wrist_speed < 0.35
 
     is_cross_body = _detect_cross_body(pose_data, frame_width, dominant_side)
+
+    dominant_offsets = right_wrist_offsets if dominant_side == "right" else left_wrist_offsets
+    dominant_wrist_median_offset = float(np.median(dominant_offsets)) if dominant_offsets else 0.0
+    if dominant_side == "right":
+        dominant_wrist_opposite_ratio = (
+            float(sum(1 for o in dominant_offsets if o < -0.12)) / len(dominant_offsets)
+            if dominant_offsets else 0.0
+        )
+        dominant_wrist_same_ratio = (
+            float(sum(1 for o in dominant_offsets if o > 0.12)) / len(dominant_offsets)
+            if dominant_offsets else 0.0
+        )
+    else:
+        dominant_wrist_opposite_ratio = (
+            float(sum(1 for o in dominant_offsets if o > 0.12)) / len(dominant_offsets)
+            if dominant_offsets else 0.0
+        )
+        dominant_wrist_same_ratio = (
+            float(sum(1 for o in dominant_offsets if o < -0.12)) / len(dominant_offsets)
+            if dominant_offsets else 0.0
+        )
 
     is_downward_motion = False
     if wrist_heights and len(wrist_heights) > 5:
@@ -806,9 +923,17 @@ def _extract_features(
 
     contact_height_ratio = float(np.mean(contact_heights)) if contact_heights else 0.5
 
+    shoulder_rotation_delta_deg = 0.0
+    if len(shoulder_angles) >= 6:
+        q = max(2, len(shoulder_angles) // 4)
+        first_mean = float(np.mean(shoulder_angles[:q]))
+        last_mean = float(np.mean(shoulder_angles[-q:]))
+        shoulder_rotation_delta_deg = ((last_mean - first_mean + 180.0) % 360.0) - 180.0
+
     return {
         "dominant_side": dominant_side,
         "dominant_side_confidence": dominant_side_confidence,
+        "dominant_side_calibrated": bool(preferred_dominant_side),
         "max_wrist_speed": max_wrist_speed,
         "swing_arc_ratio": swing_arc_ratio,
         "avg_wrist_height": avg_wrist_height,
@@ -818,6 +943,10 @@ def _extract_features(
         "is_cross_body": is_cross_body,
         "is_downward_motion": is_downward_motion,
         "contact_height_ratio": contact_height_ratio,
+        "dominant_wrist_median_offset": dominant_wrist_median_offset,
+        "dominant_wrist_opposite_ratio": dominant_wrist_opposite_ratio,
+        "dominant_wrist_same_ratio": dominant_wrist_same_ratio,
+        "shoulder_rotation_delta_deg": shoulder_rotation_delta_deg,
         "max_rw_speed": max_rw_speed,
         "max_lw_speed": max_lw_speed,
     }
@@ -988,7 +1117,14 @@ def _determine_dominant_side(
     left_vis: int,
     pose_data: List[Optional[Dict]],
     frame_width: int,
+    preferred_dominant_side: Optional[str] = None,
 ) -> Tuple[str, float]:
+    normalized_preferred = str(preferred_dominant_side or "").strip().lower()
+    if normalized_preferred in ("right", "left"):
+        # Handedness calibration from user profile should take precedence
+        # over noisy visual heuristics on ambiguous clips.
+        return normalized_preferred, 1.0
+
     score_right = 0.0
     score_left = 0.0
 

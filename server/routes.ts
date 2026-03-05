@@ -75,21 +75,29 @@ function runPythonDiagnostics(
   videoPath: string,
   sportName: string,
   movementName: string,
+  dominantProfile?: string | null,
 ): Promise<any> {
   return new Promise((resolve, reject) => {
     const pythonExecutable = resolvePythonExecutable();
 
+    const args = [
+      "-m",
+      "python_analysis.run_diagnostics",
+      videoPath,
+      "--sport",
+      sportName.toLowerCase(),
+      "--movement",
+      movementName.toLowerCase().replace(/\s+/g, "-"),
+    ];
+
+    const dominant = String(dominantProfile || "").trim().toLowerCase();
+    if (dominant === "right" || dominant === "left") {
+      args.push("--dominant-profile", dominant);
+    }
+
     execFile(
       pythonExecutable,
-      [
-        "-m",
-        "python_analysis.run_diagnostics",
-        videoPath,
-        "--sport",
-        sportName.toLowerCase(),
-        "--movement",
-        movementName.toLowerCase().replace(/\s+/g, "-"),
-      ],
+      args,
       {
         cwd: process.cwd(),
         timeout: 120000,
@@ -116,6 +124,16 @@ function runPythonDiagnostics(
       },
     );
   });
+}
+
+async function resolveUserDominantProfile(userId?: string | null): Promise<string | null> {
+  if (!userId) return null;
+  const [profile] = await db
+    .select({ dominantProfile: users.dominantProfile })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return profile?.dominantProfile ?? null;
 }
 
 function parseNumberValue(value: unknown): number | null {
@@ -345,6 +363,14 @@ function normalizeMovementToken(value: unknown): string {
     .replace(/[^a-z0-9]+/g, "");
 }
 
+function readShotCountFromMetricValues(metricValues: unknown): number {
+  if (!metricValues || typeof metricValues !== "object") return 0;
+  const raw = (metricValues as Record<string, unknown>).shotCount;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return parsed;
+}
+
 function computeDiscrepancySnapshot(autoLabels: string[], manualLabels: string[]) {
   const alignedCount = Math.min(autoLabels.length, manualLabels.length);
   let labelMismatches = 0;
@@ -386,6 +412,7 @@ async function resolveAutoLabelsForAnalysis(
   sportName: string,
   movementName: string,
   manualLabels: string[],
+  dominantProfile?: string | null,
 ): Promise<string[]> {
   let autoLabels: string[] = [];
 
@@ -395,6 +422,7 @@ async function resolveAutoLabelsForAnalysis(
         analysis.videoPath,
         sportName,
         movementName,
+        dominantProfile,
       );
       autoLabels = (diagnostics?.shotSegments || []).map((segment: any) =>
         normalizeShotLabel(segment?.label),
@@ -418,7 +446,7 @@ async function resolveSportAndMovementNames(
   analysis: typeof analyses.$inferSelect,
 ): Promise<{ sportName: string; movementName: string }> {
   let sportName = "Tennis";
-  let movementName = analysis.detectedMovement || "forehand";
+  let movementName = "auto-detect";
 
   if (analysis.sportId) {
     const [sport] = await db.select().from(sports).where(eq(sports.id, analysis.sportId));
@@ -463,6 +491,7 @@ async function refreshDiscrepancySnapshotsForAnalysis(
   }
 
   const { sportName, movementName } = await resolveSportAndMovementNames(analysis);
+  const dominantProfile = await resolveUserDominantProfile(analysis.userId);
 
   let refreshed = 0;
   let skipped = 0;
@@ -478,6 +507,7 @@ async function refreshDiscrepancySnapshotsForAnalysis(
         sportName,
         movementName,
         manualLabels,
+        dominantProfile,
       );
       const snapshot = computeDiscrepancySnapshot(autoLabels, manualLabels);
 
@@ -525,6 +555,8 @@ async function refreshDiscrepancySnapshotsForAnalysis(
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  await db.execute(sql`alter table users add column if not exists dominant_profile text`);
+
   await db.execute(sql`
     create table if not exists analysis_shot_annotations (
       id varchar primary key default gen_random_uuid(),
@@ -1052,6 +1084,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(1);
 
       const { sportName, movementName } = await resolveSportAndMovementNames(analysis);
+      const dominantProfile = await resolveUserDominantProfile(analysis.userId);
 
       const manualLabels = (saved?.orderedShotLabels || orderedShotLabels).map((label) =>
         normalizeShotLabel(label),
@@ -1065,6 +1098,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             sportName,
             movementName,
             manualLabels,
+            dominantProfile,
           );
           const snapshot = computeDiscrepancySnapshot(autoLabels, manualLabels);
 
@@ -1129,7 +1163,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       let sportName = "tennis";
-      let movementName = analysis.detectedMovement || "forehand";
+      let movementName = "auto-detect";
 
       if (analysis.sportId) {
         const [sport] = await db.select().from(sports).where(eq(sports.id, analysis.sportId));
@@ -1145,7 +1179,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         analysis.videoPath,
         sportName,
         movementName,
+        await resolveUserDominantProfile(analysis.userId),
       );
+
+      const diagnosticsDetected = String(diagnostics?.detectedMovement || "").trim();
+      if (
+        diagnosticsDetected &&
+        normalizeMovementToken(diagnosticsDetected) !== normalizeMovementToken(analysis.detectedMovement)
+      ) {
+        await db
+          .update(analyses)
+          .set({ detectedMovement: diagnosticsDetected, updatedAt: new Date() })
+          .where(eq(analyses.id, analysis.id));
+      }
 
       const [manualAnnotation] = await db
         .select()
@@ -1179,7 +1225,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sportFilter = String(req.query.sportName || "").trim().toLowerCase();
       const movementFilter = normalizeMovementToken(req.query.movementName || "");
       const playerFilter = String(req.query.playerId || "").trim();
-      const applyPlayerFilter = isAdmin && playerFilter && playerFilter !== "all";
+      const normalizedPlayerFilter = playerFilter.toLowerCase();
+      const applyPlayerFilter = isAdmin && !!playerFilter && normalizedPlayerFilter !== "all";
+
+      const analysisRows = isAdmin
+        ? await db
+            .select({
+              analysis: analyses,
+              sportName: sports.name,
+              movementName: sportMovements.name,
+              metricValues: metrics.metricValues,
+            })
+            .from(analyses)
+            .leftJoin(sports, eq(analyses.sportId, sports.id))
+            .leftJoin(sportMovements, eq(analyses.movementId, sportMovements.id))
+            .leftJoin(metrics, eq(metrics.analysisId, analyses.id))
+        : await db
+            .select({
+              analysis: analyses,
+              sportName: sports.name,
+              movementName: sportMovements.name,
+              metricValues: metrics.metricValues,
+            })
+            .from(analyses)
+            .leftJoin(sports, eq(analyses.sportId, sports.id))
+            .leftJoin(sportMovements, eq(analyses.movementId, sportMovements.id))
+            .leftJoin(metrics, eq(metrics.analysisId, analyses.id))
+            .where(eq(analyses.userId, userId));
+
+      const filteredAnalysesForRate = analysisRows.filter((row) => {
+        if (row.analysis.status !== "completed") return false;
+        if (applyPlayerFilter && row.analysis.userId !== playerFilter) return false;
+
+        if (sportFilter) {
+          const rowSport = String(row.sportName || "").trim().toLowerCase();
+          if (rowSport && rowSport !== sportFilter) return false;
+        }
+
+        if (movementFilter) {
+          const rowMovement = normalizeMovementToken(
+            row.movementName || row.analysis.detectedMovement || "",
+          );
+          if (rowMovement !== movementFilter) return false;
+        }
+
+        return true;
+      });
+
+      const analysisDateById = new Map(
+        filteredAnalysesForRate.map((row) => {
+          const videoDate = row.analysis.capturedAt || row.analysis.createdAt;
+          return [row.analysis.id, videoDate] as const;
+        }),
+      );
+
+      const analysisShotCountById = new Map(
+        filteredAnalysesForRate.map((row) => [
+          row.analysis.id,
+          readShotCountFromMetricValues(row.metricValues),
+        ] as const),
+      );
+
+      const dayTotalShots = new Map<string, number>();
+      for (const row of filteredAnalysesForRate) {
+        const videoDate = row.analysis.capturedAt || row.analysis.createdAt;
+        const dayKey = videoDate.toISOString().slice(0, 10);
+        const shotCount = analysisShotCountById.get(row.analysis.id) || 0;
+        dayTotalShots.set(dayKey, (dayTotalShots.get(dayKey) || 0) + shotCount);
+      }
 
       const rows = isAdmin
         ? await db
@@ -1255,7 +1368,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }> = [];
 
       const confusionMap = new Map<string, number>();
-      const trendAccumulator = new Map<string, { mismatches: number; manualShots: number }>();
+      const dayTotalMismatches = new Map<string, number>();
+      const analysisHasMismatch = new Map<string, boolean>();
       let videosAnnotated = 0;
       let totalManualShots = 0;
       let totalMismatches = 0;
@@ -1278,6 +1392,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             sportName,
             movementName,
             manualLabels,
+            await resolveUserDominantProfile(analysis.userId),
           );
           const computed = computeDiscrepancySnapshot(autoLabels, manualLabels);
 
@@ -1345,13 +1460,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           confusionMap.set(key, (confusionMap.get(key) || 0) + Number(pair.count || 0));
         }
 
-        const videoDate = analysis.capturedAt || analysis.createdAt;
+        const manualShots = Number(snapshot.manualShots || 0);
+        const mismatches = Number(snapshot.mismatches || 0);
+        const hasMismatch = mismatches > 0;
+        const previous = analysisHasMismatch.get(analysis.id) || false;
+        if (hasMismatch && !previous) {
+          analysisHasMismatch.set(analysis.id, true);
+        } else if (!analysisHasMismatch.has(analysis.id)) {
+          analysisHasMismatch.set(analysis.id, false);
+        }
+
+        const videoDate = analysisDateById.get(analysis.id) || analysis.capturedAt || analysis.createdAt;
         const dayKey = videoDate.toISOString().slice(0, 10);
-        const existingTrend = trendAccumulator.get(dayKey) || { mismatches: 0, manualShots: 0 };
-        trendAccumulator.set(dayKey, {
-          mismatches: existingTrend.mismatches + Number(snapshot.mismatches || 0),
-          manualShots: existingTrend.manualShots + Number(snapshot.manualShots || 0),
-        });
+        dayTotalMismatches.set(
+          dayKey,
+          (dayTotalMismatches.get(dayKey) || 0) + mismatches,
+        );
 
         topVideos.push({
           analysisId: analysis.id,
@@ -1389,8 +1513,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .sort((a, b) => b.count - a.count)
         .slice(0, 8);
 
+      const totalVideosConsidered = filteredAnalysesForRate.length;
+      const videosWithDiscrepancy = Array.from(analysisHasMismatch.values()).filter(Boolean).length;
+      const totalShots = Array.from(analysisShotCountById.values()).reduce(
+        (sum, shotCount) => sum + shotCount,
+        0,
+      );
       const mismatchRatePct = Number(
-        ((totalMismatches / Math.max(totalManualShots, 1)) * 100).toFixed(1),
+        ((totalMismatches / Math.max(totalShots, 1)) * 100).toFixed(1),
       );
 
       const trend7d: Array<{ day: string; mismatchRatePct: number }> = [];
@@ -1398,9 +1528,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const date = new Date();
         date.setUTCDate(date.getUTCDate() - offset);
         const dayKey = date.toISOString().slice(0, 10);
-        const dayData = trendAccumulator.get(dayKey);
-        const dayRate = dayData
-          ? Number(((dayData.mismatches / Math.max(dayData.manualShots, 1)) * 100).toFixed(1))
+        const totalShotsForDay = dayTotalShots.get(dayKey) || 0;
+        const mismatchesForDay = dayTotalMismatches.get(dayKey) || 0;
+        const dayRate = totalShotsForDay
+          ? Number(((mismatchesForDay / Math.max(totalShotsForDay, 1)) * 100).toFixed(1))
           : 0;
         trend7d.push({ day: dayKey, mismatchRatePct: dayRate });
       }
@@ -1408,6 +1539,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         summary: {
           videosAnnotated,
+          totalVideosConsidered,
+          videosWithDiscrepancy,
+          totalShots,
           totalManualShots,
           totalMismatches,
           mismatchRatePct,
@@ -1441,7 +1575,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       let sportName = "tennis";
-      let movementName = analysis.detectedMovement || "forehand";
+      let movementName = "auto-detect";
 
       if (analysis.sportId) {
         const [sport] = await db.select().from(sports).where(eq(sports.id, analysis.sportId));
@@ -1457,7 +1591,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         analysis.videoPath,
         sportName,
         movementName,
+        await resolveUserDominantProfile(analysis.userId),
       );
+
+      const diagnosticsDetected = String(diagnostics?.detectedMovement || "").trim();
+      if (
+        diagnosticsDetected &&
+        normalizeMovementToken(diagnosticsDetected) !== normalizeMovementToken(analysis.detectedMovement)
+      ) {
+        await db
+          .update(analyses)
+          .set({ detectedMovement: diagnosticsDetected, updatedAt: new Date() })
+          .where(eq(analyses.id, analysis.id));
+      }
 
       res.json(diagnostics);
     } catch (error: any) {

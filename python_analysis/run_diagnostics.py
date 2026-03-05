@@ -7,6 +7,123 @@ from collections import Counter
 from typing import Any, Dict, List, Optional
 
 
+def _has_strong_backhand_evidence(reasons: List[str]) -> bool:
+    strong = {
+        "cross_body_motion",
+        "opposite_side_contact_profile",
+        "median_contact_opposite_side",
+    }
+    return any(str(r) in strong for r in reasons)
+
+
+def _has_strong_forehand_evidence(reasons: List[str]) -> bool:
+    strong = {
+        "right_wrist_speed_dominant",
+        "left_wrist_speed_dominant",
+        "same_side_contact_profile",
+        "median_contact_same_side",
+    }
+    return any(str(r) in strong for r in reasons)
+
+
+def _apply_tennis_temporal_smoothing(shot_segments: List[Dict[str, Any]]) -> None:
+    tennis_labels = {"forehand", "backhand"}
+    n = len(shot_segments)
+    if n < 3:
+        return
+
+    labels = [str(s.get("label", "unknown")) for s in shot_segments]
+
+    def _confidence(i: int) -> float:
+        return float(shot_segments[i].get("confidence", 0.0))
+
+    def _reasons(i: int) -> List[str]:
+        dbg = shot_segments[i].get("classificationDebug", {}) or {}
+        return [str(r) for r in dbg.get("reasons", [])]
+
+    def _try_flip(i: int, target_label: str, conf_limit: float) -> None:
+        if labels[i] not in tennis_labels or target_label not in tennis_labels:
+            return
+        if labels[i] == target_label:
+            return
+        if _confidence(i) > conf_limit:
+            return
+        if _has_strong_backhand_evidence(_reasons(i)) and labels[i] == "backhand":
+            return
+        if _has_strong_forehand_evidence(_reasons(i)) and labels[i] == "forehand":
+            return
+
+        shot = shot_segments[i]
+        shot["label"] = target_label
+        dbg = shot.get("classificationDebug", {}) or {}
+        reasons = list(dbg.get("reasons", []))
+        reasons.append("temporal_consistency_normalized")
+        dbg["reasons"] = reasons
+        shot["classificationDebug"] = dbg
+        labels[i] = target_label
+
+    for i in range(1, n - 1):
+        prev_label = labels[i - 1]
+        next_label = labels[i + 1]
+        cur_label = labels[i]
+        if (
+            prev_label in tennis_labels
+            and next_label in tennis_labels
+            and cur_label in tennis_labels
+            and prev_label == next_label
+            and cur_label != prev_label
+        ):
+            _try_flip(i, prev_label, 0.96)
+
+    if labels[0] in tennis_labels and labels[1] in tennis_labels and labels[2] in tennis_labels:
+        if labels[1] == labels[2] and labels[0] != labels[1]:
+            _try_flip(0, labels[1], 0.82)
+
+    if labels[-1] in tennis_labels and labels[-2] in tennis_labels and labels[-3] in tennis_labels:
+        if labels[-2] == labels[-3] and labels[-1] != labels[-2]:
+            _try_flip(n - 1, labels[-2], 0.82)
+
+
+def _apply_tennis_auto_detect_majority_normalization(shot_segments: List[Dict[str, Any]]) -> None:
+    tennis_labels = {"forehand", "backhand"}
+    labeled = [
+        s for s in shot_segments
+        if str(s.get("label", "unknown")) in tennis_labels
+    ]
+    total = len(labeled)
+    if total < 6:
+        return
+
+    forehands = [s for s in labeled if str(s.get("label")) == "forehand"]
+    backhands = [s for s in labeled if str(s.get("label")) == "backhand"]
+
+    if len(forehands) >= len(backhands):
+        target_label = "forehand"
+        opposite = backhands
+    else:
+        target_label = "backhand"
+        opposite = forehands
+
+    target_ratio = max(len(forehands), len(backhands)) / max(total, 1)
+    if target_ratio < 0.66 or len(opposite) > 2:
+        return
+
+    opposite_strong = [
+        s for s in opposite
+        if float(s.get("confidence", 0.0)) >= 0.97
+    ]
+    if opposite_strong:
+        return
+
+    for s in opposite:
+        s["label"] = target_label
+        dbg = s.get("classificationDebug", {}) or {}
+        reasons = list(dbg.get("reasons", []))
+        reasons.append("auto_detect_majority_normalized")
+        dbg["reasons"] = reasons
+        s["classificationDebug"] = dbg
+
+
 def _estimate_quality(
     frame_width: int,
     frame_height: int,
@@ -131,10 +248,13 @@ def main():
     parser.add_argument("video_path", help="Path to the video file")
     parser.add_argument("--sport", default="tennis", help="Sport name")
     parser.add_argument("--movement", default="forehand", help="Movement name")
+    parser.add_argument("--dominant-profile", default="", help="Player dominant side: right or left")
     args = parser.parse_args()
 
     sport = args.sport.lower().replace(" ", "").replace("_", "")
     movement = args.movement.lower().replace(" ", "-").replace("_", "-")
+    dominant_profile = args.dominant_profile.lower().strip()
+    preferred_dominant_side = dominant_profile if dominant_profile in ("right", "left") else None
 
     try:
         import cv2
@@ -233,6 +353,7 @@ def main():
             fps,
             frame_width,
             frame_height,
+            preferred_dominant_side,
         )
 
         segments = _segment_swings(pose_data, fps, frame_width, frame_height)
@@ -264,6 +385,7 @@ def main():
                 fps,
                 frame_width,
                 frame_height,
+                preferred_dominant_side,
             )
             diag = classify_segment_movement_with_diagnostics(
                 segment_data,
@@ -271,6 +393,7 @@ def main():
                 fps,
                 frame_width,
                 frame_height,
+                preferred_dominant_side,
             )
             cls = str(diag.get("label", cls))
             segment_features = _extract_features(
@@ -278,6 +401,7 @@ def main():
                 fps,
                 frame_width,
                 frame_height,
+                preferred_dominant_side,
             )
             shot_segments.append(
                 {
@@ -306,17 +430,32 @@ def main():
                 }
             )
 
-        target_drill_label = movement if movement in ("forehand", "backhand") else (
-            dominant_movement if dominant_movement in ("forehand", "backhand") else ""
-        )
+        target_drill_label = movement if movement in ("forehand", "backhand") else ""
 
         if sport == "tennis" and target_drill_label in ("forehand", "backhand"):
             opposite = "backhand" if target_drill_label == "forehand" else "forehand"
+            labeled_strokes = [
+                str(s.get("label", "unknown"))
+                for s in shot_segments
+                if str(s.get("label", "unknown")) in ("forehand", "backhand")
+            ]
+            target_count = sum(1 for label in labeled_strokes if label == target_drill_label)
+            opposite_count = sum(1 for label in labeled_strokes if label == opposite)
+            total_labeled = len(labeled_strokes)
+            target_ratio = (target_count / max(total_labeled, 1)) if total_labeled else 0.0
             opposite_confident = [
                 s for s in shot_segments
                 if str(s.get("label", "unknown")) == opposite and float(s.get("confidence", 0.0)) >= 0.90
             ]
-            if len(opposite_confident) < 3:
+
+            should_normalize = (
+                total_labeled >= 6
+                and target_ratio >= 0.65
+                and opposite_count <= 2
+                and len(opposite_confident) == 0
+            )
+
+            if should_normalize:
                 for s in shot_segments:
                     if str(s.get("label", "unknown")) == opposite:
                         s["label"] = target_drill_label
@@ -325,6 +464,33 @@ def main():
                         reasons.append("drill_prior_normalized")
                         dbg["reasons"] = reasons
                         s["classificationDebug"] = dbg
+
+            if total_labeled <= 4:
+                for i, s in enumerate(shot_segments):
+                    if i not in (0, len(shot_segments) - 1):
+                        continue
+                    label = str(s.get("label", "unknown"))
+                    confidence = float(s.get("confidence", 0.0))
+                    dbg = s.get("classificationDebug", {}) or {}
+                    reasons = [str(r) for r in dbg.get("reasons", [])]
+                    if label != opposite or confidence >= 0.82:
+                        continue
+                    if target_drill_label == "forehand" and _has_strong_backhand_evidence(reasons):
+                        continue
+                    if target_drill_label == "backhand" and _has_strong_forehand_evidence(reasons):
+                        continue
+                    s["label"] = target_drill_label
+                    updated_dbg = s.get("classificationDebug", {}) or {}
+                    updated_reasons = list(updated_dbg.get("reasons", []))
+                    updated_reasons.append("short_drill_confidence_normalized")
+                    updated_dbg["reasons"] = updated_reasons
+                    s["classificationDebug"] = updated_dbg
+
+        if sport == "tennis" and movement == "auto-detect":
+            _apply_tennis_auto_detect_majority_normalization(shot_segments)
+
+        if sport == "tennis":
+            _apply_tennis_temporal_smoothing(shot_segments)
 
         movement_per_segment: List[str] = [
             str(seg.get("label", "unknown"))
@@ -387,7 +553,13 @@ def main():
             shots_considered_for_scoring,
         )
 
-        features = _extract_features(pose_data, fps, frame_width, frame_height)
+        features = _extract_features(
+            pose_data,
+            fps,
+            frame_width,
+            frame_height,
+            preferred_dominant_side,
+        )
         rationale = _build_rationale(sport, dominant_movement_for_report, movement_counts, features)
 
         bitrate_kbps = (

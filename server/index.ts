@@ -232,7 +232,7 @@ function setupErrorHandler(app: express.Application) {
   setupCors(app);
   setupBodyParsing(app);
   setupRequestLogging(app);
-  setupAuth(app);
+  await setupAuth(app);
 
   configureExpoAndLanding(app);
 

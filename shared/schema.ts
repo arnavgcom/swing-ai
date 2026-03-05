@@ -22,6 +22,7 @@ export const users = pgTable("users", {
   phone: text("phone"),
   address: text("address"),
   country: text("country"),
+  dominantProfile: text("dominant_profile"),
   sportsInterests: text("sports_interests"),
   bio: text("bio"),
   role: text("role").default("player").notNull(),

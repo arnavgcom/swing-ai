@@ -7,7 +7,7 @@ import path from "path";
 import fs from "fs";
 import { db } from "./db";
 import { users, registerSchema, loginSchema, type User } from "@shared/schema";
-import { eq, or } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 
 function extractHostname(value: string): string {
   try {
@@ -56,6 +56,7 @@ function sanitizeUser(user: User) {
     phone: user.phone,
     address: user.address,
     country: user.country,
+    dominantProfile: user.dominantProfile,
     sportsInterests: user.sportsInterests,
     bio: user.bio,
     role: user.role,
@@ -94,7 +95,11 @@ declare module "express-session" {
 
 const PgSession = connectPgSimple(session);
 
-export function setupAuth(app: Express) {
+export async function setupAuth(app: Express) {
+  await db.execute(
+    sql`alter table users add column if not exists dominant_profile text`,
+  );
+
   app.use(
     session({
       store: new PgSession({
@@ -429,7 +434,7 @@ export function setupAuth(app: Express) {
 
   app.put("/api/profile", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { name, phone, address, country, sportsInterests, bio, role } = req.body;
+      const { name, phone, address, country, dominantProfile, sportsInterests, bio, role } = req.body;
 
       if (name !== undefined && (!name || typeof name !== "string" || !name.trim())) {
         return res.status(400).json({ error: "Name is required" });
@@ -440,6 +445,16 @@ export function setupAuth(app: Express) {
       if (phone !== undefined) updates.phone = phone?.trim() || null;
       if (address !== undefined) updates.address = address?.trim() || null;
       if (country !== undefined) updates.country = country?.trim() || null;
+      if (dominantProfile !== undefined) {
+        const value = String(dominantProfile || "").trim().toLowerCase();
+        if (!value) {
+          updates.dominantProfile = null;
+        } else if (value === "right" || value === "left") {
+          updates.dominantProfile = value;
+        } else {
+          return res.status(400).json({ error: "dominantProfile must be Right or Left" });
+        }
+      }
       if (sportsInterests !== undefined) updates.sportsInterests = sportsInterests?.trim() || null;
       if (bio !== undefined) updates.bio = bio?.trim() || null;
       if (role !== undefined && (role === "player" || role === "admin")) updates.role = role;

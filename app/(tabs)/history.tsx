@@ -208,6 +208,39 @@ function normalizeText(value: string | null | undefined): string {
   return value.toLowerCase().trim();
 }
 
+function normalizeMovementValue(value: string | null | undefined): string {
+  const normalized = normalizeText(value).replace(/[_\s]+/g, "-").replace(/-+/g, "-");
+  if (!normalized || normalized === "auto-detect" || normalized === "autodetect") {
+    return "";
+  }
+  return normalized;
+}
+
+function movementFromConfigKey(configKey: string | null | undefined): string {
+  const normalized = normalizeText(configKey);
+  if (!normalized) return "";
+  const parts = normalized.split("-").filter(Boolean);
+  if (parts.length < 2) return "";
+  return normalizeMovementValue(parts.slice(1).join("-"));
+}
+
+function movementFromVideoFilename(videoFilename: string | null | undefined): string {
+  const filename = String(videoFilename || "");
+  if (!filename) return "";
+  const stem = filename.replace(/\.[^.]+$/, "");
+  const parts = stem.split("-").map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 3) return "";
+  return normalizeMovementValue(parts[2]);
+}
+
+function resolveAnalysisMovement(item: AnalysisSummary): string {
+  return (
+    normalizeMovementValue(item.detectedMovement) ||
+    movementFromConfigKey(item.configKey) ||
+    movementFromVideoFilename(item.videoFilename)
+  );
+}
+
 function getVideoDate(item: Pick<AnalysisSummary, "capturedAt" | "createdAt">): string {
   return item.capturedAt || item.createdAt;
 }
@@ -292,8 +325,7 @@ function SummaryCard({
   const subEntries = Object.entries(subs).filter(([key]) =>
     HISTORY_DISPLAY_KEYS.includes(key.toLowerCase()),
   );
-  const movement =
-    item.detectedMovement || item.videoFilename?.split("-")[1] || "";
+  const movement = resolveAnalysisMovement(item);
 
   const currentIndex = allAnalyses.findIndex((a) => a.id === item.id);
   const prevItem =

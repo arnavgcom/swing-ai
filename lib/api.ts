@@ -171,6 +171,9 @@ export interface ShotReportResponse {
 export interface DiscrepancySummaryResponse {
   summary: {
     videosAnnotated: number;
+    totalVideosConsidered?: number;
+    videosWithDiscrepancy?: number;
+    totalShots?: number;
     totalManualShots: number;
     totalMismatches: number;
     mismatchRatePct: number;
@@ -361,14 +364,16 @@ export async function fetchDiscrepancySummary(
 ): Promise<DiscrepancySummaryResponse> {
   const baseUrl = getApiUrl();
   const params = new URLSearchParams();
+  const normalizedPlayerId = String(playerId || "").trim();
+  const isAllPlayers = normalizedPlayerId.toLowerCase() === "all";
   if (sportName) {
     params.set("sportName", sportName);
   }
   if (!isAutoDetectMovement(movementName)) {
     params.set("movementName", String(movementName));
   }
-  if (playerId && playerId !== "all") {
-    params.set("playerId", playerId);
+  if (normalizedPlayerId && !isAllPlayers) {
+    params.set("playerId", normalizedPlayerId);
   }
   const query = params.toString() ? `?${params.toString()}` : "";
   const primary = await fetch(`${baseUrl}api/discrepancy-summary${query}`, {
@@ -420,7 +425,7 @@ export async function fetchDiscrepancySummary(
     return detected === movementFilter || configToken.includes(movementFilter);
   });
 
-  const recent = filtered.slice(0, 30);
+  const considered = filtered;
   let allAnnotations: AnalysisShotAnnotationResponse[] = [];
   try {
     allAnnotations = await fetchMyShotAnnotations();
@@ -432,18 +437,43 @@ export async function fetchDiscrepancySummary(
     allAnnotations.map((item) => [item.analysisId, item]),
   );
 
-  const annotations = recent.map((analysis) => ({
+  const shotCountByAnalysisId = new Map<string, number>();
+  await Promise.all(
+    considered.map(async (analysis) => {
+      try {
+        const detail = await fetchAnalysisDetail(analysis.id);
+        const shotCountRaw = detail?.metrics?.metricValues?.shotCount;
+        const shotCount = Number(shotCountRaw);
+        if (Number.isFinite(shotCount) && shotCount > 0) {
+          shotCountByAnalysisId.set(analysis.id, shotCount);
+        }
+      } catch {
+        // Fallback mode best effort: skip if detail fetch fails.
+      }
+    }),
+  );
+
+  const annotations = considered.map((analysis) => ({
     analysis,
     annotation: annotationByAnalysisId.get(analysis.id) || null,
   }));
 
   const confusionMap = new Map<string, number>();
-  const trendAccumulator = new Map<string, { mismatches: number; manualShots: number }>();
+  const dayTotalShots = new Map<string, number>();
+  const dayTotalMismatches = new Map<string, number>();
+  const analysisHasMismatch = new Map<string, boolean>();
   const topVideos: DiscrepancySummaryResponse["topVideos"] = [];
   const annotationsFetched = annotations.filter((item) => !!item.annotation).length;
   let videosAnnotated = 0;
   let totalManualShots = 0;
   let totalMismatches = 0;
+
+  for (const analysis of considered) {
+    analysisHasMismatch.set(analysis.id, false);
+    const dayKey = new Date(analysis.createdAt).toISOString().slice(0, 10);
+    const shotCount = shotCountByAnalysisId.get(analysis.id) || 0;
+    dayTotalShots.set(dayKey, (dayTotalShots.get(dayKey) || 0) + shotCount);
+  }
 
   for (const { analysis, annotation } of annotations) {
     if (!annotation || !Array.isArray(annotation.orderedShotLabels) || annotation.orderedShotLabels.length === 0) {
@@ -470,12 +500,12 @@ export async function fetchDiscrepancySummary(
     totalManualShots += manualLabels.length;
     totalMismatches += mismatches;
 
+    if (mismatches > 0 && !analysisHasMismatch.get(analysis.id)) {
+      analysisHasMismatch.set(analysis.id, true);
+    }
+
     const dayKey = new Date(analysis.createdAt).toISOString().slice(0, 10);
-    const existing = trendAccumulator.get(dayKey) || { mismatches: 0, manualShots: 0 };
-    trendAccumulator.set(dayKey, {
-      mismatches: existing.mismatches + mismatches,
-      manualShots: existing.manualShots + manualLabels.length,
-    });
+    dayTotalMismatches.set(dayKey, (dayTotalMismatches.get(dayKey) || 0) + mismatches);
 
     topVideos.push({
       analysisId: analysis.id,
@@ -502,12 +532,17 @@ export async function fetchDiscrepancySummary(
     const date = new Date();
     date.setUTCDate(date.getUTCDate() - offset);
     const day = date.toISOString().slice(0, 10);
-    const dayData = trendAccumulator.get(day);
-    const mismatchRatePct = dayData
-      ? Number(((dayData.mismatches / Math.max(dayData.manualShots, 1)) * 100).toFixed(1))
+    const totalShotsForDay = dayTotalShots.get(day) || 0;
+    const mismatchesForDay = dayTotalMismatches.get(day) || 0;
+    const mismatchRatePct = totalShotsForDay
+      ? Number(((mismatchesForDay / Math.max(totalShotsForDay, 1)) * 100).toFixed(1))
       : 0;
     trend7d.push({ day, mismatchRatePct });
   }
+
+  const totalVideosConsidered = considered.length;
+  const videosWithDiscrepancy = Array.from(analysisHasMismatch.values()).filter(Boolean).length;
+  const totalShots = Array.from(shotCountByAnalysisId.values()).reduce((sum, value) => sum + value, 0);
 
   const labelConfusions = Array.from(confusionMap.entries())
     .map(([pair, count]) => {
@@ -527,16 +562,19 @@ export async function fetchDiscrepancySummary(
   return {
     summary: {
       videosAnnotated,
+      totalVideosConsidered,
+      videosWithDiscrepancy,
+      totalShots,
       totalManualShots,
       totalMismatches,
-      mismatchRatePct: Number(((totalMismatches / Math.max(totalManualShots, 1)) * 100).toFixed(1)),
+      mismatchRatePct: Number(((totalMismatches / Math.max(totalShots, 1)) * 100).toFixed(1)),
     },
     trend7d,
     topVideos: rankedVideos,
     labelConfusions,
     debug: {
       source: "client-fallback",
-      completedVideos: recent.length,
+      completedVideos: considered.length,
       annotationsFetched,
       annotatedUsed: videosAnnotated,
     },
