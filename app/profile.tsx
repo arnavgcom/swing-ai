@@ -23,16 +23,10 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "@/lib/auth-context";
 import { getApiUrl, apiRequest, queryClient } from "@/lib/query-client";
-import { fetch } from "expo/fetch";
-
-const APP_SPORTS = [
-  "Tennis",
-  "Golf",
-  "Pickleball",
-  "Paddle",
-  "Badminton",
-  "Table Tennis",
-];
+import {
+  fetchModelEvaluationSettings,
+  updateModelEvaluationSettings,
+} from "@/lib/api";
 
 const COUNTRIES = [
   "Singapore",
@@ -57,6 +51,10 @@ const COUNTRIES = [
 
 const DOMINANT_PROFILES = ["Right", "Left"];
 
+const normalizeRole = (value?: string | null): "admin" | "player" => {
+  return value?.trim().toLowerCase() === "admin" ? "admin" : "player";
+};
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout, refreshUser } = useAuth();
@@ -64,50 +62,43 @@ export default function ProfileScreen() {
 
   const [name, setName] = useState(user?.name || "");
   const [phone, setPhone] = useState(user?.phone || "+65 ");
-  const [address, setAddress] = useState(user?.address || "");
   const [country, setCountry] = useState(user?.country || "Singapore");
-  const [sportsInterests, setSportsInterests] = useState(user?.sportsInterests || "");
   const [dominantProfile, setDominantProfile] = useState(
     user?.dominantProfile
       ? user.dominantProfile.charAt(0).toUpperCase() + user.dominantProfile.slice(1).toLowerCase()
       : "",
   );
-  const [bio, setBio] = useState(user?.bio || "");
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
-  const [role, setRole] = useState(user?.role || "player");
+  const [role, setRole] = useState<"admin" | "player">(normalizeRole(user?.role));
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [recalcToast, setRecalcToast] = useState<{
+    visible: boolean;
+    message: string;
+    tone: "info" | "success" | "error";
+  }>({ visible: false, message: "", tone: "info" });
+  const recalcToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [showDominantProfilePicker, setShowDominantProfilePicker] = useState(false);
-  const [showSportsPicker, setShowSportsPicker] = useState(false);
-  const [selectedSports, setSelectedSports] = useState<string[]>([]);
-  const [showCreatePlayerModal, setShowCreatePlayerModal] = useState(false);
-  const [newPlayerEmail, setNewPlayerEmail] = useState("");
-  const [newPlayerName, setNewPlayerName] = useState("");
-  const [newPlayerPassword, setNewPlayerPassword] = useState("");
-  const [creatingPlayer, setCreatingPlayer] = useState(false);
-  const [createPlayerError, setCreatePlayerError] = useState("");
+  const [modelEvaluationMode, setModelEvaluationMode] = useState(false);
+  const [modelEvalLoading, setModelEvalLoading] = useState(false);
+  const isPersistedAdmin = normalizeRole(user?.role) === "admin";
+  const isSelectedAdmin = normalizeRole(role) === "admin";
+  const showAdminControls = isPersistedAdmin && isSelectedAdmin;
 
   useEffect(() => {
     if (user) {
       setName(user.name || "");
       setPhone(user.phone || "+65 ");
-      setAddress(user.address || "");
       setCountry(user.country || "Singapore");
       setDominantProfile(
         user.dominantProfile
           ? user.dominantProfile.charAt(0).toUpperCase() + user.dominantProfile.slice(1).toLowerCase()
           : "",
       );
-      setBio(user.bio || "");
-      setRole(user.role || "player");
-      if (user.sportsInterests) {
-        const parsed = user.sportsInterests.split(",").map((s) => s.trim()).filter(Boolean);
-        setSelectedSports(parsed);
-        setSportsInterests(user.sportsInterests);
-      }
+      setRole(normalizeRole(user.role));
       if (user.avatarUrl) {
         const baseUrl = getApiUrl();
         setAvatarUri(`${baseUrl}${user.avatarUrl.replace(/^\//, "")}`);
@@ -116,20 +107,53 @@ export default function ProfileScreen() {
   }, [user]);
 
   useEffect(() => {
-    if (role !== "admin" && showCreatePlayerModal) {
-      setShowCreatePlayerModal(false);
+    if (!isPersistedAdmin) {
+      setModelEvaluationMode(false);
+      return;
     }
-  }, [role, showCreatePlayerModal]);
 
-  const toggleSport = (sport: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedSports((prev) => {
-      const next = prev.includes(sport)
-        ? prev.filter((s) => s !== sport)
-        : [...prev, sport];
-      setSportsInterests(next.join(", "));
-      return next;
-    });
+    let active = true;
+    (async () => {
+      try {
+        const settings = await fetchModelEvaluationSettings();
+        if (!active) return;
+        setModelEvaluationMode(Boolean(settings.enabled));
+      } catch {
+        if (!active) return;
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [isPersistedAdmin, role]);
+
+  useEffect(() => {
+    return () => {
+      if (recalcToastTimerRef.current) {
+        clearTimeout(recalcToastTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleModelEvaluationToggle = async (enabled: boolean) => {
+    if (!isPersistedAdmin) return;
+    setModelEvalLoading(true);
+    try {
+      await updateModelEvaluationSettings(enabled);
+      setModelEvaluationMode(enabled);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["model-evaluation-settings"] }),
+        queryClient.invalidateQueries({ queryKey: ["scoring-model-dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["discrepancy-summary"] }),
+        queryClient.invalidateQueries({ queryKey: ["scoring-model-registry"] }),
+      ]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert("Error", "Failed to update Model Evaluation Mode");
+    } finally {
+      setModelEvalLoading(false);
+    }
   };
 
   const pickImage = async () => {
@@ -238,20 +262,13 @@ export default function ProfileScreen() {
       await apiRequest("PUT", "/api/profile", {
         name: name.trim(),
         phone: phone.trim(),
-        address: address.trim(),
         country: country.trim(),
         dominantProfile: dominantProfile.trim(),
-        sportsInterests: sportsInterests.trim(),
-        bio: bio.trim(),
-        role,
+        role: normalizeRole(role),
       });
       await refreshUser();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      if (Platform.OS === "web") {
-        globalThis.alert("Profile updated successfully");
-      } else {
-        Alert.alert("Saved", "Profile updated successfully");
-      }
+      router.back();
     } catch (e) {
       Alert.alert("Error", "Failed to save profile");
     } finally {
@@ -289,54 +306,35 @@ export default function ProfileScreen() {
 
   const handleRecalculateMetrics = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      "Recalc. Metrics/Scores",
-      "This will rerun analysis classification, shot counting, metrics/scores, and coaching insights for your uploaded videos.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Recalculate",
-          onPress: async () => {
-            setRecalculating(true);
-            try {
-              const res = await apiRequest("POST", "/api/analyses/recalculate");
-              const data = await res.json();
-              await queryClient.invalidateQueries({ queryKey: ["analyses-summary"] });
-              await queryClient.refetchQueries({ queryKey: ["analyses-summary"] });
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              const relinked = data.autoRelinkedAnalyses ?? 0;
-              const skipped = data.skippedAnalyses ?? 0;
-              const firstSkipReason =
-                Array.isArray(data.skippedDetails) && data.skippedDetails.length > 0
-                  ? data.skippedDetails[0]?.reason
-                  : null;
-              const message =
-                relinked > 0
-                  ? `Pipeline started for ${data.queuedAnalyses ?? 0} analysis record(s). Auto-relinked ${relinked} renamed file(s).`
-                  : skipped > 0
-                    ? `Pipeline started for ${data.queuedAnalyses ?? 0} analysis record(s). ${skipped} skipped${firstSkipReason ? `: ${firstSkipReason}` : ""}.`
-                    : `Pipeline started for ${data.queuedAnalyses ?? 0} analysis record(s).`;
-              if (Platform.OS === "web") {
-                globalThis.alert(message);
-              } else {
-                Alert.alert("Started", message);
-              }
-            } catch (e) {
-              const reason = e instanceof Error ? e.message : "Unknown error";
-              if (reason.includes("401")) {
-                Alert.alert("Session Expired", "Please log in again and retry recalculation.");
-              } else if (reason.includes("404")) {
-                Alert.alert("Endpoint Not Found", "Recalculation endpoint is unavailable. Please restart the API server and retry.");
-              } else {
-                Alert.alert("Error", `Failed to start recalculation: ${reason}`);
-              }
-            } finally {
-              setRecalculating(false);
-            }
-          },
-        },
-      ],
-    );
+    setRecalculating(true);
+    try {
+      const res = await apiRequest("POST", "/api/analyses/recalculate");
+      const data = await res.json();
+      const queued = Number(data?.queuedAnalyses ?? 0);
+
+      if (recalcToastTimerRef.current) {
+        clearTimeout(recalcToastTimerRef.current);
+      }
+
+      setRecalcToast({
+        visible: true,
+        tone: "success",
+        message: `Recalc of ${queued} videos started`,
+      });
+
+      await queryClient.invalidateQueries({ queryKey: ["analyses-summary"] });
+      await queryClient.refetchQueries({ queryKey: ["analyses-summary"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      recalcToastTimerRef.current = setTimeout(() => {
+        setRecalcToast((prev) => ({ ...prev, visible: false }));
+      }, 1800);
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : "Failed to recalc";
+      Alert.alert("Error", reason);
+    } finally {
+      setRecalculating(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -351,56 +349,6 @@ export default function ProfileScreen() {
         },
       },
     ]);
-  };
-
-  const handleCreatePlayer = async () => {
-    setCreatePlayerError("");
-    const email = newPlayerEmail.trim();
-    const name = newPlayerName.trim();
-    const password = newPlayerPassword;
-
-    if (!email || !name || !password) {
-      setCreatePlayerError("Email, full name, and password are required");
-      return;
-    }
-
-    if (password.length < 6) {
-      setCreatePlayerError("Password must be at least 6 characters");
-      return;
-    }
-
-    setCreatingPlayer(true);
-    try {
-      const baseUrl = getApiUrl();
-      const res = await fetch(`${baseUrl}api/admin/players`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          email,
-          name,
-          password,
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        setCreatePlayerError(
-          data?.error || `Failed to create player (HTTP ${res.status})`,
-        );
-        return;
-      }
-
-      setShowCreatePlayerModal(false);
-      setNewPlayerEmail("");
-      setNewPlayerName("");
-      setNewPlayerPassword("");
-      Alert.alert("Player Created", "New player profile created successfully.");
-    } catch {
-      setCreatePlayerError("Failed to create player");
-    } finally {
-      setCreatingPlayer(false);
-    }
   };
 
   const canClearHistory = false;
@@ -492,13 +440,6 @@ export default function ProfileScreen() {
             placeholder="+65 9123 4567"
             keyboardType="phone-pad"
           />
-          <ProfileField
-            label="Address"
-            value={address}
-            onChangeText={setAddress}
-            icon="location-outline"
-            placeholder="Block 123, Orchard Road, #01-01"
-          />
 
           <View style={styles.fieldWrapper}>
             <Text style={styles.fieldLabel}>Country</Text>
@@ -536,84 +477,71 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
 
-          <View style={styles.fieldWrapper}>
-            <Text style={styles.fieldLabel}>Sports Interests</Text>
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setShowSportsPicker(true);
-              }}
-              style={styles.fieldInput}
-              testID="field-sports-interests"
-            >
-              <Ionicons name="fitness-outline" size={18} color="#6C5CE7" />
-              <Text
-                style={[styles.dropdownText, selectedSports.length === 0 && styles.dropdownPlaceholder]}
-                numberOfLines={1}
-              >
-                {selectedSports.length > 0 ? selectedSports.join(", ") : "Select sports"}
-              </Text>
-              <Ionicons name="chevron-down" size={16} color="#64748B" />
-            </Pressable>
-            {selectedSports.length > 0 && (
-              <View style={styles.chipRow}>
-                {selectedSports.map((sport) => (
-                  <Pressable
-                    key={sport}
-                    onPress={() => toggleSport(sport)}
-                    style={styles.chip}
-                  >
-                    <Text style={styles.chipText}>{sport}</Text>
-                    <Ionicons name="close-circle" size={14} color="#A29BFE" />
-                  </Pressable>
-                ))}
-              </View>
-            )}
-          </View>
-
-          <ProfileField
-            label="Bio"
-            value={bio}
-            onChangeText={setBio}
-            icon="document-text-outline"
-            placeholder="Tell us about yourself..."
-            multiline
-          />
-
-          <View style={styles.fieldWrapper}>
-            <Text style={styles.fieldLabel}>Role</Text>
-            <View style={styles.roleToggleRow}>
-              <View style={styles.roleInfo}>
-                <Ionicons
-                  name={role === "admin" ? "shield-checkmark" : "person"}
-                  size={18}
-                  color={role === "admin" ? "#FBBF24" : "#6C5CE7"}
+          {user ? (
+            <View style={styles.fieldWrapper}>
+              <Text style={styles.fieldLabel}>Role</Text>
+              <View style={styles.roleToggleRow}>
+                <View style={styles.roleInfo}>
+                  <Ionicons
+                    name={role === "admin" ? "shield-checkmark" : "person"}
+                    size={18}
+                    color={role === "admin" ? "#FBBF24" : "#6C5CE7"}
+                  />
+                  <Text style={styles.roleText}>
+                    {role === "admin" ? "Admin" : "Player"}
+                  </Text>
+                  <View style={[styles.roleBadge, role === "admin" ? styles.roleBadgeAdmin : styles.roleBadgePlayer]}>
+                    <Text style={[styles.roleBadgeText, role === "admin" ? styles.roleBadgeTextAdmin : styles.roleBadgeTextPlayer]}>
+                      {role === "admin" ? "ADMIN" : "PLAYER"}
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={role === "admin"}
+                  onValueChange={(val) => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    setRole(val ? "admin" : "player");
+                  }}
+                  trackColor={{ false: "#2A2A50", true: "#FBBF2440" }}
+                  thumbColor={role === "admin" ? "#FBBF24" : "#64748B"}
+                  testID="role-toggle"
                 />
-                <Text style={styles.roleText}>
-                  {role === "admin" ? "Admin" : "Player"}
-                </Text>
-                <View style={[styles.roleBadge, role === "admin" ? styles.roleBadgeAdmin : styles.roleBadgePlayer]}>
-                  <Text style={[styles.roleBadgeText, role === "admin" ? styles.roleBadgeTextAdmin : styles.roleBadgeTextPlayer]}>
-                    {role === "admin" ? "ADMIN" : "PLAYER"}
+              </View>
+            </View>
+          ) : null}
+
+          {showAdminControls && (
+            <View style={styles.fieldWrapper}>
+              <Text style={styles.fieldLabel}>Model Evaluation Mode</Text>
+              <View style={styles.roleToggleRow}>
+                <View style={styles.roleInfo}>
+                  <Ionicons
+                    name={modelEvaluationMode ? "analytics" : "analytics-outline"}
+                    size={18}
+                    color={modelEvaluationMode ? "#34D399" : "#6C5CE7"}
+                  />
+                  <Text style={styles.roleText}>
+                    {modelEvaluationMode ? "ON - Evaluation Dataset Only" : "OFF - All Videos"}
                   </Text>
                 </View>
+                <Switch
+                  value={modelEvaluationMode}
+                  disabled={modelEvalLoading}
+                  onValueChange={(val) => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    handleModelEvaluationToggle(val);
+                  }}
+                  trackColor={{ false: "#2A2A50", true: "#34D39940" }}
+                  thumbColor={modelEvaluationMode ? "#34D399" : "#64748B"}
+                  testID="model-evaluation-toggle"
+                />
               </View>
-              <Switch
-                value={role === "admin"}
-                onValueChange={(val) => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  setRole(val ? "admin" : "player");
-                }}
-                trackColor={{ false: "#2A2A50", true: "#FBBF2440" }}
-                thumbColor={role === "admin" ? "#FBBF24" : "#64748B"}
-                testID="role-toggle"
-              />
             </View>
-          </View>
+          )}
         </View>
 
         {/* Only show Recalc button for admins */}
-        {role === "admin" && (
+        {showAdminControls && (
           <Pressable
             onPress={handleRecalculateMetrics}
             disabled={recalculating}
@@ -633,10 +561,10 @@ export default function ProfileScreen() {
           </Pressable>
           )}
 
-          {/* Admin-only: Create Player Modal Trigger */}
-          {role === "admin" && (
+          {/* Admin-only: Add Player Screen Trigger */}
+          {showAdminControls && (
             <Pressable
-              onPress={() => setShowCreatePlayerModal(true)}
+              onPress={() => router.push("/profile/add-player")}
               style={({ pressed }) => [
                 styles.saveButton,
                 { transform: [{ scale: pressed ? 0.97 : 1 }] },
@@ -648,131 +576,6 @@ export default function ProfileScreen() {
                 <Text style={styles.saveText}>Add New Player</Text>
               </View>
             </Pressable>
-          )}
-
-          {/* Modal Dialog for Creating Player */}
-          {role === "admin" && showCreatePlayerModal && (
-            <Modal
-              visible={showCreatePlayerModal}
-              transparent
-              animationType="slide"
-              onRequestClose={() => setShowCreatePlayerModal(false)}
-            >
-              <View style={styles.modalOverlay}>
-                <Pressable
-                  style={styles.modalBackdrop}
-                  onPress={() => setShowCreatePlayerModal(false)}
-                />
-                <KeyboardAvoidingView
-                  style={styles.createPlayerKeyboardWrap}
-                  behavior={Platform.OS === "ios" ? "padding" : undefined}
-                  keyboardVerticalOffset={Platform.OS === "ios" ? insets.bottom + 12 : 0}
-                >
-                <Pressable
-                  style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}
-                  onPress={() => {}}
-                >
-                  <View style={styles.modalHandle} />
-                  <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>Create New Player</Text>
-                  </View>
-                  <ScrollView
-                    keyboardShouldPersistTaps="handled"
-                    contentContainerStyle={styles.createPlayerFormContent}
-                    showsVerticalScrollIndicator={false}
-                  >
-                    <View style={styles.createPlayerFields}>
-                    <View style={styles.fieldWrapper}>
-                      <Text style={styles.fieldLabel}>Email</Text>
-                      <View style={styles.fieldInput}>
-                        <Ionicons name="mail-outline" size={18} color="#6C5CE7" />
-                        <TextInput
-                          value={newPlayerEmail}
-                          onChangeText={(text) => {
-                            setNewPlayerEmail(text);
-                            if (createPlayerError) setCreatePlayerError("");
-                          }}
-                          placeholder="player@email.com"
-                          placeholderTextColor="#4A4A6A"
-                          style={styles.textInput}
-                          keyboardType="email-address"
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          testID="new-player-email"
-                        />
-                      </View>
-                    </View>
-                    <View style={styles.fieldWrapper}>
-                      <Text style={styles.fieldLabel}>Full Name</Text>
-                      <View style={styles.fieldInput}>
-                        <Ionicons name="person-outline" size={18} color="#6C5CE7" />
-                        <TextInput
-                          value={newPlayerName}
-                          onChangeText={(text) => {
-                            setNewPlayerName(text);
-                            if (createPlayerError) setCreatePlayerError("");
-                          }}
-                          placeholder="Player Name"
-                          placeholderTextColor="#4A4A6A"
-                          style={styles.textInput}
-                          autoCapitalize="words"
-                          autoCorrect={false}
-                          testID="new-player-name"
-                        />
-                      </View>
-                    </View>
-                    <View style={styles.fieldWrapper}>
-                      <Text style={styles.fieldLabel}>Password</Text>
-                      <View style={styles.fieldInput}>
-                        <Ionicons name="lock-closed-outline" size={18} color="#6C5CE7" />
-                        <TextInput
-                          value={newPlayerPassword}
-                          onChangeText={(text) => {
-                            setNewPlayerPassword(text);
-                            if (createPlayerError) setCreatePlayerError("");
-                          }}
-                          placeholder="At least 6 characters"
-                          placeholderTextColor="#4A4A6A"
-                          style={styles.textInput}
-                          secureTextEntry
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          testID="new-player-password"
-                        />
-                      </View>
-                    </View>
-                    {createPlayerError ? (
-                      <Text style={{ color: "#EF4444", marginTop: 4 }}>{createPlayerError}</Text>
-                    ) : null}
-                    </View>
-                  </ScrollView>
-
-                  <View style={styles.createPlayerFooter}>
-                    <Pressable
-                      onPress={handleCreatePlayer}
-                      disabled={creatingPlayer}
-                      style={({ pressed }) => [
-                        styles.saveButton,
-                        { transform: [{ scale: pressed ? 0.97 : 1 }], opacity: creatingPlayer ? 0.7 : 1 },
-                      ]}
-                      testID="create-player-submit"
-                    >
-                      <View style={styles.saveContent}>
-                        {creatingPlayer ? (
-                          <ActivityIndicator size="small" color="#6C5CE7" />
-                        ) : (
-                          <>
-                            <Ionicons name="checkmark-circle" size={20} color="#6C5CE7" />
-                            <Text style={styles.saveText}>Create Player</Text>
-                          </>
-                        )}
-                      </View>
-                    </Pressable>
-                  </View>
-                </Pressable>
-                </KeyboardAvoidingView>
-              </View>
-            </Modal>
           )}
 
         {showClearHistory && (
@@ -863,15 +666,37 @@ export default function ProfileScreen() {
         onClose={() => setShowDominantProfilePicker(false)}
       />
 
-      <PickerModal
-        visible={showSportsPicker}
-        title="Select Sports"
-        items={APP_SPORTS}
-        selectedItems={selectedSports}
-        multiSelect
-        onSelect={(item) => toggleSport(item)}
-        onClose={() => setShowSportsPicker(false)}
-      />
+      {recalcToast.visible ? (
+        <View style={styles.recalcToastContainer} pointerEvents="none">
+          <View
+            style={[
+              styles.recalcToast,
+              recalcToast.tone === "success" && styles.recalcToastSuccess,
+              recalcToast.tone === "error" && styles.recalcToastError,
+            ]}
+          >
+            <Ionicons
+              name={
+                recalcToast.tone === "success"
+                  ? "checkmark-circle"
+                  : recalcToast.tone === "error"
+                    ? "alert-circle"
+                    : "time-outline"
+              }
+              size={14}
+              color={
+                recalcToast.tone === "success"
+                  ? "#34D399"
+                  : recalcToast.tone === "error"
+                    ? "#F87171"
+                    : "#94A3B8"
+              }
+            />
+            <Text style={styles.recalcToastText}>{recalcToast.message}</Text>
+          </View>
+        </View>
+      ) : null}
+
     </View>
   );
 }
@@ -991,6 +816,38 @@ function ProfileField({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0A0A1A" },
+  recalcToastContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 22,
+    alignItems: "center",
+    zIndex: 30,
+  },
+  recalcToast: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#0A0A1A",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  recalcToastSuccess: {
+    borderColor: "#166534",
+    backgroundColor: "#052E1A",
+  },
+  recalcToastError: {
+    borderColor: "#7F1D1D",
+    backgroundColor: "#3F1114",
+  },
+  recalcToastText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#E2E8F0",
+  },
   formContainer: {
     flex: 1,
   },
@@ -1197,6 +1054,29 @@ const styles = StyleSheet.create({
   },
   roleBadgeTextAdmin: {
     color: "#FBBF24",
+  },
+  helperText: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+    marginTop: 6,
+  },
+  modelConfigButton: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#6C5CE740",
+    backgroundColor: "#6C5CE720",
+    paddingVertical: 16,
+  },
+  modelConfigButtonText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#6C5CE7",
   },
   recalculateButton: {
     flexDirection: "row",

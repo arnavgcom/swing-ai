@@ -18,7 +18,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
-import { uploadVideo } from "@/lib/api";
+import { fetchModelEvaluationSettings, uploadVideo } from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
@@ -93,6 +93,7 @@ export default function UploadScreen() {
   >([]);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
+  const [modelEvaluationMode, setModelEvaluationMode] = useState(false);
 
   React.useEffect(() => {
     if (!user) {
@@ -159,6 +160,29 @@ export default function UploadScreen() {
     };
   }, [user, isAdmin]);
 
+  React.useEffect(() => {
+    if (!user) {
+      setModelEvaluationMode(false);
+      return;
+    }
+
+    let active = true;
+    (async () => {
+      try {
+        const settings = await fetchModelEvaluationSettings();
+        if (!active) return;
+        setModelEvaluationMode(Boolean(settings.enabled));
+      } catch {
+        if (!active) return;
+        setModelEvaluationMode(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [user]);
+
   const uploadMutation = useMutation({
     mutationFn: () => {
       if (!selectedVideo) throw new Error("No video selected");
@@ -198,10 +222,14 @@ export default function UploadScreen() {
       const { date, time } = getTimestampParts(new Date());
       const extension = getFileExtension(asset);
       const generatedFileName = `${fullNameToken}-${sportToken}-${categoryToken}-${date}-${time}.${extension}`;
+      const evaluationFilename = (asset.fileName || "").trim();
+      const finalFileName = modelEvaluationMode && evaluationFilename
+        ? evaluationFilename
+        : generatedFileName;
 
       setSelectedVideo({
         uri: asset.uri,
-        fileName: generatedFileName,
+        fileName: finalFileName,
         duration: asset.duration ? asset.duration / 1000 : null,
         fileSize: asset.fileSize || null,
       });

@@ -22,9 +22,81 @@ export interface MetricsResponse {
   id: string;
   analysisId: string;
   configKey: string;
+  modelVersion?: string;
   overallScore: number;
   subScores: Record<string, number>;
   metricValues: Record<string, number>;
+}
+
+export interface ModelEvaluationSettingsResponse {
+  enabled: boolean;
+  isAdmin: boolean;
+  modelVersion: string;
+  modelVersionChangeDescription: string;
+  datasetCount: number;
+  totalVideos: number;
+}
+
+export interface ScoringModelDashboardResponse {
+  modelVersion: string;
+  modelVersionDescription: string;
+  movementType: string;
+  movementDetectionAccuracyPct: number;
+  scoringAccuracyPct: number;
+  totalVideosConsidered: number;
+  datasetsUsed: string[];
+  modelEvaluationMode: boolean;
+  datasetMetrics: Array<{
+    datasetName: string;
+    movementType: string;
+    movementDetectionAccuracyPct: number;
+    scoringAccuracyPct: number;
+  }>;
+}
+
+export interface ScoringModelRegistryEntryResponse {
+  id: string;
+  modelVersion: string;
+  modelVersionDescription: string;
+  movementType: string;
+  movementDetectionAccuracyPct: number;
+  scoringAccuracyPct: number;
+  datasetsUsed: string[];
+  manifestModelVersion: string;
+  manifestDatasets: Array<{
+    name: string;
+    videos: Array<{
+      videoId: string;
+      filename: string;
+      movementType: string;
+    }>;
+  }>;
+  createdByUserId: string | null;
+  createdAt: string;
+  datasetMetrics: Array<{
+    id: string;
+    registryEntryId: string;
+    datasetName: string;
+    movementType: string;
+    movementDetectionAccuracyPct: number;
+    scoringAccuracyPct: number;
+  }>;
+}
+
+export interface ManifestValidationResponse {
+  valid: boolean;
+  datasetCount: number;
+  totalVideos: number;
+  duplicateFilenames: string[];
+  errors: string[];
+  warnings: string[];
+}
+
+export interface ModelRegistryConfigResponse {
+  activeModelVersion: string;
+  modelVersionChangeDescription: string;
+  evaluationDatasetManifestPath: string;
+  manifestValidation: ManifestValidationResponse;
 }
 
 export interface CoachingResponse {
@@ -71,6 +143,17 @@ export interface ComparisonResponse {
     subScores: Record<string, number>;
   } | null;
   count: number;
+}
+
+export interface AnalysisMetricTrendsResponse {
+  period: string;
+  points: Array<{
+    analysisId: string;
+    capturedAt: string;
+    overallScore: number | null;
+    subScores: Record<string, number>;
+    metricValues: Record<string, number>;
+  }>;
 }
 
 export interface AnalysisDiagnosticsResponse {
@@ -131,12 +214,55 @@ export interface AnalysisDiagnosticsResponse {
   };
 }
 
+export interface ScoringModelRegistryEntryDetailResponse extends ScoringModelRegistryEntryResponse {
+  summary: {
+    videosAnnotated: number;
+    totalVideosConsidered?: number;
+    videosWithDiscrepancy?: number;
+    totalShots?: number;
+    totalManualShots: number;
+    totalMismatches: number;
+    mismatchRatePct: number;
+  };
+  topVideos: Array<{
+    analysisId: string;
+    videoName: string;
+    userName?: string | null;
+    createdAt: string;
+    sportName: string;
+    movementName: string;
+    autoShots: number;
+    manualShots: number;
+    mismatches: number;
+    mismatchRatePct: number;
+    mismatchDeltaPct?: number;
+    isNewVideo?: boolean;
+  }>;
+  labelConfusions: Array<{
+    from: string;
+    to: string;
+    count: number;
+  }>;
+}
+
 export interface VideoMetadataResponse {
   capturedAt?: string | null;
   gpsLat?: number | null;
   gpsLng?: number | null;
   gpsAltM?: number | null;
   gpsSource?: string | null;
+}
+
+export interface CoachAskResponse {
+  answer: string;
+  confidence: "low" | "medium" | "high";
+  dataWindowSessions: number;
+  citations: {
+    totalSessions: number;
+    latestOverallScore?: number;
+    overallDelta?: number | null;
+    weakestMetrics?: string[];
+  };
 }
 
 export interface AnalysisShotAnnotationResponse {
@@ -147,6 +273,7 @@ export interface AnalysisShotAnnotationResponse {
   orderedShotLabels: string[];
   usedForScoringShotIndexes: number[];
   notes: string | null;
+  useForModelTraining?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -193,6 +320,8 @@ export interface DiscrepancySummaryResponse {
     manualShots: number;
     mismatches: number;
     mismatchRatePct: number;
+    mismatchDeltaPct?: number;
+    isNewVideo?: boolean;
   }>;
   labelConfusions: Array<{
     from: string;
@@ -240,6 +369,7 @@ export interface AnalysisSummary extends AnalysisResponse {
   overallScore: number | null;
   subScores: Record<string, number> | null;
   configKey: string | null;
+  modelVersion?: string | null;
 }
 
 export async function fetchAnalysesSummary(): Promise<AnalysisSummary[]> {
@@ -285,6 +415,18 @@ export async function fetchComparison(
   return res.json();
 }
 
+export async function fetchAnalysisMetricTrends(
+  id: string,
+  period: string,
+): Promise<AnalysisMetricTrendsResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/analyses/${id}/metric-trends?period=${period}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch metric trends");
+  return res.json();
+}
+
 export async function fetchAnalysisDiagnostics(
   id: string,
 ): Promise<AnalysisDiagnosticsResponse> {
@@ -325,6 +467,7 @@ export async function saveAnalysisShotAnnotation(
     orderedShotLabels: string[];
     usedForScoringShotIndexes: number[];
     notes?: string;
+    useForModelTraining?: boolean;
   },
 ): Promise<AnalysisShotAnnotationResponse> {
   const baseUrl = getApiUrl();
@@ -354,6 +497,131 @@ export async function fetchShotReport(id: string): Promise<ShotReportResponse> {
     credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to fetch shot report");
+  return res.json();
+}
+
+export async function fetchModelEvaluationSettings(): Promise<ModelEvaluationSettingsResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/model-evaluation/settings`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch model evaluation settings");
+  return res.json();
+}
+
+export async function updateModelEvaluationSettings(
+  enabled: boolean,
+): Promise<{ enabled: boolean }> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/model-evaluation/settings`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error("Failed to update model evaluation settings");
+  return res.json();
+}
+
+export async function fetchScoringModelDashboard(
+  movementName?: string | null,
+  playerId?: string,
+): Promise<ScoringModelDashboardResponse> {
+  const baseUrl = getApiUrl();
+  const params = new URLSearchParams();
+  if (!isAutoDetectMovement(movementName)) {
+    params.set("movementName", String(movementName));
+  }
+  if (playerId && playerId.toLowerCase() !== "all") {
+    params.set("playerId", playerId);
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`${baseUrl}api/scoring-model/dashboard${query}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch scoring model dashboard");
+  return res.json();
+}
+
+export async function saveScoringModelRegistrySnapshot(
+  movementName?: string | null,
+  playerId?: string,
+): Promise<{ id: string; saved: boolean; nextModelVersion?: string }> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/scoring-model/registry/save`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ movementName, playerId }),
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(payload?.error || "Failed to save scoring model registry snapshot");
+  }
+  return res.json();
+}
+
+export async function fetchScoringModelRegistry(): Promise<ScoringModelRegistryEntryResponse[]> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/scoring-model/registry`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch scoring model registry");
+  return res.json();
+}
+
+export async function fetchScoringModelRegistryEntry(
+  id: string,
+): Promise<ScoringModelRegistryEntryDetailResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/scoring-model/registry/${id}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch scoring model registry entry");
+  return res.json();
+}
+
+export async function fetchModelRegistryConfig(): Promise<ModelRegistryConfigResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/model-registry/config`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch model registry config");
+  return res.json();
+}
+
+export async function updateModelRegistryConfig(payload: {
+  activeModelVersion: string;
+  modelVersionChangeDescription: string;
+  evaluationDatasetManifestPath: string;
+}): Promise<ModelRegistryConfigResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/model-registry/config`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const payloadErr = await res.json().catch(() => null);
+    throw new Error(payloadErr?.error || "Failed to update model registry config");
+  }
+  return res.json();
+}
+
+export async function validateModelRegistryManifest(): Promise<{
+  config: {
+    activeModelVersion: string;
+    modelVersionChangeDescription: string;
+    evaluationDatasetManifestPath: string;
+  };
+  validation: ManifestValidationResponse;
+}> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/model-registry/validate-manifest`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to validate model registry manifest");
   return res.json();
 }
 
@@ -581,6 +849,28 @@ export async function fetchDiscrepancySummary(
   };
 }
 
+export async function askCoachQuestion(payload: {
+  question: string;
+  sportName?: string;
+  movementName?: string | null;
+  playerId?: string;
+}): Promise<CoachAskResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/coach/ask`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error || "Failed to get coach answer");
+  }
+
+  return res.json();
+}
+
 export async function deleteAnalysis(id: string): Promise<void> {
   const baseUrl = getApiUrl();
   const res = await fetch(`${baseUrl}api/analyses/${id}`, {
@@ -614,7 +904,20 @@ export async function uploadVideo(
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || "Upload failed");
+    let message = text?.trim() || "";
+
+    if (message) {
+      try {
+        const parsed = JSON.parse(message) as { error?: unknown };
+        if (typeof parsed?.error === "string" && parsed.error.trim()) {
+          message = parsed.error.trim();
+        }
+      } catch {
+        // Keep plain-text message as-is when response is not JSON.
+      }
+    }
+
+    throw new Error(message || "Upload failed");
   }
   return res.json();
 }

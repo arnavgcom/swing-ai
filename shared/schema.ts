@@ -62,6 +62,8 @@ export const analyses = pgTable("analyses", {
   sportId: varchar("sport_id").references(() => sports.id),
   movementId: varchar("movement_id").references(() => sportMovements.id),
   videoFilename: text("video_filename").notNull(),
+  sourceFilename: text("source_filename"),
+  evaluationVideoId: text("evaluation_video_id"),
   videoPath: text("video_path").notNull(),
   status: text("status").notNull().default("pending"),
   detectedMovement: text("detected_movement"),
@@ -97,6 +99,7 @@ export const metrics = pgTable("metrics", {
     .notNull()
     .references(() => analyses.id),
   configKey: varchar("config_key").notNull().default("tennis-forehand"),
+  modelVersion: varchar("model_version").notNull().default("0.1"),
   overallScore: real("overall_score"),
   subScores: jsonb("sub_scores").$type<Record<string, number>>(),
   metricValues: jsonb("metric_values").$type<Record<string, number>>(),
@@ -163,6 +166,7 @@ export const analysisShotDiscrepancies = pgTable("analysis_shot_discrepancies", 
   videoName: text("video_name").notNull(),
   sportName: text("sport_name").notNull(),
   movementName: text("movement_name").notNull(),
+  modelVersion: varchar("model_version").notNull().default("0.1"),
   autoShots: real("auto_shots").notNull(),
   manualShots: real("manual_shots").notNull(),
   mismatches: real("mismatches").notNull(),
@@ -174,6 +178,44 @@ export const analysisShotDiscrepancies = pgTable("analysis_shot_discrepancies", 
     .notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const appSettings = pgTable("app_settings", {
+  key: varchar("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const scoringModelRegistryEntries = pgTable("scoring_model_registry_entries", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  modelVersion: varchar("model_version").notNull(),
+  modelVersionDescription: text("model_version_description").notNull(),
+  movementType: text("movement_type").notNull(),
+  movementDetectionAccuracyPct: real("movement_detection_accuracy_pct").notNull(),
+  scoringAccuracyPct: real("scoring_accuracy_pct").notNull(),
+  datasetsUsed: jsonb("datasets_used").$type<string[]>().notNull(),
+  manifestModelVersion: varchar("manifest_model_version").notNull().default("0.1"),
+  manifestDatasets: jsonb("manifest_datasets")
+    .$type<Array<{ name: string; videos: Array<{ videoId: string; filename: string; movementType: string }> }>>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const scoringModelRegistryDatasetMetrics = pgTable("scoring_model_registry_dataset_metrics", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  registryEntryId: varchar("registry_entry_id")
+    .notNull()
+    .references(() => scoringModelRegistryEntries.id),
+  datasetName: text("dataset_name").notNull(),
+  movementType: text("movement_type").notNull(),
+  movementDetectionAccuracyPct: real("movement_detection_accuracy_pct").notNull(),
+  scoringAccuracyPct: real("scoring_accuracy_pct").notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -212,3 +254,6 @@ export type Metric = typeof metrics.$inferSelect;
 export type CoachingInsight = typeof coachingInsights.$inferSelect;
 export type AnalysisShotAnnotation = typeof analysisShotAnnotations.$inferSelect;
 export type AnalysisShotDiscrepancy = typeof analysisShotDiscrepancies.$inferSelect;
+export type AppSetting = typeof appSettings.$inferSelect;
+export type ScoringModelRegistryEntry = typeof scoringModelRegistryEntries.$inferSelect;
+export type ScoringModelRegistryDatasetMetric = typeof scoringModelRegistryDatasetMetrics.$inferSelect;

@@ -43,13 +43,6 @@ import { SubScoreBar } from "@/components/SubScoreBar";
 import { CoachingCard } from "@/components/CoachingCard";
 import { useAuth } from "@/lib/auth-context";
 
-const PERIODS = [
-  { key: "7d", label: "7D" },
-  { key: "30d", label: "30D" },
-  { key: "90d", label: "90D" },
-  { key: "all", label: "All" },
-] as const;
-
 const CATEGORY_LABELS: Record<string, string> = {
   biomechanics: "Biomechanics",
   ball: "Ball Metrics",
@@ -138,24 +131,21 @@ export default function AnalysisDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = Colors.dark;
   const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const [period, setPeriod] = useState("30d");
   const [fullscreen, setFullscreen] = useState(false);
   const [feedbackSheetVisible, setFeedbackSheetVisible] = useState(false);
   const [pendingRating, setPendingRating] = useState<"up" | "down" | null>(null);
   const [selectedDiscrepancies, setSelectedDiscrepancies] = useState<string[]>([]);
   const [discrepancyText, setDiscrepancyText] = useState("");
-  const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false);
-  const [advancedExpanded, setAdvancedExpanded] = useState(false);
-  const [technicalExpanded, setTechnicalExpanded] = useState(false);
   const [manualShotLabels, setManualShotLabels] = useState<string[]>([]);
   const [manualFormInitialized, setManualFormInitialized] = useState(false);
-  const [manualAnnotationVisible, setManualAnnotationVisible] = useState(false);
   const [activeShotDropdownIndex, setActiveShotDropdownIndex] = useState<number | null>(null);
   const [manualSavedVisible, setManualSavedVisible] = useState(false);
   const [manualSaveMessage, setManualSaveMessage] = useState("Saved");
   const [manualAnnotationDone, setManualAnnotationDone] = useState(false);
+  const [useForModelTraining, setUseForModelTraining] = useState(false);
   const feedbackSheetTranslateY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -183,8 +173,8 @@ export default function AnalysisDetailScreen() {
   });
 
   const { data: comparison } = useQuery({
-    queryKey: ["analysis", id, "comparison", period],
-    queryFn: () => fetchComparison(id!, period),
+    queryKey: ["analysis", id, "comparison", "30d"],
+    queryFn: () => fetchComparison(id!, "30d"),
     enabled:
       !!id && data?.analysis?.status === "completed" && !!data?.metrics,
   });
@@ -227,14 +217,18 @@ export default function AnalysisDetailScreen() {
       orderedShotLabels: string[];
       usedForScoringShotIndexes: number[];
       notes?: string;
+      useForModelTraining?: boolean;
     }) => saveAnalysisShotAnnotation(id!, payload),
-    onSuccess: (saved) => {
-      queryClient.invalidateQueries({ queryKey: ["analysis", id, "shot-annotation"] });
+    onSuccess: async (saved) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["analysis", id, "shot-annotation"] }),
+        queryClient.invalidateQueries({ queryKey: ["discrepancy-summary"] }),
+        queryClient.invalidateQueries({ queryKey: ["scoring-model-dashboard"] }),
+      ]);
       queryClient.setQueryData(["analysis", id, "shot-annotation"], saved);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setManualAnnotationDone(true);
       setActiveShotDropdownIndex(null);
-      setManualAnnotationVisible(false);
       setManualSaveMessage("Save Successful");
       setManualSavedVisible(true);
     },
@@ -315,16 +309,11 @@ export default function AnalysisDetailScreen() {
   }, [feedbackSheetVisible, feedbackSheetTranslateY]);
 
   useEffect(() => {
-    if (!manualAnnotationVisible) {
-      setActiveShotDropdownIndex(null);
-    }
-  }, [manualAnnotationVisible]);
-
-  useEffect(() => {
     setManualFormInitialized(false);
     setManualShotLabels([]);
     setActiveShotDropdownIndex(null);
     setManualAnnotationDone(false);
+    setUseForModelTraining(false);
   }, [id]);
 
   useEffect(() => {
@@ -334,6 +323,10 @@ export default function AnalysisDetailScreen() {
 
     if (savedLabels.length > 0) {
       setManualAnnotationDone(true);
+    }
+
+    if (typeof shotAnnotation?.useForModelTraining === "boolean") {
+      setUseForModelTraining(shotAnnotation.useForModelTraining);
     }
   }, [shotAnnotation]);
 
@@ -461,7 +454,6 @@ export default function AnalysisDetailScreen() {
     }
 
     setActiveShotDropdownIndex(null);
-    setManualAnnotationVisible(false);
     setManualSaveMessage("Saving...");
     setManualSavedVisible(true);
 
@@ -472,8 +464,16 @@ export default function AnalysisDetailScreen() {
         { length: totalShots },
         (_value, index) => index + 1,
       ),
+      useForModelTraining: isAdmin ? useForModelTraining : undefined,
     });
-  }, [diagnostics?.shotSegments, manualShotLabels, shotAnnotation?.orderedShotLabels, shotAnnotationMutation]);
+  }, [
+    diagnostics?.shotSegments,
+    isAdmin,
+    manualShotLabels,
+    shotAnnotation?.orderedShotLabels,
+    shotAnnotationMutation,
+    useForModelTraining,
+  ]);
 
   const handleAddManualShot = useCallback(() => {
     setManualShotLabels((prev) => [...prev, "forehand"]);
@@ -768,25 +768,14 @@ export default function AnalysisDetailScreen() {
           ]}
           showsVerticalScrollIndicator={false}
         >
-          {diagnosticsExpanded && (
-            <Pressable
-              style={styles.diagnosticsBackdropGlass}
-              onPress={() => {
-                setDiagnosticsExpanded(false);
-                setAdvancedExpanded(false);
-                setTechnicalExpanded(false);
-              }}
-            />
-          )}
-
           <View style={styles.topMetaRow}>
             <Pressable
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setDiagnosticsExpanded((prev) => !prev);
+                router.push({ pathname: "/analysis/[id]/diagnostics", params: { id: analysis.id } });
               }}
               style={({ pressed }) => [
-                styles.diagnosticsIconButton,
+                styles.diagnosticsEntryButton,
                 {
                   borderColor: `${sportThemeColor}40`,
                   backgroundColor: `${sportThemeColor}12`,
@@ -794,11 +783,8 @@ export default function AnalysisDetailScreen() {
                 { opacity: pressed ? 0.8 : 1 },
               ]}
             >
-              <Ionicons
-                name={diagnosticsExpanded ? "sparkles" : "sparkles-outline"}
-                size={16}
-                color={sportThemeColor}
-              />
+              <Ionicons name="sparkles-outline" size={14} color={sportThemeColor} />
+              <Text style={[styles.diagnosticsEntryButtonText, { color: sportThemeColor }]}>AI &gt;</Text>
             </Pressable>
             <View style={styles.badgesGroup}>
               {sportConfig?.sportName && (
@@ -845,200 +831,19 @@ export default function AnalysisDetailScreen() {
             </View>
           </View>
 
-          {diagnosticsExpanded && (
-            <View
-              style={[
-                styles.diagnosticsBody,
-                styles.diagnosticsBodyActive,
-                {
-                  borderColor: `${sportThemeColor}26`,
-                  backgroundColor: `${sportThemeColor}08`,
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push({
+                pathname: "/analysis/[id]/trends",
+                params: {
+                  id: analysis.id,
+                  focusSection: "overall",
                 },
-              ]}
-            >
-              {diagnosticsLoading ? (
-                <ActivityIndicator size="small" color={sportThemeColor} />
-              ) : diagnostics ? (
-                <>
-                  <View style={styles.diagHeaderRow}>
-                    <View style={styles.diagHeaderLeft}>
-                      <Ionicons name="sparkles-outline" size={14} color={sportThemeColor} />
-                      <Text style={styles.diagHeaderTitle}>AI Diagnostics</Text>
-                    </View>
-                    <View style={styles.diagHeaderRight}>
-                      <Text style={styles.diagHeaderHint}>Confidence {diagnostics.aiConfidencePct.toFixed(1)}%</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.diagBlockCard}>
-                    <Text style={styles.diagBlockTitle}>AI Insight</Text>
-                    <View style={styles.diagRow}>
-                      <Text style={styles.diagLabel}>Detected Category</Text>
-                      <Text style={styles.diagValueText}>
-                        {(() => {
-                          const detectedCategory = toCamelCaseLabel(diagnostics.detectedMovement);
-                          return detectedCategory.charAt(0).toUpperCase() + detectedCategory.slice(1);
-                        })()}
-                      </Text>
-                    </View>
-                    <View style={styles.diagRow}>
-                      <Text style={styles.diagLabel}>Quality</Text>
-                      <Text style={styles.diagValueText}>{diagnostics.videoQuality}</Text>
-                    </View>
-                    <Text style={styles.diagSubTitle}>Classification Rationale</Text>
-                    <Text style={styles.diagParagraph}>{diagnostics.classificationRationale}</Text>
-                  </View>
-
-                  <View style={styles.diagBlockCard}>
-                    <Text style={styles.diagBlockTitle}>Scoring Basis</Text>
-                    <View style={styles.diagRow}>
-                      <Text style={styles.diagLabel}>Active Time</Text>
-                      <Text style={styles.diagValueText}>{diagnostics.activeTimeSec.toFixed(2)}s ({diagnostics.activeTimePct.toFixed(1)}%)</Text>
-                    </View>
-                    <View style={styles.diagRow}>
-                      <Text style={styles.diagLabel}>Shots for Scoring</Text>
-                      <Text style={styles.diagValueText}>{diagnostics.shotsConsideredForScoring}</Text>
-                    </View>
-                    <View style={styles.diagRow}>
-                      <Text style={styles.diagLabel}>Pose Coverage</Text>
-                      <Text style={styles.diagValueText}>{diagnostics.poseCoveragePct.toFixed(1)}%</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.diagBlockCard}>
-                    <Pressable
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setAdvancedExpanded((prev) => !prev);
-                      }}
-                      style={({ pressed }) => [
-                        styles.techHeaderRow,
-                        { opacity: pressed ? 0.8 : 1 },
-                      ]}
-                    >
-                      <Text style={styles.diagBlockTitle}>Advanced Analysis</Text>
-                      <Ionicons
-                        name={advancedExpanded ? "chevron-up" : "chevron-down"}
-                        size={16}
-                        color="#94A3B8"
-                      />
-                    </Pressable>
-
-                    {advancedExpanded && (
-                      <>
-                        <View style={styles.diagRow}>
-                          <Text style={styles.diagLabel}>Total Frames</Text>
-                          <Text style={styles.diagValueText}>{diagnostics.totalFrames}</Text>
-                        </View>
-                        <View style={styles.diagRow}>
-                          <Text style={styles.diagLabel}>Frames for Scoring</Text>
-                          <Text style={styles.diagValueText}>{diagnostics.framesConsideredForScoring}</Text>
-                        </View>
-                        <View style={styles.diagRow}>
-                          <Text style={styles.diagLabel}>Shots Detected</Text>
-                          <Text style={styles.diagValueText}>{diagnostics.shotsDetected}</Text>
-                        </View>
-
-                        <Text style={styles.diagSubTitle}>Shot-Level Labels</Text>
-                        {diagnostics.shotSegments.length > 0 ? (
-                          diagnostics.shotSegments.map((segment) => {
-                            const detectedCategory = toCamelCaseLabel(segment.label);
-                            const displayCategory = detectedCategory.charAt(0).toUpperCase() + detectedCategory.slice(1);
-                            const debug = segment.classificationDebug;
-                            return (
-                              <View key={`shot-${segment.index}`} style={styles.diagRowStacked}>
-                                <Text style={styles.diagValueText}>Shot {segment.index}: {displayCategory}</Text>
-                                <Text style={styles.diagItem}>
-                                  Used for Scoring: {segment.includedForScoring ? "Yes" : "No"}
-                                </Text>
-                                <Text style={styles.diagItem}>
-                                  Frames {segment.startFrame}–{segment.endFrame} ({segment.frames} frames)
-                                </Text>
-                                {debug && (
-                                  <Text style={styles.diagItem}>
-                                    Debug: side {debug.dominantSide ?? "-"} • cross-body {debug.isCrossBody ? "yes" : "no"} • serve {debug.isServe ? "yes" : "no"} • compact {debug.isCompactForward ? "yes" : "no"} • overhead {debug.isOverhead ? "yes" : "no"}
-                                  </Text>
-                                )}
-                                {debug && (
-                                  <Text style={styles.diagItem}>
-                                    Speeds rw/lw/max {debug.rightWristSpeed?.toFixed(3) ?? "-"}/{debug.leftWristSpeed?.toFixed(3) ?? "-"}/{debug.maxWristSpeed?.toFixed(3) ?? "-"} • arc {debug.swingArcRatio?.toFixed(3) ?? "-"} • contact {debug.contactHeightRatio?.toFixed(3) ?? "-"}
-                                  </Text>
-                                )}
-                              </View>
-                            );
-                          })
-                        ) : (
-                          <Text style={styles.diagItem}>No shot segments available</Text>
-                        )}
-
-                        {diagnostics.excludedShots.count > 0 && (
-                          <>
-                            <Text style={styles.diagSubTitle}>Excluded Shots</Text>
-                            <View style={styles.diagRow}>
-                              <Text style={styles.diagLabel}>Excluded Count</Text>
-                              <Text style={styles.diagValueText}>{diagnostics.excludedShots.count}</Text>
-                            </View>
-                            {diagnostics.excludedShots.reasons.map((reason, idx) => (
-                              <Text key={`excluded-reason-${idx}`} style={styles.diagItem}>• {reason}</Text>
-                            ))}
-                          </>
-                        )}
-                      </>
-                    )}
-                  </View>
-
-                  <View style={styles.diagBlockCard}>
-                    <Pressable
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setTechnicalExpanded((prev) => !prev);
-                      }}
-                      style={({ pressed }) => [
-                        styles.techHeaderRow,
-                        { opacity: pressed ? 0.8 : 1 },
-                      ]}
-                    >
-                      <Text style={styles.diagBlockTitle}>Technical Details</Text>
-                      <Ionicons
-                        name={technicalExpanded ? "chevron-up" : "chevron-down"}
-                        size={16}
-                        color="#94A3B8"
-                      />
-                    </Pressable>
-
-                    {technicalExpanded && (
-                      <>
-                        <View style={styles.diagRow}>
-                          <Text style={styles.diagLabel}>Duration</Text>
-                          <Text style={styles.diagValueText}>{diagnostics.videoDurationSec.toFixed(2)}s</Text>
-                        </View>
-                        <View style={styles.diagRow}>
-                          <Text style={styles.diagLabel}>FPS</Text>
-                          <Text style={styles.diagValueText}>{diagnostics.fps.toFixed(2)}</Text>
-                        </View>
-                        <View style={styles.diagRow}>
-                          <Text style={styles.diagLabel}>File Size</Text>
-                          <Text style={styles.diagValueText}>{formatBytes(diagnostics.fileSizeBytes)}</Text>
-                        </View>
-                        <View style={styles.diagRow}>
-                          <Text style={styles.diagLabel}>Resolution</Text>
-                          <Text style={styles.diagValueText}>{diagnostics.resolution.width}x{diagnostics.resolution.height}</Text>
-                        </View>
-                        <View style={styles.diagRow}>
-                          <Text style={styles.diagLabel}>Bitrate</Text>
-                          <Text style={styles.diagValueText}>{diagnostics.bitrateKbps.toFixed(2)} kbps</Text>
-                        </View>
-                      </>
-                    )}
-                  </View>
-                </>
-              ) : (
-                <Text style={styles.diagItem}>Diagnostics unavailable for this video.</Text>
-              )}
-            </View>
-          )}
-
-          <View style={styles.scoreSection}>
+              });
+            }}
+            style={({ pressed }) => [styles.scoreSection, { opacity: pressed ? 0.9 : 1 }]}
+          >
             <ScoreGauge
               score={m.overallScore}
               size={160}
@@ -1053,7 +858,7 @@ export default function AnalysisDetailScreen() {
                   : null,
               )}
             />
-          </View>
+          </Pressable>
 
           {wasOverridden && (
             <View style={styles.overrideBanner}>
@@ -1070,7 +875,19 @@ export default function AnalysisDetailScreen() {
           )}
 
           {sportConfig && m.subScores && (
-            <View style={styles.section}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({
+                  pathname: "/analysis/[id]/trends",
+                  params: {
+                    id: analysis.id,
+                    focusSection: "breakdown",
+                  },
+                });
+              }}
+              style={({ pressed }) => [styles.section, { opacity: pressed ? 0.95 : 1 }]}
+            >
               <Text style={styles.sectionTitle}>Performance Breakdown</Text>
               <View style={styles.barsContainer}>
                 {sportConfig.scores.map((score, i) => (
@@ -1086,7 +903,7 @@ export default function AnalysisDetailScreen() {
                   />
                 ))}
               </View>
-            </View>
+            </Pressable>
           )}
 
           {videoUrl && (
@@ -1117,33 +934,10 @@ export default function AnalysisDetailScreen() {
                   <Pressable
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      const gpsLat = analysis.gpsLat ?? videoMetadata?.gpsLat ?? null;
-                      const gpsLng = analysis.gpsLng ?? videoMetadata?.gpsLng ?? null;
-                      Alert.alert(
-                        "Video metadata extracted",
-                        `Captured At: ${formatDateWithTimezone(analysis.capturedAt, profileTimeZone)}\n` +
-                          `Created At: ${formatDateWithTimezone(analysis.createdAt, profileTimeZone)}\n` +
-                          `GPS: ${gpsLat != null && gpsLng != null ? `${Number(gpsLat).toFixed(6)}, ${Number(gpsLng).toFixed(6)}` : videoMetadataLoading ? "Loading..." : "Not available"}\n` +
-                          `Duration: ${diagnostics ? `${diagnostics.videoDurationSec.toFixed(2)}s` : diagnosticsLoading ? "Loading..." : "Not available"}\n` +
-                          `FPS: ${diagnostics ? diagnostics.fps.toFixed(2) : diagnosticsLoading ? "Loading..." : "Not available"}\n` +
-                          `Resolution: ${diagnostics ? `${diagnostics.resolution.width}x${diagnostics.resolution.height}` : diagnosticsLoading ? "Loading..." : "Not available"}\n` +
-                          `File Size: ${diagnostics ? formatBytes(diagnostics.fileSizeBytes) : diagnosticsLoading ? "Loading..." : "Not available"}\n` +
-                          `Bitrate: ${diagnostics ? `${diagnostics.bitrateKbps.toFixed(2)} kbps` : diagnosticsLoading ? "Loading..." : "Not available"}`,
-                      );
-                    }}
-                    style={({ pressed }) => [
-                      styles.videoInfoFloatingButton,
-                      { opacity: pressed ? 0.85 : 1 },
-                    ]}
-                  >
-                    <Ionicons name="information-circle-outline" size={17} color="#94A3B8" />
-                  </Pressable>
-                )}
-                {analysis.status === "completed" && (
-                  <Pressable
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setManualAnnotationVisible(true);
+                      router.push({
+                        pathname: "/analysis/[id]/manual-annotation",
+                        params: { id: analysis.id },
+                      });
                     }}
                     style={({ pressed }) => [
                       styles.manualAnnotationFloatingButton,
@@ -1161,39 +955,6 @@ export default function AnalysisDetailScreen() {
             </View>
           )}
 
-          <View style={styles.periodRow}>
-            {PERIODS.map((p) => (
-              <Pressable
-                key={p.key}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setPeriod(p.key);
-                }}
-                style={[
-                  styles.periodPill,
-                  period === p.key && {
-                    backgroundColor: sportThemeColor,
-                    borderColor: sportThemeColor,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.periodText,
-                    period === p.key && styles.periodTextActive,
-                  ]}
-                >
-                  {p.label}
-                </Text>
-              </Pressable>
-            ))}
-            {comparison && comparison.count > 0 && (
-              <Text style={styles.periodHint}>
-                vs {comparison.count} prior
-              </Text>
-            )}
-          </View>
-
           {sportConfig &&
             m.metricValues &&
             Object.entries(metricsByCategory).map(
@@ -1205,17 +966,28 @@ export default function AnalysisDetailScreen() {
                   <View style={styles.metricsGrid}>
                     {categoryMetrics.map((metric) => (
                       <View key={metric.key} style={styles.metricCardWrapper}>
-                        <MetricCard
-                          icon={metric.icon as any}
-                          label={metric.label}
-                          value={m.metricValues[metric.key] ?? 0}
-                          unit={metric.unit}
-                          color={metric.color}
-                          change={calcChange(
-                            m.metricValues[metric.key],
-                            avgMetrics?.[metric.key],
-                          )}
-                        />
+                        <Pressable
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            router.push({
+                              pathname: "/analysis/[id]/trends",
+                              params: { id: analysis.id, focusMetric: metric.key },
+                            });
+                          }}
+                          style={({ pressed }) => [{ opacity: pressed ? 0.86 : 1 }]}
+                        >
+                          <MetricCard
+                            icon={metric.icon as any}
+                            label={metric.label}
+                            value={m.metricValues[metric.key] ?? 0}
+                            unit={metric.unit}
+                            color={metric.color}
+                            change={calcChange(
+                              m.metricValues[metric.key],
+                              avgMetrics?.[metric.key],
+                            )}
+                          />
+                        </Pressable>
                       </View>
                     ))}
                   </View>
@@ -1409,170 +1181,6 @@ export default function AnalysisDetailScreen() {
         </View>
       </Modal>
 
-      <Modal
-        visible={manualAnnotationVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setManualAnnotationVisible(false)}
-      >
-        <View style={styles.manualOverlay}>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={() => setManualAnnotationVisible(false)}
-          />
-          <KeyboardAvoidingView
-            style={styles.manualKeyboardContainer}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 0}
-          >
-            <View
-              style={[
-                styles.manualSheet,
-                { paddingBottom: Math.max(insets.bottom + 20, 24) },
-              ]}
-            >
-              <View style={styles.manualSheetHandle} />
-              <View style={styles.manualHeaderRow}>
-                <Text style={styles.manualTitle}>Manual Annotation</Text>
-                <Pressable
-                  onPress={() => setManualAnnotationVisible(false)}
-                  style={({ pressed }) => [
-                    styles.manualCloseButton,
-                    { opacity: pressed ? 0.75 : 1 },
-                  ]}
-                >
-                  <Ionicons name="close" size={16} color="#F2F2F7" />
-                </Pressable>
-              </View>
-
-              <View style={styles.manualShotActionsRow}>
-                <Pressable
-                  onPress={handleAddManualShot}
-                  style={({ pressed }) => [
-                    styles.manualShotActionButton,
-                    { opacity: pressed ? 0.85 : 1 },
-                  ]}
-                >
-                  <Ionicons name="add" size={14} color={sportThemeColor} />
-                  <Text style={styles.manualShotActionText}>Add Shot</Text>
-                </Pressable>
-                <Pressable
-                  onPress={handleRemoveManualShot}
-                  disabled={manualShotLabels.length === 0}
-                  style={({ pressed }) => [
-                    styles.manualShotActionButton,
-                    manualShotLabels.length === 0 && styles.manualShotActionDisabled,
-                    { opacity: pressed ? 0.85 : 1 },
-                  ]}
-                >
-                  <Ionicons name="remove" size={14} color={manualShotLabels.length === 0 ? "#64748B" : "#FCA5A5"} />
-                  <Text
-                    style={[
-                      styles.manualShotActionText,
-                      manualShotLabels.length === 0 && styles.manualShotActionTextDisabled,
-                    ]}
-                  >
-                    Remove Shot
-                  </Text>
-                </Pressable>
-              </View>
-
-              <ScrollView style={styles.manualShotList} contentContainerStyle={styles.manualShotListContent}>
-                {manualShotLabels.map((shotLabel, index) => {
-                  const labelText = toCamelCaseLabel(shotLabel || "unknown");
-                  const displayLabel = labelText.charAt(0).toUpperCase() + labelText.slice(1);
-                  const dropdownOpen = activeShotDropdownIndex === index;
-                  return (
-                    <View
-                      key={`manual-shot-${index}`}
-                      style={[styles.manualShotRow, dropdownOpen && { zIndex: 10 }]}
-                    >
-                      <Text
-                        style={[
-                          styles.manualShotNumber,
-                          {
-                            backgroundColor: `${sportThemeColor}20`,
-                            borderColor: `${sportThemeColor}44`,
-                            color: sportThemeColor,
-                          },
-                        ]}
-                      >
-                        {index + 1}.
-                      </Text>
-                      <View style={styles.manualDropdownWrap}>
-                        <Pressable
-                          onPress={() =>
-                            setActiveShotDropdownIndex((prev) => (prev === index ? null : index))
-                          }
-                          style={({ pressed }) => [
-                            styles.manualDropdownTrigger,
-                            { opacity: pressed ? 0.85 : 1 },
-                          ]}
-                        >
-                          <Text style={styles.manualDropdownTriggerText}>{displayLabel}</Text>
-                          <Ionicons
-                            name={dropdownOpen ? "chevron-up" : "chevron-down"}
-                            size={14}
-                            color="#94A3B8"
-                          />
-                        </Pressable>
-                        {dropdownOpen && (
-                          <View style={styles.manualDropdownMenu}>
-                            {movementTypeOptions.map((option) => {
-                              const optionText = toCamelCaseLabel(option);
-                              const optionDisplay = optionText.charAt(0).toUpperCase() + optionText.slice(1);
-                              const selected = option === shotLabel;
-                              return (
-                                <Pressable
-                                  key={`manual-option-${index}-${option}`}
-                                  onPress={() => {
-                                    setManualShotLabels((prev) => {
-                                      const next = [...prev];
-                                      next[index] = option;
-                                      return next;
-                                    });
-                                    setActiveShotDropdownIndex(null);
-                                  }}
-                                  style={({ pressed }) => [
-                                    styles.manualDropdownOption,
-                                    selected && {
-                                      borderColor: sportThemeColor,
-                                      backgroundColor: `${sportThemeColor}20`,
-                                    },
-                                    { opacity: pressed ? 0.85 : 1 },
-                                  ]}
-                                >
-                                  <Text style={styles.manualDropdownOptionText}>{optionDisplay}</Text>
-                                </Pressable>
-                              );
-                            })}
-                          </View>
-                        )}
-                      </View>
-                    </View>
-                  );
-                })}
-              </ScrollView>
-
-              <Pressable
-                onPress={handleSaveManualAnnotation}
-                style={({ pressed }) => [
-                  styles.shotReportSaveButton,
-                  !shotAnnotationMutation.isPending && { backgroundColor: sportThemeColor },
-                  shotAnnotationMutation.isPending && styles.shotReportSaveButtonDisabled,
-                  { opacity: pressed ? 0.85 : 1 },
-                ]}
-                disabled={shotAnnotationMutation.isPending}
-              >
-                <Text style={styles.shotReportSaveText}>
-                  {shotAnnotationMutation.isPending ? "Saving..." : "Save"}
-                </Text>
-              </Pressable>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
       {fullscreen && videoUrl && (
         <Modal
           animationType="fade"
@@ -1676,6 +1284,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#2A2A5060",
     backgroundColor: "#15152D",
+  },
+  diagnosticsEntryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  diagnosticsEntryButtonText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
   },
   diagnosticsBody: {
     borderWidth: 1,
@@ -2180,6 +1801,34 @@ const styles = StyleSheet.create({
   manualShotListContent: {
     gap: 10,
     paddingBottom: 6,
+  },
+  manualTrainingToggleRow: {
+    marginTop: 8,
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#2A2A5035",
+    borderRadius: 10,
+    backgroundColor: "#0A0A1A80",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  manualTrainingCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "#475569",
+    backgroundColor: "#0F172A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  manualTrainingToggleText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: "#CBD5E1",
   },
   manualShotActionsRow: {
     flexDirection: "row",

@@ -41,6 +41,8 @@ export interface IStorage {
     sportId?: string | null,
     movementId?: string | null,
     metadata?: AnalysisMetadataInput,
+    sourceFilename?: string | null,
+    evaluationVideoId?: string | null,
   ): Promise<Analysis>;
   getAnalysis(id: string): Promise<Analysis | undefined>;
   getAllAnalyses(userId: string | null, sportId?: string): Promise<Analysis[]>;
@@ -57,11 +59,15 @@ export class DatabaseStorage implements IStorage {
     sportId?: string | null,
     movementId?: string | null,
     metadata?: AnalysisMetadataInput,
+    sourceFilename?: string | null,
+    evaluationVideoId?: string | null,
   ): Promise<Analysis> {
     const [analysis] = await db
       .insert(analyses)
       .values({
         videoFilename,
+        sourceFilename: sourceFilename || null,
+        evaluationVideoId: evaluationVideoId || null,
         videoPath,
         status: "pending",
         userId: userId || null,
@@ -118,6 +124,8 @@ export class DatabaseStorage implements IStorage {
         sportId: analyses.sportId,
         movementId: analyses.movementId,
         videoFilename: analyses.videoFilename,
+        sourceFilename: analyses.sourceFilename,
+        evaluationVideoId: analyses.evaluationVideoId,
         videoPath: analyses.videoPath,
         status: analyses.status,
         detectedMovement: analyses.detectedMovement,

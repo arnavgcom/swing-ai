@@ -3,6 +3,7 @@ import { analyses, metrics, coachingInsights, sportMovements, sports, users } fr
 import { eq } from "drizzle-orm";
 import { execFile } from "child_process";
 import { getConfigKey } from "@shared/sport-configs";
+import { readModelRegistryConfig } from "./model-registry";
 import fs from "fs";
 import path from "path";
 
@@ -157,6 +158,7 @@ export async function processAnalysis(analysisId: string): Promise<void> {
     }
 
     const configKey = getConfigKey(sportName, movementName);
+    const modelRegistryConfig = readModelRegistryConfig();
 
     console.log(
       `Starting Python analysis for: ${analysis.videoPath} (${sportName}/${movementName}, config: ${configKey})`,
@@ -224,6 +226,7 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       await tx.insert(metrics).values({
         analysisId,
         configKey: result.configKey || configKey,
+        modelVersion: modelRegistryConfig.activeModelVersion,
         overallScore: result.overallScore,
         subScores: result.subScores,
         metricValues,

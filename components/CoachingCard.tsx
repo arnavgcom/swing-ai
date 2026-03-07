@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 interface CoachingCardProps {
@@ -10,6 +10,14 @@ interface CoachingCardProps {
 }
 
 export function CoachingCard({ icon, title, content, color }: CoachingCardProps) {
+  const [expanded, setExpanded] = React.useState(false);
+  const [canExpand, setCanExpand] = React.useState(false);
+
+  React.useEffect(() => {
+    setExpanded(false);
+    setCanExpand(false);
+  }, [content]);
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -18,7 +26,28 @@ export function CoachingCard({ icon, title, content, color }: CoachingCardProps)
         </View>
         <Text style={[styles.title, { color }]}>{title}</Text>
       </View>
-      <Text style={styles.content}>{content}</Text>
+      <Text
+        style={styles.content}
+        numberOfLines={expanded ? undefined : 4}
+        onTextLayout={(event) => {
+          if (!expanded) {
+            const lineCount = event.nativeEvent.lines.length;
+            if (lineCount > 4 && !canExpand) {
+              setCanExpand(true);
+            }
+          }
+        }}
+      >
+        {content}
+      </Text>
+      {canExpand ? (
+        <Pressable
+          onPress={() => setExpanded((prev) => !prev)}
+          style={({ pressed }) => [styles.moreButton, { opacity: pressed ? 0.75 : 1 }]}
+        >
+          <Text style={[styles.moreText, { color }]}>{expanded ? ".. less .." : ".. more .."}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -54,5 +83,13 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     lineHeight: 21,
     color: "#CBD5E1",
+  },
+  moreButton: {
+    alignSelf: "flex-start",
+    marginTop: -2,
+  },
+  moreText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
   },
 });

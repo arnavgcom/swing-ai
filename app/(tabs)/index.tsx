@@ -7,16 +7,30 @@ import {
   Pressable,
   RefreshControl,
   ActivityIndicator,
-  Platform,
   Modal,
 } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import Svg, {
+  Circle,
+  Defs,
+  Line,
+  LinearGradient as SvgLinearGradient,
+  Path,
+  Polyline,
+  Stop,
+} from "react-native-svg";
 import { sportColors } from "@/constants/colors";
-import { fetchAnalysesSummary, fetchDiscrepancySummary } from "@/lib/api";
+import {
+  fetchAnalysesSummary,
+  fetchDiscrepancySummary,
+  fetchScoringModelDashboard,
+  fetchScoringModelRegistry,
+  saveScoringModelRegistrySnapshot,
+} from "@/lib/api";
 import type { AnalysisSummary } from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
@@ -93,13 +107,496 @@ function getPlayerDisplayName(u: {
   return fullName || String(u.email || "").trim() || "Unknown";
 }
 
+const PLAYER_METRICS = [
+  { key: "power", label: "Power", icon: "flash", color: "#22C55E" },
+  { key: "timing", label: "Timing", icon: "timer", color: "#38BDF8" },
+  { key: "stability", label: "Stability", icon: "body", color: "#A78BFA" },
+  { key: "consistency", label: "Consistency", icon: "repeat", color: "#F59E0B" },
+] as const;
+
+const PLAN_DURATIONS = [10, 20, 30] as const;
+type PlanDuration = (typeof PLAN_DURATIONS)[number];
+const TREND_SESSION_FILTERS = [
+  { key: 5, label: "5S" },
+  { key: 10, label: "10S" },
+  { key: 25, label: "25S" },
+  { key: "all", label: "All" },
+] as const;
+type TrendSessionWindow = (typeof TREND_SESSION_FILTERS)[number]["key"];
+
+function getImprovementDrill(
+  metricKey: string,
+  sportName?: string,
+  movementName?: string,
+): string {
+  const sport = String(sportName || "").toLowerCase();
+  const movement = String(movementName || "").toLowerCase();
+
+  if (sport.includes("tennis")) {
+    if (movement.includes("serve")) {
+      if (metricKey === "timing") return "3 x 12 toss-to-contact sequencing reps";
+      if (metricKey === "stability") return "4 x 20s balanced trophy-stance holds";
+      if (metricKey === "consistency") return "3 rounds of 10 first-serve target hits";
+      return "3 x 10 medicine-ball style overhead drive motions";
+    }
+    if (movement.includes("backhand")) {
+      if (metricKey === "timing") return "3 x 15 backhand contact-point marker reps";
+      if (metricKey === "stability") return "4 x 30s split-step plus crossover recovery";
+      if (metricKey === "consistency") return "3 rounds of 20 cross-court backhands";
+      return "3 x 12 loaded backhand acceleration swings";
+    }
+    if (movement.includes("forehand")) {
+      if (metricKey === "timing") return "3 x 15 forehand early-prep to contact reps";
+      if (metricKey === "stability") return "4 x 30s open-stance recovery footwork";
+      if (metricKey === "consistency") return "3 rounds of 20 deep forehand rally balls";
+      return "3 x 12 forehand kinetic-chain acceleration reps";
+    }
+
+    if (metricKey === "timing") return "3 x 15 unit-turn to contact timing reps";
+    if (metricKey === "stability") return "4 x 30s split-step and recovery drill";
+    if (metricKey === "consistency") return "3 rounds of 20 controlled rally contacts";
+    return "3 x 12 explosive shadow swings";
+  }
+
+  if (sport.includes("golf")) {
+    if (metricKey === "timing") return "3 x 10 takeaway-to-impact tempo reps";
+    if (metricKey === "stability") return "4 x 20s single-leg balance with club set-up";
+    if (metricKey === "consistency") return "3 rounds of 10 target-line strikes";
+    return "3 x 10 resisted hip-turn power reps";
+  }
+
+  if (sport.includes("badminton")) {
+    if (metricKey === "timing") return "3 x 15 split-step to shuttle contact reps";
+    if (metricKey === "stability") return "4 x 25s lunge-recover footwork";
+    if (metricKey === "consistency") return "3 rounds of 20 controlled clears";
+    return "3 x 12 jump-smash loading motions";
+  }
+
+  if (metricKey === "timing") return "3 x 15 contact timing reps";
+  if (metricKey === "stability") return "4 x 30s balance and recovery drill";
+  if (metricKey === "consistency") return "3 rounds of 20 controlled repetitions";
+  return "3 x 12 explosive movement reps";
+}
+
+function roundScore(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function average(values: number[]): number | null {
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function stdDeviation(values: number[]): number | null {
+  if (!values.length) return null;
+  const avg = average(values);
+  if (avg === null) return null;
+  const variance = values.reduce((sum, value) => sum + (value - avg) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+function getSubScoreValue(item: AnalysisSummary | undefined, metricKey: string): number | null {
+  if (!item) return null;
+  const subs = item.subScores;
+  if (!subs) return null;
+  for (const key of Object.keys(subs)) {
+    if (key.toLowerCase() === metricKey.toLowerCase()) {
+      return Number(subs[key]);
+    }
+  }
+  return null;
+}
+
+function getMovementFromAnalysis(item: AnalysisSummary): string {
+  if (item.detectedMovement) return formatLabel(String(item.detectedMovement));
+  const config = String(item.configKey || "").trim();
+  if (!config) return "General";
+  const parts = config.split("-").filter(Boolean);
+  if (parts.length <= 1) return "General";
+  return formatLabel(parts.slice(1).join("-"));
+}
+
+function getMovementTarget(metricKey: string): number {
+  if (metricKey === "consistency") return 85;
+  if (metricKey === "timing") return 82;
+  if (metricKey === "stability") return 80;
+  return 78;
+}
+
+function scaleDrillForDuration(baseDrill: string, minutes: PlanDuration): string {
+  if (minutes === 20) return baseDrill;
+
+  if (minutes === 10) {
+    if (baseDrill.startsWith("4 x ")) return baseDrill.replace("4 x ", "3 x ");
+    if (baseDrill.startsWith("3 x ")) return baseDrill.replace("3 x ", "2 x ");
+    if (baseDrill.startsWith("3 rounds of ")) {
+      return baseDrill.replace("3 rounds of ", "2 rounds of ");
+    }
+    return `Quick block: ${baseDrill}`;
+  }
+
+  if (baseDrill.startsWith("4 x ")) return baseDrill.replace("4 x ", "5 x ");
+  if (baseDrill.startsWith("3 x ")) return baseDrill.replace("3 x ", "4 x ");
+  if (baseDrill.startsWith("3 rounds of ")) {
+    return baseDrill.replace("3 rounds of ", "4 rounds of ");
+  }
+  return `Extended block: ${baseDrill}`;
+}
+
+function getExpectedGain(metricKey: string, minutes: PlanDuration): number {
+  const baseGain =
+    metricKey === "consistency"
+      ? 5
+      : metricKey === "timing"
+        ? 4
+        : metricKey === "stability"
+          ? 3
+          : 3;
+
+  const multiplier = minutes === 10 ? 0.7 : minutes === 30 ? 1.4 : 1;
+  return Math.max(1, Math.round(baseGain * multiplier));
+}
+
+function formatScoreDelta(delta: number | null): string {
+  if (delta === null) return "No baseline";
+  const sign = delta >= 0 ? "+" : "";
+  return `${sign}${delta.toFixed(1)} vs baseline`;
+}
+
+function getDeltaColor(delta: number | null): string {
+  if (delta === null) return "#94A3B8";
+  if (delta >= 0) return "#34D399";
+  return "#F87171";
+}
+
+function PlayerMetricTrendChart({
+  labels,
+  series,
+  activeKey,
+}: {
+  labels: string[];
+  series: Array<{
+    key: string;
+    label: string;
+    color: string;
+    values: Array<number | null>;
+  }>;
+  activeKey: string;
+}) {
+  if (!labels.length) return null;
+
+  const activeSeries = series.find((item) => item.key === activeKey) || series[0];
+  if (!activeSeries) return null;
+
+  const contextSeries = series.filter((item) => item.key !== activeSeries.key);
+
+  const chartWidth = 320;
+  const chartHeight = 136;
+  const leftPadding = 12;
+  const rightPadding = 8;
+  const topPadding = 10;
+  const bottomPadding = 22;
+  const innerWidth = chartWidth - leftPadding - rightPadding;
+  const innerHeight = chartHeight - topPadding - bottomPadding;
+  const stepX = labels.length > 1 ? innerWidth / (labels.length - 1) : innerWidth;
+
+  const toX = (index: number) => leftPadding + stepX * index;
+  const toY = (value: number) => topPadding + (1 - value / 100) * innerHeight;
+
+  const toPoints = (values: Array<number | null>) =>
+    values
+      .map((value, index) => {
+        if (value === null) return null;
+        return {
+          x: toX(index),
+          y: toY(Math.max(0, Math.min(100, value))),
+          value,
+          index,
+        };
+      })
+      .filter((point): point is { x: number; y: number; value: number; index: number } => point !== null);
+
+  const activePoints = toPoints(activeSeries.values);
+  if (!activePoints.length) return null;
+
+  const latestPoint = activePoints[activePoints.length - 1];
+  const prevPoint = activePoints.length > 1 ? activePoints[activePoints.length - 2] : null;
+  const latestDelta = prevPoint ? Number((latestPoint.value - prevPoint.value).toFixed(1)) : null;
+
+  const activePolylinePoints = activePoints.map((point) => `${point.x},${point.y}`).join(" ");
+  const areaPath = [
+    `M ${activePoints[0].x} ${innerHeight + topPadding}`,
+    ...activePoints.map((point) => `L ${point.x} ${point.y}`),
+    `L ${activePoints[activePoints.length - 1].x} ${innerHeight + topPadding}`,
+    "Z",
+  ].join(" ");
+
+  const shouldShowLabel = (index: number): boolean => {
+    if (labels.length <= 7) return true;
+    if (labels.length <= 15) return index === 0 || index === labels.length - 1 || index % 2 === 0;
+    return index === 0 || index === labels.length - 1 || index % 4 === 0;
+  };
+
+  return (
+    <View>
+      <View style={styles.playerTrendTopRow}>
+        <View style={styles.playerTrendMetricPill}>
+          <View
+            style={[
+              styles.playerTrendMetricDot,
+              { backgroundColor: activeSeries.color },
+            ]}
+          />
+          <Text style={styles.playerTrendMetricLabel}>{activeSeries.label}</Text>
+        </View>
+        <Text style={[styles.playerTrendMetricValue, { color: activeSeries.color }]}>
+          {roundScore(Number(latestPoint.value))}
+          {latestDelta !== null ? ` (${latestDelta >= 0 ? "+" : ""}${latestDelta})` : ""}
+        </Text>
+      </View>
+
+      <Svg width={chartWidth} height={chartHeight}>
+        <Defs>
+          <SvgLinearGradient id="activeAreaFill" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0%" stopColor={activeSeries.color} stopOpacity={0.3} />
+            <Stop offset="100%" stopColor={activeSeries.color} stopOpacity={0.03} />
+          </SvgLinearGradient>
+        </Defs>
+
+        {[25, 50, 75].map((value) => {
+          const y = toY(value);
+          return (
+            <Line
+              key={`grid-${value}`}
+              x1={leftPadding}
+              y1={y}
+              x2={chartWidth - rightPadding}
+              y2={y}
+              stroke="#33415544"
+              strokeWidth={1}
+            />
+          );
+        })}
+
+        {contextSeries.map((line) => {
+          const points = toPoints(line.values).map((point) => `${point.x},${point.y}`);
+          return (
+            <Polyline
+              key={`context-${line.key}`}
+              points={points.join(" ")}
+              fill="none"
+              stroke={line.color}
+              strokeOpacity={0.18}
+              strokeWidth={1.6}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          );
+        })}
+
+        <Path d={areaPath} fill="url(#activeAreaFill)" />
+
+        <Polyline
+          points={activePolylinePoints}
+          fill="none"
+          stroke={activeSeries.color}
+          strokeOpacity={0.2}
+          strokeWidth={8}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+
+        <Polyline
+          points={activePolylinePoints}
+          fill="none"
+          stroke={activeSeries.color}
+          strokeWidth={2.5}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+
+        <Line
+          x1={latestPoint.x}
+          y1={topPadding}
+          x2={latestPoint.x}
+          y2={innerHeight + topPadding}
+          stroke={activeSeries.color}
+          strokeOpacity={0.28}
+          strokeWidth={1}
+        />
+
+        {activePoints.map((point, index) => {
+          const isLatest = index === activePoints.length - 1;
+          return (
+            <Circle
+              key={`active-dot-${point.index}`}
+              cx={point.x}
+              cy={point.y}
+              r={isLatest ? 4.2 : 2.4}
+              fill={isLatest ? "#F8FAFC" : activeSeries.color}
+              stroke={activeSeries.color}
+              strokeWidth={isLatest ? 2 : 0}
+            />
+          );
+        })}
+      </Svg>
+
+      <View style={styles.playerTrendLabelsRow}>
+        {labels.map((label, index) => (
+          <Text
+            key={`${label}-${index}`}
+            style={[
+              styles.playerTrendAxisLabel,
+              index === 0 ? { textAlign: "left" as const } : undefined,
+              index === labels.length - 1 ? { textAlign: "right" as const } : undefined,
+            ]}
+            numberOfLines={1}
+          >
+            {shouldShowLabel(index) ? label : ""}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function ModelRegistryTrendLineChart({
+  points,
+}: {
+  points: Array<{
+    modelVersion: string;
+    mismatchRatePct: number;
+    movementDetectionAccuracyPct: number;
+    scoringAccuracyPct: number;
+  }>;
+}) {
+  if (!points.length) return null;
+
+  const chartWidth = 320;
+  const chartHeight = 180;
+  const leftPadding = 14;
+  const rightPadding = 10;
+  const topPadding = 12;
+  const bottomPadding = 30;
+  const innerWidth = chartWidth - leftPadding - rightPadding;
+  const innerHeight = chartHeight - topPadding - bottomPadding;
+  const stepX = points.length > 1 ? innerWidth / (points.length - 1) : innerWidth;
+
+  const toX = (index: number) => leftPadding + stepX * index;
+  const toY = (value: number) => topPadding + (1 - Math.max(0, Math.min(100, value)) / 100) * innerHeight;
+
+  const toPolyline = (values: number[]) =>
+    values.map((value, index) => `${toX(index)},${toY(value)}`).join(" ");
+
+  const mismatch = points.map((point) => Number(point.mismatchRatePct || 0));
+  const movement = points.map((point) => Number(point.movementDetectionAccuracyPct || 0));
+  const scoring = points.map((point) => Number(point.scoringAccuracyPct || 0));
+
+  return (
+    <View>
+      <View style={styles.registryTrendLegendRow}>
+        <View style={styles.registryLegendItem}>
+          <View style={[styles.registryLegendDot, { backgroundColor: "#F87171" }]} />
+          <Text style={styles.registryLegendText}>Mismatch</Text>
+        </View>
+        <View style={styles.registryLegendItem}>
+          <View style={[styles.registryLegendDot, { backgroundColor: "#34D399" }]} />
+          <Text style={styles.registryLegendText}>Movement Accuracy</Text>
+        </View>
+        <View style={styles.registryLegendItem}>
+          <View style={[styles.registryLegendDot, { backgroundColor: "#38BDF8" }]} />
+          <Text style={styles.registryLegendText}>Scoring Accuracy</Text>
+        </View>
+      </View>
+
+      <Svg width={chartWidth} height={chartHeight}>
+        {[0, 25, 50, 75, 100].map((tick) => {
+          const y = toY(tick);
+          return (
+            <Line
+              key={`registry-grid-${tick}`}
+              x1={leftPadding}
+              y1={y}
+              x2={chartWidth - rightPadding}
+              y2={y}
+              stroke="#33415555"
+              strokeWidth={1}
+            />
+          );
+        })}
+
+        <Polyline
+          points={toPolyline(mismatch)}
+          fill="none"
+          stroke="#F87171"
+          strokeWidth={2.4}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        <Polyline
+          points={toPolyline(movement)}
+          fill="none"
+          stroke="#34D399"
+          strokeWidth={2.4}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        <Polyline
+          points={toPolyline(scoring)}
+          fill="none"
+          stroke="#38BDF8"
+          strokeWidth={2.4}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+
+        {points.map((point, index) => (
+          <Circle key={`mismatch-dot-${point.modelVersion}`} cx={toX(index)} cy={toY(mismatch[index])} r={2.5} fill="#F87171" />
+        ))}
+        {points.map((point, index) => (
+          <Circle key={`movement-dot-${point.modelVersion}`} cx={toX(index)} cy={toY(movement[index])} r={2.5} fill="#34D399" />
+        ))}
+        {points.map((point, index) => (
+          <Circle key={`scoring-dot-${point.modelVersion}`} cx={toX(index)} cy={toY(scoring[index])} r={2.5} fill="#38BDF8" />
+        ))}
+      </Svg>
+
+      <View style={styles.registryXAxisLabels}>
+        {points.map((point) => (
+          <Text key={`version-${point.modelVersion}`} style={styles.registryXAxisLabel} numberOfLines={1}>
+            {point.modelVersion}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export default function DashboardScreen() {
   const { user } = useAuth();
   const { selectedSport, selectedMovement } = useSport();
   const isAdmin = user?.role === "admin";
+  const [selectedTrendMetric, setSelectedTrendMetric] = React.useState<string>(PLAYER_METRICS[0].key);
+  const [selectedTrendSessions, setSelectedTrendSessions] = React.useState<TrendSessionWindow>(10);
+  const [selectedPlanMinutes, setSelectedPlanMinutes] = React.useState<PlanDuration>(20);
   const [userList, setUserList] = React.useState<Array<{id:string,name:string,email:string,role:string}>>([]);
   const [selectedPlayerId, setSelectedPlayerId] = React.useState<string>("all");
   const [showPlayerDropdown, setShowPlayerDropdown] = React.useState(false);
+  const [registrySaveToast, setRegistrySaveToast] = React.useState<{
+    visible: boolean;
+    message: string;
+    tone: "info" | "success" | "error";
+  }>({ visible: false, message: "", tone: "info" });
+  const registryToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (registryToastTimerRef.current) {
+        clearTimeout(registryToastTimerRef.current);
+      }
+    };
+  }, []);
+
   React.useEffect(() => {
     if (!isAdmin) {
       setSelectedPlayerId("all");
@@ -183,8 +680,99 @@ export default function DashboardScreen() {
         selectedMovement?.name,
         isAdmin ? selectedPlayerId : user?.id,
       ),
-    enabled: !!user,
+    enabled: !!user && isAdmin,
     retry: false,
+  });
+
+  const {
+    data: scoringModel,
+    isLoading: scoringModelLoading,
+    refetch: refetchScoringModelDashboard,
+  } = useQuery({
+    queryKey: [
+      "scoring-model-dashboard",
+      selectedSport?.name || "all",
+      selectedMovement?.name || "auto-detect",
+      isAdmin ? selectedPlayerId : user?.id || "self",
+    ],
+    queryFn: () =>
+      fetchScoringModelDashboard(
+        selectedMovement?.name,
+        isAdmin ? selectedPlayerId : user?.id,
+      ),
+    enabled: !!user && isAdmin,
+    retry: false,
+  });
+
+  const {
+    data: scoringModelRegistry,
+    isLoading: scoringModelRegistryLoading,
+    isError: scoringModelRegistryIsError,
+    refetch: refetchScoringModelRegistry,
+    isRefetching: scoringModelRegistryRefetching,
+  } = useQuery({
+    queryKey: ["scoring-model-registry"],
+    queryFn: fetchScoringModelRegistry,
+    enabled: !!user && isAdmin,
+    retry: false,
+  });
+
+  const scoringModelRegistryTrend = React.useMemo(() => {
+    const source = scoringModelRegistry || [];
+    const bucket = new Map<string, { md: number; sc: number; mismatch: number; count: number }>();
+    for (const entry of source) {
+      const key = entry.modelVersion;
+      const current = bucket.get(key) || { md: 0, sc: 0, mismatch: 0, count: 0 };
+      current.md += Number(entry.movementDetectionAccuracyPct || 0);
+      current.sc += Number(entry.scoringAccuracyPct || 0);
+      current.mismatch += Number((100 - Number(entry.scoringAccuracyPct || 0)).toFixed(1));
+      current.count += 1;
+      bucket.set(key, current);
+    }
+
+    return Array.from(bucket.entries())
+      .map(([modelVersion, values]) => ({
+        modelVersion,
+        movementDetectionAccuracyPct: values.count ? Number((values.md / values.count).toFixed(1)) : 0,
+        scoringAccuracyPct: values.count ? Number((values.sc / values.count).toFixed(1)) : 0,
+        mismatchRatePct: values.count ? Number((values.mismatch / values.count).toFixed(1)) : 0,
+      }))
+      .sort((a, b) => a.modelVersion.localeCompare(b.modelVersion, undefined, { numeric: true }));
+  }, [scoringModelRegistry]);
+
+  const saveRegistryMutation = useMutation({
+    onMutate: () => {
+      if (registryToastTimerRef.current) {
+        clearTimeout(registryToastTimerRef.current);
+      }
+      setRegistrySaveToast({ visible: true, message: "Saving...", tone: "info" });
+    },
+    mutationFn: () =>
+      saveScoringModelRegistrySnapshot(
+        selectedMovement?.name,
+        isAdmin ? selectedPlayerId : user?.id,
+      ),
+    onSuccess: async () => {
+      await Promise.all([
+        refetchScoringModelDashboard(),
+        refetchScoringModelRegistry(),
+      ]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setRegistrySaveToast({ visible: true, message: "Saved", tone: "success" });
+      registryToastTimerRef.current = setTimeout(() => {
+        setRegistrySaveToast((prev) => ({ ...prev, visible: false }));
+      }, 1600);
+    },
+    onError: (error: Error) => {
+      setRegistrySaveToast({
+        visible: true,
+        message: error.message || "Failed to save",
+        tone: "error",
+      });
+      registryToastTimerRef.current = setTimeout(() => {
+        setRegistrySaveToast((prev) => ({ ...prev, visible: false }));
+      }, 2200);
+    },
   });
 
   let filteredAnalyses = filterBySport(
@@ -197,6 +785,154 @@ export default function DashboardScreen() {
   } else if (!isAdmin && user?.id) {
     filteredAnalyses = filteredAnalyses.filter(a => a.userId === user.id);
   }
+
+  const playerDashboard = React.useMemo(() => {
+    const scoredAnalyses = filteredAnalyses
+      .map((analysis) => {
+        const score = typeof analysis.overallScore === "number" ? analysis.overallScore : null;
+        const timestamp = new Date(analysis.capturedAt || analysis.createdAt).getTime();
+        return {
+          analysis,
+          score,
+          timestamp: Number.isNaN(timestamp) ? 0 : timestamp,
+        };
+      })
+      .filter((entry) => entry.score !== null)
+      .sort((a, b) => b.timestamp - a.timestamp);
+
+    if (!scoredAnalyses.length) return null;
+
+    const recentThree = scoredAnalyses.slice(0, 3).map((entry) => Number(entry.score));
+    const previousThree = scoredAnalyses.slice(3, 6).map((entry) => Number(entry.score));
+    const currentAverage = average(recentThree);
+    const previousAverage = average(previousThree);
+
+    const overallDelta =
+      currentAverage !== null && previousAverage !== null
+        ? Number((currentAverage - previousAverage).toFixed(1))
+        : null;
+
+    const metricCards = PLAYER_METRICS.map((metric) => {
+      const latestMetricScore = getSubScoreValue(scoredAnalyses[0].analysis, metric.key);
+      const recentMetricValues = scoredAnalyses
+        .slice(0, 3)
+        .map((entry) => getSubScoreValue(entry.analysis, metric.key))
+        .filter((value): value is number => value !== null);
+      const previousMetricValues = scoredAnalyses
+        .slice(3, 6)
+        .map((entry) => getSubScoreValue(entry.analysis, metric.key))
+        .filter((value): value is number => value !== null);
+
+      const recentMetricAverage = average(recentMetricValues);
+      const previousMetricAverage = average(previousMetricValues);
+      const delta =
+        recentMetricAverage !== null && previousMetricAverage !== null
+          ? Number((recentMetricAverage - previousMetricAverage).toFixed(1))
+          : null;
+
+      return {
+        ...metric,
+        score: latestMetricScore !== null ? roundScore(latestMetricScore) : null,
+        delta,
+      };
+    });
+
+    const scoreStd = stdDeviation(scoredAnalyses.slice(0, 5).map((entry) => Number(entry.score)));
+    const consistencyIndex =
+      scoreStd === null ? null : roundScore(100 - scoreStd * 2.5);
+
+    const trendSliceCount = selectedTrendSessions === "all" ? scoredAnalyses.length : selectedTrendSessions;
+    const trendEntries = scoredAnalyses
+      .slice(0, trendSliceCount)
+      .reverse();
+
+    const trendPoints = trendEntries
+      .slice(0, trendSliceCount)
+      .map((entry) => {
+        const date = new Date(entry.analysis.capturedAt || entry.analysis.createdAt);
+        const dateLabel = Number.isNaN(date.getTime())
+          ? "-"
+          : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+        return {
+          label: dateLabel,
+          score: roundScore(Number(entry.score)),
+        };
+      });
+
+    const metricTrendSeries = PLAYER_METRICS.map((metric) => ({
+      key: metric.key,
+      label: metric.label,
+      color: metric.color,
+      values: trendEntries.map((entry) => {
+        const value = getSubScoreValue(entry.analysis, metric.key);
+        return value === null ? null : roundScore(value);
+      }),
+    }));
+
+    const movementBuckets = new Map<string, number[]>();
+    for (const entry of scoredAnalyses) {
+      const movement = getMovementFromAnalysis(entry.analysis);
+      const values = movementBuckets.get(movement) || [];
+      values.push(Number(entry.score));
+      movementBuckets.set(movement, values);
+    }
+
+    const movementCards = Array.from(movementBuckets.entries())
+      .map(([movement, scores]) => {
+        const recent = average(scores.slice(0, 2));
+        const previous = average(scores.slice(2, 4));
+        const delta =
+          recent !== null && previous !== null ? Number((recent - previous).toFixed(1)) : null;
+        return {
+          movement,
+          score: roundScore(average(scores) || 0),
+          delta,
+          sessions: scores.length,
+        };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4);
+
+    const focusAreas = metricCards
+      .filter((metric) => metric.score !== null)
+      .sort((a, b) => Number(a.score) - Number(b.score))
+      .slice(0, 2)
+      .map((metric) => {
+        const current = Number(metric.score || 0);
+        const target = getMovementTarget(metric.key);
+        return {
+          key: metric.key,
+          label: metric.label,
+          current,
+          target,
+          drill: scaleDrillForDuration(
+            getImprovementDrill(metric.key, selectedSport?.name, selectedMovement?.name) ||
+              "Focused technical reps",
+            selectedPlanMinutes,
+          ),
+          expectedGain: getExpectedGain(metric.key, selectedPlanMinutes),
+        };
+      });
+
+    return {
+      latestScore: roundScore(Number(scoredAnalyses[0].score)),
+      scoreCount: scoredAnalyses.length,
+      overallDelta,
+      consistencyIndex,
+      metricCards,
+      trendPoints,
+      metricTrendSeries,
+      movementCards,
+      focusAreas,
+    };
+  }, [
+    filteredAnalyses,
+    selectedSport?.name,
+    selectedMovement?.name,
+    selectedPlanMinutes,
+    selectedTrendSessions,
+  ]);
+
   const isAutoDetectMode = !selectedMovement?.name;
   const selectedPlayerLabel =
     selectedPlayerId === "all"
@@ -219,10 +955,13 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scroll}
         refreshControl={
           <RefreshControl
-            refreshing={isRefetching || discrepancyRefetching}
+            refreshing={isRefetching || discrepancyRefetching || scoringModelRegistryRefetching}
             onRefresh={() => {
               refetch();
-              refetchDiscrepancy();
+              if (isAdmin) {
+                refetchDiscrepancy();
+                refetchScoringModelRegistry();
+              }
             }}
             tintColor="#6C5CE7"
           />
@@ -354,16 +1093,58 @@ export default function DashboardScreen() {
           </View>
         ) : (
           <>
-            {(discrepancyLoading || discrepancyIsError || !!discrepancy) && (
+            {isAdmin && (discrepancyLoading || discrepancyIsError || !!discrepancy) && (
               <View style={styles.discrepancyCard}>
                 <View style={styles.discrepancyHeader}>
-                  <Text style={styles.discrepancyTitle}>Discrepancy Report</Text>
+                  <Text style={styles.discrepancyTitle}>Scoring Model</Text>
                   {!discrepancyLoading && !discrepancyIsError && discrepancy && (
                     <Text style={[styles.discrepancyRate, { color: sc.primary }]}> 
-                      {discrepancy.summary.mismatchRatePct.toFixed(1)}%
+                      Mismatch: {discrepancy.summary.mismatchRatePct.toFixed(1)}%
                     </Text>
                   )}
                 </View>
+
+                {!scoringModelLoading && scoringModel && (
+                  <View style={styles.modelMetaCard}>
+                    <Text style={styles.modelMetaText}>
+                      Version {scoringModel.modelVersion}
+                    </Text>
+                    {String(selectedMovement?.name || scoringModel.movementType || "")
+                      .trim()
+                      .toLowerCase() !== "all" ? (
+                      <Text style={styles.modelMetaText}>
+                        Movement: {formatMovementBadgeLabel(selectedMovement?.name || scoringModel.movementType)}
+                      </Text>
+                    ) : null}
+                    <Text style={styles.modelMetaText}>
+                      Movement Detection Accuracy: {scoringModel.movementDetectionAccuracyPct.toFixed(1)}%
+                    </Text>
+                    <Text style={styles.modelMetaText}>
+                      Scoring Accuracy: {scoringModel.scoringAccuracyPct.toFixed(1)}%
+                    </Text>
+                  </View>
+                )}
+
+                {isAdmin && scoringModel?.modelEvaluationMode ? (
+                  <Pressable
+                    onPress={() => saveRegistryMutation.mutate()}
+                    disabled={saveRegistryMutation.isPending}
+                    style={({ pressed }) => [
+                      styles.scoringSaveButton,
+                      { borderColor: `${sc.primary}55` },
+                      {
+                        opacity: pressed || saveRegistryMutation.isPending ? 0.6 : 1,
+                      },
+                    ]}
+                  >
+                    {saveRegistryMutation.isPending ? (
+                      <ActivityIndicator size="small" color={sc.primary} />
+                    ) : (
+                      <Ionicons name="save-outline" size={16} color={sc.primary} />
+                    )}
+                    <Text style={[styles.scoringSaveText, { color: sc.primary }]}>Save To Scoring Model Registry</Text>
+                  </Pressable>
+                ) : null}
 
                 {discrepancyLoading && (
                   <Text style={styles.discrepancyStateText}>Loading discrepancy data…</Text>
@@ -503,6 +1284,293 @@ export default function DashboardScreen() {
               </View>
             )}
 
+            {isAdmin && (
+              <View style={styles.registryCard}>
+                <Text style={styles.registryTitle}>Model Registry</Text>
+                <Text style={styles.registrySubtitle}>Versioned model scoring and movement detection snapshots</Text>
+
+                {scoringModelRegistryLoading && (
+                  <Text style={styles.discrepancyStateText}>Loading registry snapshots…</Text>
+                )}
+
+                {scoringModelRegistryIsError && (
+                  <Text style={styles.discrepancyStateText}>Failed to load registry snapshots. Pull to refresh.</Text>
+                )}
+
+                {!scoringModelRegistryLoading && !scoringModelRegistryIsError && (scoringModelRegistry || []).length === 0 && (
+                  <Text style={styles.discrepancyStateText}>No registry snapshots saved yet.</Text>
+                )}
+
+                {scoringModelRegistryTrend.length > 0 && (
+                  <View style={styles.registryTrendCard}>
+                    <Text style={styles.registryTrendTitle}>Version Trend</Text>
+                    <ModelRegistryTrendLineChart points={scoringModelRegistryTrend} />
+                  </View>
+                )}
+
+                {(scoringModelRegistry || []).slice(0, 6).map((entry) => (
+                  <Pressable
+                    key={entry.id}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push({ pathname: "/model-version/[id]", params: { id: entry.id } });
+                    }}
+                    style={({ pressed }) => [styles.registryEntryCard, { opacity: pressed ? 0.78 : 1 }]}
+                  >
+                    <View style={styles.registryEntryHeader}>
+                      <Text style={styles.registryEntryVersionText}>Model {entry.modelVersion}</Text>
+                      <Text style={styles.registryEntryDateText}>{formatDateTime(entry.createdAt)}</Text>
+                    </View>
+                    {String(entry.movementType || "").trim().toLowerCase() !== "all" ? (
+                      <Text style={styles.registryEntryMetaText}>Movement: {entry.movementType}</Text>
+                    ) : null}
+                    <Text style={styles.registryEntryMetaText}>
+                      Movement Detection Accuracy: {entry.movementDetectionAccuracyPct.toFixed(1)}%
+                    </Text>
+                    <Text style={styles.registryEntryMetaText}>Scoring Accuracy: {entry.scoringAccuracyPct.toFixed(1)}%</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            {!isAdmin && playerDashboard && (
+              <>
+                <LinearGradient
+                  colors={["#121B3A", "#14243B", "#121A34"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.playerHeroCard}
+                >
+                  <Text style={styles.playerHeroLabel}>Overall performance</Text>
+                  <View style={styles.playerHeroTopRow}>
+                    <Text style={styles.playerHeroScore}>{playerDashboard.latestScore}</Text>
+                    <View style={styles.playerHeroDeltaWrap}>
+                      <Ionicons
+                        name={
+                          playerDashboard.overallDelta !== null && playerDashboard.overallDelta < 0
+                            ? "trending-down"
+                            : "trending-up"
+                        }
+                        size={14}
+                        color={getDeltaColor(playerDashboard.overallDelta)}
+                      />
+                      <Text
+                        style={[
+                          styles.playerHeroDelta,
+                          { color: getDeltaColor(playerDashboard.overallDelta) },
+                        ]}
+                      >
+                        {formatScoreDelta(playerDashboard.overallDelta)}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.playerHeroMetaRow}>
+                    <Text style={styles.playerHeroMetaText}>
+                      Sessions tracked: {playerDashboard.scoreCount}
+                    </Text>
+                    <Text style={styles.playerHeroMetaText}>
+                      Consistency index: {playerDashboard.consistencyIndex ?? "--"}
+                    </Text>
+                  </View>
+                </LinearGradient>
+
+                <View style={styles.playerMetricGrid}>
+                  {playerDashboard.metricCards.map((metric) => (
+                    <View key={metric.key} style={styles.playerMetricCard}>
+                      <View style={styles.playerMetricHeader}>
+                        <View
+                          style={[
+                            styles.playerMetricIconWrap,
+                            { backgroundColor: `${metric.color}20` },
+                          ]}
+                        >
+                          <Ionicons name={metric.icon as any} size={13} color={metric.color} />
+                        </View>
+                        <Text style={styles.playerMetricLabel}>{metric.label}</Text>
+                      </View>
+                      <Text style={styles.playerMetricValue}>{metric.score ?? "--"}</Text>
+                      <Text
+                        style={[
+                          styles.playerMetricDelta,
+                          { color: getDeltaColor(metric.delta) },
+                        ]}
+                      >
+                        {metric.delta === null
+                          ? "Build baseline"
+                          : `${metric.delta >= 0 ? "+" : ""}${metric.delta.toFixed(1)} trend`}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={styles.playerSectionCard}>
+                  <View style={styles.playerTrendHeaderRow}>
+                    <View>
+                      <Text style={styles.playerSectionTitle}>Trend</Text>
+                      <Text style={styles.playerTrendSubtitle}>
+                        Showing {selectedTrendSessions === "all" ? playerDashboard.scoreCount : Math.min(selectedTrendSessions, playerDashboard.scoreCount)} of {playerDashboard.scoreCount} sessions
+                      </Text>
+                    </View>
+                    <View style={styles.playerTrendSessionTabs}>
+                      {TREND_SESSION_FILTERS.map((option) => (
+                        <Pressable
+                          key={String(option.key)}
+                          onPress={() => setSelectedTrendSessions(option.key)}
+                          style={({ pressed }) => [
+                            styles.playerTrendSessionTab,
+                            {
+                              borderColor:
+                                selectedTrendSessions === option.key ? `${sc.primary}80` : "#2A2A5060",
+                              backgroundColor:
+                                selectedTrendSessions === option.key ? `${sc.primary}20` : "#0A0A1A80",
+                              opacity: pressed ? 0.8 : 1,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.playerTrendSessionTabText,
+                              { color: selectedTrendSessions === option.key ? sc.primary : "#94A3B8" },
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={styles.playerTrendMetricTabs}>
+                    {PLAYER_METRICS.map((metric) => (
+                      <Pressable
+                        key={metric.key}
+                        onPress={() => setSelectedTrendMetric(metric.key)}
+                        style={({ pressed }) => [
+                          styles.playerTrendMetricTab,
+                          {
+                            borderColor:
+                              selectedTrendMetric === metric.key
+                                ? `${metric.color}80`
+                                : "#2A2A5060",
+                            backgroundColor:
+                              selectedTrendMetric === metric.key
+                                ? `${metric.color}1F`
+                                : "#0A0A1A80",
+                            opacity: pressed ? 0.8 : 1,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.playerTrendMetricTabText,
+                            {
+                              color:
+                                selectedTrendMetric === metric.key ? metric.color : "#94A3B8",
+                            },
+                          ]}
+                        >
+                          {metric.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <LinearGradient
+                    colors={["#0E1835", "#0B132B", "#0A1126"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.playerTrendGlassCard}
+                  >
+                  <PlayerMetricTrendChart
+                    labels={playerDashboard.trendPoints.map((point) => point.label)}
+                    series={playerDashboard.metricTrendSeries}
+                    activeKey={selectedTrendMetric}
+                  />
+                  </LinearGradient>
+                </View>
+
+                <View style={styles.playerSectionCard}>
+                  <Text style={styles.playerSectionTitle}>Stroke performance</Text>
+                  {playerDashboard.movementCards.map((movement) => (
+                    <View key={movement.movement} style={styles.playerMovementRow}>
+                      <View>
+                        <Text style={styles.playerMovementName}>{movement.movement}</Text>
+                        <Text style={styles.playerMovementMeta}>{movement.sessions} sessions</Text>
+                      </View>
+                      <View style={styles.playerMovementRight}>
+                        <Text style={styles.playerMovementScore}>{movement.score}</Text>
+                        <Text
+                          style={[
+                            styles.playerMovementDelta,
+                            { color: getDeltaColor(movement.delta) },
+                          ]}
+                        >
+                          {movement.delta === null
+                            ? "No trend"
+                            : `${movement.delta >= 0 ? "+" : ""}${movement.delta.toFixed(1)}`}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={styles.playerSectionCard}>
+                  <Text style={styles.playerSectionTitle}>Improvement plan</Text>
+                  <View style={styles.playerPlanDurationRow}>
+                    {PLAN_DURATIONS.map((minutes) => (
+                      <Pressable
+                        key={minutes}
+                        onPress={() => setSelectedPlanMinutes(minutes)}
+                        style={({ pressed }) => [
+                          styles.playerPlanDurationChip,
+                          {
+                            borderColor:
+                              selectedPlanMinutes === minutes ? `${sc.primary}80` : "#2A2A5060",
+                            backgroundColor:
+                              selectedPlanMinutes === minutes ? `${sc.primary}20` : "#0A0A1A80",
+                            opacity: pressed ? 0.8 : 1,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.playerPlanDurationText,
+                            { color: selectedPlanMinutes === minutes ? sc.primary : "#94A3B8" },
+                          ]}
+                        >
+                          {minutes} min
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  {playerDashboard.focusAreas.map((area, index) => (
+                    <View key={area.key} style={styles.playerPlanRow}>
+                      <View style={styles.playerPlanIndexWrap}>
+                        <Text style={styles.playerPlanIndex}>{index + 1}</Text>
+                      </View>
+                      <View style={styles.playerPlanContent}>
+                        <Text style={styles.playerPlanTitle}>{area.label}</Text>
+                        <Text style={styles.playerPlanMeta}>
+                          {area.current} now to target {area.target}
+                        </Text>
+                        <Text style={styles.playerPlanGain}>Expected gain: +{area.expectedGain}</Text>
+                        <Text style={styles.playerPlanDrill}>{area.drill}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+
+              </>
+            )}
+
+
+            {!isAdmin && filteredAnalyses.length > 0 && !playerDashboard && (
+              <View style={styles.playerPendingCard}>
+                <Text style={styles.playerPendingTitle}>Analysis in progress</Text>
+                <Text style={styles.playerPendingText}>
+                  We found your uploaded videos. Performance metrics will appear after scoring completes.
+                </Text>
+              </View>
+            )}
+
             {filteredAnalyses.length === 0 && (
               <View style={styles.emptyState}>
                 <View style={styles.emptyIconWrap}>
@@ -522,6 +1590,37 @@ export default function DashboardScreen() {
           </>
         )}
       </ScrollView>
+
+      {registrySaveToast.visible ? (
+        <View style={styles.registryToastContainer} pointerEvents="none">
+          <View
+            style={[
+              styles.registryToast,
+              registrySaveToast.tone === "success" && styles.registryToastSuccess,
+              registrySaveToast.tone === "error" && styles.registryToastError,
+            ]}
+          >
+            <Ionicons
+              name={
+                registrySaveToast.tone === "success"
+                  ? "checkmark-circle"
+                  : registrySaveToast.tone === "error"
+                    ? "alert-circle"
+                    : "time-outline"
+              }
+              size={14}
+              color={
+                registrySaveToast.tone === "success"
+                  ? "#34D399"
+                  : registrySaveToast.tone === "error"
+                    ? "#F87171"
+                    : "#94A3B8"
+              }
+            />
+            <Text style={styles.registryToastText}>{registrySaveToast.message}</Text>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -529,6 +1628,38 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0A0A1A" },
   scroll: { paddingHorizontal: 20, paddingBottom: 100 },
+  registryToastContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 22,
+    alignItems: "center",
+    zIndex: 30,
+  },
+  registryToast: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#0A0A1A",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  registryToastSuccess: {
+    borderColor: "#166534",
+    backgroundColor: "#052E1A",
+  },
+  registryToastError: {
+    borderColor: "#7F1D1D",
+    backgroundColor: "#3F1114",
+  },
+  registryToastText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#E2E8F0",
+  },
   greetingSection: { marginTop: 20, marginBottom: 28 },
   greeting: {
     fontSize: 26,
@@ -642,6 +1773,46 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_500Medium",
     color: "#94A3B8",
+  },
+  modelMetaCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2A2A5035",
+    backgroundColor: "#0A0A1A90",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  modelMetaText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#E2E8F0",
+  },
+  modelMetaSubText: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+    marginTop: 2,
+  },
+  scoringSaveButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingVertical: 9,
+    backgroundColor: "#0A0A1A80",
+  },
+  scoringSaveText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  scoringSaveHintText: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+    marginTop: -4,
   },
   discrepancyTrendCard: {
     borderRadius: 10,
@@ -770,6 +1941,503 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Inter_500Medium",
     color: "#CBD5E1",
+  },
+  registryCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#15152D",
+    padding: 14,
+    gap: 10,
+    marginBottom: 24,
+  },
+  registryTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
+  },
+  registrySubtitle: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  registryTrendCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2A2A5035",
+    backgroundColor: "#0A0A1A90",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 7,
+  },
+  registryTrendTitle: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#CBD5E1",
+  },
+  registryTrendLegendRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 6,
+  },
+  registryLegendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  registryLegendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 99,
+  },
+  registryLegendText: {
+    fontSize: 10,
+    fontFamily: "Inter_500Medium",
+    color: "#CBD5E1",
+  },
+  registryXAxisLabels: {
+    flexDirection: "row",
+    gap: 4,
+    marginTop: 4,
+  },
+  registryXAxisLabel: {
+    flex: 1,
+    fontSize: 10,
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
+    textAlign: "center",
+  },
+  registryTrendRow: {
+    gap: 5,
+    paddingVertical: 3,
+  },
+  registryTrendVersionText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#E2E8F0",
+  },
+  registryTrendBarsWrap: {
+    gap: 5,
+  },
+  registryTrendBarTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#1E293B",
+    overflow: "hidden",
+  },
+  registryTrendBarFillMovement: {
+    height: "100%",
+    backgroundColor: "#22C55E",
+    borderRadius: 999,
+  },
+  registryTrendBarFillScoring: {
+    height: "100%",
+    backgroundColor: "#38BDF8",
+    borderRadius: 999,
+  },
+  registryTrendValueText: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
+  },
+  registryEntryCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2A2A5035",
+    backgroundColor: "#0A0A1A80",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 3,
+  },
+  registryEntryHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+  },
+  registryEntryVersionText: {
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+    color: "#34D399",
+  },
+  registryEntryDateText: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
+  },
+  registryEntryMetaText: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#E2E8F0",
+  },
+  registryEntrySubText: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+    marginTop: 2,
+  },
+  registryDetailOverlay: {
+    flex: 1,
+    backgroundColor: "#020617B0",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  registryDetailCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#0B1228",
+    maxHeight: "82%",
+    padding: 14,
+    gap: 8,
+  },
+  registryDetailHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  registryDetailTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+  },
+  registryDetailSectionTitle: {
+    marginTop: 6,
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+    color: "#93C5FD",
+  },
+  registryDetailMeta: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#CBD5E1",
+  },
+  registryDetailDatasetBlock: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#33415580",
+    backgroundColor: "#0A1023",
+    padding: 8,
+    gap: 3,
+  },
+  registryDetailDatasetName: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    color: "#E2E8F0",
+  },
+  registryDetailVideoMeta: {
+    fontSize: 10,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  playerHeroCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    padding: 14,
+    gap: 8,
+    marginBottom: 14,
+  },
+  playerHeroLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: "#93C5FD",
+    letterSpacing: 0.2,
+  },
+  playerHeroTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  playerHeroScore: {
+    fontSize: 48,
+    lineHeight: 52,
+    fontFamily: "Inter_800ExtraBold",
+    color: "#F8FAFC",
+  },
+  playerHeroDeltaWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 7,
+  },
+  playerHeroDelta: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  playerHeroMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  playerHeroMetaText: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#BFDBFE",
+  },
+  playerMetricGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 14,
+  },
+  playerMetricCard: {
+    width: "48%",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#131A35",
+    padding: 10,
+    gap: 5,
+  },
+  playerMetricHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  playerMetricIconWrap: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playerMetricLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#CBD5E1",
+  },
+  playerMetricValue: {
+    fontSize: 24,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+  },
+  playerMetricDelta: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+  },
+  playerSectionCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#15152D",
+    padding: 12,
+    gap: 10,
+    marginBottom: 12,
+  },
+  playerSectionTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
+  },
+  playerTrendHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  playerTrendSubtitle: {
+    marginTop: 2,
+    fontSize: 10,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  playerTrendLabelsRow: {
+    flexDirection: "row",
+    marginTop: 6,
+    gap: 4,
+  },
+  playerTrendTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  playerTrendMetricPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "#2A2A5055",
+    backgroundColor: "#0A0F22A0",
+  },
+  playerTrendMetricDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
+  playerTrendMetricLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#CBD5E1",
+  },
+  playerTrendMetricValue: {
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+  },
+  playerTrendAxisLabel: {
+    flex: 1,
+    fontSize: 9,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+    textAlign: "center" as const,
+  },
+  playerTrendSessionTabs: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  playerTrendSessionTab: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  playerTrendSessionTabText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  playerTrendMetricTabs: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  playerTrendMetricTab: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  playerTrendMetricTabText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  playerTrendGlassCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    padding: 10,
+  },
+  playerMovementRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2A2A5035",
+    backgroundColor: "#0A0A1A80",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  playerMovementName: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#E2E8F0",
+  },
+  playerMovementMeta: {
+    fontSize: 10,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+    marginTop: 2,
+  },
+  playerMovementRight: {
+    alignItems: "flex-end",
+  },
+  playerMovementScore: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    color: "#34D399",
+  },
+  playerMovementDelta: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+  },
+  playerPlanRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2A2A5035",
+    backgroundColor: "#0A0A1A80",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  playerPlanDurationRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  playerPlanDurationChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  playerPlanDurationText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  playerPlanIndexWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#1E293B",
+    marginTop: 1,
+  },
+  playerPlanIndex: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    color: "#93C5FD",
+  },
+  playerPlanContent: {
+    flex: 1,
+    gap: 2,
+  },
+  playerPlanTitle: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#E2E8F0",
+  },
+  playerPlanMeta: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
+  },
+  playerPlanGain: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#34D399",
+  },
+  playerPlanDrill: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: "#CBD5E1",
+  },
+  playerPendingCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#15152D",
+    padding: 12,
+    marginBottom: 14,
+    gap: 5,
+  },
+  playerPendingTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
+  },
+  playerPendingText: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+    lineHeight: 18,
   },
   emptyState: {
     alignItems: "center",
