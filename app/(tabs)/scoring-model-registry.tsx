@@ -12,6 +12,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { TabHeader } from "@/components/TabHeader";
 import { fetchScoringModelRegistry } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { ds } from "@/constants/design-system";
+import { GlassCard } from "@/components/ui/GlassCard";
 
 type VersionTrendPoint = {
   modelVersion: string;
@@ -86,7 +88,7 @@ export default function ScoringModelRegistryScreen() {
         </View>
       ) : isLoading ? (
         <View style={styles.centerWrap}>
-          <ActivityIndicator size="large" color="#34D399" />
+          <ActivityIndicator size="large" color={ds.color.success} />
         </View>
       ) : (
         <ScrollView
@@ -95,7 +97,7 @@ export default function ScoringModelRegistryScreen() {
             <RefreshControl
               refreshing={isRefetching}
               onRefresh={() => refetch()}
-              tintColor="#34D399"
+              tintColor={ds.color.success}
             />
           }
           showsVerticalScrollIndicator={false}
@@ -112,7 +114,7 @@ export default function ScoringModelRegistryScreen() {
           ) : null}
 
           {trendPoints.length > 0 ? (
-            <View style={styles.trendCard}>
+            <GlassCard style={styles.trendCard}>
               <Text style={styles.trendTitle}>Version Trend</Text>
               {trendPoints.map((point) => (
                 <View key={point.modelVersion} style={styles.trendRow}>
@@ -140,11 +142,11 @@ export default function ScoringModelRegistryScreen() {
                   </Text>
                 </View>
               ))}
-            </View>
+            </GlassCard>
           ) : null}
 
           {(data || []).map((entry) => (
-            <View key={entry.id} style={styles.card}>
+            <GlassCard key={entry.id} style={styles.card}>
               <View style={styles.rowBetween}>
                 <Text style={styles.versionText}>Model {entry.modelVersion}</Text>
                 <Text style={styles.dateText}>{formatDateTime(entry.createdAt)}</Text>
@@ -159,15 +161,15 @@ export default function ScoringModelRegistryScreen() {
               <View style={styles.datasetBlock}>
                 <Text style={styles.datasetTitle}>Datasets</Text>
                 {(entry.datasetMetrics || []).map((metric) => (
-                  <View key={metric.id} style={styles.datasetRow}>
+                  <GlassCard key={metric.id} style={styles.datasetRow}>
                     <Text style={styles.datasetName}>{metric.datasetName}</Text>
                     <Text style={styles.datasetMeta}>
                       {metric.movementType} | MD {metric.movementDetectionAccuracyPct.toFixed(1)}% | SC {metric.scoringAccuracyPct.toFixed(1)}%
                     </Text>
-                  </View>
+                  </GlassCard>
                 ))}
               </View>
-            </View>
+            </GlassCard>
           ))}
         </ScrollView>
       )}
@@ -176,33 +178,30 @@ export default function ScoringModelRegistryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0A0A1A" },
-  scroll: { paddingHorizontal: 20, paddingBottom: 120, paddingTop: 20, gap: 14 },
+  container: { flex: 1, backgroundColor: ds.color.bg },
+  scroll: { paddingHorizontal: ds.space.xl, paddingBottom: 120, paddingTop: ds.space.xl, gap: 14 },
   centerWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   title: {
     fontSize: 24,
     fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   subtitle: {
     marginTop: 8,
     marginBottom: 10,
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   trendCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderRadius: ds.radius.md,
     padding: 12,
     gap: 8,
   },
   trendTitle: {
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   trendRow: {
     gap: 6,
@@ -211,7 +210,7 @@ const styles = StyleSheet.create({
   trendVersionText: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
+    color: ds.color.textSecondary,
   },
   trendBarsWrap: {
     gap: 5,
@@ -219,12 +218,12 @@ const styles = StyleSheet.create({
   trendBarTrack: {
     height: 8,
     borderRadius: 999,
-    backgroundColor: "#1E293B",
+    backgroundColor: ds.color.bgElevated,
     overflow: "hidden",
   },
   trendBarFillMovement: {
     height: "100%",
-    backgroundColor: "#22C55E",
+    backgroundColor: ds.color.success,
     borderRadius: 999,
   },
   trendBarFillScoring: {
@@ -235,13 +234,10 @@ const styles = StyleSheet.create({
   trendValueText: {
     fontSize: 11,
     fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   card: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderRadius: ds.radius.md,
     padding: 12,
     gap: 6,
   },
@@ -254,41 +250,38 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: 15,
     fontFamily: "Inter_700Bold",
-    color: "#34D399",
+    color: ds.color.success,
   },
   dateText: {
     fontSize: 11,
     fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   metaText: {
     fontSize: 12,
     fontFamily: "Inter_500Medium",
-    color: "#E2E8F0",
+    color: ds.color.textSecondary,
   },
   metaSubText: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
     marginTop: 2,
   },
   datasetBlock: {
     marginTop: 6,
     borderTopWidth: 1,
-    borderTopColor: "#2A2A5060",
+    borderTopColor: ds.color.glassBorder,
     paddingTop: 8,
     gap: 6,
   },
   datasetTitle: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   datasetRow: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#2A2A5035",
-    backgroundColor: "#0A0A1A80",
+    borderRadius: ds.radius.sm,
     paddingHorizontal: 8,
     paddingVertical: 7,
     gap: 2,
@@ -296,23 +289,23 @@ const styles = StyleSheet.create({
   datasetName: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
+    color: ds.color.textSecondary,
   },
   datasetMeta: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   emptyTitle: {
     fontSize: 20,
     fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   emptyText: {
     marginTop: 8,
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
     textAlign: "center",
   },
 });

@@ -13,6 +13,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { fetchScoringModelRegistryEntry } from "@/lib/api";
+import { GlassCard } from "@/components/ui/GlassCard";
+import { ds } from "@/constants/design-system";
 
 function formatLabel(label: string): string {
   return label
@@ -96,7 +98,7 @@ export default function ModelVersionScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          <View style={styles.summaryCard}>
+          <GlassCard style={styles.summaryCard}>
             <View style={styles.versionPill}>
               <Text style={styles.versionPillText}>Model {data.modelVersion}</Text>
             </View>
@@ -113,12 +115,12 @@ export default function ModelVersionScreen() {
             <Text style={styles.summaryLine}>
               Scoring Accuracy: {data.scoringAccuracyPct.toFixed(1)}%
             </Text>
-          </View>
+          </GlassCard>
 
-          <View style={styles.discrepancyCard}>
+          <GlassCard style={styles.discrepancyCard}>
             <Text style={styles.discrepancyTitle}>Version Videos</Text>
             {(data.topVideos || []).map((item) => (
-              <View key={item.analysisId} style={styles.discrepancyRow}>
+              <GlassCard key={item.analysisId} style={styles.discrepancyRow}>
                 <View style={styles.discrepancyLeft}>
                   <Text style={styles.videoName} numberOfLines={1}>
                     {String(item.userName || "Player")}
@@ -171,7 +173,7 @@ export default function ModelVersionScreen() {
                     <Text style={styles.reviewText}>Review</Text>
                   </Pressable>
                 </View>
-              </View>
+              </GlassCard>
             ))}
 
             {(data.topVideos || []).length === 0 ? (
@@ -183,7 +185,7 @@ export default function ModelVersionScreen() {
                 Top confusion: {formatLabel(data.labelConfusions[0].from)} {"->"} {formatLabel(data.labelConfusions[0].to)} ({data.labelConfusions[0].count})
               </Text>
             ) : null}
-          </View>
+          </GlassCard>
         </ScrollView>
       )}
     </View>
@@ -191,11 +193,11 @@ export default function ModelVersionScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0A0A1A" },
+  container: { flex: 1, backgroundColor: ds.color.bg },
   header: {
     marginTop: 52,
-    paddingHorizontal: 20,
-    paddingBottom: 12,
+    paddingHorizontal: ds.space.xl,
+    paddingBottom: ds.space.md,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -203,17 +205,17 @@ const styles = StyleSheet.create({
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: "#1A1A36",
+    borderRadius: ds.radius.pill,
+    backgroundColor: ds.color.glass,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#2A2A50",
+    borderColor: ds.color.glassBorder,
   },
   headerTitle: {
     fontSize: 18,
     fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   centerWrap: {
     flex: 1,
@@ -225,23 +227,20 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 18,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   errorText: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   scroll: {
-    paddingHorizontal: 20,
+    paddingHorizontal: ds.space.xl,
     paddingBottom: 30,
-    gap: 12,
+    gap: ds.space.md,
   },
   summaryCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0B122A",
+    borderRadius: ds.radius.lg,
     padding: 14,
     gap: 4,
   },
@@ -264,26 +263,20 @@ const styles = StyleSheet.create({
   summaryLine: {
     fontSize: 13,
     fontFamily: "Inter_500Medium",
-    color: "#CBD5E1",
+    color: ds.color.textSecondary,
   },
   discrepancyCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#10122C",
+    borderRadius: ds.radius.lg,
     padding: 12,
     gap: 10,
   },
   discrepancyTitle: {
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   discrepancyRow: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#2A2A5035",
-    backgroundColor: "#0A0C22",
+    borderRadius: ds.radius.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: "row",
@@ -297,12 +290,12 @@ const styles = StyleSheet.create({
   videoName: {
     fontSize: 15,
     fontFamily: "Inter_700Bold",
-    color: "#E2E8F0",
+    color: ds.color.textSecondary,
   },
   videoMeta: {
     fontSize: 12,
     fontFamily: "Inter_500Medium",
-    color: "#CBD5E1",
+    color: ds.color.textSecondary,
   },
   discrepancyRight: {
     alignItems: "flex-end",
@@ -332,14 +325,14 @@ const styles = StyleSheet.create({
   newVideoText: {
     fontSize: 10,
     fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
     marginTop: -2,
   },
   reviewButton: {
-    borderRadius: 10,
+    borderRadius: ds.radius.sm,
     borderWidth: 1,
-    borderColor: "#1F8A8A",
-    backgroundColor: "#0E1E2A",
+    borderColor: `${ds.color.success}66`,
+    backgroundColor: `${ds.color.success}1A`,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
@@ -351,12 +344,12 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 12,
     fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   confusionText: {
     marginTop: 2,
     fontSize: 12,
     fontFamily: "Inter_500Medium",
-    color: "#CBD5E1",
+    color: ds.color.textSecondary,
   },
 });

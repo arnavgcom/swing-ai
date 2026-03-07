@@ -1,0 +1,51 @@
+export const ds = {
+  color: {
+    bg: "#070B16",
+    bgElevated: "#0F172A",
+    glass: "rgba(15, 23, 42, 0.58)",
+    glassBorder: "rgba(255, 255, 255, 0.16)",
+    textPrimary: "#F8FAFC",
+    textSecondary: "#CBD5E1",
+    textTertiary: "#94A3B8",
+    success: "#34D399",
+    warning: "#FBBF24",
+    danger: "#F87171",
+    accent: "#6C5CE7",
+  },
+  radius: {
+    sm: 10,
+    md: 14,
+    lg: 18,
+    xl: 24,
+    pill: 999,
+  },
+  space: {
+    xs: 4,
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 20,
+    xxl: 28,
+  },
+  shadow: {
+    soft: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.2,
+      shadowRadius: 24,
+      elevation: 8,
+    },
+    subtle: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 12,
+      elevation: 4,
+    },
+  },
+  motion: {
+    quick: 140,
+    normal: 220,
+    slow: 340,
+  },
+} as const;

@@ -17,6 +17,8 @@ import {
   fetchAnalysisDiagnostics,
   fetchAnalysisVideoMetadata,
 } from "@/lib/api";
+import { GlassCard } from "@/components/ui/GlassCard";
+import { ds } from "@/constants/design-system";
 
 function formatBytes(bytes: number | null | undefined): string {
   if (bytes == null || !Number.isFinite(bytes) || bytes <= 0) return "-";
@@ -104,41 +106,41 @@ export default function AnalysisDiagnosticsScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          <View style={styles.heroCard}>
+          <GlassCard style={styles.heroCard}>
             <Text style={styles.heroLabel}>Confidence</Text>
             <Text style={styles.heroValue}>{diagnostics.aiConfidencePct.toFixed(1)}%</Text>
             <Text style={styles.heroSub}>Detected: {toTitle(diagnostics.detectedMovement)}</Text>
-          </View>
+          </GlassCard>
 
-          <View style={styles.card}>
+          <GlassCard style={styles.card}>
             <Text style={styles.cardTitle}>Classification Rationale</Text>
             <Text style={styles.cardBody}>{diagnostics.classificationRationale}</Text>
-          </View>
+          </GlassCard>
 
-          <View style={styles.card}>
+          <GlassCard style={styles.card}>
             <Text style={styles.cardTitle}>Scoring Basis</Text>
             <Text style={styles.rowText}>Active time: {diagnostics.activeTimeSec.toFixed(2)}s ({diagnostics.activeTimePct.toFixed(1)}%)</Text>
             <Text style={styles.rowText}>Shots considered: {diagnostics.shotsConsideredForScoring}</Text>
             <Text style={styles.rowText}>Pose coverage: {diagnostics.poseCoveragePct.toFixed(1)}%</Text>
             <Text style={styles.rowText}>Frames for scoring: {diagnostics.framesConsideredForScoring}</Text>
-          </View>
+          </GlassCard>
 
-          <View style={styles.card}>
+          <GlassCard style={styles.card}>
             <Text style={styles.cardTitle}>Shot-Level Labels</Text>
             {diagnostics.shotSegments.length === 0 ? (
               <Text style={styles.rowText}>No shot segments available</Text>
             ) : (
               diagnostics.shotSegments.map((segment) => (
-                <View key={`shot-${segment.index}`} style={styles.shotItem}>
+                <GlassCard key={`shot-${segment.index}`} style={styles.shotItem}>
                   <Text style={styles.shotTitle}>Shot {segment.index}: {toTitle(segment.label)}</Text>
                   <Text style={styles.shotSub}>Frames {segment.startFrame}-{segment.endFrame} ({segment.frames})</Text>
                   <Text style={styles.shotSub}>Used for scoring: {segment.includedForScoring ? "Yes" : "No"}</Text>
-                </View>
+                </GlassCard>
               ))
             )}
-          </View>
+          </GlassCard>
 
-          <View style={styles.card}>
+          <GlassCard style={styles.card}>
             <Pressable
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -150,7 +152,7 @@ export default function AnalysisDiagnosticsScreen() {
               <Ionicons
                 name={videoTechnicalExpanded ? "chevron-up" : "chevron-down"}
                 size={16}
-                color="#94A3B8"
+                color={ds.color.textTertiary}
               />
             </Pressable>
             {videoTechnicalExpanded ? (
@@ -165,7 +167,7 @@ export default function AnalysisDiagnosticsScreen() {
                 <Text style={styles.rowText}>GPS: {videoMetadata?.gpsLat != null && videoMetadata?.gpsLng != null ? `${Number(videoMetadata.gpsLat).toFixed(6)}, ${Number(videoMetadata.gpsLng).toFixed(6)}` : "Not available"}</Text>
               </>
             ) : null}
-          </View>
+          </GlassCard>
         </ScrollView>
       )}
     </View>
@@ -173,12 +175,12 @@ export default function AnalysisDiagnosticsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0A0A1A" },
+  container: { flex: 1, backgroundColor: ds.color.bg },
   centerWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   header: {
     marginTop: 52,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: ds.space.lg,
+    paddingBottom: ds.space.md,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -186,58 +188,49 @@ const styles = StyleSheet.create({
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: ds.radius.md,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#15152D",
+    backgroundColor: ds.color.glass,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: ds.color.glassBorder,
   },
   title: {
     flex: 1,
     textAlign: "center",
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
-  emptyText: { fontSize: 13, fontFamily: "Inter_500Medium", color: "#94A3B8" },
-  scroll: { paddingHorizontal: 20, paddingBottom: 26, gap: 12 },
+  emptyText: { fontSize: 13, fontFamily: "Inter_500Medium", color: ds.color.textTertiary },
+  scroll: { paddingHorizontal: ds.space.xl, paddingBottom: 26, gap: ds.space.md },
   heroCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#111A37",
-    padding: 14,
+    borderRadius: ds.radius.lg,
+    padding: ds.space.lg,
     gap: 4,
   },
-  heroLabel: { fontSize: 12, fontFamily: "Inter_500Medium", color: "#94A3B8" },
-  heroValue: { fontSize: 30, fontFamily: "Inter_700Bold", color: "#34D399" },
-  heroSub: { fontSize: 13, fontFamily: "Inter_500Medium", color: "#CBD5E1" },
+  heroLabel: { fontSize: 12, fontFamily: "Inter_500Medium", color: ds.color.textTertiary },
+  heroValue: { fontSize: 30, fontFamily: "Inter_700Bold", color: ds.color.success },
+  heroSub: { fontSize: 13, fontFamily: "Inter_500Medium", color: ds.color.textSecondary },
   card: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
-    padding: 12,
+    borderRadius: ds.radius.md,
+    padding: ds.space.md,
     gap: 6,
   },
-  cardTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#F8FAFC" },
+  cardTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: ds.color.textPrimary },
   cardHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  cardBody: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", color: "#CBD5E1" },
-  rowText: { fontSize: 12, fontFamily: "Inter_500Medium", color: "#CBD5E1" },
+  cardBody: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", color: ds.color.textSecondary },
+  rowText: { fontSize: 12, fontFamily: "Inter_500Medium", color: ds.color.textSecondary },
   shotItem: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#2A2A5035",
-    backgroundColor: "#0A0A1A80",
+    borderRadius: ds.radius.sm,
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 2,
   },
-  shotTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#E2E8F0" },
-  shotSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#94A3B8" },
+  shotTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: ds.color.textSecondary },
+  shotSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: ds.color.textTertiary },
 });

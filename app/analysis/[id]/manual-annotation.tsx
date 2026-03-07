@@ -21,6 +21,8 @@ import {
   saveAnalysisShotAnnotation,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { GlassCard } from "@/components/ui/GlassCard";
+import { ds } from "@/constants/design-system";
 
 const SPORT_MOVEMENT_OPTIONS: Record<string, string[]> = {
   tennis: ["forehand", "backhand", "serve", "volley", "game"],
@@ -205,7 +207,7 @@ export default function ManualAnnotationScreen() {
         {manualShotLabels.map((shotLabel, index) => {
           const dropdownOpen = activeShotDropdownIndex === index;
           return (
-            <View key={`manual-shot-${index}`} style={[styles.rowCard, dropdownOpen && { zIndex: 10 }]}> 
+            <GlassCard key={`manual-shot-${index}`} style={[styles.rowCard, dropdownOpen && { zIndex: 10 }]}> 
               <Text style={styles.indexText}>{index + 1}.</Text>
               <View style={styles.dropdownWrap}>
                 <Pressable
@@ -243,7 +245,7 @@ export default function ManualAnnotationScreen() {
                   </View>
                 )}
               </View>
-            </View>
+            </GlassCard>
           );
         })}
 
@@ -276,11 +278,11 @@ export default function ManualAnnotationScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0A0A1A" },
+  container: { flex: 1, backgroundColor: ds.color.bg },
   header: {
     marginTop: 52,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: ds.space.lg,
+    paddingBottom: ds.space.md,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -288,91 +290,88 @@ const styles = StyleSheet.create({
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: ds.radius.md,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#15152D",
+    backgroundColor: ds.color.glass,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: ds.color.glassBorder,
   },
   title: {
     flex: 1,
     textAlign: "center",
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
-  scroll: { paddingHorizontal: 20, paddingBottom: 30, gap: 10 },
-  actionsRow: { flexDirection: "row", gap: 10, marginBottom: 4 },
+  scroll: { paddingHorizontal: ds.space.xl, paddingBottom: 30, gap: 10 },
+  actionsRow: { flexDirection: "row", gap: ds.space.sm, marginBottom: 4 },
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    borderRadius: 10,
+    borderRadius: ds.radius.sm,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.glass,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
-  actionButtonDisabled: { backgroundColor: "#0F172A" },
-  actionText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#CBD5E1" },
-  actionTextDisabled: { color: "#64748B" },
+  actionButtonDisabled: { backgroundColor: ds.color.bgElevated },
+  actionText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: ds.color.textSecondary },
+  actionTextDisabled: { color: ds.color.textTertiary },
   rowCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#2A2A5035",
-    backgroundColor: "#131328",
+    borderRadius: ds.radius.md,
     paddingHorizontal: 10,
     paddingVertical: 10,
     flexDirection: "row",
     gap: 10,
     alignItems: "flex-start",
   },
-  indexText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#A78BFA", marginTop: 9 },
+  indexText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: ds.color.accent, marginTop: 9 },
   dropdownWrap: { flex: 1 },
   dropdownTrigger: {
-    borderRadius: 10,
+    borderRadius: ds.radius.sm,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A80",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.bgElevated,
     paddingHorizontal: 10,
     paddingVertical: 9,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  dropdownText: { fontSize: 12, fontFamily: "Inter_500Medium", color: "#CBD5E1" },
+  dropdownText: { fontSize: 12, fontFamily: "Inter_500Medium", color: ds.color.textSecondary },
   dropdownMenu: {
     marginTop: 6,
-    borderRadius: 10,
+    borderRadius: ds.radius.sm,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.bgElevated,
     padding: 6,
     gap: 5,
   },
   dropdownOption: {
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: ds.color.glassBorder,
     paddingHorizontal: 9,
     paddingVertical: 7,
   },
   dropdownOptionSelected: {
-    borderColor: "#6C5CE7",
-    backgroundColor: "#6C5CE720",
+    borderColor: ds.color.accent,
+    backgroundColor: `${ds.color.accent}20`,
   },
-  dropdownOptionText: { fontSize: 12, fontFamily: "Inter_500Medium", color: "#CBD5E1" },
+  dropdownOptionText: { fontSize: 12, fontFamily: "Inter_500Medium", color: ds.color.textSecondary },
   trainingToggleRow: {
     marginTop: 8,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     borderWidth: 1,
-    borderColor: "#2A2A5035",
-    borderRadius: 10,
-    backgroundColor: "#0A0A1A80",
+    borderColor: ds.color.glassBorder,
+    borderRadius: ds.radius.sm,
+    backgroundColor: ds.color.bgElevated,
     paddingHorizontal: 10,
     paddingVertical: 10,
   },
@@ -381,22 +380,22 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: "#475569",
-    backgroundColor: "#0F172A",
+    borderColor: ds.color.textTertiary,
+    backgroundColor: ds.color.bg,
     alignItems: "center",
     justifyContent: "center",
   },
   trainingCheckboxChecked: {
-    borderColor: "#6C5CE7",
-    backgroundColor: "#6C5CE724",
+    borderColor: ds.color.accent,
+    backgroundColor: `${ds.color.accent}24`,
   },
-  trainingToggleText: { fontSize: 12, fontFamily: "Inter_500Medium", color: "#CBD5E1" },
+  trainingToggleText: { fontSize: 12, fontFamily: "Inter_500Medium", color: ds.color.textSecondary },
   saveButton: {
     marginTop: 10,
-    borderRadius: 10,
+    borderRadius: ds.radius.sm,
     borderWidth: 1,
-    borderColor: "#6C5CE7",
-    backgroundColor: "#6C5CE7",
+    borderColor: ds.color.accent,
+    backgroundColor: ds.color.accent,
     paddingVertical: 11,
     alignItems: "center",
     justifyContent: "center",

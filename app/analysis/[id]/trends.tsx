@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   Pressable,
   ScrollView,
@@ -13,13 +14,15 @@ import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import Svg, { Line, Polyline, Circle } from "react-native-svg";
+import Svg, { Line, Polyline, Circle, Polygon } from "react-native-svg";
 import {
   fetchAnalysisDetail,
   fetchAnalysisMetricTrends,
   fetchSportConfig,
   type SportCategoryConfig,
 } from "@/lib/api";
+import { GlassCard } from "@/components/ui/GlassCard";
+import { ds } from "@/constants/design-system";
 
 const SESSION_FILTERS = [
   { key: 5, label: "5S" },
@@ -49,6 +52,18 @@ type SeriesPoint = {
 };
 
 function MetricTrendChart({ points, color }: { points: SeriesPoint[]; color: string }) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const reveal = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    reveal.setValue(0);
+    Animated.timing(reveal, {
+      toValue: 1,
+      duration: ds.motion.slow,
+      useNativeDriver: true,
+    }).start();
+  }, [color, points.length, reveal]);
+
   if (!points.length) {
     return <Text style={styles.metricEmpty}>No trend data</Text>;
   }
@@ -73,6 +88,7 @@ function MetricTrendChart({ points, color }: { points: SeriesPoint[]; color: str
   const polyline = points
     .map((point, index) => `${toX(index)},${toY(point.value)}`)
     .join(" ");
+  const areaPoints = `${leftPadding},${height - bottomPadding} ${polyline} ${width - rightPadding},${height - bottomPadding}`;
 
   const xLabelStep =
     points.length <= 6
@@ -83,46 +99,95 @@ function MetricTrendChart({ points, color }: { points: SeriesPoint[]; color: str
           ? 3
           : 4;
 
+  const getIndexFromX = (x: number): number => {
+    if (points.length <= 1) return 0;
+    const clampedX = Math.max(leftPadding, Math.min(width - rightPadding, x));
+    const ratio = (clampedX - leftPadding) / innerWidth;
+    return Math.max(0, Math.min(points.length - 1, Math.round(ratio * (points.length - 1))));
+  };
+
+  const focusedIndex = activeIndex ?? points.length - 1;
+  const focusedPoint = points[focusedIndex];
+  const focusX = toX(focusedIndex);
+  const focusY = toY(focusedPoint.value);
+  const tooltipWidth = 96;
+  const tooltipLeft = Math.max(
+    leftPadding,
+    Math.min(width - rightPadding - tooltipWidth, focusX - tooltipWidth / 2),
+  );
+  const revealTranslateY = reveal.interpolate({ inputRange: [0, 1], outputRange: [6, 0] });
+
   return (
-    <View>
-      <Svg width={width} height={height}>
-        {[0, 0.25, 0.5, 0.75, 1].map((tick, idx) => {
-          const y = topPadding + tick * innerHeight;
-          return (
-            <Line
-              key={`grid-${idx}`}
-              x1={leftPadding}
-              y1={y}
-              x2={width - rightPadding}
-              y2={y}
-              stroke="#33415555"
-              strokeWidth={1}
-            />
-          );
-        })}
+    <Animated.View style={{ opacity: reveal, transform: [{ translateY: revealTranslateY }] }}>
+      <View
+        style={styles.chartInteractiveWrap}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderGrant={(event) => {
+          setActiveIndex(getIndexFromX(event.nativeEvent.locationX));
+        }}
+        onResponderMove={(event) => {
+          setActiveIndex(getIndexFromX(event.nativeEvent.locationX));
+        }}
+        onResponderRelease={() => setActiveIndex(null)}
+        onResponderTerminate={() => setActiveIndex(null)}
+      >
+        <Svg width={width} height={height}>
+          {[0, 0.25, 0.5, 0.75, 1].map((tick, idx) => {
+            const y = topPadding + tick * innerHeight;
+            return (
+              <Line
+                key={`grid-${idx}`}
+                x1={leftPadding}
+                y1={y}
+                x2={width - rightPadding}
+                y2={y}
+                stroke="#33415555"
+                strokeWidth={1}
+              />
+            );
+          })}
 
-        <Polyline
-          points={polyline}
-          fill="none"
-          stroke={color}
-          strokeWidth={2.5}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
+          <Polygon points={areaPoints} fill={`${color}1F`} />
 
-        {points.map((point, index) => (
-          <Circle
-            key={`dot-${index}`}
-            cx={toX(index)}
-            cy={toY(point.value)}
-            r={index === points.length - 1 ? 4 : 2.5}
-            fill={index === points.length - 1 ? "#F8FAFC" : color}
+          <Polyline
+            points={polyline}
+            fill="none"
             stroke={color}
-            strokeWidth={index === points.length - 1 ? 2 : 0}
+            strokeWidth={2.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
           />
-        ))}
-      </Svg>
 
+          <Line
+            x1={focusX}
+            y1={topPadding}
+            x2={focusX}
+            y2={height - bottomPadding}
+            stroke={`${color}88`}
+            strokeWidth={1}
+          />
+
+          {points.map((point, index) => (
+            <Circle
+              key={`dot-${index}`}
+              cx={toX(index)}
+              cy={toY(point.value)}
+              r={index === focusedIndex ? 4 : 2.5}
+              fill={index === focusedIndex ? "#F8FAFC" : color}
+              stroke={color}
+              strokeWidth={index === focusedIndex ? 2 : 0}
+            />
+          ))}
+        </Svg>
+
+        {activeIndex !== null ? (
+          <View style={[styles.chartTooltip, { left: tooltipLeft, top: Math.max(0, focusY - 36) }]}>
+            <Text style={styles.chartTooltipValue}>{focusedPoint.value.toFixed(1)}</Text>
+            <Text style={styles.chartTooltipLabel}>{focusedPoint.label}</Text>
+          </View>
+        ) : null}
+      </View>
       <View style={styles.chartValueRow}>
         <Text style={styles.chartValueText}>Min {minValue.toFixed(1)}</Text>
         <Text style={styles.chartValueText}>Max {maxValue.toFixed(1)}</Text>
@@ -141,7 +206,7 @@ function MetricTrendChart({ points, color }: { points: SeriesPoint[]; color: str
           );
         })}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -338,7 +403,7 @@ export default function AnalysisMetricTrendsScreen() {
             style={styles.section}
           >
             <Text style={styles.sectionTitle}>Overall Score</Text>
-            <View style={styles.metricTrendCard}>
+            <GlassCard style={styles.metricTrendCard}>
               <View style={styles.metricHeaderRow}>
                 <View style={[styles.metricIconWrap, { backgroundColor: "#6C5CE71F" }]}>
                   <Ionicons name="stats-chart" size={14} color="#6C5CE7" />
@@ -351,7 +416,7 @@ export default function AnalysisMetricTrendsScreen() {
                 </View>
               </View>
               <MetricTrendChart points={overallTrendPoints} color="#6C5CE7" />
-            </View>
+            </GlassCard>
           </View>
 
           <View
@@ -367,7 +432,7 @@ export default function AnalysisMetricTrendsScreen() {
                 ? scoreTrend.points[scoreTrend.points.length - 1].value
                 : null;
               return (
-                <View key={scoreTrend.key} style={styles.metricTrendCard}>
+                <GlassCard key={scoreTrend.key} style={styles.metricTrendCard}>
                   <View style={styles.metricHeaderRow}>
                     <View style={[styles.metricIconWrap, { backgroundColor: `${scoreTrend.color}1F` }]}>
                       <Ionicons name="pulse" size={14} color={scoreTrend.color} />
@@ -380,7 +445,7 @@ export default function AnalysisMetricTrendsScreen() {
                     </View>
                   </View>
                   <MetricTrendChart points={scoreTrend.points} color={scoreTrend.color} />
-                </View>
+                </GlassCard>
               );
             })}
           </View>
@@ -415,24 +480,27 @@ export default function AnalysisMetricTrendsScreen() {
                         return { ...prev, [metric.key]: nextY };
                       });
                     }}
-                    style={[
-                      styles.metricTrendCard,
-                      highlighted && { borderColor: `${metric.color}99` },
-                    ]}
                   >
-                    <View style={styles.metricHeaderRow}>
-                      <View style={[styles.metricIconWrap, { backgroundColor: `${metric.color}1F` }]}>
-                        <Ionicons name={metric.icon as any} size={14} color={metric.color} />
+                    <GlassCard
+                      style={[
+                        styles.metricTrendCard,
+                        highlighted && { borderColor: `${metric.color}99` },
+                      ]}
+                    >
+                      <View style={styles.metricHeaderRow}>
+                        <View style={[styles.metricIconWrap, { backgroundColor: `${metric.color}1F` }]}>
+                          <Ionicons name={metric.icon as any} size={14} color={metric.color} />
+                        </View>
+                        <View style={styles.metricTitleWrap}>
+                          <Text style={styles.metricTitle}>{metric.label}</Text>
+                          <Text style={styles.metricSubTitle}>
+                            Latest: {latestValue !== null ? latestValue.toFixed(2) : "-"} {metric.unit}
+                          </Text>
+                        </View>
                       </View>
-                      <View style={styles.metricTitleWrap}>
-                        <Text style={styles.metricTitle}>{metric.label}</Text>
-                        <Text style={styles.metricSubTitle}>
-                          Latest: {latestValue !== null ? latestValue.toFixed(2) : "-"} {metric.unit}
-                        </Text>
-                      </View>
-                    </View>
 
-                    <MetricTrendChart points={trendPoints} color={metric.color} />
+                      <MetricTrendChart points={trendPoints} color={metric.color} />
+                    </GlassCard>
                   </View>
                 );
               })}
@@ -447,12 +515,12 @@ export default function AnalysisMetricTrendsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0A0A1A",
+    backgroundColor: ds.color.bg,
   },
   topBar: {
     marginTop: 52,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: ds.space.lg,
+    paddingBottom: ds.space.md,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -460,43 +528,43 @@ const styles = StyleSheet.create({
   navButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: ds.radius.md,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#15152D",
+    backgroundColor: ds.color.glass,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: ds.color.glassBorder,
   },
   topTitle: {
     flex: 1,
     textAlign: "center",
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   periodRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 20,
+    paddingHorizontal: ds.space.xl,
     marginBottom: 6,
   },
   periodPill: {
     paddingHorizontal: 14,
     paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: "#15152D",
+    borderRadius: ds.radius.pill,
+    backgroundColor: ds.color.glass,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: ds.color.glassBorder,
   },
   periodPillActive: {
-    backgroundColor: "#6C5CE7",
-    borderColor: "#6C5CE7",
+    backgroundColor: ds.color.accent,
+    borderColor: ds.color.accent,
   },
   periodText: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: "#64748B",
+    color: ds.color.textTertiary,
   },
   periodTextActive: {
     color: "#FFFFFF",
@@ -509,12 +577,12 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 14,
     fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   scrollContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: ds.space.xl,
     paddingBottom: 26,
-    gap: 16,
+    gap: ds.space.lg,
   },
   section: {
     gap: 10,
@@ -522,14 +590,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   metricTrendCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
-    padding: 12,
+    borderRadius: ds.radius.lg,
+    padding: ds.space.md,
     gap: 8,
   },
   metricHeaderRow: {
@@ -551,17 +616,17 @@ const styles = StyleSheet.create({
   metricTitle: {
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   metricSubTitle: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   metricEmpty: {
     fontSize: 12,
     fontFamily: "Inter_500Medium",
-    color: "#64748B",
+    color: ds.color.textTertiary,
     paddingVertical: 8,
   },
   chartLabelsRow: {
@@ -578,13 +643,37 @@ const styles = StyleSheet.create({
   chartValueText: {
     fontSize: 10,
     fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   chartLabel: {
     flex: 1,
     fontSize: 9,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
     textAlign: "center",
+  },
+  chartInteractiveWrap: {
+    position: "relative",
+  },
+  chartTooltip: {
+    position: "absolute",
+    width: 96,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: ds.radius.sm,
+    borderWidth: 1,
+    borderColor: ds.color.glassBorder,
+    backgroundColor: "rgba(7, 11, 22, 0.92)",
+    alignItems: "center",
+  },
+  chartTooltipValue: {
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+    color: ds.color.textPrimary,
+  },
+  chartTooltipLabel: {
+    fontSize: 10,
+    fontFamily: "Inter_500Medium",
+    color: ds.color.textTertiary,
   },
 });

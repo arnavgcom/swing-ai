@@ -17,6 +17,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { getApiUrl } from "@/lib/query-client";
 import { fetch } from "expo/fetch";
+import { ds } from "@/constants/design-system";
+import { GlassCard } from "@/components/ui/GlassCard";
 
 export default function AddPlayerScreen() {
   const [newPlayerEmail, setNewPlayerEmail] = useState("");
@@ -89,7 +91,7 @@ export default function AddPlayerScreen() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.fieldWrapper}>
             <Text style={styles.fieldLabel}>Email</Text>
-            <View style={styles.fieldInput}>
+            <GlassCard style={styles.fieldInput}>
               <Ionicons name="mail-outline" size={18} color="#6C5CE7" />
               <TextInput
                 value={newPlayerEmail}
@@ -104,12 +106,12 @@ export default function AddPlayerScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
               />
-            </View>
+            </GlassCard>
           </View>
 
           <View style={styles.fieldWrapper}>
             <Text style={styles.fieldLabel}>Full Name</Text>
-            <View style={styles.fieldInput}>
+            <GlassCard style={styles.fieldInput}>
               <Ionicons name="person-outline" size={18} color="#6C5CE7" />
               <TextInput
                 value={newPlayerName}
@@ -123,12 +125,12 @@ export default function AddPlayerScreen() {
                 autoCapitalize="words"
                 autoCorrect={false}
               />
-            </View>
+            </GlassCard>
           </View>
 
           <View style={styles.fieldWrapper}>
             <Text style={styles.fieldLabel}>Password</Text>
-            <View style={styles.fieldInput}>
+            <GlassCard style={styles.fieldInput}>
               <Ionicons name="lock-closed-outline" size={18} color="#6C5CE7" />
               <TextInput
                 value={newPlayerPassword}
@@ -143,7 +145,7 @@ export default function AddPlayerScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
               />
-            </View>
+            </GlassCard>
           </View>
 
           {createPlayerError ? <Text style={styles.errorText}>{createPlayerError}</Text> : null}
@@ -169,11 +171,11 @@ export default function AddPlayerScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0A0A1A" },
+  container: { flex: 1, backgroundColor: ds.color.bg },
   header: {
     marginTop: 52,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: ds.space.lg,
+    paddingBottom: ds.space.md,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -181,26 +183,26 @@ const styles = StyleSheet.create({
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: ds.radius.md,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#15152D",
+    backgroundColor: ds.color.glass,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: ds.color.glassBorder,
   },
   title: {
     flex: 1,
     textAlign: "center",
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
-  scroll: { paddingHorizontal: 20, paddingBottom: 30, gap: 14 },
+  scroll: { paddingHorizontal: ds.space.xl, paddingBottom: 30, gap: 14 },
   fieldWrapper: { gap: 8 },
   fieldLabel: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -208,16 +210,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#2A2A50",
-    backgroundColor: "#131328",
+    borderRadius: ds.radius.md,
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
   textInput: {
     flex: 1,
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
     fontSize: 15,
     fontFamily: "Inter_400Regular",
   },
@@ -229,10 +228,10 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     marginTop: 10,
-    borderRadius: 14,
+    borderRadius: ds.radius.md,
     borderWidth: 1,
-    borderColor: "#6C5CE740",
-    backgroundColor: "#6C5CE720",
+    borderColor: `${ds.color.accent}40`,
+    backgroundColor: `${ds.color.accent}20`,
     paddingVertical: 14,
     alignItems: "center",
     justifyContent: "center",

@@ -1,6 +1,8 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { GlassCard } from "@/components/ui/GlassCard";
+import { ds } from "@/constants/design-system";
 
 interface MetricCardProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -29,7 +31,7 @@ export function MetricCard({ icon, label, value, unit, color, change }: MetricCa
       : null;
 
   return (
-    <View style={styles.card}>
+    <GlassCard style={styles.card}>
       <View style={[styles.iconContainer, { backgroundColor: accentColor + "14" }]}>
         <Ionicons name={icon} size={16} color={accentColor} />
       </View>
@@ -47,18 +49,15 @@ export function MetricCard({ icon, label, value, unit, color, change }: MetricCa
           </Text>
         </View>
       )}
-    </View>
+    </GlassCard>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    padding: ds.space.lg,
+    borderRadius: ds.radius.lg,
     gap: 6,
     minHeight: 120,
   },
@@ -74,7 +73,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_400Regular",
     letterSpacing: 0.3,
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   valueRow: {
     flexDirection: "row",
@@ -84,12 +83,12 @@ const styles = StyleSheet.create({
   value: {
     fontSize: 20,
     fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   unit: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
-    color: "#64748B",
+    color: ds.color.textTertiary,
   },
   changeRow: {
     flexDirection: "row",

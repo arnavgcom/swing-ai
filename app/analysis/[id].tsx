@@ -146,6 +146,8 @@ export default function AnalysisDetailScreen() {
   const [manualSaveMessage, setManualSaveMessage] = useState("Saved");
   const [manualAnnotationDone, setManualAnnotationDone] = useState(false);
   const [useForModelTraining, setUseForModelTraining] = useState(false);
+  const [overallExpanded, setOverallExpanded] = useState(false);
+  const [overallCanExpand, setOverallCanExpand] = useState(false);
   const feedbackSheetTranslateY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -493,6 +495,13 @@ export default function AnalysisDetailScreen() {
   const analysis = data?.analysis;
   const m = data?.metrics;
   const coaching = data?.coaching;
+  const overallSummaryText = String(coaching?.simpleExplanation || "").trim();
+
+  useEffect(() => {
+    setOverallExpanded(false);
+    // Fallback for truncated long text when line-measurement is not fully reliable.
+    setOverallCanExpand(overallSummaryText.length > 150);
+  }, [overallSummaryText]);
 
   const displayVideoName = useMemo(() => {
     if (analysis?.videoPath) {
@@ -1029,9 +1038,30 @@ export default function AnalysisDetailScreen() {
                   <Ionicons name="chatbubbles" size={18} color={sportThemeColor} />
                   <Text style={[styles.overallHeading, { color: sportThemeColor }]}>Overall</Text>
                 </View>
-                <Text style={styles.summaryText}>
-                  {coaching.simpleExplanation}
+                <Text
+                  style={styles.summaryText}
+                  numberOfLines={overallExpanded ? undefined : 4}
+                  onTextLayout={(event) => {
+                    if (!overallExpanded) {
+                      const lineCount = event.nativeEvent.lines.length;
+                      if (lineCount > 4 && !overallCanExpand) {
+                        setOverallCanExpand(true);
+                      }
+                    }
+                  }}
+                >
+                  {overallSummaryText}
                 </Text>
+                {overallCanExpand ? (
+                  <Pressable
+                    onPress={() => setOverallExpanded((prev) => !prev)}
+                    style={({ pressed }) => [styles.summaryMoreButton, { opacity: pressed ? 0.75 : 1 }]}
+                  >
+                    <Text style={[styles.summaryMoreText, { color: sportThemeColor }]}> 
+                      {overallExpanded ? ".. less .." : ".. more .."}
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             </View>
           )}
@@ -1670,6 +1700,14 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     lineHeight: 21,
     color: "#CBD5E1",
+  },
+  summaryMoreButton: {
+    alignSelf: "flex-start",
+    marginTop: 2,
+  },
+  summaryMoreText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
   },
   shotReportCard: {
     borderRadius: 16,

@@ -86,7 +86,8 @@ export default function ProfileScreen() {
   const [modelEvalLoading, setModelEvalLoading] = useState(false);
   const isPersistedAdmin = normalizeRole(user?.role) === "admin";
   const isSelectedAdmin = normalizeRole(role) === "admin";
-  const showAdminControls = isPersistedAdmin && isSelectedAdmin;
+  const showAdminControls = isSelectedAdmin;
+  const canUseAdminApis = isPersistedAdmin && isSelectedAdmin;
 
   useEffect(() => {
     if (user) {
@@ -107,7 +108,7 @@ export default function ProfileScreen() {
   }, [user]);
 
   useEffect(() => {
-    if (!isPersistedAdmin) {
+    if (!canUseAdminApis) {
       setModelEvaluationMode(false);
       return;
     }
@@ -126,7 +127,7 @@ export default function ProfileScreen() {
     return () => {
       active = false;
     };
-  }, [isPersistedAdmin, role]);
+  }, [canUseAdminApis]);
 
   useEffect(() => {
     return () => {
@@ -137,7 +138,10 @@ export default function ProfileScreen() {
   }, []);
 
   const handleModelEvaluationToggle = async (enabled: boolean) => {
-    if (!isPersistedAdmin) return;
+    if (!canUseAdminApis) {
+      Alert.alert("Save role first", "Please save profile changes after switching to Admin.");
+      return;
+    }
     setModelEvalLoading(true);
     try {
       await updateModelEvaluationSettings(enabled);
@@ -526,7 +530,7 @@ export default function ProfileScreen() {
                 </View>
                 <Switch
                   value={modelEvaluationMode}
-                  disabled={modelEvalLoading}
+                  disabled={modelEvalLoading || !canUseAdminApis}
                   onValueChange={(val) => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     handleModelEvaluationToggle(val);
@@ -536,6 +540,9 @@ export default function ProfileScreen() {
                   testID="model-evaluation-toggle"
                 />
               </View>
+              {!canUseAdminApis ? (
+                <Text style={styles.adminHintText}>Save profile to enable admin actions.</Text>
+              ) : null}
             </View>
           )}
         </View>
@@ -544,10 +551,10 @@ export default function ProfileScreen() {
         {showAdminControls && (
           <Pressable
             onPress={handleRecalculateMetrics}
-            disabled={recalculating}
+            disabled={recalculating || !canUseAdminApis}
             style={({ pressed }) => [
               styles.recalculateButton,
-              recalculating && styles.recalculateButtonDisabled,
+              (recalculating || !canUseAdminApis) && styles.recalculateButtonDisabled,
               { transform: [{ scale: pressed ? 0.97 : 1 }] },
             ]}
             testID="recalculate-metrics"
@@ -564,9 +571,17 @@ export default function ProfileScreen() {
           {/* Admin-only: Add Player Screen Trigger */}
           {showAdminControls && (
             <Pressable
-              onPress={() => router.push("/profile/add-player")}
+              onPress={() => {
+                if (!canUseAdminApis) {
+                  Alert.alert("Save role first", "Please save profile changes after switching to Admin.");
+                  return;
+                }
+                router.push("/profile/add-player");
+              }}
+              disabled={!canUseAdminApis}
               style={({ pressed }) => [
                 styles.saveButton,
+                !canUseAdminApis && styles.recalculateButtonDisabled,
                 { transform: [{ scale: pressed ? 0.97 : 1 }] },
               ]}
               testID="create-player-trigger"
@@ -847,6 +862,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
     color: "#E2E8F0",
+  },
+  adminHintText: {
+    marginTop: 6,
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
   },
   formContainer: {
     flex: 1,

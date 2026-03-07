@@ -1,6 +1,8 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { GlassCard } from "@/components/ui/GlassCard";
+import { ds } from "@/constants/design-system";
 
 interface CoachingCardProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -12,14 +14,16 @@ interface CoachingCardProps {
 export function CoachingCard({ icon, title, content, color }: CoachingCardProps) {
   const [expanded, setExpanded] = React.useState(false);
   const [canExpand, setCanExpand] = React.useState(false);
+  const contentText = String(content || "").trim();
 
   React.useEffect(() => {
     setExpanded(false);
-    setCanExpand(false);
-  }, [content]);
+    // Fallback for platforms where onTextLayout may not reveal truncation lines with numberOfLines.
+    setCanExpand(contentText.length > 150);
+  }, [contentText]);
 
   return (
-    <View style={styles.card}>
+    <GlassCard style={styles.card}>
       <View style={styles.header}>
         <View style={[styles.iconWrap, { backgroundColor: color + "14" }]}>
           <Ionicons name={icon} size={16} color={color} />
@@ -38,7 +42,7 @@ export function CoachingCard({ icon, title, content, color }: CoachingCardProps)
           }
         }}
       >
-        {content}
+        {contentText}
       </Text>
       {canExpand ? (
         <Pressable
@@ -48,17 +52,14 @@ export function CoachingCard({ icon, title, content, color }: CoachingCardProps)
           <Text style={[styles.moreText, { color }]}>{expanded ? ".. less .." : ".. more .."}</Text>
         </Pressable>
       ) : null}
-    </View>
+    </GlassCard>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    padding: ds.space.lg,
+    borderRadius: ds.radius.lg,
     gap: 10,
   },
   header: {
@@ -82,7 +83,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     lineHeight: 21,
-    color: "#CBD5E1",
+    color: ds.color.textSecondary,
   },
   moreButton: {
     alignSelf: "flex-start",

@@ -9,6 +9,7 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 import { useEffect } from "react";
+import { ds } from "@/constants/design-system";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -43,14 +44,14 @@ export function ScoreGauge({
   }));
 
   const getScoreColor = () => {
-    if (score >= 80) return "#34D399";
+    if (score >= 80) return ds.color.success;
     if (score >= 60) return "#60A5FA";
-    if (score >= 40) return "#FBBF24";
-    return "#F87171";
+    if (score >= 40) return ds.color.warning;
+    return ds.color.danger;
   };
 
   const hasChange = change !== null && change !== undefined;
-  const changeColor = hasChange ? (change >= 0 ? "#34D399" : "#F87171") : null;
+  const changeColor = hasChange ? (change >= 0 ? ds.color.success : ds.color.danger) : null;
 
   return (
     <View style={styles.container}>
@@ -59,7 +60,7 @@ export function ScoreGauge({
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="#1E1E3F"
+          stroke="rgba(148, 163, 184, 0.22)"
           strokeWidth={strokeWidth}
           fill="none"
           strokeLinecap="round"
@@ -129,7 +130,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textTransform: "uppercase",
     letterSpacing: 1,
-    color: "#64748B",
+    color: ds.color.textTertiary,
   },
   changeRow: {
     flexDirection: "row",

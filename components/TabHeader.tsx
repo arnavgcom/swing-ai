@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
 import { sportColors } from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
+import { ds } from "@/constants/design-system";
 
 export function TabHeader() {
   const insets = useSafeAreaInsets();
@@ -20,7 +21,6 @@ export function TabHeader() {
     : null;
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
-
   return (
     <View style={[styles.header, { paddingTop: insets.top + 12 + webTopInset }]}>
       <Pressable
@@ -65,23 +65,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingBottom: 8,
+    paddingHorizontal: ds.space.xl,
+    paddingBottom: ds.space.sm,
   },
   iconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#15152D",
+    width: 40,
+    height: 40,
+    borderRadius: ds.radius.pill,
+    backgroundColor: ds.color.glass,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: ds.color.glassBorder,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+    ...ds.shadow.subtle,
   },
   avatarImage: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: ds.radius.pill,
   },
 });

@@ -36,6 +36,7 @@ import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
+import { ds } from "@/constants/design-system";
 
 function filterBySport(
   analyses: AnalysisSummary[],
@@ -89,12 +90,12 @@ function formatDateTime(value: string): string {
 
 function getMismatchPalette(rate: number): { bg: string; border: string; text: string } {
   if (rate < 10) {
-    return { bg: "#052E1A", border: "#166534", text: "#34D399" };
+    return { bg: "#052E1A", border: "#166534", text: ds.color.success };
   }
   if (rate <= 25) {
-    return { bg: "#3F2A07", border: "#92400E", text: "#FBBF24" };
+    return { bg: "#3F2A07", border: "#92400E", text: ds.color.warning };
   }
-  return { bg: "#3F1114", border: "#7F1D1D", text: "#F87171" };
+  return { bg: "#3F1114", border: "#7F1D1D", text: ds.color.danger };
 }
 
 function getPlayerDisplayName(u: {
@@ -108,10 +109,10 @@ function getPlayerDisplayName(u: {
 }
 
 const PLAYER_METRICS = [
-  { key: "power", label: "Power", icon: "flash", color: "#22C55E" },
+  { key: "power", label: "Power", icon: "flash", color: ds.color.success },
   { key: "timing", label: "Timing", icon: "timer", color: "#38BDF8" },
   { key: "stability", label: "Stability", icon: "body", color: "#A78BFA" },
-  { key: "consistency", label: "Consistency", icon: "repeat", color: "#F59E0B" },
+  { key: "consistency", label: "Consistency", icon: "repeat", color: ds.color.warning },
 ] as const;
 
 const PLAN_DURATIONS = [10, 20, 30] as const;
@@ -264,9 +265,9 @@ function formatScoreDelta(delta: number | null): string {
 }
 
 function getDeltaColor(delta: number | null): string {
-  if (delta === null) return "#94A3B8";
-  if (delta >= 0) return "#34D399";
-  return "#F87171";
+  if (delta === null) return ds.color.textTertiary;
+  if (delta >= 0) return ds.color.success;
+  return ds.color.danger;
 }
 
 function PlayerMetricTrendChart({
@@ -1626,8 +1627,8 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0A0A1A" },
-  scroll: { paddingHorizontal: 20, paddingBottom: 100 },
+  container: { flex: 1, backgroundColor: ds.color.bg },
+  scroll: { paddingHorizontal: ds.space.xl, paddingBottom: 100 },
   registryToastContainer: {
     position: "absolute",
     left: 0,
@@ -1642,8 +1643,8 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.bgElevated,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
@@ -1658,19 +1659,19 @@ const styles = StyleSheet.create({
   registryToastText: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    color: ds.color.textSecondary,
   },
   greetingSection: { marginTop: 20, marginBottom: 28 },
   greeting: {
     fontSize: 26,
     fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   greetingSubtitle: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     marginTop: 10,
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   sportLineRow: {
     flexDirection: "row",
@@ -1681,7 +1682,7 @@ const styles = StyleSheet.create({
   sportLine: {
     fontSize: 15,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   movementBadge: {
     flexDirection: "row",
@@ -1726,10 +1727,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   playerDropdownMenu: {
-    borderRadius: 12,
+    borderRadius: ds.radius.md,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.glass,
     maxHeight: 260,
     overflow: "hidden",
   },
@@ -1743,15 +1744,15 @@ const styles = StyleSheet.create({
   playerDropdownItemText: {
     fontSize: 13,
     fontFamily: "Inter_500Medium",
-    color: "#CBD5E1",
+    color: ds.color.textSecondary,
   },
   loadingWrap: { paddingTop: 60, alignItems: "center" },
   discrepancyCard: {
-    borderRadius: 16,
+    borderRadius: ds.radius.lg,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
-    padding: 14,
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.glass,
+    padding: ds.space.lg,
     gap: 12,
     marginBottom: 24,
   },
@@ -1763,7 +1764,7 @@ const styles = StyleSheet.create({
   discrepancyTitle: {
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   discrepancyRate: {
     fontSize: 16,
@@ -1772,13 +1773,13 @@ const styles = StyleSheet.create({
   discrepancyStateText: {
     fontSize: 12,
     fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   modelMetaCard: {
-    borderRadius: 10,
+    borderRadius: ds.radius.sm,
     borderWidth: 1,
-    borderColor: "#2A2A5035",
-    backgroundColor: "#0A0A1A90",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.bgElevated,
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 4,
@@ -1786,12 +1787,12 @@ const styles = StyleSheet.create({
   modelMetaText: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    color: ds.color.textSecondary,
   },
   modelMetaSubText: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
     marginTop: 2,
   },
   scoringSaveButton: {
@@ -1811,14 +1812,14 @@ const styles = StyleSheet.create({
   scoringSaveHintText: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
     marginTop: -4,
   },
   discrepancyTrendCard: {
-    borderRadius: 10,
+    borderRadius: ds.radius.sm,
     borderWidth: 1,
-    borderColor: "#2A2A5035",
-    backgroundColor: "#0A0A1A90",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.bgElevated,
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 8,
@@ -1831,7 +1832,7 @@ const styles = StyleSheet.create({
   discrepancyTrendTitle: {
     fontSize: 11,
     fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   discrepancyTrendValue: {
     fontSize: 12,
@@ -1863,7 +1864,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 10,
     fontFamily: "Inter_500Medium",
-    color: "#64748B",
+    color: ds.color.textTertiary,
   },
   discrepancyList: {
     gap: 8,
@@ -1873,10 +1874,10 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     justifyContent: "space-between",
     gap: 8,
-    borderRadius: 10,
+    borderRadius: ds.radius.sm,
     borderWidth: 1,
-    borderColor: "#2A2A5035",
-    backgroundColor: "#0A0A1A80",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.bgElevated,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
@@ -1898,23 +1899,23 @@ const styles = StyleSheet.create({
   discrepancyVideoName: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    color: ds.color.textSecondary,
     flex: 1,
   },
   discrepancyMeta: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   discrepancyMetaSecondary: {
     fontSize: 11,
     fontFamily: "Inter_500Medium",
-    color: "#CBD5E1",
+    color: ds.color.textSecondary,
   },
   discrepancyUploader: {
     fontSize: 11,
     fontFamily: "Inter_500Medium",
-    color: "#A29BFE",
+    color: ds.color.accent,
   },
   discrepancyRateBadge: {
     borderRadius: 999,
@@ -1927,9 +1928,9 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
   },
   discrepancyReviewButton: {
-    borderRadius: 8,
+    borderRadius: ds.radius.sm,
     borderWidth: 1,
-    backgroundColor: "#101025",
+    backgroundColor: ds.color.bg,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
@@ -1940,32 +1941,32 @@ const styles = StyleSheet.create({
   discrepancyConfusionText: {
     fontSize: 11,
     fontFamily: "Inter_500Medium",
-    color: "#CBD5E1",
+    color: ds.color.textSecondary,
   },
   registryCard: {
-    borderRadius: 16,
+    borderRadius: ds.radius.lg,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
-    padding: 14,
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.glass,
+    padding: ds.space.lg,
     gap: 10,
     marginBottom: 24,
   },
   registryTitle: {
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   registrySubtitle: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   registryTrendCard: {
-    borderRadius: 10,
+    borderRadius: ds.radius.sm,
     borderWidth: 1,
-    borderColor: "#2A2A5035",
-    backgroundColor: "#0A0A1A90",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.bgElevated,
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 7,
@@ -1973,7 +1974,7 @@ const styles = StyleSheet.create({
   registryTrendTitle: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
+    color: ds.color.textSecondary,
   },
   registryTrendLegendRow: {
     flexDirection: "row",
@@ -1994,7 +1995,7 @@ const styles = StyleSheet.create({
   registryLegendText: {
     fontSize: 10,
     fontFamily: "Inter_500Medium",
-    color: "#CBD5E1",
+    color: ds.color.textSecondary,
   },
   registryXAxisLabels: {
     flexDirection: "row",
@@ -2005,7 +2006,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 10,
     fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
     textAlign: "center",
   },
   registryTrendRow: {
@@ -2015,7 +2016,7 @@ const styles = StyleSheet.create({
   registryTrendVersionText: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    color: ds.color.textSecondary,
   },
   registryTrendBarsWrap: {
     gap: 5,
@@ -2039,13 +2040,13 @@ const styles = StyleSheet.create({
   registryTrendValueText: {
     fontSize: 11,
     fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   registryEntryCard: {
-    borderRadius: 10,
+    borderRadius: ds.radius.sm,
     borderWidth: 1,
-    borderColor: "#2A2A5035",
-    backgroundColor: "#0A0A1A80",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.bgElevated,
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 3,
@@ -2064,17 +2065,17 @@ const styles = StyleSheet.create({
   registryEntryDateText: {
     fontSize: 11,
     fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   registryEntryMetaText: {
     fontSize: 11,
     fontFamily: "Inter_500Medium",
-    color: "#E2E8F0",
+    color: ds.color.textSecondary,
   },
   registryEntrySubText: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
     marginTop: 2,
   },
   registryDetailOverlay: {
@@ -2219,18 +2220,18 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
   },
   playerSectionCard: {
-    borderRadius: 14,
+    borderRadius: ds.radius.md,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
-    padding: 12,
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.glass,
+    padding: ds.space.md,
     gap: 10,
     marginBottom: 12,
   },
   playerSectionTitle: {
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   playerTrendHeaderRow: {
     flexDirection: "row",
@@ -2242,7 +2243,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 10,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   playerTrendLabelsRow: {
     flexDirection: "row",
@@ -2274,7 +2275,7 @@ const styles = StyleSheet.create({
   playerTrendMetricLabel: {
     fontSize: 11,
     fontFamily: "Inter_500Medium",
-    color: "#CBD5E1",
+    color: ds.color.textSecondary,
   },
   playerTrendMetricValue: {
     fontSize: 12,
@@ -2284,7 +2285,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 9,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
     textAlign: "center" as const,
   },
   playerTrendSessionTabs: {
@@ -2328,20 +2329,20 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2A2A5035",
-    backgroundColor: "#0A0A1A80",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.bgElevated,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   playerMovementName: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    color: ds.color.textSecondary,
   },
   playerMovementMeta: {
     fontSize: 10,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
     marginTop: 2,
   },
   playerMovementRight: {
@@ -2362,8 +2363,8 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2A2A5035",
-    backgroundColor: "#0A0A1A80",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.bgElevated,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
@@ -2402,12 +2403,12 @@ const styles = StyleSheet.create({
   playerPlanTitle: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    color: ds.color.textSecondary,
   },
   playerPlanMeta: {
     fontSize: 11,
     fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   playerPlanGain: {
     fontSize: 11,
@@ -2417,26 +2418,26 @@ const styles = StyleSheet.create({
   playerPlanDrill: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
-    color: "#CBD5E1",
+    color: ds.color.textSecondary,
   },
   playerPendingCard: {
-    borderRadius: 12,
+    borderRadius: ds.radius.md,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
-    padding: 12,
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.glass,
+    padding: ds.space.md,
     marginBottom: 14,
     gap: 5,
   },
   playerPendingTitle: {
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   playerPendingText: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
     lineHeight: 18,
   },
   emptyState: {
@@ -2447,17 +2448,17 @@ const styles = StyleSheet.create({
   emptyIconWrap: {
     width: 72,
     height: 72,
-    borderRadius: 20,
-    backgroundColor: "#15152D",
+    borderRadius: ds.radius.xl,
+    backgroundColor: ds.color.glass,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: ds.color.glassBorder,
   },
   emptyTitle: {
     fontSize: 18,
     fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
     marginTop: 8,
   },
   emptyText: {
@@ -2466,6 +2467,6 @@ const styles = StyleSheet.create({
     textAlign: "center" as const,
     lineHeight: 21,
     paddingHorizontal: 20,
-    color: "#64748B",
+    color: ds.color.textTertiary,
   },
 });

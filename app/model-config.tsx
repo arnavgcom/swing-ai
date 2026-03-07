@@ -23,6 +23,8 @@ import {
   validateModelRegistryManifest,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { ds } from "@/constants/design-system";
+import { GlassCard } from "@/components/ui/GlassCard";
 
 export default function ModelConfigScreen() {
   const insets = useSafeAreaInsets();
@@ -163,14 +165,14 @@ export default function ModelConfigScreen() {
             </View>
 
             {configQuery.data?.manifestValidation ? (
-              <View style={styles.validationCard}>
+              <GlassCard style={styles.validationCard}>
                 <Text style={styles.validationTitle}>
                   Manifest Validation: {configQuery.data.manifestValidation.valid ? "Valid" : "Issues Found"}
                 </Text>
                 <Text style={styles.validationText}>
                   Datasets: {configQuery.data.manifestValidation.datasetCount} | Videos: {configQuery.data.manifestValidation.totalVideos}
                 </Text>
-              </View>
+              </GlassCard>
             ) : null}
 
             <Pressable
@@ -212,10 +214,10 @@ export default function ModelConfigScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0A0A1A" },
+  container: { flex: 1, backgroundColor: ds.color.bg },
   centerWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   scroll: {
-    paddingHorizontal: 20,
+    paddingHorizontal: ds.space.xl,
     gap: 14,
   },
   topNavRow: {
@@ -225,71 +227,68 @@ const styles = StyleSheet.create({
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: "#1A1A36",
+    borderRadius: ds.radius.pill,
+    backgroundColor: ds.color.glass,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#2A2A50",
+    borderColor: ds.color.glassBorder,
   },
   title: {
     fontSize: 24,
     fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   subtitle: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
     marginTop: 6,
   },
   fieldWrap: { gap: 6 },
   fieldLabel: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: "#131328",
-    borderRadius: 12,
+    backgroundColor: ds.color.bgElevated,
+    borderRadius: ds.radius.md,
     borderWidth: 1,
-    borderColor: "#2A2A50",
+    borderColor: ds.color.glassBorder,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
     fontFamily: "Inter_400Regular",
-    color: "#F8FAFC",
+    color: ds.color.textPrimary,
   },
   multilineInput: {
     minHeight: 88,
     textAlignVertical: "top",
   },
   validationCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderRadius: ds.radius.md,
     padding: 12,
     gap: 4,
   },
   validationTitle: {
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    color: ds.color.textSecondary,
   },
   validationText: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: ds.color.textTertiary,
   },
   primaryButton: {
     marginTop: 6,
-    borderRadius: 12,
+    borderRadius: ds.radius.md,
     borderWidth: 1,
-    borderColor: "#6C5CE755",
-    backgroundColor: "#6C5CE718",
+    borderColor: `${ds.color.accent}66`,
+    backgroundColor: `${ds.color.accent}1F`,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -299,6 +298,6 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
-    color: "#6C5CE7",
+    color: ds.color.accent,
   },
 });
