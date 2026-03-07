@@ -172,6 +172,13 @@ function toTitleCase(str: string): string {
 }
 
 const HISTORY_DISPLAY_KEYS = ["power", "timing", "stability", "consistency"];
+const TREND_SESSION_FILTERS = [
+  { key: 5, label: "5S" },
+  { key: 10, label: "10S" },
+  { key: 25, label: "25S" },
+  { key: "all", label: "All" },
+] as const;
+type TrendSessionWindow = (typeof TREND_SESSION_FILTERS)[number]["key"];
 
 function filterBySport(
   analyses: AnalysisSummary[],
@@ -637,6 +644,7 @@ export default function HistoryScreen() {
   const { selectedSport, selectedMovement } = useSport();
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("all");
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
+  const [selectedTrendSessions, setSelectedTrendSessions] = useState<TrendSessionWindow>(10);
   const [userList, setUserList] = useState<
     Array<{ id: string; name: string; email: string; role: string }>
   >([]);
@@ -776,9 +784,13 @@ export default function HistoryScreen() {
       (a) => a.status === "processing" || a.status === "pending",
     ) || [];
 
+  const trendSliceCount =
+    selectedTrendSessions === "all"
+      ? completed.filter((a) => a.overallScore != null).length
+      : selectedTrendSessions;
   const trendItems = completed
     .filter((a) => a.overallScore != null)
-    .slice(0, 7)
+    .slice(0, trendSliceCount)
     .reverse();
   const trendScores = trendItems.map((a) => Math.round(a.overallScore || 0));
   const trendDates = trendItems.map((a) => {
@@ -981,7 +993,38 @@ export default function HistoryScreen() {
       {trendScores.length > 1 && (
         <View style={styles.trendCard}>
           <View style={styles.trendCardGradient}>
-            <Text style={styles.trendLabel}>Overall Performance Trend</Text>
+            <View style={styles.trendHeaderRow}>
+              <Text style={styles.trendLabel}>Overall Performance Trend</Text>
+              <View style={styles.trendSessionTabs}>
+                {TREND_SESSION_FILTERS.map((option) => (
+                  <Pressable
+                    key={String(option.key)}
+                    onPress={() => setSelectedTrendSessions(option.key)}
+                    style={[
+                      styles.trendSessionTab,
+                      selectedTrendSessions === option.key && {
+                        borderColor: `${historyHighlightColor}66`,
+                        backgroundColor: `${historyHighlightColor}1A`,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.trendSessionTabText,
+                        {
+                          color:
+                            selectedTrendSessions === option.key
+                              ? historyHighlightColor
+                              : "#94A3B8",
+                        },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
             <TrendChart data={trendScores} dates={trendDates} />
           </View>
         </View>
@@ -1199,6 +1242,31 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     color: "#94A3B8",
     marginBottom: 4,
+  },
+  trendHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 6,
+  },
+  trendSessionTabs: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  trendSessionTab: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#0A0A1A80",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  trendSessionTabText: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+    color: "#94A3B8",
   },
   statsRow: {
     flexDirection: "row",

@@ -20,6 +20,7 @@ import Svg, {
   Line,
   LinearGradient as SvgLinearGradient,
   Path,
+  Polygon,
   Polyline,
   Stop,
 } from "react-native-svg";
@@ -113,6 +114,11 @@ const PLAYER_METRICS = [
   { key: "timing", label: "Timing", icon: "timer", color: "#38BDF8" },
   { key: "stability", label: "Stability", icon: "body", color: "#A78BFA" },
   { key: "consistency", label: "Consistency", icon: "repeat", color: ds.color.warning },
+] as const;
+
+const PLAYER_TREND_FILTERS = [
+  { key: "overall", label: "Overall Performance", icon: "stats-chart", color: ds.color.accent },
+  ...PLAYER_METRICS,
 ] as const;
 
 const PLAN_DURATIONS = [10, 20, 30] as const;
@@ -474,10 +480,10 @@ function ModelRegistryTrendLineChart({
   if (!points.length) return null;
 
   const chartWidth = 320;
-  const chartHeight = 180;
+  const chartHeight = 170;
   const leftPadding = 14;
   const rightPadding = 10;
-  const topPadding = 12;
+  const topPadding = 14;
   const bottomPadding = 30;
   const innerWidth = chartWidth - leftPadding - rightPadding;
   const innerHeight = chartHeight - topPadding - bottomPadding;
@@ -490,24 +496,20 @@ function ModelRegistryTrendLineChart({
     values.map((value, index) => `${toX(index)},${toY(value)}`).join(" ");
 
   const mismatch = points.map((point) => Number(point.mismatchRatePct || 0));
-  const movement = points.map((point) => Number(point.movementDetectionAccuracyPct || 0));
-  const scoring = points.map((point) => Number(point.scoringAccuracyPct || 0));
+  const mismatchPolyline = toPolyline(mismatch);
+  const areaPoints = `${leftPadding},${toY(0)} ${mismatchPolyline} ${chartWidth - rightPadding},${toY(0)}`;
+  const latestMismatch = mismatch[mismatch.length - 1] ?? 0;
 
   return (
     <View>
       <View style={styles.registryTrendLegendRow}>
         <View style={styles.registryLegendItem}>
-          <View style={[styles.registryLegendDot, { backgroundColor: "#F87171" }]} />
+          <View style={[styles.registryLegendDot, { backgroundColor: ds.color.danger }]} />
           <Text style={styles.registryLegendText}>Mismatch</Text>
         </View>
-        <View style={styles.registryLegendItem}>
-          <View style={[styles.registryLegendDot, { backgroundColor: "#34D399" }]} />
-          <Text style={styles.registryLegendText}>Movement Accuracy</Text>
-        </View>
-        <View style={styles.registryLegendItem}>
-          <View style={[styles.registryLegendDot, { backgroundColor: "#38BDF8" }]} />
-          <Text style={styles.registryLegendText}>Scoring Accuracy</Text>
-        </View>
+        <Text style={[styles.registryTrendValueText, { color: ds.color.danger }]}>
+          Latest {latestMismatch.toFixed(1)}%
+        </Text>
       </View>
 
       <Svg width={chartWidth} height={chartHeight}>
@@ -526,39 +528,27 @@ function ModelRegistryTrendLineChart({
           );
         })}
 
+        <Polygon points={areaPoints} fill={`${ds.color.danger}22`} />
+
         <Polyline
-          points={toPolyline(mismatch)}
+          points={mismatchPolyline}
           fill="none"
-          stroke="#F87171"
-          strokeWidth={2.4}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-        <Polyline
-          points={toPolyline(movement)}
-          fill="none"
-          stroke="#34D399"
-          strokeWidth={2.4}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-        <Polyline
-          points={toPolyline(scoring)}
-          fill="none"
-          stroke="#38BDF8"
-          strokeWidth={2.4}
+          stroke={ds.color.danger}
+          strokeWidth={2.8}
           strokeLinejoin="round"
           strokeLinecap="round"
         />
 
         {points.map((point, index) => (
-          <Circle key={`mismatch-dot-${point.modelVersion}`} cx={toX(index)} cy={toY(mismatch[index])} r={2.5} fill="#F87171" />
-        ))}
-        {points.map((point, index) => (
-          <Circle key={`movement-dot-${point.modelVersion}`} cx={toX(index)} cy={toY(movement[index])} r={2.5} fill="#34D399" />
-        ))}
-        {points.map((point, index) => (
-          <Circle key={`scoring-dot-${point.modelVersion}`} cx={toX(index)} cy={toY(scoring[index])} r={2.5} fill="#38BDF8" />
+          <Circle
+            key={`mismatch-dot-${point.modelVersion}`}
+            cx={toX(index)}
+            cy={toY(mismatch[index])}
+            r={index === points.length - 1 ? 4 : 2.5}
+            fill={index === points.length - 1 ? ds.color.textPrimary : ds.color.danger}
+            stroke={ds.color.danger}
+            strokeWidth={index === points.length - 1 ? 2 : 0}
+          />
         ))}
       </Svg>
 
@@ -577,9 +567,10 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const { selectedSport, selectedMovement } = useSport();
   const isAdmin = user?.role === "admin";
-  const [selectedTrendMetric, setSelectedTrendMetric] = React.useState<string>(PLAYER_METRICS[0].key);
+  const [selectedTrendMetric, setSelectedTrendMetric] = React.useState<string>(PLAYER_TREND_FILTERS[0].key);
   const [selectedTrendSessions, setSelectedTrendSessions] = React.useState<TrendSessionWindow>(10);
   const [selectedPlanMinutes, setSelectedPlanMinutes] = React.useState<PlanDuration>(20);
+  const [showAllRegistryEntries, setShowAllRegistryEntries] = React.useState(false);
   const [userList, setUserList] = React.useState<Array<{id:string,name:string,email:string,role:string}>>([]);
   const [selectedPlayerId, setSelectedPlayerId] = React.useState<string>("all");
   const [showPlayerDropdown, setShowPlayerDropdown] = React.useState(false);
@@ -726,7 +717,7 @@ export default function DashboardScreen() {
       const current = bucket.get(key) || { md: 0, sc: 0, mismatch: 0, count: 0 };
       current.md += Number(entry.movementDetectionAccuracyPct || 0);
       current.sc += Number(entry.scoringAccuracyPct || 0);
-      current.mismatch += Number((100 - Number(entry.scoringAccuracyPct || 0)).toFixed(1));
+      current.mismatch += Number(entry.mismatchRatePct || 0);
       current.count += 1;
       bucket.set(key, current);
     }
@@ -860,11 +851,14 @@ export default function DashboardScreen() {
         };
       });
 
-    const metricTrendSeries = PLAYER_METRICS.map((metric) => ({
+    const metricTrendSeries = PLAYER_TREND_FILTERS.map((metric) => ({
       key: metric.key,
       label: metric.label,
       color: metric.color,
       values: trendEntries.map((entry) => {
+        if (metric.key === "overall") {
+          return roundScore(Number(entry.score));
+        }
         const value = getSubScoreValue(entry.analysis, metric.key);
         return value === null ? null : roundScore(value);
       }),
@@ -1097,34 +1091,35 @@ export default function DashboardScreen() {
             {isAdmin && (discrepancyLoading || discrepancyIsError || !!discrepancy) && (
               <View style={styles.discrepancyCard}>
                 <View style={styles.discrepancyHeader}>
-                  <Text style={styles.discrepancyTitle}>Scoring Model</Text>
-                  {!discrepancyLoading && !discrepancyIsError && discrepancy && (
-                    <Text style={[styles.discrepancyRate, { color: sc.primary }]}> 
-                      Mismatch: {discrepancy.summary.mismatchRatePct.toFixed(1)}%
-                    </Text>
-                  )}
+                  <Text style={styles.discrepancyTitle}>
+                    Model {scoringModel?.modelVersion ? scoringModel.modelVersion : ""}
+                  </Text>
+                  {!discrepancyLoading && !discrepancyIsError && discrepancy && (() => {
+                    const palette = getMismatchPalette(discrepancy.summary.mismatchRatePct);
+                    return (
+                      <View
+                        style={[
+                          styles.discrepancyRateBadge,
+                          { backgroundColor: palette.bg, borderColor: palette.border },
+                        ]}
+                      >
+                        <Text style={[styles.discrepancyRateText, { color: palette.text }]}>
+                          Mismatch {discrepancy.summary.mismatchRatePct.toFixed(1)}%
+                        </Text>
+                      </View>
+                    );
+                  })()}
                 </View>
 
-                {!scoringModelLoading && scoringModel && (
+                {!scoringModelLoading && scoringModel && String(selectedMovement?.name || scoringModel.movementType || "")
+                  .trim()
+                  .toLowerCase() !== "all" ? (
                   <View style={styles.modelMetaCard}>
                     <Text style={styles.modelMetaText}>
-                      Version {scoringModel.modelVersion}
-                    </Text>
-                    {String(selectedMovement?.name || scoringModel.movementType || "")
-                      .trim()
-                      .toLowerCase() !== "all" ? (
-                      <Text style={styles.modelMetaText}>
-                        Movement: {formatMovementBadgeLabel(selectedMovement?.name || scoringModel.movementType)}
-                      </Text>
-                    ) : null}
-                    <Text style={styles.modelMetaText}>
-                      Movement Detection Accuracy: {scoringModel.movementDetectionAccuracyPct.toFixed(1)}%
-                    </Text>
-                    <Text style={styles.modelMetaText}>
-                      Scoring Accuracy: {scoringModel.scoringAccuracyPct.toFixed(1)}%
+                      Movement: {formatMovementBadgeLabel(selectedMovement?.name || scoringModel.movementType)}
                     </Text>
                   </View>
-                )}
+                ) : null}
 
                 {isAdmin && scoringModel?.modelEvaluationMode ? (
                   <Pressable
@@ -1165,57 +1160,19 @@ export default function DashboardScreen() {
 
                 {!discrepancyLoading && !discrepancyIsError && discrepancy && discrepancy.summary.videosAnnotated > 0 && (
                   <>
-                    {discrepancy.trend7d.length > 0 && (
-                      <View style={styles.discrepancyTrendCard}>
-                        <View style={styles.discrepancyTrendHeader}>
-                          <Text style={styles.discrepancyTrendTitle}>Last 7 Days</Text>
-                          <Text style={[styles.discrepancyTrendValue, { color: sc.primary }]}> 
-                            {discrepancy.trend7d[discrepancy.trend7d.length - 1]?.mismatchRatePct.toFixed(1)}%
-                          </Text>
-                        </View>
-                        <View style={styles.discrepancyTrendBars}>
-                          {(() => {
-                            const maxRate = Math.max(
-                              ...discrepancy.trend7d.map((point) => point.mismatchRatePct),
-                              1,
-                            );
-                            return discrepancy.trend7d.map((point) => {
-                              const barHeight = Math.max(
-                                6,
-                                Math.round((point.mismatchRatePct / maxRate) * 28),
-                              );
-                              return (
-                                <View key={point.day} style={styles.discrepancyTrendBarItem}>
-                                  <View
-                                    style={[
-                                      styles.discrepancyTrendBar,
-                                      {
-                                        height: barHeight,
-                                        backgroundColor:
-                                          point.mismatchRatePct > 0
-                                            ? `${sc.primary}CC`
-                                            : "#334155",
-                                      },
-                                    ]}
-                                  />
-                                </View>
-                              );
-                            });
-                          })()}
-                        </View>
-                        <View style={styles.discrepancyTrendLabels}>
-                          {discrepancy.trend7d.map((point) => (
-                            <Text key={`label-${point.day}`} style={styles.discrepancyTrendLabelText}>
-                              {toWeekdayInitial(point.day)}
-                            </Text>
-                          ))}
-                        </View>
-                      </View>
-                    )}
-
                     <View style={styles.discrepancyList}>
                       {discrepancy.topVideos.filter((item) => item.mismatches > 0).map((item) => (
-                        <View key={item.analysisId} style={styles.discrepancyRow}>
+                        <Pressable
+                          key={item.analysisId}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            router.push({
+                              pathname: "/analysis/[id]",
+                              params: { id: item.analysisId },
+                            });
+                          }}
+                          style={({ pressed }) => [styles.discrepancyRow, { opacity: pressed ? 0.82 : 1 }]}
+                        >
                           <View style={styles.discrepancyRowLeft}>
                             <View style={styles.discrepancyTopLine}>
                               <Text style={styles.discrepancyVideoName} numberOfLines={1}>
@@ -1248,24 +1205,8 @@ export default function DashboardScreen() {
                                 </View>
                               );
                             })()}
-                            <Pressable
-                              onPress={() => {
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                router.push({
-                                  pathname: "/analysis/[id]",
-                                  params: { id: item.analysisId },
-                                });
-                              }}
-                              style={({ pressed }) => [
-                                styles.discrepancyReviewButton,
-                                { borderColor: `${sc.primary}66` },
-                                { opacity: pressed ? 0.75 : 1 },
-                              ]}
-                            >
-                              <Text style={[styles.discrepancyReviewText, { color: sc.primary }]}>Review</Text>
-                            </Pressable>
                           </View>
-                        </View>
+                        </Pressable>
                       ))}
                     </View>
 
@@ -1287,9 +1228,7 @@ export default function DashboardScreen() {
 
             {isAdmin && (
               <View style={styles.registryCard}>
-                <Text style={styles.registryTitle}>Model Registry</Text>
-                <Text style={styles.registrySubtitle}>Versioned model scoring and movement detection snapshots</Text>
-
+                <Text style={styles.registryTitle}>Model History</Text>
                 {scoringModelRegistryLoading && (
                   <Text style={styles.discrepancyStateText}>Loading registry snapshots…</Text>
                 )}
@@ -1309,7 +1248,7 @@ export default function DashboardScreen() {
                   </View>
                 )}
 
-                {(scoringModelRegistry || []).slice(0, 6).map((entry) => (
+                {(showAllRegistryEntries ? (scoringModelRegistry || []) : (scoringModelRegistry || []).slice(0, 5)).map((entry) => (
                   <Pressable
                     key={entry.id}
                     onPress={() => {
@@ -1320,17 +1259,37 @@ export default function DashboardScreen() {
                   >
                     <View style={styles.registryEntryHeader}>
                       <Text style={styles.registryEntryVersionText}>Model {entry.modelVersion}</Text>
-                      <Text style={styles.registryEntryDateText}>{formatDateTime(entry.createdAt)}</Text>
+                      {(() => {
+                        const palette = getMismatchPalette(Number(entry.mismatchRatePct || 0));
+                        return (
+                          <View
+                            style={[
+                              styles.discrepancyRateBadge,
+                              { backgroundColor: palette.bg, borderColor: palette.border },
+                            ]}
+                          >
+                            <Text style={[styles.discrepancyRateText, { color: palette.text }]}> 
+                              Mismatch {Number(entry.mismatchRatePct || 0).toFixed(1)}%
+                            </Text>
+                          </View>
+                        );
+                      })()}
                     </View>
+                    <Text style={styles.registryEntryDateText}>{formatDateTime(entry.createdAt)}</Text>
                     {String(entry.movementType || "").trim().toLowerCase() !== "all" ? (
                       <Text style={styles.registryEntryMetaText}>Movement: {entry.movementType}</Text>
                     ) : null}
-                    <Text style={styles.registryEntryMetaText}>
-                      Movement Detection Accuracy: {entry.movementDetectionAccuracyPct.toFixed(1)}%
-                    </Text>
-                    <Text style={styles.registryEntryMetaText}>Scoring Accuracy: {entry.scoringAccuracyPct.toFixed(1)}%</Text>
                   </Pressable>
                 ))}
+
+                {!showAllRegistryEntries && (scoringModelRegistry || []).length > 5 ? (
+                  <Pressable
+                    onPress={() => setShowAllRegistryEntries(true)}
+                    style={({ pressed }) => [styles.registryMoreButton, { opacity: pressed ? 0.78 : 1 }]}
+                  >
+                    <Text style={styles.registryMoreText}>.. More ..</Text>
+                  </Pressable>
+                ) : null}
               </View>
             )}
 
@@ -1441,7 +1400,7 @@ export default function DashboardScreen() {
                     </View>
                   </View>
                   <View style={styles.playerTrendMetricTabs}>
-                    {PLAYER_METRICS.map((metric) => (
+                    {PLAYER_TREND_FILTERS.map((metric) => (
                       <Pressable
                         key={metric.key}
                         onPress={() => setSelectedTrendMetric(metric.key)}
@@ -1961,6 +1920,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
+  },
+  registryMoreButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    marginTop: -2,
+  },
+  registryMoreText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: ds.color.accent,
   },
   registryTrendCard: {
     borderRadius: ds.radius.sm,

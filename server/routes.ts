@@ -1228,11 +1228,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metricsByEntry.set(metric.registryEntryId, current);
       }
 
+      const analysisRows = await db
+        .select({
+          analysis: analyses,
+        })
+        .from(analyses)
+        .orderBy(desc(analyses.createdAt));
+
+      const normalizeFilenameToken = (value: string): string => {
+        return path.basename(String(value || "").trim()).toLowerCase();
+      };
+
+      const selectedAnalysisIdsByEntry = new Map<string, string[]>();
+      const allSelectedAnalysisIds = new Set<string>();
+
+      for (const entry of entries) {
+        const manifestDatasets = Array.isArray(entry.manifestDatasets)
+          ? entry.manifestDatasets
+          : [];
+
+        const manifestVideos = manifestDatasets.flatMap((dataset: any) => {
+          const videos = Array.isArray(dataset?.videos) ? dataset.videos : [];
+          return videos.map((video: any) => ({
+            videoId: String(video?.videoId || "").trim(),
+            filename: String(video?.filename || "").trim(),
+          }));
+        });
+
+        const selectedIds = new Set<string>();
+        for (const manifestVideo of manifestVideos) {
+          const manifestVideoId = manifestVideo.videoId;
+          const manifestFilenameBase = normalizeFilenameToken(manifestVideo.filename);
+
+          const match = analysisRows.find((row) => {
+            const analysisVideoId = String(row.analysis.evaluationVideoId || "").trim();
+            if (manifestVideoId && analysisVideoId && analysisVideoId === manifestVideoId) {
+              return true;
+            }
+
+            const sourceFilenameBase = normalizeFilenameToken(String(row.analysis.sourceFilename || ""));
+            const videoFilenameBase = normalizeFilenameToken(String(row.analysis.videoFilename || ""));
+
+            return (
+              !!manifestFilenameBase
+              && (sourceFilenameBase === manifestFilenameBase || videoFilenameBase === manifestFilenameBase)
+            );
+          });
+
+          if (match?.analysis?.id) {
+            selectedIds.add(match.analysis.id);
+          }
+        }
+
+        const ids = Array.from(selectedIds);
+        selectedAnalysisIdsByEntry.set(entry.id, ids);
+        for (const id of ids) {
+          allSelectedAnalysisIds.add(id);
+        }
+      }
+
+      const selectedDiscrepancySnapshots = allSelectedAnalysisIds.size
+        ? await db
+            .select()
+            .from(analysisShotDiscrepancies)
+            .where(inArray(analysisShotDiscrepancies.analysisId, Array.from(allSelectedAnalysisIds)))
+        : [];
+
+      const historyByAnalysisId = new Map<string, Array<typeof analysisShotDiscrepancies.$inferSelect>>();
+      for (const snapshot of selectedDiscrepancySnapshots) {
+        const list = historyByAnalysisId.get(snapshot.analysisId) || [];
+        list.push(snapshot);
+        historyByAnalysisId.set(snapshot.analysisId, list);
+      }
+      for (const [analysisId, list] of historyByAnalysisId.entries()) {
+        historyByAnalysisId.set(
+          analysisId,
+          [...list].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+        );
+      }
+
+      const modelVersions = Array.from(
+        new Set(entries.map((entry) => String(entry.modelVersion || "").trim()).filter(Boolean)),
+      );
+
+      const versionDiscrepancySnapshots = modelVersions.length
+        ? await db
+            .select()
+            .from(analysisShotDiscrepancies)
+            .where(inArray(analysisShotDiscrepancies.modelVersion, modelVersions))
+        : [];
+
+      const mismatchByVersion = new Map<string, { mismatches: number; manualShots: number }>();
+      for (const snapshot of versionDiscrepancySnapshots) {
+        const version = String(snapshot.modelVersion || "").trim();
+        if (!version) continue;
+        const current = mismatchByVersion.get(version) || { mismatches: 0, manualShots: 0 };
+        current.mismatches += Number(snapshot.mismatches || 0);
+        current.manualShots += Number(snapshot.manualShots || 0);
+        mismatchByVersion.set(version, current);
+      }
+
       res.json(
-        entries.map((entry) => ({
-          ...entry,
-          datasetMetrics: metricsByEntry.get(entry.id) || [],
-        })),
+        entries.map((entry) => {
+          const targetVersion = String(entry.modelVersion || "").trim();
+          const selectedAnalysisIds = selectedAnalysisIdsByEntry.get(entry.id) || [];
+
+          let manifestManualShots = 0;
+          let manifestMismatches = 0;
+
+          for (const analysisId of selectedAnalysisIds) {
+            const history = historyByAnalysisId.get(analysisId) || [];
+            if (!history.length) continue;
+            const targetSnapshot = history.find(
+              (snapshot) => String(snapshot.modelVersion || "").trim() === targetVersion,
+            );
+            const snapshot = targetSnapshot || history[0];
+            manifestManualShots += Number(snapshot.manualShots || 0);
+            manifestMismatches += Number(snapshot.mismatches || 0);
+          }
+
+          const manifestMismatchRatePct = manifestManualShots > 0
+            ? Number(((manifestMismatches / manifestManualShots) * 100).toFixed(1))
+            : null;
+
+          const versionWide = mismatchByVersion.get(targetVersion);
+          const versionMismatchRatePct = versionWide && versionWide.manualShots > 0
+            ? Number(((versionWide.mismatches / versionWide.manualShots) * 100).toFixed(1))
+            : null;
+
+          const fallbackMismatchRatePct = Number(
+            (100 - Number(entry.scoringAccuracyPct || 0)).toFixed(1),
+          );
+
+          const mismatchRatePct =
+            manifestMismatchRatePct
+            ?? versionMismatchRatePct
+            ?? fallbackMismatchRatePct;
+
+          return {
+            ...entry,
+            mismatchRatePct: Math.max(0, Math.min(100, mismatchRatePct)),
+            datasetMetrics: metricsByEntry.get(entry.id) || [],
+          };
+        }),
       );
     } catch (error: any) {
       res.status(500).json({ error: error.message });

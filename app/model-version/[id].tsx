@@ -102,78 +102,87 @@ export default function ModelVersionScreen() {
             <View style={styles.versionPill}>
               <Text style={styles.versionPillText}>Model {data.modelVersion}</Text>
             </View>
-            <Text style={styles.summaryLine}>Saved: {formatDateTime(data.createdAt)}</Text>
+            {(() => {
+              const summaryPalette = getMismatchPalette(data.summary.mismatchRatePct);
+              return (
+                <View style={styles.summaryMismatchRow}>
+                  <Text style={styles.summaryMismatchLabel}>Mismatch Rate</Text>
+                  <View
+                    style={[
+                      styles.rateBadge,
+                      {
+                        backgroundColor: summaryPalette.bg,
+                        borderColor: summaryPalette.border,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.rateText, { color: summaryPalette.text }]}> 
+                      {data.summary.mismatchRatePct.toFixed(1)}%
+                    </Text>
+                  </View>
+                </View>
+              );
+            })()}
+            <Text style={styles.summaryLine}>{formatDateTime(data.createdAt)}</Text>
             {String(data.movementType || "").trim().toLowerCase() !== "all" ? (
               <Text style={styles.summaryLine}>Movement: {formatLabel(data.movementType)}</Text>
             ) : null}
-            <Text style={styles.summaryLine}>
-              Mismatch Rate: {data.summary.mismatchRatePct.toFixed(1)}%
-            </Text>
-            <Text style={styles.summaryLine}>
-              Movement Detection Accuracy: {data.movementDetectionAccuracyPct.toFixed(1)}%
-            </Text>
-            <Text style={styles.summaryLine}>
-              Scoring Accuracy: {data.scoringAccuracyPct.toFixed(1)}%
-            </Text>
           </GlassCard>
 
           <GlassCard style={styles.discrepancyCard}>
-            <Text style={styles.discrepancyTitle}>Version Videos</Text>
+            <Text style={styles.discrepancyTitle}>Training Data</Text>
             {(data.topVideos || []).map((item) => (
-              <GlassCard key={item.analysisId} style={styles.discrepancyRow}>
-                <View style={styles.discrepancyLeft}>
-                  <Text style={styles.videoName} numberOfLines={1}>
-                    {String(item.userName || "Player")}
-                  </Text>
-                  <Text style={styles.videoMeta} numberOfLines={1}>
-                    {`${String(item.sportName || "Sport")} • ${formatLabel(item.movementName)}`}
-                  </Text>
-                  <Text style={styles.videoMeta}>{formatDateTime(item.createdAt)}</Text>
-                  <Text style={styles.videoMeta}>{`${item.mismatches}/${item.manualShots} shots mismatched`}</Text>
-                </View>
-                <View style={styles.discrepancyRight}>
-                  {(() => {
-                    const palette = getMismatchPalette(item.mismatchRatePct);
-                    const delta = Number(item.mismatchDeltaPct || 0);
-                    const deltaPalette = getDeltaPalette(delta);
-                    return (
-                      <>
-                        <View
-                          style={[
-                            styles.rateBadge,
-                            { backgroundColor: palette.bg, borderColor: palette.border },
-                          ]}
-                        >
-                          <Text style={[styles.rateText, { color: palette.text }]}>
-                            {item.mismatchRatePct.toFixed(1)}%
-                          </Text>
-                        </View>
-                        <View style={styles.deltaRow}>
-                          <Ionicons name={deltaPalette.icon} size={12} color={deltaPalette.color} />
-                          <Text style={[styles.deltaText, { color: deltaPalette.color }]}>
-                            {Math.abs(delta).toFixed(1)}%
-                          </Text>
-                        </View>
-                        {item.isNewVideo ? (
-                          <Text style={styles.newVideoText}>new video</Text>
-                        ) : null}
-                      </>
-                    );
-                  })()}
-                  <Pressable
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      router.push({ pathname: "/analysis/[id]", params: { id: item.analysisId } });
-                    }}
-                    style={({ pressed }) => [
-                      styles.reviewButton,
-                      { opacity: pressed ? 0.75 : 1 },
-                    ]}
-                  >
-                    <Text style={styles.reviewText}>Review</Text>
-                  </Pressable>
-                </View>
-              </GlassCard>
+              <Pressable
+                key={item.analysisId}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push({ pathname: "/analysis/[id]", params: { id: item.analysisId } });
+                }}
+                style={({ pressed }) => [{ opacity: pressed ? 0.82 : 1 }]}
+              >
+                <GlassCard style={styles.discrepancyRow}>
+                  <View style={styles.discrepancyLeft}>
+                    <Text style={styles.videoName} numberOfLines={1}>
+                      {String(item.userName || "Player")}
+                    </Text>
+                    <Text style={styles.videoMeta} numberOfLines={1}>
+                      {`${String(item.sportName || "Sport")} • ${formatLabel(item.movementName)}`}
+                    </Text>
+                    <Text style={styles.videoMeta}>{formatDateTime(item.createdAt)}</Text>
+                    <Text style={styles.videoMeta}>{`${item.mismatches}/${item.manualShots} shots mismatched`}</Text>
+                  </View>
+                  <View style={styles.discrepancyRight}>
+                    {(() => {
+                      const palette = getMismatchPalette(item.mismatchRatePct);
+                      const delta = Number(item.mismatchDeltaPct || 0);
+                      const deltaPalette = getDeltaPalette(delta);
+                      return (
+                        <>
+                          <View
+                            style={[
+                              styles.rateBadge,
+                              { backgroundColor: palette.bg, borderColor: palette.border },
+                            ]}
+                          >
+                            <Text style={[styles.rateText, { color: palette.text }]}> 
+                              {item.mismatchRatePct.toFixed(1)}%
+                            </Text>
+                          </View>
+                          <View style={styles.deltaRow}>
+                            <Ionicons name={deltaPalette.icon} size={12} color={deltaPalette.color} />
+                            <Text style={[styles.deltaText, { color: deltaPalette.color }]}> 
+                              {Math.abs(delta).toFixed(1)}%
+                            </Text>
+                          </View>
+                          {item.isNewVideo ? (
+                            <Text style={styles.newVideoText}>new video</Text>
+                          ) : null}
+                        </>
+                      );
+                    })()}
+                  </View>
+                </GlassCard>
+              </Pressable>
             ))}
 
             {(data.topVideos || []).length === 0 ? (
@@ -242,7 +251,18 @@ const styles = StyleSheet.create({
   summaryCard: {
     borderRadius: ds.radius.lg,
     padding: 14,
-    gap: 4,
+    gap: 6,
+  },
+  summaryMismatchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  summaryMismatchLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: ds.color.textTertiary,
   },
   versionPill: {
     alignSelf: "flex-start",
@@ -327,19 +347,6 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     color: ds.color.textTertiary,
     marginTop: -2,
-  },
-  reviewButton: {
-    borderRadius: ds.radius.sm,
-    borderWidth: 1,
-    borderColor: `${ds.color.success}66`,
-    backgroundColor: `${ds.color.success}1A`,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  reviewText: {
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-    color: "#34D399",
   },
   emptyText: {
     fontSize: 12,

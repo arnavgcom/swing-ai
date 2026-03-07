@@ -61,6 +61,7 @@ export interface ScoringModelRegistryEntryResponse {
   movementType: string;
   movementDetectionAccuracyPct: number;
   scoringAccuracyPct: number;
+  mismatchRatePct: number;
   datasetsUsed: string[];
   manifestModelVersion: string;
   manifestDatasets: Array<{
