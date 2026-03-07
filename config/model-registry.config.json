@@ -1,5 +1,5 @@
 {
-  "activeModelVersion": "0.4",
-  "modelVersionChangeDescription": "Changed with improved backhand",
+  "activeModelVersion": "0.1",
+  "modelVersionChangeDescription": "Initial baseline scoring model release.",
   "evaluationDatasetManifestPath": "model_evaluation_datasets/manifest.json"
 }

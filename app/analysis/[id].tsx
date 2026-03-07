@@ -109,6 +109,59 @@ function formatDateWithTimezone(
   return tzPart ? `${datePart} ${tzPart}` : datePart;
 }
 
+function formatHeaderDateTime(value: string | null | undefined, timeZone?: string): string {
+  if (!value) return "Unknown date";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown date";
+  const day = date.toLocaleString("en-GB", { day: "2-digit", timeZone });
+  const month = date.toLocaleString("en-GB", { month: "short", timeZone });
+  const year = date.toLocaleString("en-GB", { year: "2-digit", timeZone });
+  const time = date.toLocaleString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone,
+  });
+
+  const compactTime = time.replace(/\s?(AM|PM)$/i, "$1");
+
+  return `${day} ${month} '${year} ${compactTime}`;
+}
+
+function derivePlayerNameFromVideoName(filename: string | null | undefined): string | null {
+  const base = String(filename || "")
+    .replace(/\.[a-z0-9]+$/i, "")
+    .trim();
+  if (!base) return null;
+
+  const sportTokens = new Set(["tennis", "golf", "pickleball", "paddle", "badminton", "table", "tabletennis"]);
+  const stopTokens = new Set(["autodetect", "automodel", "model", "analysis", "upload"]);
+
+  let parts = base.split(/[-_]/).map((p) => p.trim()).filter(Boolean);
+  if (!parts.length) return null;
+
+  if (sportTokens.has(parts[0].toLowerCase())) {
+    parts = parts.slice(1);
+  }
+
+  const nameParts: string[] = [];
+  for (const part of parts) {
+    const cleaned = part.replace(/[^a-zA-Z\s]/g, "").trim();
+    if (!cleaned) continue;
+    const flat = cleaned.toLowerCase().replace(/\s+/g, "");
+    if (stopTokens.has(flat)) break;
+    if (/^\d+$/.test(cleaned)) break;
+    nameParts.push(cleaned);
+    if (nameParts.length >= 2) break;
+  }
+
+  if (!nameParts.length) return null;
+  return nameParts
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function toCamelCaseLabel(value: string): string {
   const parts = value
     .replace(/[^a-zA-Z0-9]+/g, " ")
@@ -638,6 +691,17 @@ export default function AnalysisDetailScreen() {
   const detectedMovement = analysis.detectedMovement;
   const profileTimeZone =
     (user as any)?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const filenamePlayerName = derivePlayerNameFromVideoName(displayVideoName);
+  const headerPlayerNameResolved =
+    String(analysis.userName || "").trim()
+    || String(user?.name || "").trim()
+    || filenamePlayerName
+    || "Player";
+  const headerDateTime = formatHeaderDateTime(
+    analysis.capturedAt || analysis.createdAt,
+    profileTimeZone,
+  );
+  const topHeaderTitle = `${headerPlayerNameResolved} ${headerDateTime}`;
   const wasOverridden =
     selectedMovement &&
     detectedMovement &&
@@ -679,7 +743,7 @@ export default function AnalysisDetailScreen() {
             style={[styles.topTitle, { color: colors.text }]}
             numberOfLines={1}
           >
-            {displayVideoName}
+            {topHeaderTitle}
           </Text>
         </Pressable>
         <View style={styles.navButton} />

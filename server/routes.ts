@@ -2026,6 +2026,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Analysis not found" });
       }
 
+      const [analysisUser] = analysis.userId
+        ? await db
+            .select({ name: users.name })
+            .from(users)
+            .where(eq(users.id, analysis.userId))
+            .limit(1)
+        : [null];
+
       if (!isAdmin && analysis.userId !== userId) {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
@@ -2045,7 +2053,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({
-        analysis,
+        analysis: {
+          ...analysis,
+          userName: analysisUser?.name || null,
+        },
         metrics: metricsData || null,
         coaching: insights || null,
         selectedMovementName,
