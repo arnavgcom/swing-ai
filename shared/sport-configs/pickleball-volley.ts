@@ -6,12 +6,11 @@ export const pickleballVolleyConfig: SportCategoryConfig = {
   configKey: "pickleball-volley",
   overallScoreLabel: "Volley Score",
   scores: [
-    { key: "reflexes", label: "Reflexes", weight: 0.25 },
-    { key: "technique", label: "Technique", weight: 0.20 },
-    { key: "stability", label: "Stability", weight: 0.15 },
     { key: "power", label: "Power", weight: 0.15 },
+    { key: "control", label: "Control", weight: 0.40 },
+    { key: "timing", label: "Timing", weight: 0.10 },
+    { key: "technique", label: "Technique", weight: 0.20 },
     { key: "consistency", label: "Consistency", weight: 0.15 },
-    { key: "rhythm", label: "Rhythm", weight: 0.10 },
   ],
   metrics: [
     {

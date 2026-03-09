@@ -6,11 +6,11 @@ export const badmintonSmashConfig: SportCategoryConfig = {
   configKey: "badminton-smash",
   overallScoreLabel: "Smash Score",
   scores: [
-    { key: "power", label: "Power", weight: 0.30 },
-    { key: "technique", label: "Technique", weight: 0.25 },
-    { key: "timing", label: "Timing", weight: 0.20 },
-    { key: "athleticism", label: "Athleticism", weight: 0.15 },
-    { key: "consistency", label: "Consistency", weight: 0.10 },
+    { key: "power", label: "Power", weight: 0.41 },
+    { key: "control", label: "Control", weight: 0.09 },
+    { key: "timing", label: "Timing", weight: 0.18 },
+    { key: "technique", label: "Technique", weight: 0.23 },
+    { key: "consistency", label: "Consistency", weight: 0.09 },
   ],
   metrics: [
     {

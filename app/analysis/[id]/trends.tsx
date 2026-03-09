@@ -40,6 +40,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   power: "Power",
 };
 
+const MPH_TO_KMPH = 1.60934;
+
+function isMphUnit(unit?: string): boolean {
+  return String(unit || "").trim().toLowerCase() === "mph";
+}
+
+function toDisplaySpeed(value: number): number {
+  return value * MPH_TO_KMPH;
+}
+
 function formatDateLabel(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
@@ -248,6 +258,8 @@ export default function AnalysisMetricTrendsScreen() {
     retry: false,
   });
 
+  const allPoints = trendData?.points || [];
+
   const metricsByCategory = useMemo(() => {
     if (!sportConfig) return {} as Record<string, SportCategoryConfig["metrics"]>;
     const groups: Record<string, SportCategoryConfig["metrics"]> = {};
@@ -257,10 +269,34 @@ export default function AnalysisMetricTrendsScreen() {
       }
       groups[metric.category].push(metric);
     }
-    return groups;
-  }, [sportConfig]);
 
-  const allPoints = trendData?.points || [];
+    const hasShotSpeedData = allPoints.some((point) => {
+      const value = Number(point.metricValues?.shotSpeed);
+      return Number.isFinite(value) && value > 0;
+    });
+
+    if (hasShotSpeedData) {
+      const ballMetrics = groups.ball || [];
+      const alreadyPresent = ballMetrics.some((metric) => metric.key === "shotSpeed");
+      if (!alreadyPresent) {
+        groups.ball = [
+          {
+            key: "shotSpeed",
+            label: "Shot Speed",
+            unit: "kmph",
+            icon: "speedometer-outline",
+            category: "ball",
+            color: "#F59E0B",
+            description: "Normalized shot speed across sessions.",
+          },
+          ...ballMetrics,
+        ];
+      }
+    }
+
+    return groups;
+  }, [allPoints, sportConfig]);
+
   const points = useMemo(() => {
     if (sessionFilter === "all") return allPoints;
     return allPoints.slice(-sessionFilter);
@@ -455,10 +491,16 @@ export default function AnalysisMetricTrendsScreen() {
               <Text style={styles.sectionTitle}>{CATEGORY_LABELS[category] || category}</Text>
 
               {categoryMetrics.map((metric) => {
+                const metricUsesMph = isMphUnit(metric.unit);
+                const displayUnit = metricUsesMph ? "kmph" : metric.unit;
                 const trendPoints = points
                   .map((point) => {
                     const raw = point.metricValues?.[metric.key];
-                    const value = Number(raw);
+                    const parsedValue = Number(raw);
+                    const value =
+                      metricUsesMph && Number.isFinite(parsedValue)
+                        ? toDisplaySpeed(parsedValue)
+                        : parsedValue;
                     if (!Number.isFinite(value)) return null;
                     return {
                       label: formatDateLabel(point.capturedAt),
@@ -469,6 +511,7 @@ export default function AnalysisMetricTrendsScreen() {
 
                 const latestValue = trendPoints.length ? trendPoints[trendPoints.length - 1].value : null;
                 const highlighted = String(focusMetric || "") === metric.key;
+                const latestPrecision = metric.key === "ballSpeed" ? 1 : 2;
 
                 return (
                   <View
@@ -494,7 +537,7 @@ export default function AnalysisMetricTrendsScreen() {
                         <View style={styles.metricTitleWrap}>
                           <Text style={styles.metricTitle}>{metric.label}</Text>
                           <Text style={styles.metricSubTitle}>
-                            Latest: {latestValue !== null ? latestValue.toFixed(2) : "-"} {metric.unit}
+                            Latest: {latestValue !== null ? latestValue.toFixed(latestPrecision) : "-"} {displayUnit}
                           </Text>
                         </View>
                       </View>

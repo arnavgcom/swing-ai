@@ -13,6 +13,7 @@ interface PythonResult {
   subScores: Record<string, number>;
   metricValues: Record<string, number>;
   shotCount?: number;
+  shotSpeed?: number;
   coaching: {
     keyStrength: string;
     improvementArea: string;
@@ -217,6 +218,9 @@ export async function processAnalysis(analysisId: string): Promise<void> {
     const metricValues = { ...result.metricValues };
     if (result.shotCount != null) {
       metricValues.shotCount = result.shotCount;
+    }
+    if (result.shotSpeed != null && Number.isFinite(result.shotSpeed)) {
+      metricValues.shotSpeed = result.shotSpeed;
     }
 
     await db.transaction(async (tx) => {

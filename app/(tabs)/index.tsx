@@ -120,8 +120,9 @@ function getGreetingFirstName(name?: string | null): string {
 
 const PLAYER_METRICS = [
   { key: "power", label: "Power", icon: "flash", color: ds.color.success },
+  { key: "control", label: "Control", icon: "body", color: "#A78BFA" },
   { key: "timing", label: "Timing", icon: "timer", color: "#38BDF8" },
-  { key: "stability", label: "Stability", icon: "body", color: "#A78BFA" },
+  { key: "technique", label: "Technique", icon: "construct", color: "#60A5FA" },
   { key: "consistency", label: "Consistency", icon: "repeat", color: ds.color.warning },
 ] as const;
 
@@ -151,45 +152,52 @@ function getImprovementDrill(
   if (sport.includes("tennis")) {
     if (movement.includes("serve")) {
       if (metricKey === "timing") return "3 x 12 toss-to-contact sequencing reps";
-      if (metricKey === "stability") return "4 x 20s balanced trophy-stance holds";
+      if (metricKey === "control") return "4 x 20s balanced trophy-stance holds";
+      if (metricKey === "technique") return "3 x 12 technical shadow serves with finish hold";
       if (metricKey === "consistency") return "3 rounds of 10 first-serve target hits";
       return "3 x 10 medicine-ball style overhead drive motions";
     }
     if (movement.includes("backhand")) {
       if (metricKey === "timing") return "3 x 15 backhand contact-point marker reps";
-      if (metricKey === "stability") return "4 x 30s split-step plus crossover recovery";
+      if (metricKey === "control") return "4 x 30s split-step plus crossover recovery";
+      if (metricKey === "technique") return "3 x 12 backhand shape-and-finish repetitions";
       if (metricKey === "consistency") return "3 rounds of 20 cross-court backhands";
       return "3 x 12 loaded backhand acceleration swings";
     }
     if (movement.includes("forehand")) {
       if (metricKey === "timing") return "3 x 15 forehand early-prep to contact reps";
-      if (metricKey === "stability") return "4 x 30s open-stance recovery footwork";
+      if (metricKey === "control") return "4 x 30s open-stance recovery footwork";
+      if (metricKey === "technique") return "3 x 12 forehand shape-and-finish repetitions";
       if (metricKey === "consistency") return "3 rounds of 20 deep forehand rally balls";
       return "3 x 12 forehand kinetic-chain acceleration reps";
     }
 
     if (metricKey === "timing") return "3 x 15 unit-turn to contact timing reps";
-    if (metricKey === "stability") return "4 x 30s split-step and recovery drill";
+    if (metricKey === "control") return "4 x 30s split-step and recovery drill";
+    if (metricKey === "technique") return "3 x 12 swing-path and finish checkpoints";
     if (metricKey === "consistency") return "3 rounds of 20 controlled rally contacts";
     return "3 x 12 explosive shadow swings";
   }
 
   if (sport.includes("golf")) {
     if (metricKey === "timing") return "3 x 10 takeaway-to-impact tempo reps";
-    if (metricKey === "stability") return "4 x 20s single-leg balance with club set-up";
+    if (metricKey === "control") return "4 x 20s single-leg balance with club set-up";
+    if (metricKey === "technique") return "3 x 10 setup-posture and impact-position checkpoints";
     if (metricKey === "consistency") return "3 rounds of 10 target-line strikes";
     return "3 x 10 resisted hip-turn power reps";
   }
 
   if (sport.includes("badminton")) {
     if (metricKey === "timing") return "3 x 15 split-step to shuttle contact reps";
-    if (metricKey === "stability") return "4 x 25s lunge-recover footwork";
+    if (metricKey === "control") return "4 x 25s lunge-recover footwork";
+    if (metricKey === "technique") return "3 x 12 racket-path and contact-height checkpoints";
     if (metricKey === "consistency") return "3 rounds of 20 controlled clears";
     return "3 x 12 jump-smash loading motions";
   }
 
   if (metricKey === "timing") return "3 x 15 contact timing reps";
-  if (metricKey === "stability") return "4 x 30s balance and recovery drill";
+  if (metricKey === "control") return "4 x 30s balance and recovery drill";
+  if (metricKey === "technique") return "3 x 12 movement-shape and finish checkpoints";
   if (metricKey === "consistency") return "3 rounds of 20 controlled repetitions";
   return "3 x 12 explosive movement reps";
 }
@@ -235,7 +243,8 @@ function getMovementFromAnalysis(item: AnalysisSummary): string {
 function getMovementTarget(metricKey: string): number {
   if (metricKey === "consistency") return 85;
   if (metricKey === "timing") return 82;
-  if (metricKey === "stability") return 80;
+  if (metricKey === "control") return 80;
+  if (metricKey === "technique") return 81;
   return 78;
 }
 
@@ -265,7 +274,7 @@ function getExpectedGain(metricKey: string, minutes: PlanDuration): number {
       ? 5
       : metricKey === "timing"
         ? 4
-        : metricKey === "stability"
+        : metricKey === "control"
           ? 3
           : 3;
 

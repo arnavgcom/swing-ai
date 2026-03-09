@@ -424,7 +424,8 @@ function getMovementLabel(row: {
 
 function getDrillForMetric(metric: string): string {
   if (metric === "timing") return "3 x 15 contact-point timing reps";
-  if (metric === "stability") return "4 x 30s split-step + recovery";
+  if (metric === "control") return "4 x 30s split-step + recovery";
+  if (metric === "technique") return "3 x 12 movement-shape checkpoints";
   if (metric === "consistency") return "3 rounds of 20-ball rally consistency";
   return "3 x 12 explosive shadow swings";
 }
@@ -1918,7 +1919,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const overallDelta =
         recentAvg !== null && previousAvg !== null ? round1(recentAvg - previousAvg) : null;
 
-      const metricKeys = ["power", "timing", "stability", "consistency"] as const;
+      const metricKeys = ["power", "control", "timing", "technique", "consistency"] as const;
       const metricSummary = metricKeys.map((key) => {
         const latest = readSubScoreValue(scored[0]?.subScores, key);
         const recentMetric = scored

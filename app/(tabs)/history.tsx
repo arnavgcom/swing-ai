@@ -171,7 +171,7 @@ function toTitleCase(str: string): string {
     .trim();
 }
 
-const HISTORY_DISPLAY_KEYS = ["power", "timing", "stability", "consistency"];
+const HISTORY_DISPLAY_KEYS = ["power", "control", "timing", "technique", "consistency"];
 const TREND_SESSION_FILTERS = [
   { key: 5, label: "5S" },
   { key: 10, label: "10S" },

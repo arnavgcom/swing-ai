@@ -6,12 +6,11 @@ export const pickleballThirdShotDropConfig: SportCategoryConfig = {
   configKey: "pickleball-third-shot-drop",
   overallScoreLabel: "Third Shot Drop Score",
   scores: [
-    { key: "touch", label: "Soft Touch", weight: 0.25 },
-    { key: "arc", label: "Arc Control", weight: 0.20 },
-    { key: "technique", label: "Technique", weight: 0.20 },
-    { key: "consistency", label: "Consistency", weight: 0.15 },
-    { key: "stability", label: "Stability", weight: 0.10 },
-    { key: "rhythm", label: "Rhythm", weight: 0.10 },
+    { key: "power", label: "Power", weight: 0.11 },
+    { key: "control", label: "Control", weight: 0.31 },
+    { key: "timing", label: "Timing", weight: 0.09 },
+    { key: "technique", label: "Technique", weight: 0.36 },
+    { key: "consistency", label: "Consistency", weight: 0.13 },
   ],
   metrics: [
     {

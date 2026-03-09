@@ -11,28 +11,28 @@ Complete reference for all sport categories, metrics, optimal ranges, sub-scores
 | 1 | Tennis | Forehand | `tennis-forehand` | 13 | 5 | Forehand Score |
 | 2 | Tennis | Backhand | `tennis-backhand` | 13 | 5 | Backhand Score |
 | 3 | Tennis | Serve | `tennis-serve` | 13 | 5 | Serve Score |
-| 4 | Tennis | Volley | `tennis-volley` | 10 | 4 | Volley Score |
-| 5 | Tennis | Game | `tennis-game` | 8 | 4 | Game Score |
+| 4 | Tennis | Volley | `tennis-volley` | 10 | 5 | Volley Score |
+| 5 | Tennis | Game | `tennis-game` | 8 | 5 | Game Score |
 | 6 | Golf | Drive | `golf-drive` | 12 | 5 | Drive Score |
 | 7 | Golf | Iron Shot | `golf-iron` | 10 | 5 | Iron Shot Score |
-| 8 | Golf | Chip | `golf-chip` | 8 | 4 | Chip Score |
-| 9 | Golf | Putt | `golf-putt` | 8 | 4 | Putting Score |
+| 8 | Golf | Chip | `golf-chip` | 8 | 5 | Chip Score |
+| 9 | Golf | Putt | `golf-putt` | 8 | 5 | Putting Score |
 | 10 | Golf | Full Swing | `golf-full-swing` | 10 | 5 | Full Swing Score |
-| 11 | Pickleball | Dink | `pickleball-dink` | 7 | 6 | Dink Score |
-| 12 | Pickleball | Drive | `pickleball-drive` | 7 | 6 | Drive Score |
-| 13 | Pickleball | Serve | `pickleball-serve` | 6 | 6 | Serve Score |
-| 14 | Pickleball | Volley | `pickleball-volley` | 7 | 6 | Volley Score |
-| 15 | Pickleball | Third Shot Drop | `pickleball-third-shot-drop` | 6 | 6 | Third Shot Drop Score |
+| 11 | Pickleball | Dink | `pickleball-dink` | 7 | 5 | Dink Score |
+| 12 | Pickleball | Drive | `pickleball-drive` | 7 | 5 | Drive Score |
+| 13 | Pickleball | Serve | `pickleball-serve` | 6 | 5 | Serve Score |
+| 14 | Pickleball | Volley | `pickleball-volley` | 7 | 5 | Volley Score |
+| 15 | Pickleball | Third Shot Drop | `pickleball-third-shot-drop` | 6 | 5 | Third Shot Drop Score |
 | 16 | Paddle | Forehand | `paddle-forehand` | 9 | 5 | Forehand Score |
 | 17 | Paddle | Backhand | `paddle-backhand` | 8 | 5 | Backhand Score |
-| 18 | Paddle | Serve | `paddle-serve` | 6 | 4 | Serve Score |
-| 19 | Paddle | Smash | `paddle-smash` | 7 | 4 | Smash Score |
-| 20 | Paddle | Bandeja | `paddle-bandeja` | 7 | 4 | Bandeja Score |
+| 18 | Paddle | Serve | `paddle-serve` | 6 | 5 | Serve Score |
+| 19 | Paddle | Smash | `paddle-smash` | 7 | 5 | Smash Score |
+| 20 | Paddle | Bandeja | `paddle-bandeja` | 7 | 5 | Bandeja Score |
 | 21 | Badminton | Clear | `badminton-clear` | 7 | 5 | Clear Score |
 | 22 | Badminton | Smash | `badminton-smash` | 7 | 5 | Smash Score |
 | 23 | Badminton | Drop | `badminton-drop` | 6 | 5 | Drop Shot Score |
 | 24 | Badminton | Net Shot | `badminton-net-shot` | 6 | 5 | Net Shot Score |
-| 25 | Badminton | Serve | `badminton-serve` | 5 | 4 | Serve Score |
+| 25 | Badminton | Serve | `badminton-serve` | 5 | 5 | Serve Score |
 | 26 | Table Tennis | Forehand | `tabletennis-forehand` | 7 | 5 | Forehand Score |
 | 27 | Table Tennis | Backhand | `tabletennis-backhand` | 6 | 5 | Backhand Score |
 | 28 | Table Tennis | Serve | `tabletennis-serve` | 6 | 5 | Serve Score |
@@ -50,6 +50,29 @@ overallScore = Σ (weight_i × subScore_i)
 ```
 
 Each sub-score is computed by the Python analyzer on a 0–100 scale. The weights are listed in each category's Scores table below.
+
+## Global Standardized Sub-Score Model (Active)
+
+As of the latest scoring model update, all categories are normalized to these five sub-scores:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Python runtime standardization happens in `python_analysis/base_analyzer.py`:
+
+- `_build_standard_sub_scores(raw_sub_scores)` maps legacy category-specific keys to the five standardized keys.
+- `_compute_standard_overall_score(sub_scores)` computes overall score from standardized keys.
+
+Global overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy keys such as `stability`, `followThrough`, `accuracy`, `placement`, `touch`, `spin`, `reflexes`, and others are preserved for backwards compatibility in payloads/coaching generation, but UI/config scoring now uses the standardized five-key model.
+
+Note: category-specific formula snippets later in this document may still show legacy analyzer-local naming. Runtime scoring and UI score cards should be interpreted through the standardized five-key model above.
 
 ---
 
@@ -124,6 +147,7 @@ Fields returned by Python and consumed by the server pipeline:
 | `overallScore` | `number` | Overall normalized score (0-100). | Successful analyses |
 | `subScores` | `Record<string, number>` | Weighted component scores (for example power, timing). | Successful analyses |
 | `metricValues` | `Record<string, number>` | Raw computed metric values used for scoring and UI display. | Successful analyses |
+| `shotSpeed` | `number` | Normalized shot-speed attribute (mph), derived from the analyzer speed metric (for example `ballSpeed`, `avgBallSpeed`, `shuttleSpeed`). | Successful analyses when speed can be measured |
 | `coaching` | `object` | Generated coaching text (`keyStrength`, `improvementArea`, `trainingSuggestion`, `simpleExplanation`). | Successful analyses |
 | `rejected` | `boolean` | Video was rejected before scoring due to validation mismatch. | Rejected analyses |
 | `rejectionReason` | `string` | Human-readable rejection reason. | Rejected analyses |
@@ -140,12 +164,12 @@ Fields returned by Python and consumed by the server pipeline:
 | Key | Label | Weight |
 |-----|-------|--------|
 | power | Power | 25% |
-| stability | Stability | 20% |
+| control | Control | 20% |
 | timing | Timing | 25% |
-| followThrough | Follow-through | 15% |
+| technique | Technique | 15% |
 | consistency | Consistency | 15% |
 
-**Formula:** `overallScore = 0.25 × power + 0.20 × stability + 0.25 × timing + 0.15 × followThrough + 0.15 × consistency`
+**Formula:** `overallScore = 0.25 × power + 0.20 × control + 0.25 × timing + 0.15 × technique + 0.15 × consistency`
 
 ### Metrics
 
@@ -185,6 +209,25 @@ Computed from `python_analysis/sports/tennis_forehand.py` (method `_compute_metr
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 | `contactHeight` | Computed from `contact_height` and clamped to `0.5–1.5`. |
 
+### Sub-Score Computation Details
+
+`power` calculation in `python_analysis/sports/tennis_forehand.py` (`_compute_sub_scores`):
+
+`power = round(((normalize(ballSpeed, 40.0, 130.0) * 0.5) + (normalize(wristSpeed, 15.0, 45.0) * 0.3) + (normalize(spinRate, 400.0, 3500.0) * 0.2)) * 100)`
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 2. Tennis — Backhand
@@ -196,12 +239,12 @@ Computed from `python_analysis/sports/tennis_forehand.py` (method `_compute_metr
 | Key | Label | Weight |
 |-----|-------|--------|
 | power | Power | 20% |
-| stability | Stability | 25% |
+| control | Control | 25% |
 | timing | Timing | 25% |
-| followThrough | Follow-through | 15% |
+| technique | Technique | 15% |
 | consistency | Consistency | 15% |
 
-**Formula:** `overallScore = 0.20 × power + 0.25 × stability + 0.25 × timing + 0.15 × followThrough + 0.15 × consistency`
+**Formula:** `overallScore = 0.20 × power + 0.25 × control + 0.25 × timing + 0.15 × technique + 0.15 × consistency`
 
 ### Metrics
 
@@ -241,6 +284,25 @@ Computed from `python_analysis/sports/tennis_backhand.py` (method `_compute_metr
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 | `contactHeight` | Computed from `float(np.median(contact_heights)) if contact_heights else 0.85` and clamped to `0.5–1.4`. |
 
+### Sub-Score Computation Details
+
+`power` calculation in `python_analysis/sports/tennis_backhand.py` (`_compute_sub_scores`):
+
+`power = round(((normalize(ballSpeed, 35.0, 110.0) * 0.5) + (normalize(wristSpeed, 12.0, 40.0) * 0.3) + (normalize(spinRate, 400.0, 3000.0) * 0.2)) * 100)`
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 3. Tennis — Serve
@@ -252,12 +314,12 @@ Computed from `python_analysis/sports/tennis_backhand.py` (method `_compute_metr
 | Key | Label | Weight |
 |-----|-------|--------|
 | power | Power | 30% |
-| accuracy | Accuracy | 25% |
+| control | Control | 25% |
 | timing | Timing | 20% |
 | technique | Technique | 15% |
 | consistency | Consistency | 10% |
 
-**Formula:** `overallScore = 0.30 × power + 0.25 × accuracy + 0.20 × timing + 0.15 × technique + 0.10 × consistency`
+**Formula:** `overallScore = 0.30 × power + 0.25 × control + 0.20 × timing + 0.15 × technique + 0.10 × consistency`
 
 ### Metrics
 
@@ -297,6 +359,25 @@ Computed from `python_analysis/sports/tennis_serve.py` (method `_compute_metrics
 | `contactHeight` | Computed from `contact_height_m * 1.6` and clamped to `1.8–3.0`. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+`power` calculation in `python_analysis/sports/tennis_serve.py` (`_compute_sub_scores`):
+
+`power = round(((normalize(ballSpeed, 50.0, 140.0) * 0.4) + (normalize(wristSpeed, 20.0, 55.0) * 0.35) + (normalize(spinRate, 500.0, 3800.0) * 0.25)) * 100)`
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 4. Tennis — Volley
@@ -307,12 +388,13 @@ Computed from `python_analysis/sports/tennis_serve.py` (method `_compute_metrics
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| reflexes | Reflexes | 30% |
-| stability | Stability | 25% |
-| placement | Placement | 25% |
-| technique | Technique | 20% |
+| power | Power | 10% |
+| control | Control | 61% |
+| timing | Timing | 8% |
+| technique | Technique | 15% |
+| consistency | Consistency | 6% |
 
-**Formula:** `overallScore = 0.30 × reflexes + 0.25 × stability + 0.25 × placement + 0.20 × technique`
+**Formula:** `overallScore = 0.10 × power + 0.61 × control + 0.08 × timing + 0.15 × technique + 0.06 × consistency`
 
 ### Metrics
 
@@ -346,6 +428,25 @@ Computed from `python_analysis/sports/tennis_volley.py` (method `_compute_metric
 | `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+`tennis-volley` local sub-scores do not define a raw `power` key in `python_analysis/sports/tennis_volley.py` (`_compute_sub_scores`).
+
+At runtime, `python_analysis/base_analyzer.py` (`_build_standard_sub_scores`) synthesizes standardized keys; because no power-like alias is emitted by the volley analyzer, standardized `power` falls back to the default value `78`.
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 5. Tennis — Game
@@ -356,12 +457,13 @@ Computed from `python_analysis/sports/tennis_volley.py` (method `_compute_metric
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| movement | Movement | 25% |
-| shotSelection | Shot Selection | 25% |
-| consistency | Consistency | 25% |
-| power | Power | 25% |
+| power | Power | 21% |
+| control | Control | 42% |
+| timing | Timing | 8% |
+| technique | Technique | 8% |
+| consistency | Consistency | 21% |
 
-**Formula:** `overallScore = 0.25 × movement + 0.25 × shotSelection + 0.25 × consistency + 0.25 × power`
+**Formula:** `overallScore = 0.21 × power + 0.42 × control + 0.08 × timing + 0.08 × technique + 0.21 × consistency`
 
 ### Metrics
 
@@ -391,6 +493,25 @@ Computed from `python_analysis/sports/tennis_game.py` (method `_compute_metrics`
 | `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+`power` calculation in `python_analysis/sports/tennis_game.py` (`_compute_sub_scores`):
+
+`power = round(((normalize(avgBallSpeed, 40.0, 100.0) * 0.6) + (normalize(recoverySpeed, 1.5, 6.0) * 0.4)) * 100)`
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 6. Golf — Drive
@@ -402,12 +523,12 @@ Computed from `python_analysis/sports/tennis_game.py` (method `_compute_metrics`
 | Key | Label | Weight |
 |-----|-------|--------|
 | power | Power | 30% |
+| control | Control | 10% |
+| timing | Timing | 15% |
 | technique | Technique | 25% |
 | consistency | Consistency | 20% |
-| timing | Timing | 15% |
-| balance | Balance | 10% |
 
-**Formula:** `overallScore = 0.30 × power + 0.25 × technique + 0.20 × consistency + 0.15 × timing + 0.10 × balance`
+**Formula:** `overallScore = 0.30 × power + 0.10 × control + 0.15 × timing + 0.25 × technique + 0.20 × consistency`
 
 ### Metrics
 
@@ -445,6 +566,21 @@ Computed from `python_analysis/sports/golf_drive.py` (method `_compute_metrics`)
 | `headStability` | Derived using the `head stability` helper in the analyzer pipeline. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 7. Golf — Iron Shot
@@ -455,13 +591,13 @@ Computed from `python_analysis/sports/golf_drive.py` (method `_compute_metrics`)
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| technique | Technique | 30% |
-| accuracy | Accuracy | 25% |
-| consistency | Consistency | 20% |
-| power | Power | 15% |
-| balance | Balance | 10% |
+| power | Power | 14% |
+| control | Control | 32% |
+| timing | Timing | 9% |
+| technique | Technique | 27% |
+| consistency | Consistency | 18% |
 
-**Formula:** `overallScore = 0.30 × technique + 0.25 × accuracy + 0.20 × consistency + 0.15 × power + 0.10 × balance`
+**Formula:** `overallScore = 0.14 × power + 0.32 × control + 0.09 × timing + 0.27 × technique + 0.18 × consistency`
 
 ### Metrics
 
@@ -495,6 +631,21 @@ Computed from `python_analysis/sports/golf_iron.py` (method `_compute_metrics`).
 | `headStability` | Derived using the `head stability` helper in the analyzer pipeline. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 8. Golf — Chip
@@ -505,12 +656,13 @@ Computed from `python_analysis/sports/golf_iron.py` (method `_compute_metrics`).
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| technique | Technique | 35% |
-| touch | Touch | 25% |
-| consistency | Consistency | 25% |
-| balance | Balance | 15% |
+| power | Power | 10% |
+| control | Control | 33% |
+| timing | Timing | 8% |
+| technique | Technique | 29% |
+| consistency | Consistency | 20% |
 
-**Formula:** `overallScore = 0.35 × technique + 0.25 × touch + 0.25 × consistency + 0.15 × balance`
+**Formula:** `overallScore = 0.10 × power + 0.33 × control + 0.08 × timing + 0.29 × technique + 0.20 × consistency`
 
 ### Metrics
 
@@ -540,6 +692,21 @@ Computed from `python_analysis/sports/golf_chip.py` (method `_compute_metrics`).
 | `followThroughRatio` | Derived using the `follow through ratio` helper in the analyzer pipeline. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 9. Golf — Putt
@@ -550,12 +717,13 @@ Computed from `python_analysis/sports/golf_chip.py` (method `_compute_metrics`).
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| technique | Technique | 30% |
-| consistency | Consistency | 30% |
-| alignment | Alignment | 25% |
-| touch | Touch | 15% |
+| power | Power | 10% |
+| control | Control | 33% |
+| timing | Timing | 8% |
+| technique | Technique | 25% |
+| consistency | Consistency | 24% |
 
-**Formula:** `overallScore = 0.30 × technique + 0.30 × consistency + 0.25 × alignment + 0.15 × touch`
+**Formula:** `overallScore = 0.10 × power + 0.33 × control + 0.08 × timing + 0.25 × technique + 0.24 × consistency`
 
 ### Metrics
 
@@ -585,6 +753,21 @@ Computed from `python_analysis/sports/golf_putt.py` (method `_compute_metrics`).
 | `tempoRatio` | Computed from `follow / backswing if backswing > 0 else 1.0` and clamped to `0.5–1.5`. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 10. Golf — Full Swing
@@ -596,12 +779,12 @@ Computed from `python_analysis/sports/golf_putt.py` (method `_compute_metrics`).
 | Key | Label | Weight |
 |-----|-------|--------|
 | power | Power | 25% |
+| control | Control | 15% |
+| timing | Timing | 15% |
 | technique | Technique | 25% |
 | consistency | Consistency | 20% |
-| timing | Timing | 15% |
-| balance | Balance | 15% |
 
-**Formula:** `overallScore = 0.25 × power + 0.25 × technique + 0.20 × consistency + 0.15 × timing + 0.15 × balance`
+**Formula:** `overallScore = 0.25 × power + 0.15 × control + 0.15 × timing + 0.25 × technique + 0.20 × consistency`
 
 ### Metrics
 
@@ -635,6 +818,21 @@ Computed from `python_analysis/sports/golf_full_swing.py` (method `_compute_metr
 | `headStability` | Derived using the `head stability` helper in the analyzer pipeline. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 11. Pickleball — Dink
@@ -645,14 +843,13 @@ Computed from `python_analysis/sports/golf_full_swing.py` (method `_compute_metr
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| touch | Soft Touch | 25% |
-| technique | Technique | 20% |
-| arc | Arc Control | 15% |
-| stability | Stability | 15% |
-| consistency | Consistency | 15% |
-| rhythm | Rhythm | 10% |
+| power | Power | 11% |
+| control | Control | 36% |
+| timing | Timing | 9% |
+| technique | Technique | 31% |
+| consistency | Consistency | 13% |
 
-**Formula:** `overallScore = 0.25 × touch + 0.20 × technique + 0.15 × arc + 0.15 × stability + 0.15 × consistency + 0.10 × rhythm`
+**Formula:** `overallScore = 0.11 × power + 0.36 × control + 0.09 × timing + 0.31 × technique + 0.13 × consistency`
 
 ### Metrics
 
@@ -680,6 +877,21 @@ Computed from `python_analysis/sports/pickleball_dink.py` (method `_compute_metr
 | `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 12. Pickleball — Drive
@@ -691,13 +903,12 @@ Computed from `python_analysis/sports/pickleball_dink.py` (method `_compute_metr
 | Key | Label | Weight |
 |-----|-------|--------|
 | power | Power | 25% |
-| technique | Technique | 20% |
-| trajectory | Trajectory | 15% |
-| stability | Stability | 15% |
+| control | Control | 15% |
+| timing | Timing | 10% |
+| technique | Technique | 35% |
 | consistency | Consistency | 15% |
-| rhythm | Rhythm | 10% |
 
-**Formula:** `overallScore = 0.25 × power + 0.20 × technique + 0.15 × trajectory + 0.15 × stability + 0.15 × consistency + 0.10 × rhythm`
+**Formula:** `overallScore = 0.25 × power + 0.15 × control + 0.10 × timing + 0.35 × technique + 0.15 × consistency`
 
 ### Metrics
 
@@ -725,6 +936,21 @@ Computed from `python_analysis/sports/pickleball_drive.py` (method `_compute_met
 | `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 13. Pickleball — Serve
@@ -735,14 +961,13 @@ Computed from `python_analysis/sports/pickleball_drive.py` (method `_compute_met
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| technique | Technique | 25% |
-| placement | Placement | 20% |
 | power | Power | 15% |
-| stability | Stability | 15% |
+| control | Control | 35% |
+| timing | Timing | 10% |
+| technique | Technique | 25% |
 | consistency | Consistency | 15% |
-| rhythm | Rhythm | 10% |
 
-**Formula:** `overallScore = 0.25 × technique + 0.20 × placement + 0.15 × power + 0.15 × stability + 0.15 × consistency + 0.10 × rhythm`
+**Formula:** `overallScore = 0.15 × power + 0.35 × control + 0.10 × timing + 0.25 × technique + 0.15 × consistency`
 
 ### Metrics
 
@@ -768,6 +993,21 @@ Computed from `python_analysis/sports/pickleball_serve.py` (method `_compute_met
 | `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `50.0–98.0`. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 14. Pickleball — Volley
@@ -778,14 +1018,13 @@ Computed from `python_analysis/sports/pickleball_serve.py` (method `_compute_met
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| reflexes | Reflexes | 25% |
-| technique | Technique | 20% |
-| stability | Stability | 15% |
 | power | Power | 15% |
+| control | Control | 40% |
+| timing | Timing | 10% |
+| technique | Technique | 20% |
 | consistency | Consistency | 15% |
-| rhythm | Rhythm | 10% |
 
-**Formula:** `overallScore = 0.25 × reflexes + 0.20 × technique + 0.15 × stability + 0.15 × power + 0.15 × consistency + 0.10 × rhythm`
+**Formula:** `overallScore = 0.15 × power + 0.40 × control + 0.10 × timing + 0.20 × technique + 0.15 × consistency`
 
 ### Metrics
 
@@ -813,6 +1052,21 @@ Computed from `python_analysis/sports/pickleball_volley.py` (method `_compute_me
 | `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 15. Pickleball — Third Shot Drop
@@ -823,14 +1077,13 @@ Computed from `python_analysis/sports/pickleball_volley.py` (method `_compute_me
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| touch | Soft Touch | 25% |
-| arc | Arc Control | 20% |
-| technique | Technique | 20% |
-| consistency | Consistency | 15% |
-| stability | Stability | 10% |
-| rhythm | Rhythm | 10% |
+| power | Power | 11% |
+| control | Control | 31% |
+| timing | Timing | 9% |
+| technique | Technique | 36% |
+| consistency | Consistency | 13% |
 
-**Formula:** `overallScore = 0.25 × touch + 0.20 × arc + 0.20 × technique + 0.15 × consistency + 0.10 × stability + 0.10 × rhythm`
+**Formula:** `overallScore = 0.11 × power + 0.31 × control + 0.09 × timing + 0.36 × technique + 0.13 × consistency`
 
 ### Metrics
 
@@ -856,6 +1109,21 @@ Computed from `python_analysis/sports/pickleball_third_shot_drop.py` (method `_c
 | `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `50.0–98.0`. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 16. Paddle — Forehand
@@ -866,13 +1134,13 @@ Computed from `python_analysis/sports/pickleball_third_shot_drop.py` (method `_c
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| power | Power | 20% |
-| technique | Technique | 25% |
-| wallPlay | Wall Play | 20% |
-| consistency | Consistency | 15% |
-| timing | Timing | 20% |
+| power | Power | 18% |
+| control | Control | 9% |
+| timing | Timing | 18% |
+| technique | Technique | 41% |
+| consistency | Consistency | 14% |
 
-**Formula:** `overallScore = 0.20 × power + 0.25 × technique + 0.20 × wallPlay + 0.15 × consistency + 0.20 × timing`
+**Formula:** `overallScore = 0.18 × power + 0.09 × control + 0.18 × timing + 0.41 × technique + 0.14 × consistency`
 
 ### Metrics
 
@@ -904,6 +1172,21 @@ Computed from `python_analysis/sports/paddle_forehand.py` (method `_compute_metr
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 | `contactHeight` | Computed from `contact_height` and clamped to `0.7–1.10`. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 17. Paddle — Backhand
@@ -915,12 +1198,12 @@ Computed from `python_analysis/sports/paddle_forehand.py` (method `_compute_metr
 | Key | Label | Weight |
 |-----|-------|--------|
 | power | Power | 20% |
-| technique | Technique | 25% |
-| stability | Stability | 20% |
-| consistency | Consistency | 15% |
+| control | Control | 20% |
 | timing | Timing | 20% |
+| technique | Technique | 25% |
+| consistency | Consistency | 15% |
 
-**Formula:** `overallScore = 0.20 × power + 0.25 × technique + 0.20 × stability + 0.15 × consistency + 0.20 × timing`
+**Formula:** `overallScore = 0.20 × power + 0.20 × control + 0.20 × timing + 0.25 × technique + 0.15 × consistency`
 
 ### Metrics
 
@@ -950,6 +1233,21 @@ Computed from `python_analysis/sports/paddle_backhand.py` (method `_compute_metr
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 | `contactHeight` | Computed from `contact_height` and clamped to `0.6–1.05`. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 18. Paddle — Serve
@@ -960,12 +1258,13 @@ Computed from `python_analysis/sports/paddle_backhand.py` (method `_compute_metr
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| technique | Technique | 30% |
-| placement | Placement | 25% |
-| consistency | Consistency | 25% |
-| timing | Timing | 20% |
+| power | Power | 11% |
+| control | Control | 22% |
+| timing | Timing | 18% |
+| technique | Technique | 27% |
+| consistency | Consistency | 22% |
 
-**Formula:** `overallScore = 0.30 × technique + 0.25 × placement + 0.25 × consistency + 0.20 × timing`
+**Formula:** `overallScore = 0.11 × power + 0.22 × control + 0.18 × timing + 0.27 × technique + 0.22 × consistency`
 
 ### Metrics
 
@@ -991,6 +1290,21 @@ Computed from `python_analysis/sports/paddle_serve.py` (method `_compute_metrics
 | `balanceScore` | Computed from `balance` and clamped to `70.0–98.0`. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 19. Paddle — Smash
@@ -1001,12 +1315,13 @@ Computed from `python_analysis/sports/paddle_serve.py` (method `_compute_metrics
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| power | Power | 30% |
-| technique | Technique | 25% |
-| athleticism | Athleticism | 25% |
-| timing | Timing | 20% |
+| power | Power | 47% |
+| control | Control | 9% |
+| timing | Timing | 17% |
+| technique | Technique | 21% |
+| consistency | Consistency | 6% |
 
-**Formula:** `overallScore = 0.30 × power + 0.25 × technique + 0.25 × athleticism + 0.20 × timing`
+**Formula:** `overallScore = 0.47 × power + 0.09 × control + 0.17 × timing + 0.21 × technique + 0.06 × consistency`
 
 ### Metrics
 
@@ -1034,6 +1349,21 @@ Computed from `python_analysis/sports/paddle_smash.py` (method `_compute_metrics
 | `balanceScore` | Computed from `balance` and clamped to `65.0–95.0`. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 20. Paddle — Bandeja
@@ -1044,12 +1374,13 @@ Computed from `python_analysis/sports/paddle_smash.py` (method `_compute_metrics
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| control | Control | 30% |
-| technique | Technique | 25% |
-| consistency | Consistency | 25% |
-| timing | Timing | 20% |
+| power | Power | 11% |
+| control | Control | 27% |
+| timing | Timing | 18% |
+| technique | Technique | 22% |
+| consistency | Consistency | 22% |
 
-**Formula:** `overallScore = 0.30 × control + 0.25 × technique + 0.25 × consistency + 0.20 × timing`
+**Formula:** `overallScore = 0.11 × power + 0.27 × control + 0.18 × timing + 0.22 × technique + 0.22 × consistency`
 
 ### Metrics
 
@@ -1077,6 +1408,21 @@ Computed from `python_analysis/sports/paddle_bandeja.py` (method `_compute_metri
 | `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 21. Badminton — Clear
@@ -1087,13 +1433,13 @@ Computed from `python_analysis/sports/paddle_bandeja.py` (method `_compute_metri
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| power | Power | 25% |
-| technique | Technique | 25% |
-| footwork | Footwork | 20% |
-| timing | Timing | 15% |
-| consistency | Consistency | 15% |
+| power | Power | 23% |
+| control | Control | 9% |
+| timing | Timing | 14% |
+| technique | Technique | 41% |
+| consistency | Consistency | 13% |
 
-**Formula:** `overallScore = 0.25 × power + 0.25 × technique + 0.20 × footwork + 0.15 × timing + 0.15 × consistency`
+**Formula:** `overallScore = 0.23 × power + 0.09 × control + 0.14 × timing + 0.41 × technique + 0.13 × consistency`
 
 ### Metrics
 
@@ -1121,6 +1467,21 @@ Computed from `python_analysis/sports/badminton_clear.py` (method `_compute_metr
 | `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `65.0–95.0`. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 22. Badminton — Smash
@@ -1131,13 +1492,13 @@ Computed from `python_analysis/sports/badminton_clear.py` (method `_compute_metr
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| power | Power | 30% |
-| technique | Technique | 25% |
-| timing | Timing | 20% |
-| athleticism | Athleticism | 15% |
-| consistency | Consistency | 10% |
+| power | Power | 41% |
+| control | Control | 9% |
+| timing | Timing | 18% |
+| technique | Technique | 23% |
+| consistency | Consistency | 9% |
 
-**Formula:** `overallScore = 0.30 × power + 0.25 × technique + 0.20 × timing + 0.15 × athleticism + 0.10 × consistency`
+**Formula:** `overallScore = 0.41 × power + 0.09 × control + 0.18 × timing + 0.23 × technique + 0.09 × consistency`
 
 ### Metrics
 
@@ -1165,6 +1526,21 @@ Computed from `python_analysis/sports/badminton_smash.py` (method `_compute_metr
 | `bodyRotation` | Computed from `body_rotation` and clamped to `500.0–1000.0`. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 23. Badminton — Drop
@@ -1175,13 +1551,13 @@ Computed from `python_analysis/sports/badminton_smash.py` (method `_compute_metr
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| touch | Touch | 30% |
-| deception | Deception | 25% |
+| power | Power | 11% |
+| control | Control | 49% |
+| timing | Timing | 9% |
 | technique | Technique | 20% |
-| consistency | Consistency | 15% |
-| timing | Timing | 10% |
+| consistency | Consistency | 13% |
 
-**Formula:** `overallScore = 0.30 × touch + 0.25 × deception + 0.20 × technique + 0.15 × consistency + 0.10 × timing`
+**Formula:** `overallScore = 0.11 × power + 0.49 × control + 0.09 × timing + 0.18 × technique + 0.13 × consistency`
 
 ### Metrics
 
@@ -1207,6 +1583,53 @@ Computed from `python_analysis/sports/badminton_drop.py` (method `_compute_metri
 | `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Computed from `python_analysis/sports/badminton_drop.py` (methods `_compute_sub_scores` and `_compute_overall_score`).
+
+```python
+    def _compute_sub_scores(self, m: Dict) -> Dict:
+        touch = int(np.clip(round(
+            (self._normalize(m["touchScore"], 70.0, 98.0) * 0.5
+             + self._normalize(m["netClearance"], 2.0, 15.0) * 0.5) * 100
+        ), 0, 100))
+
+        deception = int(np.clip(round(
+            self._normalize(m["deceptionScore"], 65.0, 95.0) * 100
+        ), 0, 100))
+
+        technique = int(np.clip(round(
+            (self._normalize(m["racketAngle"], 20.0, 45.0) * 0.5
+             + self._normalize(m["touchScore"], 70.0, 98.0) * 0.5) * 100
+        ), 0, 100))
+
+        consistency = int(np.clip(round(
+            self._normalize(m["shotConsistency"], 70.0, 98.0) * 100
+        ), 0, 100))
+
+        timing = int(np.clip(round(
+            self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 100
+        ), 0, 100))
+
+        return {
+            "touch": touch,
+            "deception": deception,
+            "technique": technique,
+            "consistency": consistency,
+            "timing": timing,
+        }
+
+    def _compute_overall_score(self, sub_scores: Dict) -> int:
+        score = round(
+            sub_scores["touch"] * 0.30
+            + sub_scores["deception"] * 0.25
+            + sub_scores["technique"] * 0.20
+            + sub_scores["consistency"] * 0.15
+            + sub_scores["timing"] * 0.10
+        )
+        return int(np.clip(score, 0, 100))
+```
+
 ---
 
 ## 24. Badminton — Net Shot
@@ -1217,13 +1640,13 @@ Computed from `python_analysis/sports/badminton_drop.py` (method `_compute_metri
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| control | Control | 30% |
-| finesse | Finesse | 25% |
-| footwork | Footwork | 20% |
-| consistency | Consistency | 15% |
-| timing | Timing | 10% |
+| power | Power | 11% |
+| control | Control | 49% |
+| timing | Timing | 9% |
+| technique | Technique | 18% |
+| consistency | Consistency | 13% |
 
-**Formula:** `overallScore = 0.30 × control + 0.25 × finesse + 0.20 × footwork + 0.15 × consistency + 0.10 × timing`
+**Formula:** `overallScore = 0.11 × power + 0.49 × control + 0.09 × timing + 0.18 × technique + 0.13 × consistency`
 
 ### Metrics
 
@@ -1249,6 +1672,21 @@ Computed from `python_analysis/sports/badminton_net_shot.py` (method `_compute_m
 | `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 25. Badminton — Serve
@@ -1259,12 +1697,13 @@ Computed from `python_analysis/sports/badminton_net_shot.py` (method `_compute_m
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| accuracy | Accuracy | 30% |
-| technique | Technique | 25% |
-| consistency | Consistency | 25% |
-| timing | Timing | 20% |
+| power | Power | 11% |
+| control | Control | 27% |
+| timing | Timing | 18% |
+| technique | Technique | 22% |
+| consistency | Consistency | 22% |
 
-**Formula:** `overallScore = 0.30 × accuracy + 0.25 × technique + 0.25 × consistency + 0.20 × timing`
+**Formula:** `overallScore = 0.11 × power + 0.27 × control + 0.18 × timing + 0.22 × technique + 0.22 × consistency`
 
 ### Metrics
 
@@ -1288,6 +1727,21 @@ Computed from `python_analysis/sports/badminton_serve.py` (method `_compute_metr
 | `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
 | `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 26. Table Tennis — Forehand
@@ -1298,13 +1752,13 @@ Computed from `python_analysis/sports/badminton_serve.py` (method `_compute_metr
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| power | Power | 20% |
-| technique | Technique | 25% |
-| spin | Spin | 20% |
-| footwork | Footwork | 15% |
-| consistency | Consistency | 20% |
+| power | Power | 17% |
+| control | Control | 8% |
+| timing | Timing | 8% |
+| technique | Technique | 50% |
+| consistency | Consistency | 17% |
 
-**Formula:** `overallScore = 0.20 × power + 0.25 × technique + 0.20 × spin + 0.15 × footwork + 0.20 × consistency`
+**Formula:** `overallScore = 0.17 × power + 0.08 × control + 0.08 × timing + 0.50 × technique + 0.17 × consistency`
 
 ### Metrics
 
@@ -1332,6 +1786,21 @@ Computed from `python_analysis/sports/tabletennis_forehand.py` (method `_compute
 | `shotConsistency` | Computed from `shot_consistency` and clamped to `70.0–98.0`. |
 | `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `65.0–95.0`. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 27. Table Tennis — Backhand
@@ -1342,13 +1811,13 @@ Computed from `python_analysis/sports/tabletennis_forehand.py` (method `_compute
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| speed | Speed | 20% |
+| power | Power | 20% |
+| control | Control | 15% |
 | timing | Timing | 25% |
 | technique | Technique | 20% |
 | consistency | Consistency | 20% |
-| stability | Stability | 15% |
 
-**Formula:** `overallScore = 0.20 × speed + 0.25 × timing + 0.20 × technique + 0.20 × consistency + 0.15 × stability`
+**Formula:** `overallScore = 0.20 × power + 0.15 × control + 0.25 × timing + 0.20 × technique + 0.20 × consistency`
 
 ### Metrics
 
@@ -1374,6 +1843,21 @@ Computed from `python_analysis/sports/tabletennis_backhand.py` (method `_compute
 | `balanceScore` | Computed from `balance` and clamped to `70.0–98.0`. |
 | `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `65.0–95.0`. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 28. Table Tennis — Serve
@@ -1384,13 +1868,13 @@ Computed from `python_analysis/sports/tabletennis_backhand.py` (method `_compute
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| spin | Spin | 25% |
-| technique | Technique | 25% |
-| placement | Placement | 20% |
-| deception | Deception | 15% |
-| consistency | Consistency | 15% |
+| power | Power | 10% |
+| control | Control | 29% |
+| timing | Timing | 8% |
+| technique | Technique | 41% |
+| consistency | Consistency | 12% |
 
-**Formula:** `overallScore = 0.25 × spin + 0.25 × technique + 0.20 × placement + 0.15 × deception + 0.15 × consistency`
+**Formula:** `overallScore = 0.10 × power + 0.29 × control + 0.08 × timing + 0.41 × technique + 0.12 × consistency`
 
 ### Metrics
 
@@ -1416,6 +1900,21 @@ Computed from `python_analysis/sports/tabletennis_serve.py` (method `_compute_me
 | `placementScore` | Computed from `placement_score` and clamped to `65.0–95.0`. |
 | `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `65.0–95.0`. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 29. Table Tennis — Loop
@@ -1426,13 +1925,13 @@ Computed from `python_analysis/sports/tabletennis_serve.py` (method `_compute_me
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| power | Power | 20% |
-| spin | Spin | 25% |
-| technique | Technique | 20% |
-| stability | Stability | 15% |
-| consistency | Consistency | 20% |
+| power | Power | 18% |
+| control | Control | 14% |
+| timing | Timing | 9% |
+| technique | Technique | 41% |
+| consistency | Consistency | 18% |
 
-**Formula:** `overallScore = 0.20 × power + 0.25 × spin + 0.20 × technique + 0.15 × stability + 0.20 × consistency`
+**Formula:** `overallScore = 0.18 × power + 0.14 × control + 0.09 × timing + 0.41 × technique + 0.18 × consistency`
 
 ### Metrics
 
@@ -1458,6 +1957,21 @@ Computed from `python_analysis/sports/tabletennis_loop.py` (method `_compute_met
 | `balanceScore` | Computed from `balance` and clamped to `65.0–95.0`. |
 | `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `60.0–92.0`. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## 30. Table Tennis — Chop
@@ -1468,13 +1982,13 @@ Computed from `python_analysis/sports/tabletennis_loop.py` (method `_compute_met
 
 | Key | Label | Weight |
 |-----|-------|--------|
-| technique | Technique | 25% |
-| consistency | Consistency | 25% |
-| spin | Spin | 20% |
-| stability | Stability | 15% |
-| footwork | Footwork | 15% |
+| power | Power | 10% |
+| control | Control | 12% |
+| timing | Timing | 8% |
+| technique | Technique | 49% |
+| consistency | Consistency | 21% |
 
-**Formula:** `overallScore = 0.25 × technique + 0.25 × consistency + 0.20 × spin + 0.15 × stability + 0.15 × footwork`
+**Formula:** `overallScore = 0.10 × power + 0.12 × control + 0.08 × timing + 0.49 × technique + 0.21 × consistency`
 
 ### Metrics
 
@@ -1500,6 +2014,21 @@ Computed from `python_analysis/sports/tabletennis_chop.py` (method `_compute_met
 | `footworkScore` | Computed from `footwork_score` and clamped to `65.0–95.0`. |
 | `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `65.0–95.0`. |
 
+### Sub-Score Computation Details
+
+Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+
+- `power`
+- `control`
+- `timing`
+- `technique`
+- `consistency`
+
+Standardized overall formula used by runtime:
+
+`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+
+Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
 ---
 
 ## Source Files

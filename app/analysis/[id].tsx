@@ -52,6 +52,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   power: "Power",
 };
 
+const MPH_TO_KMPH = 1.60934;
+
+function isMphUnit(unit?: string): boolean {
+  return String(unit || "").trim().toLowerCase() === "mph";
+}
+
+function toDisplaySpeed(value: number): number {
+  return value * MPH_TO_KMPH;
+}
+
 const FEEDBACK_DISCREPANCY_TAGS = [
   "Wrong Detection",
   "Scores high/low",
@@ -683,6 +693,16 @@ export default function AnalysisDetailScreen() {
   const movementLabel =
     analysis.detectedMovement || sportConfig?.movementName || "Movement";
 
+  const shotSpeedValue = m?.metricValues?.shotSpeed;
+  const hasShotSpeed =
+    typeof shotSpeedValue === "number"
+    && Number.isFinite(shotSpeedValue)
+    && shotSpeedValue > 0;
+  const shotSpeedKmph = hasShotSpeed ? toDisplaySpeed(shotSpeedValue) : null;
+  const shotSpeedLabel = hasShotSpeed
+    ? `${(shotSpeedKmph as number) >= 100 ? (shotSpeedKmph as number).toFixed(0) : (shotSpeedKmph as number).toFixed(1)} kmph`
+    : null;
+
   const sportThemeColor =
     (sportConfig?.sportName && sportColors[sportConfig.sportName]?.primary) ||
     "#A29BFE";
@@ -901,6 +921,21 @@ export default function AnalysisDetailScreen() {
                   </Text>
                 </View>
               )}
+              {hasShotSpeed && shotSpeedLabel && (
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    router.push({
+                      pathname: "/analysis/[id]/trends",
+                      params: { id: analysis.id, focusMetric: "shotSpeed" },
+                    });
+                  }}
+                  style={({ pressed }) => [styles.shotSpeedBadge, { opacity: pressed ? 0.82 : 1 }]}
+                >
+                  <Ionicons name="speedometer-outline" size={12} color="#F59E0B" />
+                  <Text style={styles.shotSpeedBadgeText}>{shotSpeedLabel}</Text>
+                </Pressable>
+              )}
             </View>
           </View>
 
@@ -1049,18 +1084,40 @@ export default function AnalysisDetailScreen() {
                           }}
                           style={({ pressed }) => [{ opacity: pressed ? 0.86 : 1 }]}
                         >
+                          {(() => {
+                            const rawMetricValue = Number(m.metricValues[metric.key] ?? 0);
+                            const metricUsesMph = isMphUnit(metric.unit);
+                            const displayMetricValue =
+                              metricUsesMph && Number.isFinite(rawMetricValue)
+                                ? toDisplaySpeed(rawMetricValue)
+                                : rawMetricValue;
+                            const formattedDisplayMetricValue =
+                              metric.key === "ballSpeed" && Number.isFinite(displayMetricValue)
+                                ? displayMetricValue.toFixed(1)
+                                : displayMetricValue;
+                            const displayOptimalRange =
+                              metricUsesMph && metric.optimalRange
+                                ? [
+                                    toDisplaySpeed(metric.optimalRange[0]),
+                                    toDisplaySpeed(metric.optimalRange[1]),
+                                  ] as [number, number]
+                                : metric.optimalRange;
+
+                            return (
                           <MetricCard
                             icon={metric.icon as any}
                             label={metric.label}
-                            value={m.metricValues[metric.key] ?? 0}
-                            unit={metric.unit}
+                            value={formattedDisplayMetricValue}
+                            unit={metricUsesMph ? "kmph" : metric.unit}
                             color={metric.color}
-                            optimalRange={metric.optimalRange}
+                            optimalRange={displayOptimalRange}
                             change={calcChange(
                               m.metricValues[metric.key],
                               avgMetrics?.[metric.key],
                             )}
                           />
+                            );
+                          })()}
                         </Pressable>
                       </View>
                     ))}
@@ -1559,6 +1616,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     color: "#60A5FA",
+  },
+  shotSpeedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "#F59E0B12",
+    borderWidth: 1,
+    borderColor: "#F59E0B30",
+  },
+  shotSpeedBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F59E0B",
   },
   compactThumbsRow: {
     flexDirection: "row",
