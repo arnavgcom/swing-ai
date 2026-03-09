@@ -53,6 +53,84 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 
 ---
 
+## Video Classification Flow
+
+This is how Swing AI decides what movement a video contains (for example, forehand vs backhand) before scoring.
+
+### 1) Request And Inputs
+
+- Server starts analysis with selected `sport` and `movement` (or `auto-detect`) from the DB record.
+- User dominant side (`right` or `left`) is passed when available.
+- Python entry point: `python_analysis.run_analysis`.
+
+### 2) Sport Validation Gate
+
+- Pose frames are extracted first.
+- `validate_sport_match(...)` checks minimum visible body landmarks and motion signatures for the chosen sport.
+- If validation fails, analysis is rejected with a human-readable reason (no scoring is run).
+
+### 3) Shot Segmentation
+
+- `_segment_swings(...)` splits the clip into swing windows from wrist-speed peaks.
+- Each segment is then classified independently when enough valid pose frames are present.
+
+### 4) Segment-Level Movement Classification
+
+- `classify_segment_movement_with_diagnostics(...)` computes movement features (wrist speed, arc, cross-body pattern, contact profile, overhead/serve cues, etc.).
+- Rule-based sport logic maps features to labels for Tennis/Pickleball/Paddle/Table Tennis (forehand/backhand family plus sport-specific classes such as volley, dink, loop, chop).
+- Rule-based sport logic maps features to labels for Badminton (clear/smash/drop/net-shot/serve).
+- Rule-based sport logic maps features to labels for Golf (putt/chip/iron/full-swing/drive).
+- Tennis forehand/backhand uses a weighted scorer with confidence and diagnostic reasons.
+
+### 5) Clip-Level Classification
+
+- `classify_movement(...)` takes the dominant label (majority vote) across segment labels.
+- `shotCount` is the number of detected swing segments.
+
+### 6) Tennis Normalization And Override Rules
+
+- Tennis drill clips apply additional normalization/smoothing to reduce noisy opposite-side labels in short or near-unanimous clips.
+- If classifier disagrees with user-selected movement, override is applied only when evidence is strong enough (confidence/vote thresholds).
+- Final movement is returned as `detectedMovement`, with `movementOverridden` flag.
+
+### 7) Analyzer Selection And Scoring
+
+- Analyzer key is chosen as `{sport}-{detectedMovement}` when overridden, otherwise `{sport}-{userSelectedMovement}`.
+- `get_analyzer(config_key)` selects the Python analyzer class from `python_analysis/sports/registry.py`.
+- Scoring can be limited to shot windows matching the detected movement, excluding idle/non-target segments.
+
+### 8) Persistence
+
+- Server stores `analyses.detectedMovement`.
+- Server stores `metrics.configKey`, `overallScore`, `subScores`, and `metricValues`.
+- Server stores coaching insights text fields.
+- Very low-confidence/low-score runs can still be rejected by backend guardrails.
+
+### Classification Output Contract
+
+Fields returned by Python and consumed by the server pipeline:
+
+| Field | Type | Meaning | When Present |
+|-----|------|---------|--------------|
+| `configKey` | `string` | Final analyzer key used for scoring (for example `tennis-forehand`). | Successful analyses |
+| `detectedMovement` | `string` | Movement detected by classifier after normalization/smoothing (for example `forehand`, `serve`). | Successful analyses |
+| `movementOverridden` | `boolean` | Whether detected movement overrode the user-selected movement. | Successful analyses |
+| `userSelectedMovement` | `string` | Movement originally requested by the client/user. | Successful analyses |
+| `shotCount` | `number` | Number of swing segments detected in the video. | Successful analyses |
+| `shotsConsideredForScoring` | `number` | Number of detected shots actually used in scoring window selection. | Successful analyses |
+| `frameRangesUsedForScoring` | `Array<[number, number]>` | Frame ranges included for scoring target movement windows. | Successful analyses |
+| `idleTimeExcluded` | `boolean` | Indicates if non-target/idle windows were excluded from scoring. | Successful analyses |
+| `shotLabelDiagnostics` | `Array<object>` | Per-shot label diagnostics (`label`, `confidence`, `reasons`, frame indices, etc.). | Successful analyses |
+| `overallScore` | `number` | Overall normalized score (0-100). | Successful analyses |
+| `subScores` | `Record<string, number>` | Weighted component scores (for example power, timing). | Successful analyses |
+| `metricValues` | `Record<string, number>` | Raw computed metric values used for scoring and UI display. | Successful analyses |
+| `coaching` | `object` | Generated coaching text (`keyStrength`, `improvementArea`, `trainingSuggestion`, `simpleExplanation`). | Successful analyses |
+| `rejected` | `boolean` | Video was rejected before scoring due to validation mismatch. | Rejected analyses |
+| `rejectionReason` | `string` | Human-readable rejection reason. | Rejected analyses |
+| `error` | `string` | Pipeline/runtime error message from Python layer. | Error path only |
+
+---
+
 ## 1. Tennis — Forehand
 
 **Config Key:** `tennis-forehand`
@@ -86,6 +164,26 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | followThroughDuration | Follow-through | s | timing | 0.4 – 1.0 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
 | contactHeight | Contact Height | m | technique | 0.85 – 1.10 |
+
+### Metric Computation Details
+
+Computed from `python_analysis/sports/tennis_forehand.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, swing phase timing, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `wristSpeed` | Computed from `wrist_speed_ms` and clamped to `15.0–45.0`. |
+| `elbowAngle` | Uses `float(np.mean(elbow_angles))` when `elbow_angles`; otherwise uses `130.0`. |
+| `shoulderRotation` | Computed from `shoulder_rot_vel` and clamped to `350.0–950.0`. |
+| `balanceScore` | Computed from `balance` and clamped to `40.0–98.0`. |
+| `ballSpeed` | Estimated from `ball_speed` and clipped to `40.0–130.0` when `ball_speed > 0` is valid; otherwise falls back to `55–95`. |
+| `trajectoryArc` | Estimated from `trajectory_arc` and clipped to `5.0–30.0` when `trajectory_arc > 0` is valid; otherwise falls back to `10–22`. |
+| `spinRate` | Computed from `spin` and clamped to `400.0–3500.0`. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `backswingDuration` | Taken from swing phase detection as backswing duration. |
+| `contactTiming` | Taken from swing phase detection as contact window timing. |
+| `followThroughDuration` | Taken from swing phase detection as follow-through duration. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+| `contactHeight` | Computed from `contact_height` and clamped to `0.5–1.5`. |
 
 ---
 
@@ -123,6 +221,26 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
 | contactHeight | Contact Height | m | technique | 0.80 – 1.05 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/tennis_backhand.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, swing phase timing, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `wristSpeed` | Computed from `wrist_speed / pixels_per_meter` and clamped to `12.0–40.0`. |
+| `elbowAngle` | Uses `float(np.mean(elbow_angles))` when `elbow_angles`; otherwise uses `125.0`. |
+| `shoulderRotation` | Computed from `shoulder_rot_vel` and clamped to `300.0–850.0`. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 70.0` and clamped to `40.0–98.0`. |
+| `ballSpeed` | Estimated from `ball_speed` and clipped to `35.0–110.0` when `ball_speed > 0` is valid; otherwise falls back to `45–85`. |
+| `trajectoryArc` | Estimated from `trajectory_arc` and clipped to `5.0–28.0` when `trajectory_arc > 0` is valid; otherwise falls back to `8–20`. |
+| `spinRate` | Computed from `self.ball_tracker.estimate_spin(fps)` and clamped to `400.0–3000.0`. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `backswingDuration` | Taken from swing phase detection as backswing duration. |
+| `contactTiming` | Taken from swing phase detection as contact window timing. |
+| `followThroughDuration` | Taken from swing phase detection as follow-through duration. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+| `contactHeight` | Computed from `float(np.median(contact_heights)) if contact_heights else 0.85` and clamped to `0.5–1.4`. |
+
 ---
 
 ## 3. Tennis — Serve
@@ -159,6 +277,26 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | contactHeight | Contact Height | m | technique | 2.2 – 2.8 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/tennis_serve.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, swing phase timing, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `wristSpeed` | Computed from `wrist_speed / pixels_per_meter` and clamped to `20.0–55.0`. |
+| `shoulderRotation` | Computed from `shoulder_rot_vel` and clamped to `400.0–1200.0`. |
+| `tossHeight` | Derived using the `toss height` helper in the analyzer pipeline. |
+| `trophyAngle` | Derived using the `trophy angle` helper in the analyzer pipeline. |
+| `pronation` | Derived using the `pronation` helper in the analyzer pipeline. |
+| `ballSpeed` | Estimated from `ball_speed` and clipped to `50.0–140.0` when `ball_speed > 0` is valid; otherwise falls back to `70–110`. |
+| `trajectoryArc` | Estimated from `trajectory_arc` and clipped to `2.0–20.0` when `trajectory_arc > 0` is valid; otherwise falls back to `5–12`. |
+| `spinRate` | Computed from `self.ball_tracker.estimate_spin(fps)` and clamped to `500.0–3800.0`. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 72.0` and clamped to `40.0–98.0`. |
+| `backswingDuration` | Taken from swing phase detection as backswing duration. |
+| `contactTiming` | Taken from swing phase detection as contact window timing. |
+| `contactHeight` | Computed from `contact_height_m * 1.6` and clamped to `1.8–3.0`. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+
 ---
 
 ## 4. Tennis — Volley
@@ -191,6 +329,23 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | shotConsistency | Consistency | /100 | consistency | 70 – 98 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/tennis_volley.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `reactionSpeed` | Derived using the `reaction speed` helper in the analyzer pipeline. |
+| `racketPrep` | Derived using the `racket prep` helper in the analyzer pipeline. |
+| `wristFirmness` | Derived using the `wrist firmness` helper in the analyzer pipeline. |
+| `splitStepTiming` | Derived using the `split step timing` helper in the analyzer pipeline. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 72.0` and clamped to `40.0–98.0`. |
+| `contactHeight` | Computed from `float(np.median(contact_heights)) if contact_heights else 1.0` and clamped to `0.5–1.8`. |
+| `stepForward` | Derived using the `step forward` helper in the analyzer pipeline. |
+| `ballSpeed` | Estimated from `ball_speed` and clipped to `20.0–80.0` when `ball_speed > 0` is valid; otherwise falls back to `35–60`. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+
 ---
 
 ## 5. Tennis — Game
@@ -220,6 +375,21 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | rallyLength | Rally Length | shots | consistency | 4 – 12 |
 | shotConsistency | Consistency | /100 | consistency | 65 – 95 |
 | rhythmConsistency | Rhythm | /100 | timing | 60 – 90 |
+
+### Metric Computation Details
+
+Computed from `python_analysis/sports/tennis_game.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `courtCoverage` | Derived using the `court coverage` helper in the analyzer pipeline. |
+| `recoverySpeed` | Derived using the `recovery speed` helper in the analyzer pipeline. |
+| `avgBallSpeed` | Estimated from `ball_speed` and clipped to `40.0–100.0` when `ball_speed > 0` is valid; otherwise falls back to `50–80`. |
+| `shotVariety` | Derived using the `shot variety` helper in the analyzer pipeline. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 70.0` and clamped to `40.0–98.0`. |
+| `rallyLength` | Derived from `self._estimate_rally_length(pose_data, fps)`. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
 ---
 
@@ -256,6 +426,25 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | headStability | Head Stability | /100 | technique | 70 – 98 |
 | rhythmConsistency | Rhythm | /100 | consistency | 65 – 95 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/golf_drive.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, swing phase timing.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `clubHeadSpeed` | Computed from `club_speed_mph` and clamped to `70.0–125.0`. |
+| `hipRotation` | Computed from `hip_rot * 0.08` and clamped to `25.0–65.0`. |
+| `shoulderRotation` | Computed from `shoulder_rot * 0.12` and clamped to `60.0–110.0`. |
+| `xFactor` | Computed from `shoulder_rot_deg - hip_rot_deg` and clamped to `15.0–60.0`. |
+| `spineAngle` | Computed from `spine_angle` and clamped to `15.0–50.0`. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 72.0` and clamped to `40.0–98.0`. |
+| `tempoRatio` | Computed from `backswing / downswing if downswing > 0 else 3.0` and clamped to `1.5–5.0`. |
+| `backswingDuration` | Taken from swing phase detection as backswing duration. |
+| `downswingDuration` | Taken from swing phase detection as contact window timing. |
+| `followThroughDuration` | Taken from swing phase detection as follow-through duration. |
+| `headStability` | Derived using the `head stability` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+
 ---
 
 ## 7. Golf — Iron Shot
@@ -289,6 +478,23 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | headStability | Head Stability | /100 | technique | 75 – 98 |
 | rhythmConsistency | Rhythm | /100 | consistency | 65 – 95 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/golf_iron.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, swing phase timing.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `clubHeadSpeed` | Computed from `club_speed_mph` and clamped to `55.0–105.0`. |
+| `hipRotation` | Computed from `hip_rot * 0.08` and clamped to `20.0–58.0`. |
+| `shoulderRotation` | Computed from `shoulder_rot * 0.12` and clamped to `55.0–105.0`. |
+| `spineAngle` | Computed from `spine_angle` and clamped to `18.0–50.0`. |
+| `divotAngle` | Derived using the `divot angle` helper in the analyzer pipeline. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 72.0` and clamped to `40.0–98.0`. |
+| `tempoRatio` | Computed from `backswing / downswing_dur if downswing_dur > 0 else 3.0` and clamped to `1.5–5.0`. |
+| `backswingDuration` | Taken from swing phase detection as backswing duration. |
+| `headStability` | Derived using the `head stability` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+
 ---
 
 ## 8. Golf — Chip
@@ -319,6 +525,21 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | followThroughRatio | Follow-through | /100 | timing | 70 – 95 |
 | rhythmConsistency | Rhythm | /100 | consistency | 70 – 95 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/golf_chip.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, swing phase timing.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `wristHinge` | Derived using the `wrist hinge` helper in the analyzer pipeline. |
+| `armPendulum` | Derived using the `arm pendulum` helper in the analyzer pipeline. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `50.0–98.0`. |
+| `headStability` | Derived using the `head stability` helper in the analyzer pipeline. |
+| `strokeLength` | Derived using the `stroke length` helper in the analyzer pipeline. |
+| `contactQuality` | Derived using the `contact quality` helper in the analyzer pipeline. |
+| `followThroughRatio` | Derived using the `follow through ratio` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+
 ---
 
 ## 9. Golf — Putt
@@ -348,6 +569,21 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | balanceScore | Balance | /100 | biomechanics | 80 – 98 |
 | tempoRatio | Tempo | :1 | timing | 0.8 – 1.2 |
 | rhythmConsistency | Rhythm | /100 | consistency | 75 – 98 |
+
+### Metric Computation Details
+
+Computed from `python_analysis/sports/golf_putt.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, swing phase timing.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `pendulumScore` | Derived using the `pendulum` helper in the analyzer pipeline. |
+| `headStability` | Derived using the `head stability` helper in the analyzer pipeline. |
+| `eyeLine` | Derived using the `eye line` helper in the analyzer pipeline. |
+| `strokeLength` | Derived using the `stroke symmetry` helper in the analyzer pipeline. |
+| `wristStability` | Derived using the `wrist stability` helper in the analyzer pipeline. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 78.0` and clamped to `55.0–98.0`. |
+| `tempoRatio` | Computed from `follow / backswing if backswing > 0 else 1.0` and clamped to `0.5–1.5`. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
 ---
 
@@ -382,6 +618,23 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | headStability | Head Stability | /100 | technique | 70 – 98 |
 | rhythmConsistency | Rhythm | /100 | consistency | 65 – 95 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/golf_full_swing.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, swing phase timing.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `clubHeadSpeed` | Computed from `club_speed_mph` and clamped to `65.0–120.0`. |
+| `hipRotation` | Computed from `hip_rot * 0.08` and clamped to `25.0–60.0`. |
+| `shoulderRotation` | Computed from `shoulder_rot * 0.12` and clamped to `60.0–110.0`. |
+| `xFactor` | Computed from `shoulder_rot_deg - hip_rot_deg` and clamped to `15.0–55.0`. |
+| `spineAngle` | Computed from `spine_angle` and clamped to `15.0–48.0`. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 72.0` and clamped to `40.0–98.0`. |
+| `tempoRatio` | Computed from `backswing / downswing_dur if downswing_dur > 0 else 3.0` and clamped to `1.5–5.0`. |
+| `backswingDuration` | Taken from swing phase detection as backswing duration. |
+| `headStability` | Derived using the `head stability` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+
 ---
 
 ## 11. Pickleball — Dink
@@ -412,6 +665,20 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | balanceScore | Balance | /100 | biomechanics | 70 – 98 |
 | shotConsistency | Consistency | /100 | consistency | 70 – 98 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+### Metric Computation Details
+
+Computed from `python_analysis/sports/pickleball_dink.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `paddleAngle` | Derived using the `paddle angle` helper in the analyzer pipeline. |
+| `softTouch` | Derived using the `soft touch` helper in the analyzer pipeline. |
+| `wristStability` | Derived using the `wrist stability` helper in the analyzer pipeline. |
+| `arcHeight` | Derived using the `arc height` helper in the analyzer pipeline. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `50.0–98.0`. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
 ---
 
@@ -444,6 +711,20 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | shotConsistency | Consistency | /100 | consistency | 65 – 95 |
 | rhythmConsistency | Rhythm | /100 | timing | 60 – 90 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/pickleball_drive.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `paddleSpeed` | Computed from `float(np.max(wrist_speeds)) if wrist_speeds else 18.0` and clamped to `5.0–40.0`. |
+| `bodyRotation` | Computed from `float(np.max(shoulder_rotations)) if shoulder_rotations else 400.0` and clamped to `100.0–900.0`. |
+| `ballSpeed` | Estimated from `ball_speed` and clipped to `20.0–70.0` when `ball_speed > 0` is valid; otherwise falls back to `35–55`. |
+| `trajectoryAngle` | Derived using the `trajectory angle` helper in the analyzer pipeline. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 72.0` and clamped to `45.0–98.0`. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+
 ---
 
 ## 13. Pickleball — Serve
@@ -473,6 +754,19 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | placement | Placement | /100 | ball | 65 – 95 |
 | balanceScore | Balance | /100 | biomechanics | 70 – 98 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+### Metric Computation Details
+
+Computed from `python_analysis/sports/pickleball_serve.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `paddleAngle` | Derived using the `paddle angle` helper in the analyzer pipeline. |
+| `tossConsistency` | Derived using the `toss consistency` helper in the analyzer pipeline. |
+| `ballSpeed` | Estimated from `ball_speed` and clipped to `15.0–55.0` when `ball_speed > 0` is valid; otherwise falls back to `25–40`. |
+| `placement` | Derived using the `placement` helper in the analyzer pipeline. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `50.0–98.0`. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
 ---
 
@@ -505,6 +799,20 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | shotConsistency | Consistency | /100 | consistency | 65 – 95 |
 | rhythmConsistency | Rhythm | /100 | timing | 60 – 90 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/pickleball_volley.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `reactionSpeed` | Derived using the `reaction speed` helper in the analyzer pipeline. |
+| `paddlePrep` | Derived using the `paddle prep` helper in the analyzer pipeline. |
+| `wristFirmness` | Derived using the `wrist firmness` helper in the analyzer pipeline. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 72.0` and clamped to `40.0–98.0`. |
+| `ballSpeed` | Estimated from `ball_speed` and clipped to `15.0–55.0` when `ball_speed > 0` is valid; otherwise falls back to `25–45`. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+
 ---
 
 ## 15. Pickleball — Third Shot Drop
@@ -534,6 +842,19 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | shotConsistency | Consistency | /100 | consistency | 65 – 95 |
 | balanceScore | Balance | /100 | biomechanics | 70 – 98 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+### Metric Computation Details
+
+Computed from `python_analysis/sports/pickleball_third_shot_drop.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `arcHeight` | Derived using the `arc height` helper in the analyzer pipeline. |
+| `softTouch` | Derived using the `soft touch` helper in the analyzer pipeline. |
+| `paddleAngle` | Derived using the `paddle angle` helper in the analyzer pipeline. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `50.0–98.0`. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
 ---
 
@@ -567,6 +888,22 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
 | contactHeight | Contact Height | m | technique | 0.70 – 1.10 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/paddle_forehand.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `wristSpeed` | Computed from `wrist_speed_ms` and clamped to `18.0–32.0`. |
+| `elbowAngle` | Uses `float(np.mean(elbow_angles))` when `elbow_angles`; otherwise uses `130.0`. |
+| `shoulderRotation` | Computed from `shoulder_rot` and clamped to `400.0–800.0`. |
+| `balanceScore` | Computed from `balance` and clamped to `70.0–98.0`. |
+| `ballSpeed` | Estimated from `ball_speed` and clipped to `40.0–80.0` when `ball_speed > 0` is valid; otherwise falls back to `45–70`. |
+| `wallPlayScore` | Derived using the `wall play` helper in the analyzer pipeline. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+| `contactHeight` | Computed from `contact_height` and clamped to `0.7–1.10`. |
+
 ---
 
 ## 17. Paddle — Backhand
@@ -598,6 +935,21 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
 | contactHeight | Contact Height | m | technique | 0.60 – 1.05 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/paddle_backhand.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `wristSpeed` | Computed from `wrist_speed_ms` and clamped to `15.0–28.0`. |
+| `elbowAngle` | Uses `float(np.mean(elbow_angles))` when `elbow_angles`; otherwise uses `125.0`. |
+| `shoulderRotation` | Computed from `shoulder_rot` and clamped to `350.0–750.0`. |
+| `balanceScore` | Computed from `balance` and clamped to `70.0–98.0`. |
+| `ballSpeed` | Estimated from `ball_speed` and clipped to `35.0–70.0` when `ball_speed > 0` is valid; otherwise falls back to `40–60`. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+| `contactHeight` | Computed from `contact_height` and clamped to `0.6–1.05`. |
+
 ---
 
 ## 18. Paddle — Serve
@@ -625,6 +977,19 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | shotConsistency | Consistency | /100 | consistency | 70 – 98 |
 | balanceScore | Balance | /100 | biomechanics | 70 – 98 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+### Metric Computation Details
+
+Computed from `python_analysis/sports/paddle_serve.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `paddleAngle` | Derived using the `paddle angle` helper in the analyzer pipeline. |
+| `ballSpeed` | Estimated from `ball_speed` and clipped to `30.0–60.0` when `ball_speed > 0` is valid; otherwise falls back to `35–50`. |
+| `placementScore` | Derived using the `placement` helper in the analyzer pipeline. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `balanceScore` | Computed from `balance` and clamped to `70.0–98.0`. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
 ---
 
@@ -655,6 +1020,20 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | balanceScore | Balance | /100 | biomechanics | 65 – 95 |
 | rhythmConsistency | Rhythm | /100 | timing | 60 – 92 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/paddle_smash.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `wristSpeed` | Computed from `wrist_speed_ms` and clamped to `22.0–38.0`. |
+| `shoulderRotation` | Computed from `shoulder_rot` and clamped to `500.0–900.0`. |
+| `jumpHeight` | Derived using the `jump height` helper in the analyzer pipeline. |
+| `ballSpeed` | Estimated from `ball_speed` and clipped to `50.0–90.0` when `ball_speed > 0` is valid; otherwise falls back to `55–80`. |
+| `contactHeight` | Computed from `contact_height` and clamped to `2.0–3.0`. |
+| `balanceScore` | Computed from `balance` and clamped to `65.0–95.0`. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+
 ---
 
 ## 20. Paddle — Bandeja
@@ -683,6 +1062,20 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | balanceScore | Balance | /100 | biomechanics | 70 – 98 |
 | shotConsistency | Consistency | /100 | consistency | 70 – 98 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+### Metric Computation Details
+
+Computed from `python_analysis/sports/paddle_bandeja.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `paddleAngle` | Derived using the `paddle angle` helper in the analyzer pipeline. |
+| `ballSpeed` | Estimated from `ball_speed` and clipped to `25.0–55.0` when `ball_speed > 0` is valid; otherwise falls back to `30–45`. |
+| `wristControl` | Derived using the `wrist control` helper in the analyzer pipeline. |
+| `contactHeight` | Computed from `contact_height` and clamped to `1.8–2.8`. |
+| `balanceScore` | Computed from `balance` and clamped to `70.0–98.0`. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
 ---
 
@@ -714,6 +1107,20 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | balanceScore | Balance | /100 | biomechanics | 65 – 95 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/badminton_clear.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `racketSpeed` | Computed from `racket_speed` and clamped to `25.0–45.0`. |
+| `shuttleSpeed` | Estimated from `shuttle_speed` and clipped to `80.0–150.0` when `shuttle_speed > 0` is valid; otherwise falls back to `90–130`. |
+| `trajectoryHeight` | Estimated from `trajectory_arc * 0.8` and clipped to `5.0–10.0` when `trajectory_arc > 0` is valid; otherwise falls back to `6–9`. |
+| `shoulderRotation` | Computed from `shoulder_rot` and clamped to `500.0–900.0`. |
+| `footworkScore` | Derived using the `footwork` helper in the analyzer pipeline. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `65.0–95.0`. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+
 ---
 
 ## 22. Badminton — Smash
@@ -744,6 +1151,20 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | bodyRotation | Body Rotation | deg/s | biomechanics | 500 – 1000 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/badminton_smash.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `racketSpeed` | Computed from `racket_speed` and clamped to `35.0–60.0`. |
+| `shuttleSpeed` | Estimated from `shuttle_speed` and clipped to `150.0–300.0` when `shuttle_speed > 0` is valid; otherwise falls back to `180–260`. |
+| `jumpHeight` | Derived using the `jump height` helper in the analyzer pipeline. |
+| `contactHeight` | Computed from `contact_h * 1.2` and clamped to `2.5–3.2`. |
+| `wristSnap` | Derived using the `wrist snap` helper in the analyzer pipeline. |
+| `bodyRotation` | Computed from `body_rotation` and clamped to `500.0–1000.0`. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+
 ---
 
 ## 23. Badminton — Drop
@@ -772,6 +1193,19 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | racketAngle | Racket Angle | deg | technique | 20 – 45 |
 | shotConsistency | Consistency | /100 | consistency | 70 – 98 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+### Metric Computation Details
+
+Computed from `python_analysis/sports/badminton_drop.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `touchScore` | Derived using the `touch score` helper in the analyzer pipeline. |
+| `deceptionScore` | Derived using the `deception score` helper in the analyzer pipeline. |
+| `netClearance` | Estimated from `trajectory_arc * 2.0` and clipped to `2.0–15.0` when `trajectory_arc > 0` is valid; otherwise falls back to `4–10`. |
+| `racketAngle` | Derived using the `racket angle` helper in the analyzer pipeline. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
 ---
 
@@ -802,6 +1236,19 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | shotConsistency | Consistency | /100 | consistency | 70 – 98 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/badminton_net_shot.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `racketControl` | Derived using the `racket control` helper in the analyzer pipeline. |
+| `wristFinesse` | Derived using the `wrist finesse` helper in the analyzer pipeline. |
+| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `65.0–95.0`. |
+| `footworkScore` | Derived using the `footwork` helper in the analyzer pipeline. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
+
 ---
 
 ## 25. Badminton — Serve
@@ -828,6 +1275,18 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | placementScore | Placement | /100 | ball | 70 – 98 |
 | shotConsistency | Consistency | /100 | consistency | 70 – 98 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+### Metric Computation Details
+
+Computed from `python_analysis/sports/badminton_serve.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `racketAngle` | Derived using the `racket angle` helper in the analyzer pipeline. |
+| `shuttleSpeed` | Estimated from `shuttle_speed` and clipped to `30.0–100.0` when `shuttle_speed > 0` is valid; otherwise falls back to `40–75`. |
+| `placementScore` | Derived using the `placement score` helper in the analyzer pipeline. |
+| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
+| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
 
 ---
 
@@ -859,6 +1318,20 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | shotConsistency | Consistency | /100 | consistency | 70 – 98 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/tabletennis_forehand.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `batSpeed` | Computed from `bat_speed` and clamped to `8.0–18.0`. |
+| `wristAction` | Computed from `wrist_action` and clamped to `300.0–700.0`. |
+| `spinRate` | Computed from `spin_rate` and clamped to `2000.0–5000.0`. |
+| `footworkScore` | Computed from `footwork_score` and clamped to `65.0–95.0`. |
+| `bodyRotation` | Computed from `body_rotation` and clamped to `200.0–500.0`. |
+| `shotConsistency` | Computed from `shot_consistency` and clamped to `70.0–98.0`. |
+| `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `65.0–95.0`. |
+
 ---
 
 ## 27. Table Tennis — Backhand
@@ -887,6 +1360,19 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | shotConsistency | Consistency | /100 | consistency | 70 – 98 |
 | balanceScore | Balance | /100 | biomechanics | 70 – 98 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+### Metric Computation Details
+
+Computed from `python_analysis/sports/tabletennis_backhand.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `batSpeed` | Computed from `bat_speed` and clamped to `6.0–15.0`. |
+| `timingScore` | Computed from `timing_score` and clamped to `70.0–98.0`. |
+| `batAngle` | Computed from `bat_angle` and clamped to `30.0–70.0`. |
+| `shotConsistency` | Computed from `shot_consistency` and clamped to `70.0–98.0`. |
+| `balanceScore` | Computed from `balance` and clamped to `70.0–98.0`. |
+| `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `65.0–95.0`. |
 
 ---
 
@@ -917,6 +1403,19 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | placementScore | Placement | /100 | technique | 65 – 95 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/tabletennis_serve.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, ball-tracker estimates.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `spinVariation` | Computed from `spin_variation` and clamped to `1500.0–4500.0`. |
+| `batAngle` | Computed from `bat_angle` and clamped to `20.0–65.0`. |
+| `ballSpeed` | Estimated from `ball_speed` and clipped to `15.0–40.0` when `ball_speed > 0` is valid; otherwise falls back to `20–32`. |
+| `tossHeight` | Computed from `toss_height` and clamped to `16.0–30.0`. |
+| `placementScore` | Computed from `placement_score` and clamped to `65.0–95.0`. |
+| `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `65.0–95.0`. |
+
 ---
 
 ## 29. Table Tennis — Loop
@@ -946,6 +1445,19 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | balanceScore | Balance | /100 | biomechanics | 65 – 95 |
 | rhythmConsistency | Rhythm | /100 | timing | 60 – 92 |
 
+### Metric Computation Details
+
+Computed from `python_analysis/sports/tabletennis_loop.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `batSpeed` | Computed from `bat_speed` and clamped to `10.0–22.0`. |
+| `bodyRotation` | Computed from `body_rotation` and clamped to `250.0–600.0`. |
+| `spinRate` | Computed from `spin_rate` and clamped to `3000.0–6000.0`. |
+| `contactPoint` | Computed from `contact_point` and clamped to `65.0–95.0`. |
+| `balanceScore` | Computed from `balance` and clamped to `65.0–95.0`. |
+| `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `60.0–92.0`. |
+
 ---
 
 ## 30. Table Tennis — Chop
@@ -974,6 +1486,19 @@ Each sub-score is computed by the Python analyzer on a 0–100 scale. The weight
 | balanceScore | Balance | /100 | biomechanics | 70 – 98 |
 | footworkScore | Footwork | /100 | biomechanics | 65 – 95 |
 | rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+
+### Metric Computation Details
+
+Computed from `python_analysis/sports/tabletennis_chop.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency.
+
+| Key | How It Is Computed |
+|-----|---------------------|
+| `batAngle` | Computed from `bat_angle` and clamped to `40.0–75.0`. |
+| `shotConsistency` | Computed from `shot_consistency` and clamped to `70.0–98.0`. |
+| `spinRate` | Computed from `spin_rate` and clamped to `1500.0–4000.0`. |
+| `balanceScore` | Computed from `balance` and clamped to `70.0–98.0`. |
+| `footworkScore` | Computed from `footwork_score` and clamped to `65.0–95.0`. |
+| `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `65.0–95.0`. |
 
 ---
 

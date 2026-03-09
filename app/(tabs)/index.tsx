@@ -109,6 +109,15 @@ function getPlayerDisplayName(u: {
   return fullName || String(u.email || "").trim() || "Unknown";
 }
 
+function getGreetingFirstName(name?: string | null): string {
+  const fullName = String(name || "").trim();
+  if (fullName) {
+    return fullName.split(/\s+/)[0];
+  }
+
+  return "Player";
+}
+
 const PLAYER_METRICS = [
   { key: "power", label: "Power", icon: "flash", color: ds.color.success },
   { key: "timing", label: "Timing", icon: "timer", color: "#38BDF8" },
@@ -567,6 +576,7 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const { selectedSport, selectedMovement } = useSport();
   const isAdmin = user?.role === "admin";
+  const greetingFirstName = getGreetingFirstName(user?.name);
   const [selectedTrendMetric, setSelectedTrendMetric] = React.useState<string>(PLAYER_TREND_FILTERS[0].key);
   const [selectedTrendSessions, setSelectedTrendSessions] = React.useState<TrendSessionWindow>(10);
   const [selectedPlanMinutes, setSelectedPlanMinutes] = React.useState<PlanDuration>(20);
@@ -964,7 +974,7 @@ export default function DashboardScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.greetingSection}>
-          <Text style={styles.greeting}>Hi Vikram,</Text>
+          <Text style={styles.greeting}>{`Hi ${greetingFirstName},`}</Text>
           <Text style={styles.greetingSubtitle}>Ready to improve your game today?</Text>
           <View style={styles.sportLineRow}>
             {isAdmin ? (
