@@ -48,10 +48,14 @@ def _apply_tennis_temporal_smoothing(shot_segments: List[Dict[str, Any]]) -> Non
             return
         if _confidence(i) > conf_limit:
             return
+        # Keep very high-confidence labels stable, but allow temporal cleanup
+        # for medium-confidence outliers in repetitive drills.
         if _has_strong_backhand_evidence(_reasons(i)) and labels[i] == "backhand":
-            return
+            if _confidence(i) >= 0.97:
+                return
         if _has_strong_forehand_evidence(_reasons(i)) and labels[i] == "forehand":
-            return
+            if _confidence(i) >= 0.97:
+                return
 
         shot = shot_segments[i]
         shot["label"] = target_label
