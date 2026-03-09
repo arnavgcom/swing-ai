@@ -7,41 +7,6 @@
     {
       "name": "manual-annotations",
       "videos": [
-        {
-          "videoId": "d37af91f-fc91-40f7-b481-c1a84ee73c16",
-          "filename": "model_evaluation_datasets/dataset/A74E9BB9-6E9F-47D6-B354-E2FE213C4E1C.mp4",
-          "movementType": "backhand"
-        },
-        {
-          "videoId": "5435bb57-6eb9-40a7-82ef-42200077f204",
-          "filename": "model_evaluation_datasets/dataset/64243C80-3179-4089-97BE-BA07328B2FFA.mp4",
-          "movementType": "forehand"
-        },
-        {
-          "videoId": "70eee09d-795e-4455-bff4-f25f34416a05",
-          "filename": "model_evaluation_datasets/dataset/7E75DF0C-FE32-41FF-9AD8-3089F414E568.mp4",
-          "movementType": "forehand"
-        },
-        {
-          "videoId": "b7eb5468-e40b-4a5e-9171-bcb8d9cc0bf6",
-          "filename": "model_evaluation_datasets/dataset/D8BC99CB-A4AE-42BE-9463-A0684AAC3FB3.mp4",
-          "movementType": "backhand"
-        },
-        {
-          "videoId": "d3fd27fd-205d-4fb4-96eb-894419adb952",
-          "filename": "model_evaluation_datasets/dataset/302742D2-A0CA-46FD-AA06-D24748E2B738.mp4",
-          "movementType": "forehand"
-        },
-        {
-          "videoId": "e8a40b9f-92f2-45c9-baa2-b3ebb567502b",
-          "filename": "model_evaluation_datasets/dataset/E4F8624F-B1FC-409D-8DE6-D05250AA5B88.mp4",
-          "movementType": "backhand"
-        },
-        {
-          "videoId": "e9384b19-dffc-457e-8d4e-80ba250f1e18",
-          "filename": "model_evaluation_datasets/dataset/99F2C651-5930-4C18-ACC1-DDF8A556B2F5.mp4",
-          "movementType": "forehand"
-        }
       ]
     }
   ]
