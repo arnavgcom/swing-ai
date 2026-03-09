@@ -1055,6 +1055,7 @@ export default function AnalysisDetailScreen() {
                             value={m.metricValues[metric.key] ?? 0}
                             unit={metric.unit}
                             color={metric.color}
+                            optimalRange={metric.optimalRange}
                             change={calcChange(
                               m.metricValues[metric.key],
                               avgMetrics?.[metric.key],

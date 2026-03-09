@@ -11,10 +11,81 @@ interface MetricCardProps {
   unit?: string;
   color?: string;
   change?: number | null;
+  optimalRange?: [number, number];
 }
 
-export function MetricCard({ icon, label, value, unit, color, change }: MetricCardProps) {
+export function MetricCard({
+  icon,
+  label,
+  value,
+  unit,
+  color,
+  change,
+  optimalRange,
+}: MetricCardProps) {
   const accentColor = color || "#6C5CE7";
+  const numericValue = typeof value === "number" && Number.isFinite(value) ? value : null;
+  const hasOptimalRange =
+    !!optimalRange
+    && Number.isFinite(optimalRange[0])
+    && Number.isFinite(optimalRange[1])
+    && optimalRange[1] > optimalRange[0]
+    && numericValue !== null;
+
+  const rangeMin = hasOptimalRange ? optimalRange[0] : null;
+  const rangeMax = hasOptimalRange ? optimalRange[1] : null;
+  const rangeSpan = hasOptimalRange && rangeMin !== null && rangeMax !== null ? rangeMax - rangeMin : 1;
+  const visualPadding = rangeSpan * 0.35;
+  const visualMin = hasOptimalRange && rangeMin !== null ? Math.max(0, rangeMin - visualPadding) : 0;
+  const visualMax = hasOptimalRange && rangeMax !== null ? rangeMax + visualPadding : 100;
+  const visualSpan = Math.max(visualMax - visualMin, 1e-6);
+
+  const clampPct = (raw: number) => Math.max(0, Math.min(100, raw));
+  const markerPct = hasOptimalRange && numericValue !== null
+    ? clampPct(((numericValue - visualMin) / visualSpan) * 100)
+    : 0;
+  const zoneStartPct = hasOptimalRange && rangeMin !== null
+    ? clampPct(((rangeMin - visualMin) / visualSpan) * 100)
+    : 0;
+  const zoneEndPct = hasOptimalRange && rangeMax !== null
+    ? clampPct(((rangeMax - visualMin) / visualSpan) * 100)
+    : 0;
+  const zoneWidthPct = Math.max(zoneEndPct - zoneStartPct, 4);
+
+  const rangeState =
+    hasOptimalRange && numericValue !== null && rangeMin !== null && rangeMax !== null
+      ? numericValue < rangeMin
+        ? "low"
+        : numericValue > rangeMax
+          ? "high"
+          : "ok"
+      : null;
+  const rangeStatusColor =
+    rangeState === "ok"
+      ? ds.color.success
+      : rangeState === "low"
+        ? ds.color.warning
+        : rangeState === "high"
+          ? ds.color.warning
+          : ds.color.textSecondary;
+  const rangeStatusLabel =
+    rangeState === "ok"
+      ? "OK"
+      : rangeState === "low"
+        ? "LOW"
+        : rangeState === "high"
+          ? "HIGH"
+          : null;
+
+  const fmtRangeValue = (num: number) => {
+    if (!Number.isFinite(num)) return "-";
+    const rounded = Math.round(num * 10) / 10;
+    return Number.isInteger(rounded) ? String(Math.trunc(rounded)) : rounded.toFixed(1);
+  };
+
+  const rangeLabel = hasOptimalRange && rangeMin !== null && rangeMax !== null
+    ? `${fmtRangeValue(rangeMin)}-${fmtRangeValue(rangeMax)}`
+    : null;
 
   const changeColor =
     change !== null && change !== undefined
@@ -40,6 +111,42 @@ export function MetricCard({ icon, label, value, unit, color, change }: MetricCa
         <Text style={styles.value}>{value}</Text>
         {unit && <Text style={styles.unit}>{unit}</Text>}
       </View>
+      {hasOptimalRange && rangeMin !== null && rangeMax !== null && (
+        <View style={styles.rangeBlock}>
+          <View style={styles.rangeMetaRow}>
+            <View style={styles.rangeChip}>
+              <Text style={styles.rangeText}>{rangeLabel}</Text>
+            </View>
+            {rangeStatusLabel && (
+              <View style={[styles.rangeStatusChip, { borderColor: `${rangeStatusColor}66`, backgroundColor: `${rangeStatusColor}22` }]}>
+                <Text style={[styles.rangeStatusText, { color: rangeStatusColor }]}>{rangeStatusLabel}</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.rangeTrack}>
+            <View
+              style={[
+                styles.rangeZone,
+                {
+                  left: `${zoneStartPct}%`,
+                  width: `${zoneWidthPct}%`,
+                  backgroundColor: `${accentColor}66`,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.rangeMarker,
+                {
+                  left: `${markerPct}%`,
+                  borderColor: accentColor,
+                  backgroundColor: "#F8FAFC",
+                },
+              ]}
+            />
+          </View>
+        </View>
+      )}
       {change !== null && change !== undefined && changeColor && changeIcon && (
         <View style={styles.changeRow}>
           <Ionicons name={changeIcon} size={11} color={changeColor} />
@@ -95,6 +202,62 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 3,
     marginTop: 2,
+  },
+  rangeBlock: {
+    marginTop: 2,
+    gap: 6,
+  },
+  rangeMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+  },
+  rangeText: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+    color: ds.color.textTertiary,
+  },
+  rangeChip: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: "rgba(148, 163, 184, 0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.28)",
+  },
+  rangeStatusChip: {
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+  },
+  rangeStatusText: {
+    fontSize: 9,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.4,
+  },
+  rangeTrack: {
+    position: "relative",
+    height: 8,
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: "rgba(148, 163, 184, 0.22)",
+  },
+  rangeZone: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    borderRadius: 999,
+  },
+  rangeMarker: {
+    position: "absolute",
+    top: -3,
+    marginLeft: -6,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
   },
   changeText: {
     fontSize: 11,
