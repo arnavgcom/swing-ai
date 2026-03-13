@@ -12,6 +12,7 @@ import { db } from "./db";
 import {
   sports,
   sportMovements,
+  sportCategoryMetricRanges,
   users,
   analysisFeedback,
   analysisShotAnnotations,
@@ -24,7 +25,12 @@ import {
   coachingInsights,
 } from "@shared/schema";
 import { eq, asc, and, desc, inArray, sql } from "drizzle-orm";
-import { getSportConfig, getAllConfigs } from "@shared/sport-configs";
+import {
+  getSportConfig,
+  getAllConfigs,
+  type MetricDefinition,
+  type SportCategoryConfig,
+} from "@shared/sport-configs";
 import {
   getEvaluationDatasetVideoMap,
   incrementModelVersion,
@@ -806,6 +812,382 @@ function getModelEvaluationModeKey(userId?: string): string {
   return `${MODEL_EVALUATION_MODE_KEY}:${uid}`;
 }
 
+type SkeletonLandmark = {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  visibility: number;
+};
+
+type SkeletonFrame = {
+  frame_number: number;
+  timestamp: number;
+  landmarks: SkeletonLandmark[];
+};
+
+type SkeletonShot = {
+  shot_id: number;
+  frames: SkeletonFrame[];
+};
+
+type SkeletonDataset = {
+  video_id: string;
+  shots: SkeletonShot[];
+};
+
+type SkeletonShotIndex = {
+  shot: SkeletonShot;
+  frameNumbers: number[];
+  framesByNumber: Map<number, SkeletonFrame>;
+};
+
+type SkeletonCacheEntry = {
+  dataset: SkeletonDataset;
+  shotsById: Map<number, SkeletonShotIndex>;
+  cachedAt: number;
+  expiresAt: number;
+};
+
+const SKELETON_CACHE_TTL_MS = 5 * 60 * 1000;
+const SKELETON_CACHE_MAX_ENTRIES = 200;
+const skeletonCache = new Map<string, SkeletonCacheEntry>();
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function createSkeletonRecord(
+  video_id: string,
+  shot_id: number,
+  frame_number: number,
+  landmarks: Array<Record<string, unknown>>,
+  timestamp = 0,
+): SkeletonFrame {
+  const mappedLandmarks: SkeletonLandmark[] = (landmarks || []).slice(0, 33).map((joint, idx) => ({
+    id: Number.isFinite(Number(joint.id)) ? Number(joint.id) : idx,
+    x: clamp01(Number(joint.x)),
+    y: clamp01(Number(joint.y)),
+    z: clamp01(Number(joint.z)),
+    visibility: clamp01(Number(joint.visibility)),
+  }));
+
+  return {
+    frame_number: Number(frame_number),
+    timestamp: Number.isFinite(Number(timestamp)) ? Number(timestamp) : 0,
+    landmarks: mappedLandmarks,
+  };
+}
+
+function normalizeSkeletonDataset(raw: unknown, fallbackVideoId: string): SkeletonDataset | null {
+  if (!raw || typeof raw !== "object") return null;
+  const source = raw as Record<string, unknown>;
+  const video_id = String(source.video_id || fallbackVideoId || "").trim();
+  if (!video_id) return null;
+
+  const rawShots = Array.isArray(source.shots) ? source.shots : [];
+  const shots: SkeletonShot[] = rawShots.map((item, idx) => {
+    const shot = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+    const shot_id = Number.isFinite(Number(shot.shot_id)) ? Number(shot.shot_id) : idx + 1;
+    const rawFrames = Array.isArray(shot.frames) ? shot.frames : [];
+
+    const frames: SkeletonFrame[] = rawFrames.map((frameRaw) => {
+      const frame = frameRaw && typeof frameRaw === "object" ? (frameRaw as Record<string, unknown>) : {};
+      const frame_number = Number.isFinite(Number(frame.frame_number)) ? Number(frame.frame_number) : 0;
+      const timestamp = Number.isFinite(Number(frame.timestamp)) ? Number(frame.timestamp) : 0;
+      const landmarks = Array.isArray(frame.landmarks)
+        ? (frame.landmarks as Array<Record<string, unknown>>)
+        : [];
+      return createSkeletonRecord(video_id, shot_id, frame_number, landmarks, timestamp);
+    }).filter((frame) => frame.frame_number > 0);
+
+    return {
+      shot_id,
+      frames,
+    };
+  }).filter((shot) => shot.frames.length > 0);
+
+  return {
+    video_id,
+    shots,
+  };
+}
+
+function buildSkeletonCacheEntry(dataset: SkeletonDataset): SkeletonCacheEntry {
+  const shotsById = new Map<number, SkeletonShotIndex>();
+  for (const shot of dataset.shots) {
+    const sortedFrames = [...shot.frames].sort((a, b) => a.frame_number - b.frame_number);
+    const frameNumbers = sortedFrames.map((frame) => frame.frame_number);
+    const framesByNumber = new Map<number, SkeletonFrame>();
+    for (const frame of sortedFrames) {
+      framesByNumber.set(frame.frame_number, frame);
+    }
+    shotsById.set(shot.shot_id, {
+      shot: {
+        ...shot,
+        frames: sortedFrames,
+      },
+      frameNumbers,
+      framesByNumber,
+    });
+  }
+
+  const now = Date.now();
+  return {
+    dataset,
+    shotsById,
+    cachedAt: now,
+    expiresAt: now + SKELETON_CACHE_TTL_MS,
+  };
+}
+
+function evictOldestSkeletonCacheEntry(): void {
+  if (skeletonCache.size < SKELETON_CACHE_MAX_ENTRIES) return;
+  let oldestKey: string | null = null;
+  let oldestTime = Number.POSITIVE_INFINITY;
+  for (const [key, entry] of skeletonCache.entries()) {
+    if (entry.cachedAt < oldestTime) {
+      oldestTime = entry.cachedAt;
+      oldestKey = key;
+    }
+  }
+  if (oldestKey) skeletonCache.delete(oldestKey);
+}
+
+function invalidateSkeletonCache(video_id: string): void {
+  skeletonCache.delete(video_id);
+}
+
+function getCachedSkeletonEntry(video_id: string): SkeletonCacheEntry | null {
+  const hit = skeletonCache.get(video_id);
+  if (!hit) return null;
+  if (Date.now() > hit.expiresAt) {
+    skeletonCache.delete(video_id);
+    return null;
+  }
+  return hit;
+}
+
+function setCachedSkeletonEntry(video_id: string, entry: SkeletonCacheEntry): void {
+  evictOldestSkeletonCacheEntry();
+  skeletonCache.set(video_id, entry);
+}
+
+function lowerBoundFrameIndex(values: number[], target: number): number {
+  let lo = 0;
+  let hi = values.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (values[mid] < target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function upperBoundFrameIndex(values: number[], target: number): number {
+  let lo = 0;
+  let hi = values.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (values[mid] <= target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function selectShotFramesByRange(
+  shotIndex: SkeletonShotIndex,
+  startFrame?: number,
+  endFrame?: number,
+): SkeletonFrame[] {
+  const hasStart = Number.isFinite(Number(startFrame));
+  const hasEnd = Number.isFinite(Number(endFrame));
+  if (!hasStart && !hasEnd) return shotIndex.shot.frames;
+
+  const start = hasStart ? Number(startFrame) : Number.NEGATIVE_INFINITY;
+  const end = hasEnd ? Number(endFrame) : Number.POSITIVE_INFINITY;
+  if (start > end) return [];
+
+  const lo = hasStart ? lowerBoundFrameIndex(shotIndex.frameNumbers, start) : 0;
+  const hi = hasEnd ? upperBoundFrameIndex(shotIndex.frameNumbers, end) : shotIndex.frameNumbers.length;
+
+  return shotIndex.shot.frames.slice(lo, hi);
+}
+
+async function getSkeletonCacheEntry(video_id: string): Promise<SkeletonCacheEntry | null> {
+  const cached = getCachedSkeletonEntry(video_id);
+  if (cached) return cached;
+
+  const [row] = await db
+    .select({ aiDiagnostics: metrics.aiDiagnostics })
+    .from(metrics)
+    .where(eq(metrics.analysisId, video_id))
+    .limit(1);
+
+  const diagnostics = row?.aiDiagnostics && typeof row.aiDiagnostics === "object"
+    ? (row.aiDiagnostics as Record<string, unknown>)
+    : null;
+  if (!diagnostics) return null;
+
+  const dataset = normalizeSkeletonDataset(diagnostics.skeletonData, video_id);
+  if (!dataset) return null;
+
+  const entry = buildSkeletonCacheEntry(dataset);
+  setCachedSkeletonEntry(video_id, entry);
+  return entry;
+}
+
+async function getSkeletonDataset(video_id: string): Promise<SkeletonDataset | null> {
+  const entry = await getSkeletonCacheEntry(video_id);
+  return entry?.dataset || null;
+}
+
+async function getShotSkeleton(
+  video_id: string,
+  shot_id: number,
+  startFrame?: number,
+  endFrame?: number,
+): Promise<{ video_id: string; shot_id: number; frames: SkeletonFrame[] } | null> {
+  const cacheEntry = await getSkeletonCacheEntry(video_id);
+  if (!cacheEntry) return null;
+
+  const shot = cacheEntry.shotsById.get(shot_id);
+  if (!shot) return null;
+
+  const frames = selectShotFramesByRange(shot, startFrame, endFrame);
+
+  return {
+    video_id: cacheEntry.dataset.video_id,
+    shot_id,
+    frames,
+  };
+}
+
+async function getFrameSkeleton(
+  video_id: string,
+  shot_id: number,
+  frame_number: number,
+): Promise<{ video_id: string; shot_id: number; frame: SkeletonFrame } | null> {
+  const cacheEntry = await getSkeletonCacheEntry(video_id);
+  if (!cacheEntry) return null;
+
+  const shot = cacheEntry.shotsById.get(shot_id);
+  if (!shot) return null;
+
+  const frame = shot.framesByNumber.get(frame_number);
+  if (!frame) return null;
+
+  return {
+    video_id: cacheEntry.dataset.video_id,
+    shot_id,
+    frame,
+  };
+}
+
+type MetricRangeFilters = {
+  configKey?: string;
+  sportName?: string;
+  movementName?: string;
+  metricKey?: string;
+  includeInactive?: boolean;
+};
+
+function applyDbRangesToConfig(
+  config: SportCategoryConfig,
+  rows: Array<typeof sportCategoryMetricRanges.$inferSelect>,
+): SportCategoryConfig {
+  const byMetricKey = new Map<string, typeof sportCategoryMetricRanges.$inferSelect>();
+  for (const row of rows) {
+    byMetricKey.set(String(row.metricKey || ""), row);
+  }
+
+  const metricsByKey = new Map<string, MetricDefinition>();
+
+  // Start from static config so label/description/optimalRange remain available.
+  // DB rows, when present, will override these fields.
+  for (const metric of config.metrics || []) {
+    metricsByKey.set(metric.key, { ...metric });
+  }
+
+  for (const row of rows) {
+    const key = String(row.metricKey || "").trim();
+    if (!key) continue;
+    const existing = metricsByKey.get(key);
+    if (existing) {
+      metricsByKey.set(key, {
+        ...existing,
+        label: row.metricLabel || existing.label,
+        unit: row.unit || existing.unit,
+        optimalRange: [Number(row.optimalMin), Number(row.optimalMax)],
+      });
+      continue;
+    }
+
+    metricsByKey.set(key, {
+      key,
+      label: row.metricLabel || key,
+      unit: row.unit || "",
+      icon: "analytics-outline",
+      category: "technique",
+      color: "#60A5FA",
+      description: "Optimal range configured in database.",
+      optimalRange: [Number(row.optimalMin), Number(row.optimalMax)],
+    });
+  }
+
+  const metrics: MetricDefinition[] = Array.from(metricsByKey.values()).map((metric) => {
+    const row = byMetricKey.get(metric.key);
+    if (!row) return metric;
+    return {
+      ...metric,
+      label: row.metricLabel || metric.label,
+      unit: row.unit || metric.unit,
+      optimalRange: [Number(row.optimalMin), Number(row.optimalMax)],
+    };
+  });
+
+  return {
+    ...config,
+    metrics,
+  };
+}
+
+async function fetchMetricRangeRows(filters: MetricRangeFilters = {}) {
+  const conditions: any[] = [];
+
+  if (filters.configKey) {
+    conditions.push(eq(sportCategoryMetricRanges.configKey, String(filters.configKey).trim()));
+  }
+  if (filters.metricKey) {
+    conditions.push(eq(sportCategoryMetricRanges.metricKey, String(filters.metricKey).trim()));
+  }
+  if (filters.sportName) {
+    conditions.push(
+      sql`lower(${sportCategoryMetricRanges.sportName}) = ${String(filters.sportName).trim().toLowerCase()}`,
+    );
+  }
+  if (filters.movementName) {
+    conditions.push(
+      sql`lower(${sportCategoryMetricRanges.movementName}) = ${String(filters.movementName).trim().toLowerCase()}`,
+    );
+  }
+  if (!filters.includeInactive) {
+    conditions.push(eq(sportCategoryMetricRanges.isActive, true));
+  }
+
+  const rows = await db
+    .select()
+    .from(sportCategoryMetricRanges)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(
+      asc(sportCategoryMetricRanges.configKey),
+      asc(sportCategoryMetricRanges.metricKey),
+    );
+
+  return rows;
+}
+
 type ScoringModelDatasetMetric = {
   datasetName: string;
   movementType: string;
@@ -1300,6 +1682,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       movement_detection_accuracy_pct real not null,
       scoring_accuracy_pct real not null
     )
+  `);
+
+  await db.execute(sql`
+    create table if not exists sport_category_metric_ranges (
+      id varchar primary key default gen_random_uuid(),
+      sport_name text not null,
+      movement_name text not null,
+      config_key varchar not null,
+      metric_key text not null,
+      metric_label text not null,
+      unit text not null,
+      optimal_min real not null,
+      optimal_max real not null,
+      is_active boolean not null default true,
+      source text not null default 'config',
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now()
+    )
+  `);
+
+  await db.execute(sql`
+    create unique index if not exists sport_category_metric_ranges_config_metric_uq
+    on sport_category_metric_ranges (config_key, metric_key)
+  `);
+
+  await db.execute(sql`
+    create index if not exists sport_category_metric_ranges_sport_movement_idx
+    on sport_category_metric_ranges (sport_name, movement_name, is_active)
   `);
 
   await db.execute(sql`alter table metrics add column if not exists model_version varchar not null default '0.1'`);
@@ -2034,16 +2444,260 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/sport-configs", (_req: Request, res: Response) => {
-    res.json(getAllConfigs());
+  app.get("/api/sport-configs", async (_req: Request, res: Response) => {
+    try {
+      const allConfigs = getAllConfigs();
+      const rangeRows = await fetchMetricRangeRows();
+      const rangeRowsByConfig = new Map<string, Array<typeof sportCategoryMetricRanges.$inferSelect>>();
+
+      for (const row of rangeRows) {
+        const list = rangeRowsByConfig.get(row.configKey) || [];
+        list.push(row);
+        rangeRowsByConfig.set(row.configKey, list);
+      }
+
+      const resolvedConfigs = Object.fromEntries(
+        Object.entries(allConfigs).map(([key, config]) => {
+          const rows = rangeRowsByConfig.get(key) || [];
+          return [key, applyDbRangesToConfig(config, rows)];
+        }),
+      );
+
+      res.json(resolvedConfigs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
-  app.get("/api/sport-configs/:configKey", (req: Request, res: Response) => {
-    const config = getSportConfig(req.params.configKey);
-    if (!config) {
-      return res.status(404).json({ error: "Sport config not found" });
+  app.get("/api/sport-configs/:configKey", async (req: Request, res: Response) => {
+    try {
+      const config = getSportConfig(req.params.configKey);
+      if (!config) {
+        return res.status(404).json({ error: "Sport config not found" });
+      }
+
+      const rangeRows = await fetchMetricRangeRows({
+        configKey: req.params.configKey,
+      });
+
+      res.json(applyDbRangesToConfig(config, rangeRows));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
-    res.json(config);
+  });
+
+  app.get("/api/metric-optimal-ranges", async (req: Request, res: Response) => {
+    try {
+      const configKey = String(req.query.configKey || "").trim();
+      const sportName = String(req.query.sportName || "").trim();
+      const movementName = String(req.query.movementName || "").trim();
+      const metricKey = String(req.query.metricKey || "").trim();
+
+      const rows = await fetchMetricRangeRows({
+        configKey: configKey || undefined,
+        sportName: sportName || undefined,
+        movementName: movementName || undefined,
+        metricKey: metricKey || undefined,
+      });
+
+      res.json(rows);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/metric-optimal-ranges", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const configKey = String(req.body?.configKey || "").trim();
+      const metricKey = String(req.body?.metricKey || "").trim();
+      const sportName = String(req.body?.sportName || "").trim();
+      const movementName = String(req.body?.movementName || "").trim();
+      const metricLabel = String(req.body?.metricLabel || metricKey).trim();
+      const unit = String(req.body?.unit || "").trim();
+      const optimalMin = Number(req.body?.optimalMin);
+      const optimalMax = Number(req.body?.optimalMax);
+      const isActive = req.body?.isActive == null ? true : Boolean(req.body?.isActive);
+
+      if (!configKey || !metricKey || !sportName || !movementName || !unit) {
+        return res.status(400).json({
+          error: "configKey, metricKey, sportName, movementName, and unit are required",
+        });
+      }
+
+      if (!Number.isFinite(optimalMin) || !Number.isFinite(optimalMax)) {
+        return res.status(400).json({ error: "optimalMin and optimalMax must be numbers" });
+      }
+
+      if (optimalMin > optimalMax) {
+        return res.status(400).json({ error: "optimalMin cannot be greater than optimalMax" });
+      }
+
+      await db
+        .insert(sportCategoryMetricRanges)
+        .values({
+          configKey,
+          metricKey,
+          sportName,
+          movementName,
+          metricLabel,
+          unit,
+          optimalMin,
+          optimalMax,
+          isActive,
+          source: "admin",
+        })
+        .onConflictDoUpdate({
+          target: [sportCategoryMetricRanges.configKey, sportCategoryMetricRanges.metricKey],
+          set: {
+            sportName,
+            movementName,
+            metricLabel,
+            unit,
+            optimalMin,
+            optimalMax,
+            isActive,
+            source: "admin",
+            updatedAt: new Date(),
+          },
+        });
+
+      const rows = await fetchMetricRangeRows({ configKey, metricKey, includeInactive: true });
+      res.json(rows[0] || null);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/metric-optimal-ranges/bulk", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const itemsRaw = Array.isArray(req.body?.items) ? req.body.items : null;
+      if (!itemsRaw || itemsRaw.length === 0) {
+        return res.status(400).json({ error: "items array is required" });
+      }
+
+      type BulkItem = {
+        configKey: string;
+        metricKey: string;
+        sportName: string;
+        movementName: string;
+        metricLabel: string;
+        unit: string;
+        optimalMin: number;
+        optimalMax: number;
+        isActive: boolean;
+      };
+
+      const items: BulkItem[] = [];
+
+      for (let idx = 0; idx < itemsRaw.length; idx += 1) {
+        const raw = (itemsRaw[idx] || {}) as Record<string, unknown>;
+        const configKey = String(raw.configKey || "").trim();
+        const metricKey = String(raw.metricKey || "").trim();
+        const sportName = String(raw.sportName || "").trim();
+        const movementName = String(raw.movementName || "").trim();
+        const metricLabel = String(raw.metricLabel || metricKey).trim();
+        const unit = String(raw.unit || "").trim();
+        const optimalMin = Number(raw.optimalMin);
+        const optimalMax = Number(raw.optimalMax);
+        const isActive = raw.isActive == null ? true : Boolean(raw.isActive);
+
+        if (!configKey || !metricKey || !sportName || !movementName || !unit) {
+          return res.status(400).json({
+            error: `Invalid item at index ${idx}: configKey, metricKey, sportName, movementName, and unit are required`,
+          });
+        }
+
+        if (!Number.isFinite(optimalMin) || !Number.isFinite(optimalMax)) {
+          return res.status(400).json({
+            error: `Invalid item at index ${idx}: optimalMin and optimalMax must be numbers`,
+          });
+        }
+
+        if (optimalMin > optimalMax) {
+          return res.status(400).json({
+            error: `Invalid item at index ${idx}: optimalMin cannot be greater than optimalMax`,
+          });
+        }
+
+        items.push({
+          configKey,
+          metricKey,
+          sportName,
+          movementName,
+          metricLabel,
+          unit,
+          optimalMin,
+          optimalMax,
+          isActive,
+        });
+      }
+
+      for (const item of items) {
+        await db
+          .insert(sportCategoryMetricRanges)
+          .values({
+            configKey: item.configKey,
+            metricKey: item.metricKey,
+            sportName: item.sportName,
+            movementName: item.movementName,
+            metricLabel: item.metricLabel,
+            unit: item.unit,
+            optimalMin: item.optimalMin,
+            optimalMax: item.optimalMax,
+            isActive: item.isActive,
+            source: "admin",
+          })
+          .onConflictDoUpdate({
+            target: [sportCategoryMetricRanges.configKey, sportCategoryMetricRanges.metricKey],
+            set: {
+              sportName: item.sportName,
+              movementName: item.movementName,
+              metricLabel: item.metricLabel,
+              unit: item.unit,
+              optimalMin: item.optimalMin,
+              optimalMax: item.optimalMax,
+              isActive: item.isActive,
+              source: "admin",
+              updatedAt: new Date(),
+            },
+          });
+      }
+
+      const uniqueConfigKeys = Array.from(new Set(items.map((item) => item.configKey)));
+      const rows = await db
+        .select()
+        .from(sportCategoryMetricRanges)
+        .where(
+          and(
+            inArray(sportCategoryMetricRanges.configKey, uniqueConfigKeys),
+            eq(sportCategoryMetricRanges.isActive, true),
+          ),
+        )
+        .orderBy(
+          asc(sportCategoryMetricRanges.configKey),
+          asc(sportCategoryMetricRanges.metricKey),
+        );
+
+      res.json({
+        updated: items.length,
+        configKeys: uniqueConfigKeys,
+        rows,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
   app.post(
@@ -3272,6 +3926,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .set({ aiDiagnostics: diagnostics })
         .where(eq(metrics.analysisId, analysis.id));
 
+      invalidateSkeletonCache(analysis.id);
+
       const diagnosticsDetected = String(diagnostics?.detectedMovement || "").trim();
       if (
         diagnosticsDetected &&
@@ -3286,6 +3942,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(diagnostics);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/analyses/:id/skeleton/shot/:shotId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+
+      const analysis = await storage.getAnalysis(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+
+      if (!isAdmin && analysis.userId !== userId) {
+        return res.status(403).json({ error: "You can only access your own analyses" });
+      }
+
+      const shotId = Number(req.params.shotId);
+      if (!Number.isInteger(shotId) || shotId <= 0) {
+        return res.status(400).json({ error: "shotId must be a positive integer" });
+      }
+
+      const startFrame = req.query.startFrame != null ? Number(req.query.startFrame) : undefined;
+      const endFrame = req.query.endFrame != null ? Number(req.query.endFrame) : undefined;
+
+      const shotSkeleton = await getShotSkeleton(analysis.id, shotId, startFrame, endFrame);
+      if (!shotSkeleton) {
+        return res.status(404).json({ error: "Skeleton data not found for shot" });
+      }
+
+      return res.json(shotSkeleton);
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message || "Failed to fetch shot skeleton" });
+    }
+  });
+
+  app.get("/api/analyses/:id/skeleton/shot/:shotId/playback", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+
+      const analysis = await storage.getAnalysis(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+
+      if (!isAdmin && analysis.userId !== userId) {
+        return res.status(403).json({ error: "You can only access your own analyses" });
+      }
+
+      const shotId = Number(req.params.shotId);
+      if (!Number.isInteger(shotId) || shotId <= 0) {
+        return res.status(400).json({ error: "shotId must be a positive integer" });
+      }
+
+      const startFrame = req.query.startFrame != null ? Number(req.query.startFrame) : undefined;
+      const endFrame = req.query.endFrame != null ? Number(req.query.endFrame) : undefined;
+
+      const playbackData = await getShotSkeleton(analysis.id, shotId, startFrame, endFrame);
+      if (!playbackData) {
+        return res.status(404).json({ error: "Skeleton playback data not found" });
+      }
+
+      return res.json(playbackData);
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message || "Failed to fetch skeleton playback data" });
+    }
+  });
+
+  app.get("/api/analyses/:id/skeleton/shot/:shotId/frame/:frameNumber", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+
+      const analysis = await storage.getAnalysis(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+
+      if (!isAdmin && analysis.userId !== userId) {
+        return res.status(403).json({ error: "You can only access your own analyses" });
+      }
+
+      const shotId = Number(req.params.shotId);
+      const frameNumber = Number(req.params.frameNumber);
+      if (!Number.isInteger(shotId) || shotId <= 0) {
+        return res.status(400).json({ error: "shotId must be a positive integer" });
+      }
+      if (!Number.isInteger(frameNumber) || frameNumber <= 0) {
+        return res.status(400).json({ error: "frameNumber must be a positive integer" });
+      }
+
+      const frameSkeleton = await getFrameSkeleton(analysis.id, shotId, frameNumber);
+      if (!frameSkeleton) {
+        return res.status(404).json({ error: "Skeleton data not found for frame" });
+      }
+
+      return res.json(frameSkeleton);
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message || "Failed to fetch frame skeleton" });
     }
   });
 

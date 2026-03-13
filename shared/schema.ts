@@ -285,6 +285,24 @@ export const scoringModelRegistryDatasetMetrics = pgTable("scoring_model_registr
   scoringAccuracyPct: real("scoring_accuracy_pct").notNull(),
 });
 
+export const sportCategoryMetricRanges = pgTable("sport_category_metric_ranges", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  sportName: text("sport_name").notNull(),
+  movementName: text("movement_name").notNull(),
+  configKey: varchar("config_key").notNull(),
+  metricKey: text("metric_key").notNull(),
+  metricLabel: text("metric_label").notNull(),
+  unit: text("unit").notNull(),
+  optimalMin: real("optimal_min").notNull(),
+  optimalMax: real("optimal_max").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  source: text("source").notNull().default("config"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   email: true,
   name: true,
@@ -318,6 +336,7 @@ export type Sport = typeof sports.$inferSelect;
 export type SportMovement = typeof sportMovements.$inferSelect;
 export type Analysis = typeof analyses.$inferSelect;
 export type Metric = typeof metrics.$inferSelect;
+export type SportCategoryMetricRange = typeof sportCategoryMetricRanges.$inferSelect;
 export type CoachingInsight = typeof coachingInsights.$inferSelect;
 export type AnalysisShotAnnotation = typeof analysisShotAnnotations.$inferSelect;
 export type AnalysisShotDiscrepancy = typeof analysisShotDiscrepancies.$inferSelect;

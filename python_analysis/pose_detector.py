@@ -3,7 +3,7 @@ import numpy as np
 import mediapipe as mp
 import math
 import os
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 
 BaseOptions = mp.tasks.BaseOptions
 PoseLandmarker = mp.tasks.vision.PoseLandmarker
@@ -45,7 +45,11 @@ class PoseDetector:
         self.landmarker = PoseLandmarker.create_from_options(options)
         self._timestamp_ms = 0
 
-    def detect(self, frame: np.ndarray) -> Optional[Dict]:
+    @staticmethod
+    def _clamp01(value: float) -> float:
+        return float(max(0.0, min(1.0, value)))
+
+    def _detect_pose(self, frame: np.ndarray) -> Optional[Tuple[Any, int, int]]:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
@@ -57,19 +61,53 @@ class PoseDetector:
 
         h, w = frame.shape[:2]
         pose = result.pose_landmarks[0]
-        landmarks = {}
+        return pose, h, w
 
+    def _build_named_landmarks(self, pose: Any, h: int, w: int) -> Dict[str, Dict[str, float]]:
+        landmarks: Dict[str, Dict[str, float]] = {}
         for idx, name in self.LANDMARK_MAP.items():
             if idx < len(pose):
                 lm = pose[idx]
                 landmarks[name] = {
-                    "x": lm.x * w,
-                    "y": lm.y * h,
-                    "z": lm.z,
-                    "visibility": lm.visibility,
+                    "x": float(lm.x) * float(w),
+                    "y": float(lm.y) * float(h),
+                    "z": float(lm.z),
+                    "visibility": float(lm.visibility),
                 }
+        return landmarks
 
+    def _build_full_landmarks(self, pose: Any) -> List[Dict[str, float | int]]:
+        out: List[Dict[str, float | int]] = []
+        for idx, lm in enumerate(pose):
+            out.append(
+                {
+                    "id": int(idx),
+                    "x": self._clamp01(float(lm.x)),
+                    "y": self._clamp01(float(lm.y)),
+                    "z": self._clamp01((float(lm.z) + 1.0) * 0.5),
+                    "visibility": self._clamp01(float(lm.visibility)),
+                }
+            )
+        return out
+
+    def detect(self, frame: np.ndarray) -> Optional[Dict]:
+        detected = self._detect_pose(frame)
+        if not detected:
+            return None
+
+        pose, h, w = detected
+        landmarks = self._build_named_landmarks(pose, h, w)
         return landmarks if landmarks else None
+
+    def detect_with_skeleton(self, frame: np.ndarray) -> Tuple[Optional[Dict], List[Dict[str, float | int]]]:
+        detected = self._detect_pose(frame)
+        if not detected:
+            return None, []
+
+        pose, h, w = detected
+        named_landmarks = self._build_named_landmarks(pose, h, w)
+        full_landmarks = self._build_full_landmarks(pose)
+        return (named_landmarks if named_landmarks else None), full_landmarks
 
     @staticmethod
     def calc_angle(a: Dict, b: Dict, c: Dict) -> float:
