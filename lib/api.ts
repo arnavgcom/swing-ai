@@ -654,6 +654,43 @@ export async function fetchFrameSkeleton(
   return res.json();
 }
 
+export interface GhostCorrectionResponse {
+  frames: Array<{
+    frame_number: number;
+    timestamp: number;
+    landmarks: Array<{
+      id: number;
+      x: number;
+      y: number;
+      z: number;
+      visibility: number;
+    }>;
+  }>;
+  correction: {
+    metricKey: string;
+    label: string;
+    unit: string;
+    playerValue: number;
+    optimalRange: [number, number];
+    deviation: number;
+    direction: "increase" | "decrease";
+  } | null;
+  metricValues: Record<string, number>;
+  configKey: string;
+}
+
+export async function fetchGhostCorrection(
+  id: string,
+  shotId: number,
+): Promise<GhostCorrectionResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/analyses/${id}/ghost-correction/${shotId}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch ghost correction data");
+  return res.json();
+}
+
 export async function fetchAnalysisVideoMetadata(
   id: string,
 ): Promise<VideoMetadataResponse> {

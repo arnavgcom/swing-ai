@@ -98,6 +98,8 @@ All data is stored entirely on Replit:
 - `lib/sport-context.tsx` — Sport context provider (selected sport/movement, persisted to AsyncStorage)
 - `lib/query-client.ts` — React Query client with API URL configuration
 - `lib/api.ts` — API helper functions including fetchSportConfig(), updated MetricsResponse with JSONB types
+- `components/ghost-animation/` — Ghost Player Correction Animation: GhostSwingAnimation (playback + dual skeleton overlay), SkeletonRenderer (SVG MediaPipe skeleton), PlaybackControls (play/pause/scrubber/speed), CorrectionVisualizer (deviation bar + recommendation)
+- `lib/ghost-correction/` — CorrectionDetector (finds highest-priority metric deviation, maps to joints), CorrectionGenerator (adjusts skeleton frames toward optimal positions)
 - `components/` — ScoreGauge, MetricCard, SubScoreBar, CoachingCard, AnalysisCard (all dark-themed)
 - `constants/colors.ts` — Theme colors (midnight/purple/neon palette) + `sportColors` map
 

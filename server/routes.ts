@@ -4048,6 +4048,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/analyses/:id/ghost-correction/:shotId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+
+      const analysis = await storage.getAnalysis(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+      if (!isAdmin && analysis.userId !== userId) {
+        return res.status(403).json({ error: "You can only access your own analyses" });
+      }
+
+      const shotId = Number(req.params.shotId);
+      if (!Number.isInteger(shotId) || shotId <= 0) {
+        return res.status(400).json({ error: "shotId must be a positive integer" });
+      }
+
+      const shotSkeleton = await getShotSkeleton(analysis.id, shotId);
+      if (!shotSkeleton || !shotSkeleton.frames.length) {
+        return res.status(404).json({ error: "Skeleton data not found for shot" });
+      }
+
+      const [metricsRow] = await db
+        .select({
+          metricValues: metrics.metricValues,
+          configKey: metrics.configKey,
+        })
+        .from(metrics)
+        .where(eq(metrics.analysisId, analysis.id))
+        .limit(1);
+
+      if (!metricsRow) {
+        return res.status(404).json({ error: "Metrics not found" });
+      }
+
+      const configKey = String(metricsRow.configKey || "").trim();
+      const sportConfig = configKey ? getSportConfig(configKey) : undefined;
+      if (!sportConfig) {
+        return res.status(404).json({ error: "Sport config not found" });
+      }
+
+      const metricValues =
+        metricsRow.metricValues && typeof metricsRow.metricValues === "object"
+          ? (metricsRow.metricValues as Record<string, number>)
+          : {};
+
+      const metricsWithRanges = sportConfig.metrics.filter((m) => m.optimalRange);
+
+      let bestMetricKey: string | null = null;
+      let maxDeviation = 0;
+
+      for (const def of metricsWithRanges) {
+        const value = Number(metricValues[def.key]);
+        if (!Number.isFinite(value) || !def.optimalRange) continue;
+
+        const [lo, hi] = def.optimalRange;
+        const rangeSpan = Math.max(hi - lo, 1e-6);
+        let deviation = 0;
+
+        if (value < lo) deviation = (lo - value) / rangeSpan;
+        else if (value > hi) deviation = (value - hi) / rangeSpan;
+
+        if (deviation > maxDeviation) {
+          maxDeviation = deviation;
+          bestMetricKey = def.key;
+        }
+      }
+
+      if (!bestMetricKey) {
+        return res.json({
+          frames: shotSkeleton.frames,
+          correction: null,
+          metricValues,
+          configKey,
+        });
+      }
+
+      const bestDef = sportConfig.metrics.find((m) => m.key === bestMetricKey)!;
+      const playerValue = Number(metricValues[bestMetricKey]);
+      const [lo, hi] = bestDef.optimalRange!;
+
+      return res.json({
+        frames: shotSkeleton.frames,
+        correction: {
+          metricKey: bestMetricKey,
+          label: bestDef.label,
+          unit: bestDef.unit,
+          playerValue,
+          optimalRange: [lo, hi],
+          deviation: maxDeviation,
+          direction: playerValue < lo ? "increase" : "decrease",
+        },
+        metricValues,
+        configKey,
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message || "Failed to fetch ghost correction data" });
+    }
+  });
+
   app.get("/api/analyses/:id/video-metadata", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;

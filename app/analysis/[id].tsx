@@ -35,11 +35,15 @@ import {
   fetchFeedback,
   saveAnalysisShotAnnotation,
   submitFeedback,
+  fetchGhostCorrection,
+  type GhostCorrectionResponse,
 } from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
 import { ScoreGauge } from "@/components/ScoreGauge";
 import { MetricCard } from "@/components/MetricCard";
 import { CoachingCard } from "@/components/CoachingCard";
+import { GhostSwingAnimation } from "@/components/ghost-animation/GhostSwingAnimation";
+import { detectPriorityCorrection } from "@/lib/ghost-correction";
 import { useAuth } from "@/lib/auth-context";
 import {
   buildMetricOptionsWithCatalog,
@@ -564,6 +568,34 @@ export default function AnalysisDetailScreen() {
     queryFn: () => fetchAnalysisShotAnnotation(id!),
     enabled: !!id && data?.analysis?.status === "completed",
   });
+
+  const primaryShotId = useMemo(() => {
+    if (!diagnostics?.shotSegments?.length) return null;
+    const scoring = diagnostics.shotSegments.find((s: any) => s.includedForScoring);
+    return scoring ? scoring.index : diagnostics.shotSegments[0].index;
+  }, [diagnostics?.shotSegments]);
+
+  const { data: ghostData } = useQuery({
+    queryKey: ["analysis", id, "ghost-correction", primaryShotId],
+    queryFn: () => fetchGhostCorrection(id!, primaryShotId!),
+    enabled: !!id && primaryShotId != null && data?.analysis?.status === "completed",
+  });
+
+  const ghostCorrection = useMemo(() => {
+    if (!ghostData?.correction || !ghostData.frames?.length) return null;
+    if (!sportConfig?.metrics) return null;
+
+    const correction = detectPriorityCorrection(
+      ghostData.metricValues || {},
+      sportConfig.metrics,
+    );
+    return correction;
+  }, [ghostData, sportConfig?.metrics]);
+
+  const ghostPlayerFrames = useMemo(() => {
+    if (!ghostData?.frames?.length) return [];
+    return ghostData.frames;
+  }, [ghostData?.frames]);
 
   const feedbackMutation = useMutation({
     mutationFn: (vars: { rating: "up" | "down"; comment?: string }) =>
@@ -1961,6 +1993,13 @@ export default function AnalysisDetailScreen() {
               </View>
             </View>
           ) : null}
+
+          {ghostCorrection && ghostPlayerFrames.length > 0 && (
+            <GhostSwingAnimation
+              playerFrames={ghostPlayerFrames}
+              correction={ghostCorrection}
+            />
+          )}
 
           {effectiveCoaching && (
             <View style={styles.coachingSection}>
