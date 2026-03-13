@@ -6,10 +6,11 @@ export const badmintonServeConfig: SportCategoryConfig = {
   configKey: "badminton-serve",
   overallScoreLabel: "Serve Score",
   scores: [
-    { key: "accuracy", label: "Accuracy", weight: 0.30 },
-    { key: "technique", label: "Technique", weight: 0.25 },
-    { key: "consistency", label: "Consistency", weight: 0.25 },
-    { key: "timing", label: "Timing", weight: 0.20 },
+    { key: "power", label: "Power", weight: 0.11 },
+    { key: "control", label: "Control", weight: 0.27 },
+    { key: "timing", label: "Timing", weight: 0.18 },
+    { key: "technique", label: "Technique", weight: 0.22 },
+    { key: "consistency", label: "Consistency", weight: 0.22 },
   ],
   metrics: [
     {

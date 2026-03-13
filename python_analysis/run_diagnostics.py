@@ -6,6 +6,8 @@ import traceback
 from collections import Counter
 from typing import Any, Dict, List, Optional
 
+import numpy as np
+
 
 def _has_strong_backhand_evidence(reasons: List[str]) -> bool:
     strong = {
@@ -245,6 +247,550 @@ def _compute_ai_confidence_pct(
         confidence *= 0.90
 
     return round(max(0.0, min(99.5, confidence)), 1)
+
+
+def _compute_hip_rotation_deg_per_sec(pose_data: List[Optional[Dict[str, Any]]], fps: float) -> Optional[float]:
+    if fps <= 0:
+        return None
+
+    angular_velocities: List[float] = []
+    prev_angle: Optional[float] = None
+
+    for pose in pose_data:
+        if pose is None:
+            prev_angle = None
+            continue
+
+        left_hip = pose.get("left_hip")
+        right_hip = pose.get("right_hip")
+        if not left_hip or not right_hip:
+            prev_angle = None
+            continue
+
+        # Use a relaxed threshold so partially occluded hips can still contribute.
+        if left_hip.get("visibility", 0.0) <= 0.2 or right_hip.get("visibility", 0.0) <= 0.2:
+            prev_angle = None
+            continue
+
+        dx = float(right_hip["x"]) - float(left_hip["x"])
+        dy = float(right_hip["y"]) - float(left_hip["y"])
+        angle = float(np.degrees(np.arctan2(dy, dx)))
+
+        if prev_angle is not None:
+            # Wrap to [-180, 180] to avoid artificial jumps at angle boundaries.
+            delta = abs(((angle - prev_angle + 180.0) % 360.0) - 180.0)
+            vel = delta * fps
+            if 0.0 < vel < 2000.0:
+                angular_velocities.append(float(vel))
+
+        prev_angle = angle
+
+    if not angular_velocities:
+        return None
+
+    value = float(np.percentile(angular_velocities, 85))
+    return float(np.clip(value, 150.0, 1400.0))
+
+
+def _wrist_point(pose: Dict[str, Any]) -> Optional[Dict[str, float]]:
+    candidates = [pose.get("right_wrist"), pose.get("left_wrist")]
+    visible = [w for w in candidates if w and float(w.get("visibility", 0.0)) > 0.2]
+    if not visible:
+        return None
+    return max(visible, key=lambda w: float(w.get("visibility", 0.0)))
+
+
+def _landmark_visible(pose: Dict[str, Any], key: str, threshold: float = 0.2) -> bool:
+    point = pose.get(key)
+    return bool(point and float(point.get("visibility", 0.0)) > threshold)
+
+
+def _midpoint(a: Dict[str, float], b: Dict[str, float]) -> Dict[str, float]:
+    return {
+        "x": (float(a["x"]) + float(b["x"])) * 0.5,
+        "y": (float(a["y"]) + float(b["y"])) * 0.5,
+    }
+
+
+def _distance(a: Dict[str, float], b: Dict[str, float]) -> float:
+    dx = float(a["x"]) - float(b["x"])
+    dy = float(a["y"]) - float(b["y"])
+    return float(np.hypot(dx, dy))
+
+
+def _angle_deg(a: Dict[str, float], b: Dict[str, float], c: Dict[str, float]) -> Optional[float]:
+    # Returns angle ABC in degrees.
+    bax = float(a["x"]) - float(b["x"])
+    bay = float(a["y"]) - float(b["y"])
+    bcx = float(c["x"]) - float(b["x"])
+    bcy = float(c["y"]) - float(b["y"])
+
+    mag_ba = float(np.hypot(bax, bay))
+    mag_bc = float(np.hypot(bcx, bcy))
+    if mag_ba <= 1e-6 or mag_bc <= 1e-6:
+        return None
+
+    dot = bax * bcx + bay * bcy
+    cos_theta = float(np.clip(dot / (mag_ba * mag_bc), -1.0, 1.0))
+    return float(np.degrees(np.arccos(cos_theta)))
+
+
+def _dominant_side_from_pose_data(pose_data: List[Optional[Dict[str, Any]]]) -> str:
+    right_scores: List[float] = []
+    left_scores: List[float] = []
+
+    prev_rw: Optional[Dict[str, float]] = None
+    prev_lw: Optional[Dict[str, float]] = None
+
+    for pose in pose_data:
+        if pose is None:
+            prev_rw = None
+            prev_lw = None
+            continue
+
+        rw = pose.get("right_wrist")
+        lw = pose.get("left_wrist")
+
+        if rw and float(rw.get("visibility", 0.0)) > 0.2:
+            if prev_rw is not None:
+                right_scores.append(_distance(rw, prev_rw))
+            prev_rw = rw
+        else:
+            prev_rw = None
+
+        if lw and float(lw.get("visibility", 0.0)) > 0.2:
+            if prev_lw is not None:
+                left_scores.append(_distance(lw, prev_lw))
+            prev_lw = lw
+        else:
+            prev_lw = None
+
+    right_energy = float(np.percentile(right_scores, 80)) if right_scores else 0.0
+    left_energy = float(np.percentile(left_scores, 80)) if left_scores else 0.0
+    return "right" if right_energy >= left_energy else "left"
+
+
+def _compute_contact_distance_ratio(
+    pose_data: List[Optional[Dict[str, Any]]],
+    shot_segments: List[Dict[str, Any]],
+) -> Optional[float]:
+    values: List[float] = []
+    dominant = _dominant_side_from_pose_data(pose_data)
+    wrist_key = "right_wrist" if dominant == "right" else "left_wrist"
+
+    preferred_segments = [seg for seg in shot_segments if seg.get("includedForScoring")]
+    candidate_segments = preferred_segments if preferred_segments else shot_segments
+
+    for seg in candidate_segments:
+        start = int(seg.get("startFrame", -1))
+        end = int(seg.get("endFrame", -1))
+        if start < 0 or end < 0 or end <= start:
+            continue
+
+        best_idx: Optional[int] = None
+        best_speed = -1.0
+        prev_wrist: Optional[Dict[str, float]] = None
+
+        for idx in range(start, end + 1):
+            pose = pose_data[idx] if 0 <= idx < len(pose_data) else None
+            if pose is None or not _landmark_visible(pose, wrist_key):
+                prev_wrist = None
+                continue
+            wrist = pose[wrist_key]
+            if prev_wrist is not None:
+                speed = _distance(wrist, prev_wrist)
+                if speed > best_speed:
+                    best_speed = speed
+                    best_idx = idx
+            prev_wrist = wrist
+
+        if best_idx is None:
+            continue
+
+        pose = pose_data[best_idx]
+        if pose is None:
+            continue
+        if not (_landmark_visible(pose, "left_shoulder") and _landmark_visible(pose, "right_shoulder") and _landmark_visible(pose, wrist_key)):
+            continue
+
+        left_shoulder = pose["left_shoulder"]
+        right_shoulder = pose["right_shoulder"]
+        shoulder_mid = _midpoint(left_shoulder, right_shoulder)
+        shoulder_width = _distance(left_shoulder, right_shoulder)
+        if shoulder_width <= 1e-6:
+            continue
+
+        ratio = _distance(pose[wrist_key], shoulder_mid) / shoulder_width
+        if np.isfinite(ratio):
+            values.append(float(ratio))
+
+    if not values:
+        return None
+    return float(np.clip(float(np.median(values)), 0.2, 1.6))
+
+
+def _compute_knee_bend_angle_deg(pose_data: List[Optional[Dict[str, Any]]]) -> Optional[float]:
+    values: List[float] = []
+
+    for pose in pose_data:
+        if pose is None:
+            continue
+
+        for side in ("left", "right"):
+            hip_key = f"{side}_hip"
+            knee_key = f"{side}_knee"
+            ankle_key = f"{side}_ankle"
+            if not (_landmark_visible(pose, hip_key) and _landmark_visible(pose, knee_key) and _landmark_visible(pose, ankle_key)):
+                continue
+            angle = _angle_deg(pose[hip_key], pose[knee_key], pose[ankle_key])
+            if angle is None:
+                continue
+            if 20.0 <= angle <= 180.0:
+                values.append(float(angle))
+
+    if not values:
+        return None
+    # Use lower percentile to capture loaded knee bend rather than upright frames.
+    return float(np.clip(float(np.percentile(values, 35)), 25.0, 140.0))
+
+
+def _compute_racket_lag_proxy_angle_deg(pose_data: List[Optional[Dict[str, Any]]]) -> Optional[float]:
+    dominant = _dominant_side_from_pose_data(pose_data)
+    side = "right" if dominant == "right" else "left"
+    shoulder_key = f"{side}_shoulder"
+    elbow_key = f"{side}_elbow"
+    wrist_key = f"{side}_wrist"
+
+    lag_values: List[float] = []
+    for pose in pose_data:
+        if pose is None:
+            continue
+        if not (_landmark_visible(pose, shoulder_key) and _landmark_visible(pose, elbow_key) and _landmark_visible(pose, wrist_key)):
+            continue
+        elbow_angle = _angle_deg(pose[shoulder_key], pose[elbow_key], pose[wrist_key])
+        if elbow_angle is None:
+            continue
+        lag_proxy = 180.0 - elbow_angle
+        if np.isfinite(lag_proxy):
+            lag_values.append(float(lag_proxy))
+
+    if not lag_values:
+        return None
+    return float(np.clip(float(np.percentile(lag_values, 75)), 8.0, 85.0))
+
+
+def _compute_stance_angle_deg(
+    pose_data: List[Optional[Dict[str, Any]]],
+    shot_segments: List[Dict[str, Any]],
+) -> Optional[float]:
+    values: List[float] = []
+    preferred_segments = [seg for seg in shot_segments if seg.get("includedForScoring")]
+    candidate_segments = preferred_segments if preferred_segments else shot_segments
+
+    def _append_from_idx(idx: int) -> None:
+        pose = pose_data[idx] if 0 <= idx < len(pose_data) else None
+        if pose is None:
+            return
+        if not (_landmark_visible(pose, "left_ankle") and _landmark_visible(pose, "right_ankle")):
+            return
+        left_ankle = pose["left_ankle"]
+        right_ankle = pose["right_ankle"]
+        dx = float(right_ankle["x"]) - float(left_ankle["x"])
+        dy = float(right_ankle["y"]) - float(left_ankle["y"])
+        if abs(dx) <= 1e-6 and abs(dy) <= 1e-6:
+            return
+        angle = abs(float(np.degrees(np.arctan2(dy, dx))))
+        if angle > 90.0:
+            angle = 180.0 - angle
+        if np.isfinite(angle):
+            values.append(float(angle))
+
+    for seg in candidate_segments:
+        start = int(seg.get("startFrame", -1))
+        end = int(seg.get("endFrame", -1))
+        if start < 0 or end < 0 or end < start:
+            continue
+        mid = int((start + end) * 0.5)
+        _append_from_idx(mid)
+
+    if not values:
+        for idx in range(0, len(pose_data), max(1, len(pose_data) // 40 or 1)):
+            _append_from_idx(idx)
+
+    if not values:
+        return None
+    return float(np.clip(float(np.median(values)), 5.0, 80.0))
+
+
+def _wrist_speeds_series(
+    pose_data: List[Optional[Dict[str, Any]]],
+    fps: float,
+) -> List[Optional[float]]:
+    dominant = _dominant_side_from_pose_data(pose_data)
+    wrist_key = "right_wrist" if dominant == "right" else "left_wrist"
+    speeds: List[Optional[float]] = [None] * len(pose_data)
+    prev: Optional[Dict[str, float]] = None
+
+    for idx, pose in enumerate(pose_data):
+        if pose is None or not _landmark_visible(pose, wrist_key):
+            prev = None
+            continue
+        wrist = pose[wrist_key]
+        if prev is not None:
+            speeds[idx] = _distance(wrist, prev) * max(fps, 1e-6)
+        prev = wrist
+    return speeds
+
+
+def _compute_split_step_time_sec(
+    pose_data: List[Optional[Dict[str, Any]]],
+    shot_segments: List[Dict[str, Any]],
+    fps: float,
+) -> Optional[float]:
+    if fps <= 0:
+        return None
+
+    left_prev: Optional[Dict[str, float]] = None
+    right_prev: Optional[Dict[str, float]] = None
+    ankle_speed: List[Optional[float]] = [None] * len(pose_data)
+
+    for idx, pose in enumerate(pose_data):
+        if pose is None:
+            left_prev = None
+            right_prev = None
+            continue
+
+        left_ok = _landmark_visible(pose, "left_ankle")
+        right_ok = _landmark_visible(pose, "right_ankle")
+        current_values: List[float] = []
+
+        if left_ok:
+            left_now = pose["left_ankle"]
+            if left_prev is not None:
+                current_values.append(_distance(left_now, left_prev) * fps)
+            left_prev = left_now
+        else:
+            left_prev = None
+
+        if right_ok:
+            right_now = pose["right_ankle"]
+            if right_prev is not None:
+                current_values.append(_distance(right_now, right_prev) * fps)
+            right_prev = right_now
+        else:
+            right_prev = None
+
+        if current_values:
+            ankle_speed[idx] = float(np.mean(current_values))
+
+    valid_speeds = [s for s in ankle_speed if s is not None]
+    if len(valid_speeds) < 6:
+        return None
+
+    baseline = float(np.percentile(valid_speeds, 35))
+    trigger = max(0.03, baseline * 1.8)
+    pre_window_frames = max(3, int(round(0.55 * fps)))
+
+    values: List[float] = []
+    preferred_segments = [seg for seg in shot_segments if seg.get("includedForScoring")]
+    candidate_segments = preferred_segments if preferred_segments else shot_segments
+    for seg in candidate_segments:
+        start = int(seg.get("startFrame", -1))
+        if start <= 0:
+            continue
+        win_start = max(1, start - pre_window_frames)
+        hit_idx: Optional[int] = None
+        for idx in range(start - 1, win_start - 1, -1):
+            s = ankle_speed[idx]
+            if s is None:
+                continue
+            if s >= trigger:
+                hit_idx = idx
+            else:
+                if hit_idx is not None:
+                    break
+
+        if hit_idx is None:
+            continue
+        delta_sec = (start - hit_idx) / fps
+        values.append(float(delta_sec))
+
+    if not values:
+        return None
+    return float(np.clip(float(np.median(values)), 0.08, 0.70))
+
+
+def _compute_recovery_time_sec(
+    pose_data: List[Optional[Dict[str, Any]]],
+    shot_segments: List[Dict[str, Any]],
+    fps: float,
+) -> Optional[float]:
+    if fps <= 0:
+        return None
+
+    speeds = _wrist_speeds_series(pose_data, fps)
+    valid = [s for s in speeds if s is not None]
+    if len(valid) < 8:
+        return None
+
+    settle_threshold = max(0.04, float(np.percentile(valid, 35)) * 1.2)
+    max_window_frames = max(4, int(round(1.8 * fps)))
+
+    values: List[float] = []
+    preferred_segments = [seg for seg in shot_segments if seg.get("includedForScoring")]
+    candidate_segments = preferred_segments if preferred_segments else shot_segments
+
+    for seg in candidate_segments:
+        end = int(seg.get("endFrame", -1))
+        if end < 0:
+            continue
+
+        settle_idx: Optional[int] = None
+        consec = 0
+        for idx in range(end + 1, min(len(speeds), end + 1 + max_window_frames)):
+            s = speeds[idx]
+            if s is None:
+                consec = 0
+                continue
+            if s <= settle_threshold:
+                consec += 1
+                if consec >= 3:
+                    settle_idx = idx
+                    break
+            else:
+                consec = 0
+
+        if settle_idx is None:
+            continue
+
+        values.append(float((settle_idx - end) / fps))
+
+    if not values:
+        return None
+    return float(np.clip(float(np.median(values)), 0.35, 3.5))
+
+
+def _compute_segment_reaction_ms(
+    pose_data: List[Optional[Dict[str, Any]]],
+    start_frame: int,
+    end_frame: int,
+    fps: float,
+) -> Optional[float]:
+    if fps <= 0 or end_frame <= start_frame:
+        return None
+
+    speeds: List[float] = []
+    prev_wrist: Optional[Dict[str, float]] = None
+
+    for idx in range(start_frame, end_frame + 1):
+        pose = pose_data[idx] if 0 <= idx < len(pose_data) else None
+        if pose is None:
+            prev_wrist = None
+            continue
+
+        wrist = _wrist_point(pose)
+        if wrist is None:
+            prev_wrist = None
+            continue
+
+        if prev_wrist is not None:
+            dx = float(wrist["x"]) - float(prev_wrist["x"])
+            dy = float(wrist["y"]) - float(prev_wrist["y"])
+            speed = float(np.hypot(dx, dy) * fps)
+            speeds.append(speed)
+
+        prev_wrist = wrist
+
+    if len(speeds) < 3:
+        return None
+
+    baseline_window = max(2, min(6, len(speeds) // 3))
+    baseline = float(np.median(speeds[:baseline_window]))
+    trigger = max(0.05, baseline * 1.9)
+
+    trigger_idx = None
+    for i in range(1, len(speeds)):
+        if speeds[i] >= trigger and (speeds[i - 1] >= trigger * 0.75 or speeds[i] >= trigger * 1.25):
+            trigger_idx = i
+            break
+
+    if trigger_idx is None:
+        return None
+
+    reaction_ms = (trigger_idx / fps) * 1000.0
+    return float(np.clip(reaction_ms, 80.0, 900.0))
+
+
+def _compute_global_reaction_time_ms(
+    pose_data: List[Optional[Dict[str, Any]]],
+    fps: float,
+) -> Optional[float]:
+    if fps <= 0:
+        return None
+
+    speeds: List[float] = []
+    prev_wrist: Optional[Dict[str, float]] = None
+    prev_valid_idx: Optional[int] = None
+    onset_idx: Optional[int] = None
+
+    for idx, pose in enumerate(pose_data):
+        if pose is None:
+            prev_wrist = None
+            prev_valid_idx = None
+            continue
+
+        wrist = _wrist_point(pose)
+        if wrist is None:
+            prev_wrist = None
+            prev_valid_idx = None
+            continue
+
+        if prev_wrist is not None and prev_valid_idx is not None:
+            dx = float(wrist["x"]) - float(prev_wrist["x"])
+            dy = float(wrist["y"]) - float(prev_wrist["y"])
+            speed = float(np.hypot(dx, dy) * fps)
+            speeds.append(speed)
+
+            if len(speeds) >= 3 and onset_idx is None:
+                baseline = float(np.median(speeds[: min(6, len(speeds))]))
+                trigger = max(0.05, baseline * 1.9)
+                if speed >= trigger:
+                    onset_idx = idx
+
+        prev_wrist = wrist
+        prev_valid_idx = idx
+
+    if onset_idx is None:
+        return None
+
+    reaction_ms = (onset_idx / fps) * 1000.0
+    return float(np.clip(reaction_ms, 80.0, 900.0))
+
+
+def _compute_reaction_time_ms(
+    pose_data: List[Optional[Dict[str, Any]]],
+    shot_segments: List[Dict[str, Any]],
+    fps: float,
+) -> Optional[float]:
+    values: List[float] = []
+    preferred_segments = [seg for seg in shot_segments if seg.get("includedForScoring")]
+    candidate_segments = preferred_segments if preferred_segments else shot_segments
+
+    for seg in candidate_segments:
+
+        start = int(seg.get("startFrame", -1))
+        end = int(seg.get("endFrame", -1))
+        if start < 0 or end < 0:
+            continue
+
+        segment_reaction = _compute_segment_reaction_ms(pose_data, start, end, fps)
+        if segment_reaction is not None:
+            values.append(segment_reaction)
+
+    if not values:
+        return _compute_global_reaction_time_ms(pose_data, fps)
+
+    return float(np.clip(float(np.median(values)), 120.0, 700.0))
 
 
 def main():
@@ -566,6 +1112,15 @@ def main():
         )
         rationale = _build_rationale(sport, dominant_movement_for_report, movement_counts, features)
 
+        hip_rotation = _compute_hip_rotation_deg_per_sec(pose_data, fps)
+        reaction_time = _compute_reaction_time_ms(pose_data, shot_segments, fps)
+        contact_distance = _compute_contact_distance_ratio(pose_data, shot_segments)
+        knee_bend_angle = _compute_knee_bend_angle_deg(pose_data)
+        racket_lag_angle = _compute_racket_lag_proxy_angle_deg(pose_data)
+        recovery_time = _compute_recovery_time_sec(pose_data, shot_segments, fps)
+        split_step_time = _compute_split_step_time_sec(pose_data, shot_segments, fps)
+        stance_angle = _compute_stance_angle_deg(pose_data, shot_segments)
+
         bitrate_kbps = (
             (file_size_bytes * 8 / 1000.0) / duration_seconds
             if duration_seconds > 0
@@ -603,6 +1158,16 @@ def main():
             "aiConfidencePct": ai_confidence_pct,
             "detectedMovement": dominant_movement_for_report,
             "classificationRationale": rationale,
+            "computedMetrics": {
+                "hipRotation": round(hip_rotation, 2) if hip_rotation is not None else None,
+                "reactionTime": round(reaction_time, 2) if reaction_time is not None else None,
+                "contactDistance": round(contact_distance, 3) if contact_distance is not None else None,
+                "kneeBendAngle": round(knee_bend_angle, 2) if knee_bend_angle is not None else None,
+                "racketLagAngle": round(racket_lag_angle, 2) if racket_lag_angle is not None else None,
+                "recoveryTime": round(recovery_time, 3) if recovery_time is not None else None,
+                "splitStepTime": round(split_step_time, 3) if split_step_time is not None else None,
+                "stanceAngle": round(stance_angle, 2) if stance_angle is not None else None,
+            },
             "validation": {
                 "valid": bool(validation.get("valid", True)),
                 "confidence": float(validation.get("confidence", 0.0)),

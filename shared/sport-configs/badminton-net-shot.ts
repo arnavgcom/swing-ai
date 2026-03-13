@@ -6,11 +6,11 @@ export const badmintonNetShotConfig: SportCategoryConfig = {
   configKey: "badminton-net-shot",
   overallScoreLabel: "Net Shot Score",
   scores: [
-    { key: "control", label: "Control", weight: 0.30 },
-    { key: "finesse", label: "Finesse", weight: 0.25 },
-    { key: "footwork", label: "Footwork", weight: 0.20 },
-    { key: "consistency", label: "Consistency", weight: 0.15 },
-    { key: "timing", label: "Timing", weight: 0.10 },
+    { key: "power", label: "Power", weight: 0.11 },
+    { key: "control", label: "Control", weight: 0.49 },
+    { key: "timing", label: "Timing", weight: 0.09 },
+    { key: "technique", label: "Technique", weight: 0.18 },
+    { key: "consistency", label: "Consistency", weight: 0.13 },
   ],
   metrics: [
     {

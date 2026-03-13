@@ -6,11 +6,11 @@ export const tabletennisForehandConfig: SportCategoryConfig = {
   configKey: "tabletennis-forehand",
   overallScoreLabel: "Forehand Score",
   scores: [
-    { key: "power", label: "Power", weight: 0.20 },
-    { key: "technique", label: "Technique", weight: 0.25 },
-    { key: "spin", label: "Spin", weight: 0.20 },
-    { key: "footwork", label: "Footwork", weight: 0.15 },
-    { key: "consistency", label: "Consistency", weight: 0.20 },
+    { key: "power", label: "Power", weight: 0.17 },
+    { key: "control", label: "Control", weight: 0.08 },
+    { key: "timing", label: "Timing", weight: 0.08 },
+    { key: "technique", label: "Technique", weight: 0.50 },
+    { key: "consistency", label: "Consistency", weight: 0.17 },
   ],
   metrics: [
     {

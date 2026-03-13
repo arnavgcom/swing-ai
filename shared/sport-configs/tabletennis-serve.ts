@@ -6,11 +6,11 @@ export const tabletennisServeConfig: SportCategoryConfig = {
   configKey: "tabletennis-serve",
   overallScoreLabel: "Serve Score",
   scores: [
-    { key: "spin", label: "Spin", weight: 0.25 },
-    { key: "technique", label: "Technique", weight: 0.25 },
-    { key: "placement", label: "Placement", weight: 0.20 },
-    { key: "deception", label: "Deception", weight: 0.15 },
-    { key: "consistency", label: "Consistency", weight: 0.15 },
+    { key: "power", label: "Power", weight: 0.10 },
+    { key: "control", label: "Control", weight: 0.29 },
+    { key: "timing", label: "Timing", weight: 0.08 },
+    { key: "technique", label: "Technique", weight: 0.41 },
+    { key: "consistency", label: "Consistency", weight: 0.12 },
   ],
   metrics: [
     {

@@ -171,7 +171,16 @@ function toTitleCase(str: string): string {
     .trim();
 }
 
-const HISTORY_DISPLAY_KEYS = ["power", "timing", "stability", "consistency"];
+const SESSION_SECTION_KEYS: Array<"technical" | "tactical" | "movement"> = [
+  "technical",
+  "tactical",
+  "movement",
+];
+const SESSION_SECTION_LABELS: Record<(typeof SESSION_SECTION_KEYS)[number], string> = {
+  technical: "Technical",
+  tactical: "Tactical",
+  movement: "Movement",
+};
 const TREND_SESSION_FILTERS = [
   { key: 5, label: "5S" },
   { key: 10, label: "10S" },
@@ -199,20 +208,49 @@ function filterBySport(
   });
 }
 
-function findSubValue(
-  subs: Record<string, number> | null,
-  key: string,
-): number | null {
-  if (!subs) return null;
-  for (const k of Object.keys(subs)) {
-    if (k.toLowerCase() === key.toLowerCase()) return subs[k];
-  }
-  return null;
-}
-
 function normalizeText(value: string | null | undefined): string {
   if (!value) return "";
   return value.toLowerCase().trim();
+}
+
+function getSectionScore10(item: AnalysisSummary, key: "technical" | "tactical" | "movement"): number | null {
+  const raw = Number(item.sectionScores?.[key]);
+  return Number.isFinite(raw) ? raw : null;
+}
+
+function getSessionOverallScore10(item: AnalysisSummary): number | null {
+  // Use only persisted DB overall score; do not derive from section averages.
+  const rawOverall = Number(item.overallScore);
+  if (Number.isFinite(rawOverall)) {
+    return Number((rawOverall / 10).toFixed(1));
+  }
+
+  return null;
+}
+
+function computePercentDelta(current: number | null, previous: number | null): number | null {
+  if (current == null || previous == null) return null;
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) return null;
+  if (Math.abs(previous) < 1e-6) return null;
+  const pct = ((current - previous) / Math.abs(previous)) * 100;
+  const rounded = Number(pct.toFixed(1));
+  return rounded === 0 ? null : rounded;
+}
+
+function getDeltaColor(deltaPct: number | null): string {
+  if (deltaPct == null) return "#64748B";
+  if (Math.abs(deltaPct) < 1e-6) return "#94A3B8";
+  return deltaPct >= 0 ? "#34D399" : "#F87171";
+}
+
+function formatDeltaPercent(deltaPct: number | null): string | null {
+  if (deltaPct == null) return null;
+  return `${Math.abs(deltaPct).toFixed(1)}%`;
+}
+
+function deltaTrendIcon(deltaPct: number | null): "caret-up" | "caret-down" | "remove" {
+  if (deltaPct == null || Math.abs(deltaPct) < 1e-6) return "remove";
+  return deltaPct > 0 ? "caret-up" : "caret-down";
 }
 
 function normalizeMovementValue(value: string | null | undefined): string {
@@ -300,22 +338,25 @@ function matchesAnalysisSearch(item: AnalysisSummary, query: string): boolean {
 
 function SummaryCard({
   item,
+  deltas,
   isOwner,
   isAdmin,
   isHighlighted,
   highlightColor,
   onPress,
   onDelete,
-  allAnalyses,
 }: {
   item: AnalysisSummary;
+  deltas?: {
+    overallPct: number | null;
+    sections: Record<string, number | null>;
+  };
   isOwner: boolean;
   isAdmin: boolean;
   isHighlighted: boolean;
   highlightColor: string;
   onPress: () => void;
   onDelete: () => void;
-  allAnalyses: AnalysisSummary[];
 }) {
   const date = new Date(getVideoDate(item));
   const timeStr = date.toLocaleDateString("en-US", {
@@ -326,23 +367,20 @@ function SummaryCard({
     minute: "2-digit",
   });
 
-  const score =
-    item.overallScore != null ? Math.round(item.overallScore) : null;
-  const subs = item.subScores || {};
-  const subEntries = Object.entries(subs).filter(([key]) =>
-    HISTORY_DISPLAY_KEYS.includes(key.toLowerCase()),
-  );
+  const score = getSessionOverallScore10(item);
   const movement = resolveAnalysisMovement(item);
 
-  const currentIndex = allAnalyses.findIndex((a) => a.id === item.id);
-  const prevItem =
-    currentIndex >= 0 && currentIndex < allAnalyses.length - 1
-      ? allAnalyses[currentIndex + 1]
-      : null;
-  let scoreDelta: number | null = null;
-  if (score != null && prevItem?.overallScore != null) {
-    scoreDelta = score - Math.round(prevItem.overallScore);
-  }
+  const sectionEntries = SESSION_SECTION_KEYS.map((key) => {
+    const value = getSectionScore10(item, key);
+
+    return {
+      key,
+      label: SESSION_SECTION_LABELS[key],
+      value,
+    };
+  }).filter((entry) => entry.value != null);
+
+  const overallDeltaPct = deltas?.overallPct ?? null;
 
   const statusConfig: Record<string, { color: string; label: string }> = {
     pending: { color: "#FBBF24", label: "Pending" },
@@ -397,25 +435,20 @@ function SummaryCard({
           {score != null ? (
             <View style={summaryStyles.scoreWrap}>
               <Text style={summaryStyles.scoreLabel}>Score</Text>
-              <View style={summaryStyles.scoreDeltaRow}>
-                {scoreDelta != null && scoreDelta !== 0 && (
+              <View style={summaryStyles.scoreValueRow}>
+                {overallDeltaPct != null ? (
                   <View style={summaryStyles.deltaWrap}>
                     <Ionicons
-                      name={scoreDelta > 0 ? "arrow-up" : "arrow-down"}
-                      size={10}
-                      color={scoreDelta > 0 ? "#34D399" : "#F87171"}
+                      name={deltaTrendIcon(overallDeltaPct)}
+                      size={12}
+                      color={getDeltaColor(overallDeltaPct)}
                     />
-                    <Text
-                      style={[
-                        summaryStyles.deltaText,
-                        { color: scoreDelta > 0 ? "#34D399" : "#F87171" },
-                      ]}
-                    >
-                      {Math.abs(scoreDelta)}
+                    <Text style={[summaryStyles.deltaText, { color: getDeltaColor(overallDeltaPct) }]}>
+                      {formatDeltaPercent(overallDeltaPct)}
                     </Text>
                   </View>
-                )}
-                <Text style={summaryStyles.scoreText}>{score}</Text>
+                ) : null}
+                <Text style={summaryStyles.scoreText}>{score.toFixed(1)}</Text>
               </View>
             </View>
           ) : (
@@ -434,37 +467,35 @@ function SummaryCard({
         </View>
       </View>
 
-      {subEntries.length > 0 && (
+      {sectionEntries.length > 0 && (
         <View style={summaryStyles.metricsRow}>
-            {subEntries.map(([key, val]) => {
-              const prevVal = findSubValue(prevItem?.subScores || null, key);
-              const subDelta = prevVal != null ? Math.round(val) - Math.round(prevVal) : null;
+            {sectionEntries.map((entry) => {
               return (
-                <View key={key} style={summaryStyles.metricItem}>
+                <View key={entry.key} style={summaryStyles.metricItem}>
                   <Text style={summaryStyles.metricLabel} numberOfLines={1}>
-                    {toTitleCase(key)}
+                    {entry.label}
                   </Text>
                   <View style={summaryStyles.metricValueRow}>
                     <Text style={summaryStyles.metricValue}>
-                      {Math.round(val)}
+                      {Number(entry.value).toFixed(1)}
                     </Text>
-                    {subDelta != null && subDelta !== 0 && (
-                      <View style={summaryStyles.subDeltaRow}>
+                    {deltas?.sections?.[entry.key] != null ? (
+                      <View style={summaryStyles.metricDeltaWrap}>
                         <Ionicons
-                          name={subDelta > 0 ? "arrow-up" : "arrow-down"}
-                          size={7}
-                          color={subDelta > 0 ? "#34D399" : "#F87171"}
+                          name={deltaTrendIcon(Number(deltas.sections[entry.key]))}
+                          size={10}
+                          color={getDeltaColor(Number(deltas.sections[entry.key]))}
                         />
                         <Text
                           style={[
-                            summaryStyles.subDeltaText,
-                            { color: subDelta > 0 ? "#34D399" : "#F87171" },
+                            summaryStyles.metricDeltaText,
+                            { color: getDeltaColor(deltas.sections[entry.key]) },
                           ]}
                         >
-                          {Math.abs(subDelta)}
+                          {formatDeltaPercent(Number(deltas.sections[entry.key]))}
                         </Text>
                       </View>
-                    )}
+                    ) : null}
                   </View>
                 </View>
               );
@@ -566,9 +597,9 @@ const summaryStyles = StyleSheet.create({
     gap: 6,
   },
   metricItem: {
-    minWidth: "18%" as any,
+    minWidth: "31%" as any,
     flexGrow: 1,
-    flexBasis: "18%" as any,
+    flexBasis: "31%" as any,
     backgroundColor: "#0A0A1A50",
     borderRadius: 10,
     padding: 8,
@@ -585,24 +616,16 @@ const summaryStyles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   metricValue: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
   },
   metricValueRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 3,
-  },
-  subDeltaRow: {
-    flexDirection: "row",
+    width: "100%",
+    minHeight: 18,
     alignItems: "center",
-    gap: 1,
-    paddingBottom: 1,
-  },
-  subDeltaText: {
-    fontSize: 9,
-    fontFamily: "Inter_600SemiBold",
+    justifyContent: "center",
+    position: "relative",
   },
   scoreWrap: {
     alignItems: "flex-end",
@@ -614,7 +637,7 @@ const summaryStyles = StyleSheet.create({
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
   },
-  scoreDeltaRow: {
+  scoreValueRow: {
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 6,
@@ -623,11 +646,25 @@ const summaryStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
-    paddingBottom: 4,
+    marginBottom: 4,
   },
   deltaText: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
+  },
+  metricDeltaText: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+    lineHeight: 10,
+  },
+  metricDeltaWrap: {
+    position: "absolute",
+    right: "50%",
+    marginRight: 16,
+    bottom: 0,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 2,
   },
   deleteBtn: {
     position: "absolute",
@@ -740,10 +777,8 @@ export default function HistoryScreen() {
     selectedMovement?.name,
   );
 
-  const filteredAnalyses = useMemo(() => {
-    let result = analysesBySport.filter((item) =>
-      matchesAnalysisSearch(item, searchQuery),
-    );
+  const comparisonAnalyses = useMemo(() => {
+    let result = analysesBySport;
 
     if (isAdmin && selectedPlayerId !== "all") {
       result = result.filter((item) => item.userId === selectedPlayerId);
@@ -752,7 +787,15 @@ export default function HistoryScreen() {
     }
 
     return result;
-  }, [analysesBySport, searchQuery, isAdmin, selectedPlayerId, user?.id]);
+  }, [analysesBySport, isAdmin, selectedPlayerId, user?.id]);
+
+  const filteredAnalyses = useMemo(() => {
+    let result = comparisonAnalyses.filter((item) =>
+      matchesAnalysisSearch(item, searchQuery),
+    );
+
+    return result;
+  }, [comparisonAnalyses, searchQuery]);
 
   const deleteMutation = useMutation({
     mutationFn: deleteAnalysis,
@@ -786,13 +829,13 @@ export default function HistoryScreen() {
 
   const trendSliceCount =
     selectedTrendSessions === "all"
-      ? completed.filter((a) => a.overallScore != null).length
+      ? completed.filter((a) => getSessionOverallScore10(a) != null).length
       : selectedTrendSessions;
   const trendItems = completed
-    .filter((a) => a.overallScore != null)
+    .filter((a) => getSessionOverallScore10(a) != null)
     .slice(0, trendSliceCount)
     .reverse();
-  const trendScores = trendItems.map((a) => Math.round(a.overallScore || 0));
+  const trendScores = trendItems.map((a) => getSessionOverallScore10(a) as number);
   const trendDates = trendItems.map((a) => {
     const d = new Date(getVideoDate(a));
     return `${d.getMonth() + 1}/${d.getDate()}`;
@@ -824,14 +867,44 @@ export default function HistoryScreen() {
     ? selectedPlayerLabel
     : user?.name || "Player";
 
+  const deltaByAnalysisId = useMemo(() => {
+    const completedByTimeAsc = filteredAnalyses
+      .filter((analysis) => analysis.status === "completed")
+      .slice()
+      .sort((a, b) => new Date(getVideoDate(a)).getTime() - new Date(getVideoDate(b)).getTime());
+
+    const map = new Map<string, { overallPct: number | null; sections: Record<string, number | null> }>();
+    for (let idx = 0; idx < completedByTimeAsc.length; idx += 1) {
+      const current = completedByTimeAsc[idx];
+      const previous = idx > 0 ? completedByTimeAsc[idx - 1] : null;
+      const sections: Record<string, number | null> = {};
+      for (const sectionKey of SESSION_SECTION_KEYS) {
+        sections[sectionKey] = computePercentDelta(
+          getSectionScore10(current, sectionKey),
+          previous ? getSectionScore10(previous, sectionKey) : null,
+        );
+      }
+
+      map.set(current.id, {
+        overallPct: computePercentDelta(
+          getSessionOverallScore10(current),
+          previous ? getSessionOverallScore10(previous) : null,
+        ),
+        sections,
+      });
+    }
+
+    return map;
+  }, [filteredAnalyses]);
+
   const renderItem = ({ item }: { item: AnalysisSummary }) => (
     <SummaryCard
       item={item}
+      deltas={deltaByAnalysisId.get(item.id)}
       isOwner={isOwner(item)}
       isAdmin={isAdmin}
       isHighlighted={item.id === lastWorkedAnalysisId}
       highlightColor={historyHighlightColor}
-      allAnalyses={filteredAnalyses || []}
       onPress={() =>
         router.push({
           pathname: "/analysis/[id]",
@@ -938,7 +1011,7 @@ export default function HistoryScreen() {
       {isAdmin && showPlayerDropdown && (
         <Modal
           transparent
-          animationType="fade"
+          animationType="none"
           onRequestClose={() => setShowPlayerDropdown(false)}
         >
           <Pressable
@@ -1067,7 +1140,9 @@ export default function HistoryScreen() {
       </View>
 
       {filteredAnalyses.length > 0 && (
-        <Text style={styles.recentTitle}>Recent Sessions</Text>
+        <View style={styles.recentHeaderRow}>
+          <Text style={styles.recentTitle}>Recent Sessions</Text>
+        </View>
       )}
     </View>
   );
@@ -1300,6 +1375,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
     color: "#CBD5E1",
+  },
+  recentHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 12,
   },
   list: {

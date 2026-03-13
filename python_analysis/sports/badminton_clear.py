@@ -23,10 +23,10 @@ class BadmintonClearAnalyzer(BaseAnalyzer):
         racket_speed = float(np.clip(racket_speed, 25.0, 45.0))
 
         shuttle_speed = self.ball_tracker.estimate_speed(fps, pixels_per_meter)
-        shuttle_speed = float(np.clip(shuttle_speed, 80.0, 150.0)) if shuttle_speed > 0 else float(np.random.uniform(90, 130))
+        shuttle_speed = float(np.clip(shuttle_speed, 80.0, 150.0)) if shuttle_speed > 0 else float(110.00)
 
         trajectory_arc = self.ball_tracker.estimate_trajectory_arc()
-        trajectory_height = float(np.clip(trajectory_arc * 0.8, 5.0, 10.0)) if trajectory_arc > 0 else float(np.random.uniform(6, 9))
+        trajectory_height = float(np.clip(trajectory_arc * 0.8, 5.0, 10.0)) if trajectory_arc > 0 else float(7.50)
 
         shoulder_rot = float(np.percentile(shoulder_rotations, 90)) if shoulder_rotations else 650.0
         shoulder_rot = float(np.clip(shoulder_rot, 500.0, 900.0))

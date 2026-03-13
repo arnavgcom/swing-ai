@@ -25,7 +25,7 @@ class PickleballVolleyAnalyzer(BaseAnalyzer):
         balance = float(np.clip(float(np.mean(balance_scores)) if balance_scores else 72.0, 40.0, 98.0))
 
         ball_speed = self.ball_tracker.estimate_speed(fps, frame_h / 1.8)
-        ball_speed = float(np.clip(ball_speed, 15.0, 55.0)) if ball_speed > 0 else float(np.random.uniform(25, 45))
+        ball_speed = float(np.clip(ball_speed, 15.0, 55.0)) if ball_speed > 0 else float(35.00)
 
         shot_consistency = self._calc_shot_consistency(elbow_angles, wrist_speeds)
         rhythm_consistency = self._calc_rhythm_consistency(pose_data, fps)

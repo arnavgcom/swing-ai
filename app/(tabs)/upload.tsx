@@ -401,7 +401,7 @@ export default function UploadScreen() {
         {isAdmin && showPlayerDropdown && (
           <Modal
             transparent
-            animationType="fade"
+            animationType="none"
             onRequestClose={() => setShowPlayerDropdown(false)}
           >
             <Pressable

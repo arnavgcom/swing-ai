@@ -7,10 +7,10 @@ export const golfFullSwingConfig: SportCategoryConfig = {
   overallScoreLabel: "Full Swing Score",
   scores: [
     { key: "power", label: "Power", weight: 0.25 },
+    { key: "control", label: "Control", weight: 0.15 },
+    { key: "timing", label: "Timing", weight: 0.15 },
     { key: "technique", label: "Technique", weight: 0.25 },
     { key: "consistency", label: "Consistency", weight: 0.20 },
-    { key: "timing", label: "Timing", weight: 0.15 },
-    { key: "balance", label: "Balance", weight: 0.15 },
   ],
   metrics: [
     {
@@ -40,7 +40,7 @@ export const golfFullSwingConfig: SportCategoryConfig = {
       icon: "body",
       category: "biomechanics",
       color: "#6C5CE7",
-      description: "Full shoulder rotation at top of swing",
+      description: "Full torso rotation at top of swing",
       optimalRange: [75, 100],
     },
     {

@@ -6,11 +6,11 @@ export const paddleForehandConfig: SportCategoryConfig = {
   configKey: "paddle-forehand",
   overallScoreLabel: "Forehand Score",
   scores: [
-    { key: "power", label: "Power", weight: 0.20 },
-    { key: "technique", label: "Technique", weight: 0.25 },
-    { key: "wallPlay", label: "Wall Play", weight: 0.20 },
-    { key: "consistency", label: "Consistency", weight: 0.15 },
-    { key: "timing", label: "Timing", weight: 0.20 },
+    { key: "power", label: "Power", weight: 0.18 },
+    { key: "control", label: "Control", weight: 0.09 },
+    { key: "timing", label: "Timing", weight: 0.18 },
+    { key: "technique", label: "Technique", weight: 0.41 },
+    { key: "consistency", label: "Consistency", weight: 0.14 },
   ],
   metrics: [
     {
@@ -40,7 +40,7 @@ export const paddleForehandConfig: SportCategoryConfig = {
       icon: "refresh-circle",
       category: "biomechanics",
       color: "#6C5CE7",
-      description: "Angular velocity of shoulder rotation during the swing",
+      description: "Angular velocity of torso rotation during the swing",
       optimalRange: [400, 800],
     },
     {

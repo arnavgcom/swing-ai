@@ -6,11 +6,11 @@ export const tabletennisBackhandConfig: SportCategoryConfig = {
   configKey: "tabletennis-backhand",
   overallScoreLabel: "Backhand Score",
   scores: [
-    { key: "speed", label: "Speed", weight: 0.20 },
+    { key: "power", label: "Power", weight: 0.20 },
+    { key: "control", label: "Control", weight: 0.15 },
     { key: "timing", label: "Timing", weight: 0.25 },
     { key: "technique", label: "Technique", weight: 0.20 },
     { key: "consistency", label: "Consistency", weight: 0.20 },
-    { key: "stability", label: "Stability", weight: 0.15 },
   ],
   metrics: [
     {
