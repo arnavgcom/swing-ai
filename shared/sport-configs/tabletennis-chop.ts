@@ -6,11 +6,11 @@ export const tabletennisChopConfig: SportCategoryConfig = {
   configKey: "tabletennis-chop",
   overallScoreLabel: "Chop Score",
   scores: [
-    { key: "technique", label: "Technique", weight: 0.25 },
-    { key: "consistency", label: "Consistency", weight: 0.25 },
-    { key: "spin", label: "Spin", weight: 0.20 },
-    { key: "stability", label: "Stability", weight: 0.15 },
-    { key: "footwork", label: "Footwork", weight: 0.15 },
+    { key: "power", label: "Power", weight: 0.10 },
+    { key: "control", label: "Control", weight: 0.12 },
+    { key: "timing", label: "Timing", weight: 0.08 },
+    { key: "technique", label: "Technique", weight: 0.49 },
+    { key: "consistency", label: "Consistency", weight: 0.21 },
   ],
   metrics: [
     {

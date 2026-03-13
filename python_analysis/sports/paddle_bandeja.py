@@ -24,7 +24,7 @@ class PaddleBandejaAnalyzer(BaseAnalyzer):
         paddle_angle = self._calc_paddle_angle(valid_poses)
 
         ball_speed = self.ball_tracker.estimate_speed(fps, pixels_per_meter)
-        ball_speed = float(np.clip(ball_speed, 25.0, 55.0)) if ball_speed > 0 else float(np.random.uniform(30, 45))
+        ball_speed = float(np.clip(ball_speed, 25.0, 55.0)) if ball_speed > 0 else float(37.50)
 
         wrist_control = self._calc_wrist_control(wrist_speeds)
 

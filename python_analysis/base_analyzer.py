@@ -79,8 +79,9 @@ class BaseAnalyzer(ABC):
         }
 
         metrics = self._compute_metrics(pose_data, video_info)
-        sub_scores = self._compute_sub_scores(metrics)
-        overall_score = self._compute_overall_score(sub_scores)
+        raw_sub_scores = self._compute_sub_scores(metrics)
+        sub_scores = self._build_standard_sub_scores(raw_sub_scores)
+        overall_score = self._compute_standard_overall_score(sub_scores)
         coaching = self._generate_coaching(metrics, sub_scores, overall_score)
 
         return {
@@ -385,6 +386,107 @@ class BaseAnalyzer(ABC):
         if max_val <= min_val:
             return 0.5
         return float(np.clip((value - min_val) / (max_val - min_val), 0.0, 1.0))
+
+    @staticmethod
+    def _canonical_score_key(key: str) -> str:
+        cleaned = "".join(ch for ch in str(key).lower() if ch.isalnum())
+        return cleaned
+
+    def _build_standard_sub_scores(self, raw_sub_scores: Dict) -> Dict:
+        # Preserve original keys for backwards-compatible coaching copy while
+        # exposing the standardized four-key model consistently across sports.
+        merged: Dict = dict(raw_sub_scores or {})
+
+        # Consistency is no longer part of the standardized tactical model.
+        # Drop it from the merged payload so downstream consumers only receive
+        # power/control/timing/technique as tactical keys.
+        for key in list(merged.keys()):
+            if self._canonical_score_key(key) == "consistency":
+                merged.pop(key, None)
+
+        canonical_values: Dict[str, float] = {}
+        for key, value in merged.items():
+            try:
+                canonical_values[self._canonical_score_key(key)] = float(value)
+            except Exception:
+                continue
+
+        alias_weights = {
+            "power": {
+                "power": 1.0,
+                "speed": 0.9,
+                "athleticism": 0.8,
+                "touch": 0.5,
+            },
+            "control": {
+                "control": 1.0,
+                "stability": 0.9,
+                "placement": 0.8,
+                "accuracy": 0.8,
+                "alignment": 0.7,
+                "finesse": 0.7,
+                "deception": 0.6,
+                "reflexes": 0.5,
+                "balance": 0.7,
+                "movement": 0.6,
+                "shotselection": 0.6,
+            },
+            "timing": {
+                "timing": 1.0,
+                "rhythm": 0.8,
+                "reflexes": 0.5,
+            },
+            "technique": {
+                "technique": 1.0,
+                "followthrough": 0.8,
+                "spin": 0.6,
+                "arc": 0.6,
+                "footwork": 0.6,
+                "wallplay": 0.6,
+                "shotselection": 0.4,
+                "movement": 0.4,
+                "placement": 0.4,
+                "accuracy": 0.4,
+                "control": 0.5,
+                "deception": 0.5,
+                "finesse": 0.5,
+            },
+        }
+
+        fallback_defaults = {
+            "power": 78.0,
+            "control": 78.0,
+            "timing": 78.0,
+            "technique": 78.0,
+        }
+
+        standard_scores: Dict[str, int] = {}
+        for target_key, aliases in alias_weights.items():
+            weighted_sum = 0.0
+            weight_total = 0.0
+            for alias, weight in aliases.items():
+                if alias in canonical_values:
+                    weighted_sum += canonical_values[alias] * weight
+                    weight_total += weight
+
+            if weight_total > 0:
+                value = weighted_sum / weight_total
+            else:
+                value = fallback_defaults[target_key]
+
+            standard_scores[target_key] = int(np.clip(round(value), 0, 100))
+
+        merged.update(standard_scores)
+        return merged
+
+    def _compute_standard_overall_score(self, sub_scores: Dict) -> int:
+        score = round(
+            float(sub_scores.get("power", 0)) * 0.30
+            + float(sub_scores.get("control", 0)) * 0.25
+            + float(sub_scores.get("timing", 0)) * 0.25
+            + float(sub_scores.get("technique", 0)) * 0.20
+        )
+        return int(np.clip(score, 0, 100))
 
     def _generate_default_coaching(self, overall_score: int, sub_scores: Dict, sport_label: str) -> Dict:
         strengths = []

@@ -1,0 +1,13 @@
+{
+  "filenames": [
+    "B7BA807B-1011-4E07-B5CD-BC2E4DECB537.mp4",
+    "1995E6EF-9A34-401E-9D78-6A90097981D2.mp4"
+  ],
+  "latestOnly": true,
+  "includeSourceFilename": true,
+  "showScoreInputs": true,
+  "fields": {
+    "tactical": ["power", "control", "timing", "technique"],
+    "highlight": ["power", "technique"]
+  }
+}

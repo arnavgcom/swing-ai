@@ -6,11 +6,11 @@ export const golfIronConfig: SportCategoryConfig = {
   configKey: "golf-iron",
   overallScoreLabel: "Iron Shot Score",
   scores: [
-    { key: "technique", label: "Technique", weight: 0.30 },
-    { key: "accuracy", label: "Accuracy", weight: 0.25 },
-    { key: "consistency", label: "Consistency", weight: 0.20 },
-    { key: "power", label: "Power", weight: 0.15 },
-    { key: "balance", label: "Balance", weight: 0.10 },
+    { key: "power", label: "Power", weight: 0.14 },
+    { key: "control", label: "Control", weight: 0.32 },
+    { key: "timing", label: "Timing", weight: 0.09 },
+    { key: "technique", label: "Technique", weight: 0.27 },
+    { key: "consistency", label: "Consistency", weight: 0.18 },
   ],
   metrics: [
     {
@@ -40,7 +40,7 @@ export const golfIronConfig: SportCategoryConfig = {
       icon: "body",
       category: "biomechanics",
       color: "#6C5CE7",
-      description: "Shoulder rotation at top of backswing",
+      description: "Torso rotation at top of backswing",
       optimalRange: [70, 95],
     },
     {

@@ -34,10 +34,10 @@ class TennisServeAnalyzer(BaseAnalyzer):
         pronation = self._calc_pronation(pose_data, fps)
 
         ball_speed = self.ball_tracker.estimate_speed(fps, frame_h / 1.8)
-        ball_speed = float(np.clip(ball_speed, 50.0, 140.0)) if ball_speed > 0 else float(np.random.uniform(70, 110))
+        ball_speed = float(np.clip(ball_speed, 50.0, 140.0)) if ball_speed > 0 else float(90.00)
 
         trajectory_arc = self.ball_tracker.estimate_trajectory_arc()
-        trajectory_arc = float(np.clip(trajectory_arc, 2.0, 20.0)) if trajectory_arc > 0 else float(np.random.uniform(5, 12))
+        trajectory_arc = float(np.clip(trajectory_arc, 2.0, 20.0)) if trajectory_arc > 0 else float(8.50)
 
         spin = float(np.clip(self.ball_tracker.estimate_spin(fps), 500.0, 3800.0))
 
