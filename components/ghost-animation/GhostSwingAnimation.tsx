@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { View, Text, StyleSheet, Platform } from "react-native";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import Svg from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ds } from "@/constants/design-system";
 import { SkeletonRenderer } from "./SkeletonRenderer";
+import { SwingPathRenderer } from "./SwingPathRenderer";
 import { PlaybackControls } from "./PlaybackControls";
 import { CorrectionVisualizer } from "./CorrectionVisualizer";
 import type { CorrectionResult, SkeletonFrame } from "@/lib/ghost-correction";
@@ -26,6 +27,7 @@ export function GhostSwingAnimation({
   const [currentFrame, setCurrentFrame] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(0.5);
+  const [showPaths, setShowPaths] = useState(true);
   const animationRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
 
@@ -109,10 +111,28 @@ export function GhostSwingAnimation({
       <View style={styles.titleRow}>
         <Ionicons name="body" size={18} color="#60A5FA" />
         <Text style={styles.title}>Swing Correction</Text>
+        <Pressable
+          style={[styles.pathToggle, showPaths && styles.pathToggleActive]}
+          onPress={() => setShowPaths((v) => !v)}
+          hitSlop={8}
+        >
+          <Ionicons name="analytics" size={14} color={showPaths ? "#fff" : ds.color.textTertiary} />
+          <Text style={[styles.pathToggleText, showPaths && styles.pathToggleTextActive]}>Path</Text>
+        </Pressable>
       </View>
 
       <View style={styles.canvasContainer}>
         <Svg width={CANVAS_WIDTH} height={CANVAS_HEIGHT} style={styles.canvas}>
+          {showPaths && (
+            <SwingPathRenderer
+              playerFrames={playerFrames}
+              correctedFrames={correctedFrames}
+              currentFrame={currentFrame}
+              width={CANVAS_WIDTH}
+              height={CANVAS_HEIGHT}
+            />
+          )}
+
           <SkeletonRenderer
             landmarks={correctedLandmarks}
             color="#34D399"
@@ -149,6 +169,19 @@ export function GhostSwingAnimation({
         )}
       </View>
 
+      {showPaths && (
+        <View style={styles.pathLegend}>
+          <View style={styles.pathLegendItem}>
+            <View style={[styles.pathLegendDot, { backgroundColor: "#F87171" }]} />
+            <Text style={styles.pathLegendLabel}>Your Path</Text>
+          </View>
+          <View style={styles.pathLegendItem}>
+            <View style={[styles.pathLegendDot, { backgroundColor: "#34D399" }]} />
+            <Text style={styles.pathLegendLabel}>Optimal Path</Text>
+          </View>
+        </View>
+      )}
+
       <PlaybackControls
         isPlaying={isPlaying}
         currentFrame={currentFrame}
@@ -179,9 +212,33 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   title: {
+    flex: 1,
     color: ds.color.textPrimary,
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
+  },
+  pathToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: ds.radius.pill,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  pathToggleActive: {
+    backgroundColor: "rgba(248,113,113,0.2)",
+    borderColor: "rgba(248,113,113,0.4)",
+  },
+  pathToggleText: {
+    color: ds.color.textTertiary,
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+  },
+  pathToggleTextActive: {
+    color: "#fff",
   },
   canvasContainer: {
     alignItems: "center",
@@ -206,5 +263,28 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
+  },
+  pathLegend: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 16,
+    paddingVertical: 6,
+    marginHorizontal: 12,
+  },
+  pathLegendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  pathLegendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  pathLegendLabel: {
+    color: ds.color.textSecondary,
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
   },
 });
