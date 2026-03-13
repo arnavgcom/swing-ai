@@ -6,11 +6,12 @@ export const pickleballDinkConfig: SportCategoryConfig = {
   configKey: "pickleball-dink",
   overallScoreLabel: "Dink Score",
   scores: [
-    { key: "power", label: "Power", weight: 0.11 },
-    { key: "control", label: "Control", weight: 0.36 },
-    { key: "timing", label: "Timing", weight: 0.09 },
-    { key: "technique", label: "Technique", weight: 0.31 },
-    { key: "consistency", label: "Consistency", weight: 0.13 },
+    { key: "touch", label: "Soft Touch", weight: 0.25 },
+    { key: "technique", label: "Technique", weight: 0.20 },
+    { key: "arc", label: "Arc Control", weight: 0.15 },
+    { key: "stability", label: "Stability", weight: 0.15 },
+    { key: "consistency", label: "Consistency", weight: 0.15 },
+    { key: "rhythm", label: "Rhythm", weight: 0.10 },
   ],
   metrics: [
     {

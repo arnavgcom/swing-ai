@@ -6,11 +6,10 @@ export const paddleSmashConfig: SportCategoryConfig = {
   configKey: "paddle-smash",
   overallScoreLabel: "Smash Score",
   scores: [
-    { key: "power", label: "Power", weight: 0.47 },
-    { key: "control", label: "Control", weight: 0.09 },
-    { key: "timing", label: "Timing", weight: 0.17 },
-    { key: "technique", label: "Technique", weight: 0.21 },
-    { key: "consistency", label: "Consistency", weight: 0.06 },
+    { key: "power", label: "Power", weight: 0.30 },
+    { key: "technique", label: "Technique", weight: 0.25 },
+    { key: "athleticism", label: "Athleticism", weight: 0.25 },
+    { key: "timing", label: "Timing", weight: 0.20 },
   ],
   metrics: [
     {
@@ -30,7 +29,7 @@ export const paddleSmashConfig: SportCategoryConfig = {
       icon: "refresh-circle",
       category: "biomechanics",
       color: "#6C5CE7",
-      description: "Angular velocity of torso rotation during the smash",
+      description: "Angular velocity of shoulder rotation during the smash",
       optimalRange: [500, 900],
     },
     {

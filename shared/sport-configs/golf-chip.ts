@@ -6,11 +6,10 @@ export const golfChipConfig: SportCategoryConfig = {
   configKey: "golf-chip",
   overallScoreLabel: "Chip Score",
   scores: [
-    { key: "power", label: "Power", weight: 0.10 },
-    { key: "control", label: "Control", weight: 0.33 },
-    { key: "timing", label: "Timing", weight: 0.08 },
-    { key: "technique", label: "Technique", weight: 0.29 },
-    { key: "consistency", label: "Consistency", weight: 0.20 },
+    { key: "technique", label: "Technique", weight: 0.35 },
+    { key: "touch", label: "Touch", weight: 0.25 },
+    { key: "consistency", label: "Consistency", weight: 0.25 },
+    { key: "balance", label: "Balance", weight: 0.15 },
   ],
   metrics: [
     {

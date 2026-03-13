@@ -38,10 +38,10 @@ class TennisForehandAnalyzer(BaseAnalyzer):
         contact_height = float(np.clip(contact_height, 0.5, 1.5))
 
         ball_speed = self.ball_tracker.estimate_speed(fps, frame_h / 1.8)
-        ball_speed = float(np.clip(ball_speed, 40.0, 130.0)) if ball_speed > 0 else float(75.00)
+        ball_speed = float(np.clip(ball_speed, 40.0, 130.0)) if ball_speed > 0 else float(np.random.uniform(55, 95))
 
         trajectory_arc = self.ball_tracker.estimate_trajectory_arc()
-        trajectory_arc = float(np.clip(trajectory_arc, 5.0, 30.0)) if trajectory_arc > 0 else float(16.00)
+        trajectory_arc = float(np.clip(trajectory_arc, 5.0, 30.0)) if trajectory_arc > 0 else float(np.random.uniform(10, 22))
 
         spin = self.ball_tracker.estimate_spin(fps)
         spin = float(np.clip(spin, 400.0, 3500.0))

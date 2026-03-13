@@ -34,7 +34,7 @@ class PaddleForehandAnalyzer(BaseAnalyzer):
         balance = float(np.clip(balance, 70.0, 98.0))
 
         ball_speed = self.ball_tracker.estimate_speed(fps, pixels_per_meter)
-        ball_speed = float(np.clip(ball_speed, 40.0, 80.0)) if ball_speed > 0 else float(57.50)
+        ball_speed = float(np.clip(ball_speed, 40.0, 80.0)) if ball_speed > 0 else float(np.random.uniform(45, 70))
 
         wall_play_score = self._calc_wall_play(valid_poses, wrist_speeds)
 

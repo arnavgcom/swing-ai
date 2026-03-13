@@ -109,20 +109,11 @@ function getPlayerDisplayName(u: {
   return fullName || String(u.email || "").trim() || "Unknown";
 }
 
-function getGreetingFirstName(name?: string | null): string {
-  const fullName = String(name || "").trim();
-  if (fullName) {
-    return fullName.split(/\s+/)[0];
-  }
-
-  return "Player";
-}
-
 const PLAYER_METRICS = [
   { key: "power", label: "Power", icon: "flash", color: ds.color.success },
-  { key: "control", label: "Control", icon: "body", color: "#A78BFA" },
   { key: "timing", label: "Timing", icon: "timer", color: "#38BDF8" },
-  { key: "technique", label: "Technique", icon: "construct", color: "#60A5FA" },
+  { key: "stability", label: "Stability", icon: "body", color: "#A78BFA" },
+  { key: "consistency", label: "Consistency", icon: "repeat", color: ds.color.warning },
 ] as const;
 
 const PLAYER_TREND_FILTERS = [
@@ -151,46 +142,46 @@ function getImprovementDrill(
   if (sport.includes("tennis")) {
     if (movement.includes("serve")) {
       if (metricKey === "timing") return "3 x 12 toss-to-contact sequencing reps";
-      if (metricKey === "control") return "4 x 20s balanced trophy-stance holds";
-      if (metricKey === "technique") return "3 x 12 technical shadow serves with finish hold";
+      if (metricKey === "stability") return "4 x 20s balanced trophy-stance holds";
+      if (metricKey === "consistency") return "3 rounds of 10 first-serve target hits";
       return "3 x 10 medicine-ball style overhead drive motions";
     }
     if (movement.includes("backhand")) {
       if (metricKey === "timing") return "3 x 15 backhand contact-point marker reps";
-      if (metricKey === "control") return "4 x 30s split-step plus crossover recovery";
-      if (metricKey === "technique") return "3 x 12 backhand shape-and-finish repetitions";
+      if (metricKey === "stability") return "4 x 30s split-step plus crossover recovery";
+      if (metricKey === "consistency") return "3 rounds of 20 cross-court backhands";
       return "3 x 12 loaded backhand acceleration swings";
     }
     if (movement.includes("forehand")) {
       if (metricKey === "timing") return "3 x 15 forehand early-prep to contact reps";
-      if (metricKey === "control") return "4 x 30s open-stance recovery footwork";
-      if (metricKey === "technique") return "3 x 12 forehand shape-and-finish repetitions";
+      if (metricKey === "stability") return "4 x 30s open-stance recovery footwork";
+      if (metricKey === "consistency") return "3 rounds of 20 deep forehand rally balls";
       return "3 x 12 forehand kinetic-chain acceleration reps";
     }
 
     if (metricKey === "timing") return "3 x 15 unit-turn to contact timing reps";
-    if (metricKey === "control") return "4 x 30s split-step and recovery drill";
-    if (metricKey === "technique") return "3 x 12 swing-path and finish checkpoints";
+    if (metricKey === "stability") return "4 x 30s split-step and recovery drill";
+    if (metricKey === "consistency") return "3 rounds of 20 controlled rally contacts";
     return "3 x 12 explosive shadow swings";
   }
 
   if (sport.includes("golf")) {
     if (metricKey === "timing") return "3 x 10 takeaway-to-impact tempo reps";
-    if (metricKey === "control") return "4 x 20s single-leg balance with club set-up";
-    if (metricKey === "technique") return "3 x 10 setup-posture and impact-position checkpoints";
+    if (metricKey === "stability") return "4 x 20s single-leg balance with club set-up";
+    if (metricKey === "consistency") return "3 rounds of 10 target-line strikes";
     return "3 x 10 resisted hip-turn power reps";
   }
 
   if (sport.includes("badminton")) {
     if (metricKey === "timing") return "3 x 15 split-step to shuttle contact reps";
-    if (metricKey === "control") return "4 x 25s lunge-recover footwork";
-    if (metricKey === "technique") return "3 x 12 racket-path and contact-height checkpoints";
+    if (metricKey === "stability") return "4 x 25s lunge-recover footwork";
+    if (metricKey === "consistency") return "3 rounds of 20 controlled clears";
     return "3 x 12 jump-smash loading motions";
   }
 
   if (metricKey === "timing") return "3 x 15 contact timing reps";
-  if (metricKey === "control") return "4 x 30s balance and recovery drill";
-  if (metricKey === "technique") return "3 x 12 movement-shape and finish checkpoints";
+  if (metricKey === "stability") return "4 x 30s balance and recovery drill";
+  if (metricKey === "consistency") return "3 rounds of 20 controlled repetitions";
   return "3 x 12 explosive movement reps";
 }
 
@@ -201,20 +192,6 @@ function roundScore(value: number): number {
 function average(values: number[]): number | null {
   if (!values.length) return null;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function roundToTenths(value: number): number {
-  return Math.round(value * 10) / 10;
-}
-
-function computeDisplayDelta(
-  current: number | null,
-  previous: number | null,
-): number | null {
-  if (current == null || previous == null) return null;
-  if (Math.abs(previous) < 1e-6) return null;
-  const delta = Number((((current - previous) / Math.abs(previous)) * 100).toFixed(1));
-  return delta === 0 ? null : delta;
 }
 
 function stdDeviation(values: number[]): number | null {
@@ -247,9 +224,9 @@ function getMovementFromAnalysis(item: AnalysisSummary): string {
 }
 
 function getMovementTarget(metricKey: string): number {
+  if (metricKey === "consistency") return 85;
   if (metricKey === "timing") return 82;
-  if (metricKey === "control") return 80;
-  if (metricKey === "technique") return 81;
+  if (metricKey === "stability") return 80;
   return 78;
 }
 
@@ -275,9 +252,11 @@ function scaleDrillForDuration(baseDrill: string, minutes: PlanDuration): string
 
 function getExpectedGain(metricKey: string, minutes: PlanDuration): number {
   const baseGain =
-    metricKey === "timing"
+    metricKey === "consistency"
+      ? 5
+      : metricKey === "timing"
         ? 4
-        : metricKey === "control"
+        : metricKey === "stability"
           ? 3
           : 3;
 
@@ -286,21 +265,15 @@ function getExpectedGain(metricKey: string, minutes: PlanDuration): number {
 }
 
 function formatScoreDelta(delta: number | null): string {
-  if (delta === null) return "No prior session";
+  if (delta === null) return "No baseline";
   const sign = delta >= 0 ? "+" : "";
-  return `${sign}${delta.toFixed(1)}%`;
+  return `${sign}${delta.toFixed(1)} vs baseline`;
 }
 
 function getDeltaColor(delta: number | null): string {
   if (delta === null) return ds.color.textTertiary;
-  if (Math.abs(delta) < 1e-6) return "#94A3B8";
   if (delta >= 0) return ds.color.success;
   return ds.color.danger;
-}
-
-function deltaTrendIcon(delta: number | null): "trending-up" | "trending-down" | "remove" {
-  if (delta === null || Math.abs(delta) < 1e-6) return "remove";
-  return delta > 0 ? "trending-up" : "trending-down";
 }
 
 function PlayerMetricTrendChart({
@@ -355,7 +328,7 @@ function PlayerMetricTrendChart({
 
   const latestPoint = activePoints[activePoints.length - 1];
   const prevPoint = activePoints.length > 1 ? activePoints[activePoints.length - 2] : null;
-  const latestDelta = prevPoint ? computeDisplayDelta(latestPoint.value, prevPoint.value) : null;
+  const latestDelta = prevPoint ? Number((latestPoint.value - prevPoint.value).toFixed(1)) : null;
 
   const activePolylinePoints = activePoints.map((point) => `${point.x},${point.y}`).join(" ");
   const areaPath = [
@@ -385,7 +358,7 @@ function PlayerMetricTrendChart({
         </View>
         <Text style={[styles.playerTrendMetricValue, { color: activeSeries.color }]}>
           {roundScore(Number(latestPoint.value))}
-          {latestDelta !== null ? ` (${latestDelta >= 0 ? "+" : ""}${latestDelta}%)` : ""}
+          {latestDelta !== null ? ` (${latestDelta >= 0 ? "+" : ""}${latestDelta})` : ""}
         </Text>
       </View>
 
@@ -594,7 +567,6 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const { selectedSport, selectedMovement } = useSport();
   const isAdmin = user?.role === "admin";
-  const greetingFirstName = getGreetingFirstName(user?.name);
   const [selectedTrendMetric, setSelectedTrendMetric] = React.useState<string>(PLAYER_TREND_FILTERS[0].key);
   const [selectedTrendSessions, setSelectedTrendSessions] = React.useState<TrendSessionWindow>(10);
   const [selectedPlanMinutes, setSelectedPlanMinutes] = React.useState<PlanDuration>(20);
@@ -822,17 +794,33 @@ export default function DashboardScreen() {
 
     if (!scoredAnalyses.length) return null;
 
-    const latestScore = Number(scoredAnalyses[0].score);
-    const previousScore = scoredAnalyses.length > 1 ? Number(scoredAnalyses[1].score) : null;
-    const overallDelta = computeDisplayDelta(latestScore, previousScore);
+    const recentThree = scoredAnalyses.slice(0, 3).map((entry) => Number(entry.score));
+    const previousThree = scoredAnalyses.slice(3, 6).map((entry) => Number(entry.score));
+    const currentAverage = average(recentThree);
+    const previousAverage = average(previousThree);
+
+    const overallDelta =
+      currentAverage !== null && previousAverage !== null
+        ? Number((currentAverage - previousAverage).toFixed(1))
+        : null;
 
     const metricCards = PLAYER_METRICS.map((metric) => {
       const latestMetricScore = getSubScoreValue(scoredAnalyses[0].analysis, metric.key);
-      const previousMetricScore =
-        scoredAnalyses.length > 1
-          ? getSubScoreValue(scoredAnalyses[1].analysis, metric.key)
+      const recentMetricValues = scoredAnalyses
+        .slice(0, 3)
+        .map((entry) => getSubScoreValue(entry.analysis, metric.key))
+        .filter((value): value is number => value !== null);
+      const previousMetricValues = scoredAnalyses
+        .slice(3, 6)
+        .map((entry) => getSubScoreValue(entry.analysis, metric.key))
+        .filter((value): value is number => value !== null);
+
+      const recentMetricAverage = average(recentMetricValues);
+      const previousMetricAverage = average(previousMetricValues);
+      const delta =
+        recentMetricAverage !== null && previousMetricAverage !== null
+          ? Number((recentMetricAverage - previousMetricAverage).toFixed(1))
           : null;
-      const delta = computeDisplayDelta(latestMetricScore, previousMetricScore);
 
       return {
         ...metric,
@@ -840,6 +828,10 @@ export default function DashboardScreen() {
         delta,
       };
     });
+
+    const scoreStd = stdDeviation(scoredAnalyses.slice(0, 5).map((entry) => Number(entry.score)));
+    const consistencyIndex =
+      scoreStd === null ? null : roundScore(100 - scoreStd * 2.5);
 
     const trendSliceCount = selectedTrendSessions === "all" ? scoredAnalyses.length : selectedTrendSessions;
     const trendEntries = scoredAnalyses
@@ -884,7 +876,8 @@ export default function DashboardScreen() {
       .map(([movement, scores]) => {
         const recent = average(scores.slice(0, 2));
         const previous = average(scores.slice(2, 4));
-        const delta = computeDisplayDelta(recent, previous);
+        const delta =
+          recent !== null && previous !== null ? Number((recent - previous).toFixed(1)) : null;
         return {
           movement,
           score: roundScore(average(scores) || 0),
@@ -920,6 +913,7 @@ export default function DashboardScreen() {
       latestScore: roundScore(Number(scoredAnalyses[0].score)),
       scoreCount: scoredAnalyses.length,
       overallDelta,
+      consistencyIndex,
       metricCards,
       trendPoints,
       metricTrendSeries,
@@ -970,7 +964,7 @@ export default function DashboardScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.greetingSection}>
-          <Text style={styles.greeting}>{`Hi ${greetingFirstName},`}</Text>
+          <Text style={styles.greeting}>Hi Vikram,</Text>
           <Text style={styles.greetingSubtitle}>Ready to improve your game today?</Text>
           <View style={styles.sportLineRow}>
             {isAdmin ? (
@@ -1042,7 +1036,7 @@ export default function DashboardScreen() {
         {isAdmin && showPlayerDropdown && (
           <Modal
             transparent
-            animationType="none"
+            animationType="fade"
             onRequestClose={() => setShowPlayerDropdown(false)}
           >
             <Pressable
@@ -1309,9 +1303,14 @@ export default function DashboardScreen() {
                 >
                   <Text style={styles.playerHeroLabel}>Overall performance</Text>
                   <View style={styles.playerHeroTopRow}>
+                    <Text style={styles.playerHeroScore}>{playerDashboard.latestScore}</Text>
                     <View style={styles.playerHeroDeltaWrap}>
                       <Ionicons
-                        name={deltaTrendIcon(playerDashboard.overallDelta)}
+                        name={
+                          playerDashboard.overallDelta !== null && playerDashboard.overallDelta < 0
+                            ? "trending-down"
+                            : "trending-up"
+                        }
                         size={14}
                         color={getDeltaColor(playerDashboard.overallDelta)}
                       />
@@ -1324,11 +1323,13 @@ export default function DashboardScreen() {
                         {formatScoreDelta(playerDashboard.overallDelta)}
                       </Text>
                     </View>
-                    <Text style={styles.playerHeroScore}>{playerDashboard.latestScore}</Text>
                   </View>
                   <View style={styles.playerHeroMetaRow}>
                     <Text style={styles.playerHeroMetaText}>
                       Sessions tracked: {playerDashboard.scoreCount}
+                    </Text>
+                    <Text style={styles.playerHeroMetaText}>
+                      Consistency index: {playerDashboard.consistencyIndex ?? "--"}
                     </Text>
                   </View>
                 </LinearGradient>
@@ -1355,8 +1356,8 @@ export default function DashboardScreen() {
                         ]}
                       >
                         {metric.delta === null
-                          ? "No prior session"
-                          : `${metric.delta >= 0 ? "+" : ""}${metric.delta.toFixed(1)}% vs last`}
+                          ? "Build baseline"
+                          : `${metric.delta >= 0 ? "+" : ""}${metric.delta.toFixed(1)} trend`}
                       </Text>
                     </View>
                   ))}

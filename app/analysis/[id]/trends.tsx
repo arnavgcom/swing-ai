@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   Pressable,
   ScrollView,
@@ -20,8 +21,6 @@ import {
   fetchSportConfig,
   type SportCategoryConfig,
 } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
-import { normalizeMetricSelectionKey } from "@/lib/metrics-catalog";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ds } from "@/constants/design-system";
 
@@ -33,110 +32,18 @@ const SESSION_FILTERS = [
 ] as const;
 
 const CATEGORY_LABELS: Record<string, string> = {
-  biomechanics: "Technical (BIOMEC)",
+  biomechanics: "Biomechanics",
   ball: "Ball Metrics",
   timing: "Timing & Rhythm",
+  consistency: "Consistency",
   technique: "Technique",
   power: "Power",
 };
-
-const LEGACY_SECTION_LABEL_MAP: Record<string, "technical" | "tactical" | "movement"> = {
-  "technical (biomec)": "technical",
-  technical: "technical",
-  biomechanics: "technical",
-  tactical: "tactical",
-  "performance breakdown": "tactical",
-  movement: "movement",
-};
-
-const SECTION_COMPONENTS: Record<
-  "technical" | "tactical" | "movement",
-  Array<{ key: string; label: string }>
-> = {
-  technical: [
-    { key: "balance", label: "Balance" },
-    { key: "inertia", label: "Inertia" },
-    { key: "oppositeForce", label: "Opposite Force" },
-    { key: "momentum", label: "Momentum" },
-    { key: "elastic", label: "Elastic" },
-    { key: "contact", label: "Contact" },
-  ],
-  tactical: [
-    { key: "power", label: "Power" },
-    { key: "control", label: "Control" },
-    { key: "timing", label: "Timing" },
-    { key: "technique", label: "Technique" },
-  ],
-  movement: [
-    { key: "ready", label: "Ready" },
-    { key: "read", label: "Read" },
-    { key: "react", label: "React" },
-    { key: "respond", label: "Respond" },
-    { key: "recover", label: "Recover" },
-  ],
-};
-
-function toSportPreferenceKey(sportName?: string | null): string {
-  return String(sportName || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-/g, "");
-}
-
-function normalizeScoreSectionSelection(value: string): "technical" | "tactical" | "movement" | null {
-  const normalized = String(value || "").trim().toLowerCase();
-  return LEGACY_SECTION_LABEL_MAP[normalized] || null;
-}
-
-const MPH_TO_KMPH = 1.60934;
-
-function isMphUnit(unit?: string): boolean {
-  return String(unit || "").trim().toLowerCase() === "mph";
-}
-
-function toDisplaySpeed(value: number): number {
-  return value * MPH_TO_KMPH;
-}
-
-const METRICS_SCALE10_KEYS = new Set([
-  "balanceScore",
-  "rhythmConsistency",
-  "shotConsistency",
-]);
-
-function normalizeMetricDisplayScale(key: string, value: number): number {
-  if (!Number.isFinite(value)) return value;
-  if (!METRICS_SCALE10_KEYS.has(key)) return value;
-  return value > 10 ? value / 10 : value;
-}
 
 function formatDateLabel(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function computePercentDelta(current: number | null, previous: number | null): number | null {
-  if (current == null || previous == null) return null;
-  if (!Number.isFinite(current) || !Number.isFinite(previous)) return null;
-  if (Math.abs(previous) < 1e-6) return null;
-  const pct = ((current - previous) / Math.abs(previous)) * 100;
-  const rounded = Number(pct.toFixed(1));
-  return rounded === 0 ? null : rounded;
-}
-
-function deltaColor(deltaPct: number | null): string {
-  if (deltaPct == null) return "#64748B";
-  if (Math.abs(deltaPct) < 1e-6) return "#94A3B8";
-  return deltaPct >= 0 ? "#34D399" : "#F87171";
-}
-
-function formatDeltaPercent(deltaPct: number | null): string {
-  if (deltaPct == null) return "";
-  if (Math.abs(deltaPct) < 1e-6) return "  (-)";
-  return `  (${deltaPct >= 0 ? "+" : ""}${deltaPct.toFixed(1)}%)`;
 }
 
 type SeriesPoint = {
@@ -146,6 +53,16 @@ type SeriesPoint = {
 
 function MetricTrendChart({ points, color }: { points: SeriesPoint[]; color: string }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const reveal = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    reveal.setValue(0);
+    Animated.timing(reveal, {
+      toValue: 1,
+      duration: ds.motion.slow,
+      useNativeDriver: true,
+    }).start();
+  }, [color, points.length, reveal]);
 
   if (!points.length) {
     return <Text style={styles.metricEmpty}>No trend data</Text>;
@@ -198,8 +115,10 @@ function MetricTrendChart({ points, color }: { points: SeriesPoint[]; color: str
     leftPadding,
     Math.min(width - rightPadding - tooltipWidth, focusX - tooltipWidth / 2),
   );
+  const revealTranslateY = reveal.interpolate({ inputRange: [0, 1], outputRange: [6, 0] });
+
   return (
-    <View>
+    <Animated.View style={{ opacity: reveal, transform: [{ translateY: revealTranslateY }] }}>
       <View
         style={styles.chartInteractiveWrap}
         onStartShouldSetResponder={() => true}
@@ -287,7 +206,7 @@ function MetricTrendChart({ points, color }: { points: SeriesPoint[]; color: str
           );
         })}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -303,7 +222,6 @@ export default function AnalysisMetricTrendsScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const [metricOffsets, setMetricOffsets] = useState<Record<string, number>>({});
   const [sectionOffsets, setSectionOffsets] = useState<Record<string, number>>({});
-  const { user } = useAuth();
 
   const { data: analysisDetail } = useQuery({
     queryKey: ["analysis", id],
@@ -330,79 +248,19 @@ export default function AnalysisMetricTrendsScreen() {
     retry: false,
   });
 
-  const allPoints = trendData?.points || [];
-
-  const selectedSportKey = useMemo(
-    () => toSportPreferenceKey(sportConfig?.sportName),
-    [sportConfig?.sportName],
-  );
-
-  const selectedScoreSections = useMemo(() => {
-    const scoreMap =
-      user?.selectedScoreSectionsBySport && typeof user.selectedScoreSectionsBySport === "object"
-        ? user.selectedScoreSectionsBySport
-        : {};
-    const scoped = selectedSportKey ? scoreMap[selectedSportKey] : null;
-    const fallback = Array.isArray(user?.selectedScoreSections) ? user.selectedScoreSections : [];
-    const source = Array.isArray(scoped) && scoped.length > 0 ? scoped : fallback;
-
-    const mapped = source
-      .map((entry) => normalizeScoreSectionSelection(entry))
-      .filter((entry): entry is "technical" | "tactical" | "movement" => Boolean(entry));
-
-    if (mapped.length > 0) return Array.from(new Set(mapped));
-    return ["technical", "tactical", "movement"] as Array<"technical" | "tactical" | "movement">;
-  }, [selectedSportKey, user?.selectedScoreSections, user?.selectedScoreSectionsBySport]);
-
-  const selectedMetricKeys = useMemo(() => {
-    const metricMap =
-      user?.selectedMetricKeysBySport && typeof user.selectedMetricKeysBySport === "object"
-        ? user.selectedMetricKeysBySport
-        : {};
-    const scoped = selectedSportKey ? metricMap[selectedSportKey] : null;
-    const fallback = Array.isArray(user?.selectedMetricKeys) ? user.selectedMetricKeys : [];
-    const source = Array.isArray(scoped) ? scoped : fallback;
-
-    return Array.from(
-      new Set(
-        source
-          .map((entry) => normalizeMetricSelectionKey(String(entry || "")))
-          .filter((entry) => entry.length > 0),
-      ),
-    );
-  }, [selectedSportKey, user?.selectedMetricKeys, user?.selectedMetricKeysBySport]);
-
-  const orderedMetrics = useMemo(() => {
-    if (!sportConfig) return [] as SportCategoryConfig["metrics"];
-
-    const metrics = [...sportConfig.metrics];
-    const hasShotSpeedData = allPoints.some((point) => {
-      const value = Number(point.metricValues?.shotSpeed);
-      return Number.isFinite(value) && value > 0;
-    });
-
-    if (hasShotSpeedData && !metrics.some((metric) => metric.key === "shotSpeed")) {
-      metrics.push({
-        key: "shotSpeed",
-        label: "Shot Speed",
-        unit: "kmph",
-        icon: "speedometer-outline",
-        category: "ball",
-        color: "#F59E0B",
-        description: "Normalized shot speed across sessions.",
-      });
+  const metricsByCategory = useMemo(() => {
+    if (!sportConfig) return {} as Record<string, SportCategoryConfig["metrics"]>;
+    const groups: Record<string, SportCategoryConfig["metrics"]> = {};
+    for (const metric of sportConfig.metrics) {
+      if (!groups[metric.category]) {
+        groups[metric.category] = [];
+      }
+      groups[metric.category].push(metric);
     }
+    return groups;
+  }, [sportConfig]);
 
-    const sorted = metrics.sort((a, b) =>
-      String(a.label || "").localeCompare(String(b.label || ""), undefined, { sensitivity: "base" }),
-    );
-
-    if (!selectedMetricKeys.length) return sorted;
-
-    const selected = new Set(selectedMetricKeys);
-    return sorted.filter((metric) => selected.has(normalizeMetricSelectionKey(metric.key)));
-  }, [allPoints, selectedMetricKeys, sportConfig]);
-
+  const allPoints = trendData?.points || [];
   const points = useMemo(() => {
     if (sessionFilter === "all") return allPoints;
     return allPoints.slice(-sessionFilter);
@@ -416,15 +274,15 @@ export default function AnalysisMetricTrendsScreen() {
           if (!Number.isFinite(value)) return null;
           return {
             label: formatDateLabel(point.capturedAt),
-            value: value / 10,
+            value,
           };
         })
         .filter((point): point is SeriesPoint => point !== null),
     [points],
   );
 
-  const sectionTrendSeries = useMemo(() => {
-    if (!selectedScoreSections.length) return [] as Array<{
+  const breakdownTrendSeries = useMemo(() => {
+    if (!sportConfig?.scores?.length) return [] as Array<{
       key: string;
       label: string;
       color: string;
@@ -432,21 +290,11 @@ export default function AnalysisMetricTrendsScreen() {
       points: SeriesPoint[];
     }>;
 
-    const sectionLabels: Record<string, string> = {
-      technical: "Technical Score",
-      tactical: "Tactical Score",
-      movement: "Movement Score",
-    };
-    const sectionColors: Record<string, string> = {
-      technical: "#60A5FA",
-      tactical: "#34D399",
-      movement: "#F59E0B",
-    };
-
-    return selectedScoreSections.map((section) => {
-      const pointsForSection = points
+    const fallbackColors = ["#60A5FA", "#34D399", "#F59E0B", "#A78BFA", "#F87171"];
+    return sportConfig.scores.map((score, index) => {
+      const pointsForScore = points
         .map((point) => {
-          const raw = point.sectionScores?.[section];
+          const raw = point.subScores?.[score.key];
           const value = Number(raw);
           if (!Number.isFinite(value)) return null;
           return {
@@ -457,71 +305,14 @@ export default function AnalysisMetricTrendsScreen() {
         .filter((point): point is SeriesPoint => point !== null);
 
       return {
-        key: section,
-        label: sectionLabels[section] || `${section} Score`,
-        color: sectionColors[section] || "#60A5FA",
-        unit: "/10",
-        points: pointsForSection,
+        key: score.key,
+        label: score.label,
+        color: fallbackColors[index % fallbackColors.length],
+        unit: "/100",
+        points: pointsForScore,
       };
     });
-  }, [points, selectedScoreSections]);
-
-  const sectionComponentSeries = useMemo(() => {
-    const output: Array<{
-      key: string;
-      section: "technical" | "tactical" | "movement";
-      label: string;
-      color: string;
-      unit: string;
-      points: SeriesPoint[];
-    }> = [];
-
-    const sectionColors: Record<string, string> = {
-      technical: "#60A5FA",
-      tactical: "#34D399",
-      movement: "#F59E0B",
-    };
-
-    for (const section of selectedScoreSections) {
-      for (const component of SECTION_COMPONENTS[section]) {
-        const seriesPoints = points
-          .map((point) => {
-            let raw: unknown = null;
-
-            if (section === "tactical") {
-              raw = point.subScores?.[component.key];
-              const value100 = Number(raw);
-              if (!Number.isFinite(value100)) return null;
-              return {
-                label: formatDateLabel(point.capturedAt),
-                value: value100 / 10,
-              };
-            }
-
-            raw = point.scoreOutputs?.[section]?.components?.[component.key];
-            const value = Number(raw);
-            if (!Number.isFinite(value)) return null;
-
-            return {
-              label: formatDateLabel(point.capturedAt),
-              value: value > 10 ? value / 10 : value,
-            };
-          })
-          .filter((point): point is SeriesPoint => point !== null);
-
-        output.push({
-          key: `${section}.${component.key}`,
-          section,
-          label: component.label,
-          color: sectionColors[section] || "#60A5FA",
-          unit: "/10",
-          points: seriesPoints,
-        });
-      }
-    }
-
-    return output;
-  }, [points, selectedScoreSections]);
+  }, [points, sportConfig]);
 
   useEffect(() => {
     const targetSection = String(focusSection || "").trim().toLowerCase();
@@ -530,7 +321,7 @@ export default function AnalysisMetricTrendsScreen() {
       if (typeof sectionY !== "number") return;
 
       const timer = setTimeout(() => {
-        scrollRef.current?.scrollTo({ y: Math.max(0, sectionY - 10) });
+        scrollRef.current?.scrollTo({ y: Math.max(0, sectionY - 10), animated: false });
       }, 0);
 
       return () => clearTimeout(timer);
@@ -542,7 +333,7 @@ export default function AnalysisMetricTrendsScreen() {
     if (typeof targetOffset !== "number") return;
 
     const timer = setTimeout(() => {
-      scrollRef.current?.scrollTo({ y: Math.max(0, targetOffset - 10) });
+      scrollRef.current?.scrollTo({ y: Math.max(0, targetOffset - 10), animated: false });
     }, 0);
 
     return () => clearTimeout(timer);
@@ -619,17 +410,9 @@ export default function AnalysisMetricTrendsScreen() {
                 </View>
                 <View style={styles.metricTitleWrap}>
                   <Text style={styles.metricTitle}>Overall Score Trend</Text>
-                  {(() => {
-                    const latest = overallTrendPoints.length ? overallTrendPoints[overallTrendPoints.length - 1].value : null;
-                    const previous = overallTrendPoints.length > 1 ? overallTrendPoints[overallTrendPoints.length - 2].value : null;
-                    const deltaPct = computePercentDelta(latest, previous);
-                    return (
                   <Text style={styles.metricSubTitle}>
-                    Latest: {latest !== null ? latest.toFixed(2) : "-"}
-                    {formatDeltaPercent(deltaPct)}
+                    Latest: {overallTrendPoints.length ? overallTrendPoints[overallTrendPoints.length - 1].value.toFixed(2) : "-"}
                   </Text>
-                    );
-                  })()}
                 </View>
               </View>
               <MetricTrendChart points={overallTrendPoints} color="#6C5CE7" />
@@ -643,15 +426,11 @@ export default function AnalysisMetricTrendsScreen() {
             }}
             style={styles.section}
           >
-            <Text style={styles.sectionTitle}>Selected Score Dimensions</Text>
-            {sectionTrendSeries.map((scoreTrend) => {
+            <Text style={styles.sectionTitle}>Performance Breakdown</Text>
+            {breakdownTrendSeries.map((scoreTrend) => {
               const latestValue = scoreTrend.points.length
                 ? scoreTrend.points[scoreTrend.points.length - 1].value
                 : null;
-              const previousValue = scoreTrend.points.length > 1
-                ? scoreTrend.points[scoreTrend.points.length - 2].value
-                : null;
-              const deltaPct = computePercentDelta(latestValue, previousValue);
               return (
                 <GlassCard key={scoreTrend.key} style={styles.metricTrendCard}>
                   <View style={styles.metricHeaderRow}>
@@ -660,9 +439,8 @@ export default function AnalysisMetricTrendsScreen() {
                     </View>
                     <View style={styles.metricTitleWrap}>
                       <Text style={styles.metricTitle}>{scoreTrend.label}</Text>
-                      <Text style={[styles.metricSubTitle, { color: deltaPct != null ? deltaColor(deltaPct) : "#94A3B8" }]}>
+                      <Text style={styles.metricSubTitle}>
                         Latest: {latestValue !== null ? latestValue.toFixed(2) : "-"} {scoreTrend.unit}
-                        {formatDeltaPercent(deltaPct)}
                       </Text>
                     </View>
                   </View>
@@ -670,105 +448,64 @@ export default function AnalysisMetricTrendsScreen() {
                 </GlassCard>
               );
             })}
-
-            {sectionComponentSeries.map((componentTrend) => {
-              const latestValue = componentTrend.points.length
-                ? componentTrend.points[componentTrend.points.length - 1].value
-                : null;
-              const previousValue = componentTrend.points.length > 1
-                ? componentTrend.points[componentTrend.points.length - 2].value
-                : null;
-              const deltaPct = computePercentDelta(latestValue, previousValue);
-
-              return (
-                <GlassCard key={componentTrend.key} style={styles.metricTrendCard}>
-                  <View style={styles.metricHeaderRow}>
-                    <View style={[styles.metricIconWrap, { backgroundColor: `${componentTrend.color}1F` }]}> 
-                      <Ionicons name="pulse" size={14} color={componentTrend.color} />
-                    </View>
-                    <View style={styles.metricTitleWrap}>
-                      <Text style={styles.metricTitle}>{componentTrend.label}</Text>
-                      <Text style={[styles.metricSubTitle, { color: deltaPct != null ? deltaColor(deltaPct) : "#94A3B8" }]}> 
-                        Latest: {latestValue !== null ? latestValue.toFixed(2) : "-"} {componentTrend.unit}
-                        {formatDeltaPercent(deltaPct)}
-                      </Text>
-                    </View>
-                  </View>
-                  <MetricTrendChart points={componentTrend.points} color={componentTrend.color} />
-                </GlassCard>
-              );
-            })}
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Selected Metrics</Text>
+          {Object.entries(metricsByCategory).map(([category, categoryMetrics]) => (
+            <View key={category} style={styles.section}>
+              <Text style={styles.sectionTitle}>{CATEGORY_LABELS[category] || category}</Text>
 
-            {orderedMetrics.map((metric) => {
-              const metricUsesMph = isMphUnit(metric.unit);
-              const isScale10Metric = METRICS_SCALE10_KEYS.has(metric.key);
-              const displayUnit = metricUsesMph ? "kmph" : metric.unit;
-              const trendPoints = points
-                .map((point) => {
-                  const raw = point.metricValues?.[metric.key];
-                  const parsedValue = Number(raw);
-                  const normalizedValue = Number.isFinite(parsedValue)
-                    ? normalizeMetricDisplayScale(metric.key, parsedValue)
-                    : parsedValue;
-                  const value =
-                    metricUsesMph && Number.isFinite(normalizedValue)
-                      ? toDisplaySpeed(normalizedValue)
-                      : normalizedValue;
-                  if (!Number.isFinite(value)) return null;
-                  return {
-                    label: formatDateLabel(point.capturedAt),
-                    value,
-                  };
-                })
-                .filter((point): point is SeriesPoint => point !== null);
+              {categoryMetrics.map((metric) => {
+                const trendPoints = points
+                  .map((point) => {
+                    const raw = point.metricValues?.[metric.key];
+                    const value = Number(raw);
+                    if (!Number.isFinite(value)) return null;
+                    return {
+                      label: formatDateLabel(point.capturedAt),
+                      value,
+                    };
+                  })
+                  .filter((point): point is SeriesPoint => point !== null);
 
-              const latestValue = trendPoints.length ? trendPoints[trendPoints.length - 1].value : null;
-              const previousValue = trendPoints.length > 1 ? trendPoints[trendPoints.length - 2].value : null;
-              const deltaPct = computePercentDelta(latestValue, previousValue);
-              const highlighted = String(focusMetric || "") === metric.key;
-              const latestPrecision = metric.key === "ballSpeed" || isScale10Metric ? 1 : 2;
-              const metricDisplayUnit = metricUsesMph ? "kmph" : isScale10Metric ? "/10" : displayUnit;
+                const latestValue = trendPoints.length ? trendPoints[trendPoints.length - 1].value : null;
+                const highlighted = String(focusMetric || "") === metric.key;
 
-              return (
-                <View
-                  key={metric.key}
-                  onLayout={(event) => {
-                    const nextY = event.nativeEvent.layout.y;
-                    setMetricOffsets((prev) => {
-                      if (prev[metric.key] === nextY) return prev;
-                      return { ...prev, [metric.key]: nextY };
-                    });
-                  }}
-                >
-                  <GlassCard
-                    style={[
-                      styles.metricTrendCard,
-                      highlighted && { borderColor: `${metric.color}99` },
-                    ]}
+                return (
+                  <View
+                    key={metric.key}
+                    onLayout={(event) => {
+                      const nextY = event.nativeEvent.layout.y;
+                      setMetricOffsets((prev) => {
+                        if (prev[metric.key] === nextY) return prev;
+                        return { ...prev, [metric.key]: nextY };
+                      });
+                    }}
                   >
-                    <View style={styles.metricHeaderRow}>
-                      <View style={[styles.metricIconWrap, { backgroundColor: `${metric.color}1F` }]}> 
-                        <Ionicons name={metric.icon as any} size={14} color={metric.color} />
+                    <GlassCard
+                      style={[
+                        styles.metricTrendCard,
+                        highlighted && { borderColor: `${metric.color}99` },
+                      ]}
+                    >
+                      <View style={styles.metricHeaderRow}>
+                        <View style={[styles.metricIconWrap, { backgroundColor: `${metric.color}1F` }]}>
+                          <Ionicons name={metric.icon as any} size={14} color={metric.color} />
+                        </View>
+                        <View style={styles.metricTitleWrap}>
+                          <Text style={styles.metricTitle}>{metric.label}</Text>
+                          <Text style={styles.metricSubTitle}>
+                            Latest: {latestValue !== null ? latestValue.toFixed(2) : "-"} {metric.unit}
+                          </Text>
+                        </View>
                       </View>
-                      <View style={styles.metricTitleWrap}>
-                        <Text style={styles.metricTitle}>{metric.label}</Text>
-                        <Text style={[styles.metricSubTitle, { color: deltaPct != null ? deltaColor(deltaPct) : "#94A3B8" }]}>
-                          Latest: {latestValue !== null ? latestValue.toFixed(latestPrecision) : "-"} {metricDisplayUnit}
-                          {formatDeltaPercent(deltaPct)}
-                        </Text>
-                      </View>
-                    </View>
 
-                    <MetricTrendChart points={trendPoints} color={metric.color} />
-                  </GlassCard>
-                </View>
-              );
-            })}
-          </View>
+                      <MetricTrendChart points={trendPoints} color={metric.color} />
+                    </GlassCard>
+                  </View>
+                );
+              })}
+            </View>
+          ))}
         </ScrollView>
       )}
     </View>

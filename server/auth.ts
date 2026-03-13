@@ -10,17 +10,6 @@ import { users, registerSchema, loginSchema, type User } from "@shared/schema";
 import { eq, or, sql } from "drizzle-orm";
 
 function sanitizeUser(user: User) {
-  const selectedScoreSectionsBySport =
-    user.selectedScoreSectionsBySport
-    && typeof user.selectedScoreSectionsBySport === "object"
-      ? user.selectedScoreSectionsBySport
-      : {};
-  const selectedMetricKeysBySport =
-    user.selectedMetricKeysBySport
-    && typeof user.selectedMetricKeysBySport === "object"
-      ? user.selectedMetricKeysBySport
-      : {};
-
   return {
     id: user.id,
     email: user.email,
@@ -30,10 +19,6 @@ function sanitizeUser(user: User) {
     address: user.address,
     country: user.country,
     dominantProfile: user.dominantProfile,
-    selectedScoreSections: Array.isArray(user.selectedScoreSections) ? user.selectedScoreSections : [],
-    selectedMetricKeys: Array.isArray(user.selectedMetricKeys) ? user.selectedMetricKeys : [],
-    selectedScoreSectionsBySport,
-    selectedMetricKeysBySport,
     sportsInterests: user.sportsInterests,
     bio: user.bio,
     role: user.role,
@@ -75,18 +60,6 @@ const PgSession = connectPgSimple(session);
 export async function setupAuth(app: Express) {
   await db.execute(
     sql`alter table users add column if not exists dominant_profile text`,
-  );
-  await db.execute(
-    sql`alter table users add column if not exists selected_score_sections jsonb default '[]'::jsonb`,
-  );
-  await db.execute(
-    sql`alter table users add column if not exists selected_metric_keys jsonb default '[]'::jsonb`,
-  );
-  await db.execute(
-    sql`alter table users add column if not exists selected_score_sections_by_sport jsonb default '{}'::jsonb`,
-  );
-  await db.execute(
-    sql`alter table users add column if not exists selected_metric_keys_by_sport jsonb default '{}'::jsonb`,
   );
 
   app.use(
@@ -392,19 +365,7 @@ export async function setupAuth(app: Express) {
 
   app.put("/api/profile", requireAuth, async (req: Request, res: Response) => {
     try {
-      const {
-        name,
-        phone,
-        address,
-        country,
-        dominantProfile,
-        selectedScoreSections,
-        selectedMetricKeys,
-        selectedSportKey,
-        sportsInterests,
-        bio,
-        role,
-      } = req.body;
+      const { name, phone, address, country, dominantProfile, sportsInterests, bio, role } = req.body;
       const requesterId = req.session.userId!;
       const [requester] = await db
         .select()
@@ -419,7 +380,7 @@ export async function setupAuth(app: Express) {
         return res.status(400).json({ error: "Name is required" });
       }
 
-      const updates: Record<string, unknown> = {};
+      const updates: Record<string, string | null> = {};
       if (name !== undefined) updates.name = name.trim();
       if (phone !== undefined) updates.phone = phone?.trim() || null;
       if (address !== undefined) updates.address = address?.trim() || null;
@@ -436,55 +397,6 @@ export async function setupAuth(app: Express) {
       }
       if (sportsInterests !== undefined) updates.sportsInterests = sportsInterests?.trim() || null;
       if (bio !== undefined) updates.bio = bio?.trim() || null;
-      if (selectedScoreSections !== undefined) {
-        if (!Array.isArray(selectedScoreSections) || !selectedScoreSections.every((v) => typeof v === "string")) {
-          return res.status(400).json({ error: "selectedScoreSections must be an array of strings" });
-        }
-      }
-      if (selectedMetricKeys !== undefined) {
-        if (!Array.isArray(selectedMetricKeys) || !selectedMetricKeys.every((v) => typeof v === "string")) {
-          return res.status(400).json({ error: "selectedMetricKeys must be an array of strings" });
-        }
-      }
-
-      const normalizedSportKey = String(selectedSportKey || "")
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
-
-      if (selectedScoreSections !== undefined || selectedMetricKeys !== undefined) {
-        if (normalizedSportKey) {
-          const existingScoreBySport =
-            requester.selectedScoreSectionsBySport
-            && typeof requester.selectedScoreSectionsBySport === "object"
-              ? { ...(requester.selectedScoreSectionsBySport as Record<string, string[]>) }
-              : {};
-          const existingMetricBySport =
-            requester.selectedMetricKeysBySport
-            && typeof requester.selectedMetricKeysBySport === "object"
-              ? { ...(requester.selectedMetricKeysBySport as Record<string, string[]>) }
-              : {};
-
-          if (selectedScoreSections !== undefined) {
-            existingScoreBySport[normalizedSportKey] = selectedScoreSections;
-          }
-          if (selectedMetricKeys !== undefined) {
-            existingMetricBySport[normalizedSportKey] = selectedMetricKeys;
-          }
-
-          updates.selectedScoreSectionsBySport = existingScoreBySport;
-          updates.selectedMetricKeysBySport = existingMetricBySport;
-        } else {
-          // Backward-compatible fallback to global preferences when no sport key is supplied.
-          if (selectedScoreSections !== undefined) {
-            updates.selectedScoreSections = selectedScoreSections;
-          }
-          if (selectedMetricKeys !== undefined) {
-            updates.selectedMetricKeys = selectedMetricKeys;
-          }
-        }
-      }
       if (role !== undefined) {
         if (!(role === "player" || role === "admin")) {
           return res.status(400).json({ error: "role must be player or admin" });

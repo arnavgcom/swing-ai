@@ -18,16 +18,6 @@
 			"isBackground": false
 		},
 		{
-			"label": "inspect-video-discrepancy-fast",
-			"type": "shell",
-			"command": "bash",
-			"args": [
-				"-lc",
-				"VIDEO_FILENAME='Tennis-Arnav Gupta-20260303-231703-xctk.mp4' ROW_LIMIT=5 node scripts/inspect_video_discrepancy_fast.js"
-			],
-			"isBackground": false
-		},
-		{
 			"label": "run-swing-ai-server-dev",
 			"type": "shell",
 			"command": "npm",

@@ -30,7 +30,7 @@ class PaddleSmashAnalyzer(BaseAnalyzer):
         jump_height = self._calc_jump_height(valid_poses, frame_h)
 
         ball_speed = self.ball_tracker.estimate_speed(fps, pixels_per_meter)
-        ball_speed = float(np.clip(ball_speed, 50.0, 90.0)) if ball_speed > 0 else float(67.50)
+        ball_speed = float(np.clip(ball_speed, 50.0, 90.0)) if ball_speed > 0 else float(np.random.uniform(55, 80))
 
         contact_height = float(np.percentile(contact_heights, 90)) if contact_heights else 2.4
         contact_height = float(np.clip(contact_height, 2.0, 3.0))

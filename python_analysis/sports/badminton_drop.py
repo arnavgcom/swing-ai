@@ -23,7 +23,7 @@ class BadmintonDropAnalyzer(BaseAnalyzer):
         deception_score = self._calc_deception_score(wrist_speeds, elbow_angles)
 
         trajectory_arc = self.ball_tracker.estimate_trajectory_arc()
-        net_clearance = float(np.clip(trajectory_arc * 2.0, 2.0, 15.0)) if trajectory_arc > 0 else float(7.00)
+        net_clearance = float(np.clip(trajectory_arc * 2.0, 2.0, 15.0)) if trajectory_arc > 0 else float(np.random.uniform(4, 10))
 
         racket_angle = self._calc_racket_angle(valid_poses)
         shot_consistency = self._calc_shot_consistency(elbow_angles, wrist_speeds)

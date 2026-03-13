@@ -7,10 +7,10 @@ export const golfDriveConfig: SportCategoryConfig = {
   overallScoreLabel: "Drive Score",
   scores: [
     { key: "power", label: "Power", weight: 0.30 },
-    { key: "control", label: "Control", weight: 0.10 },
-    { key: "timing", label: "Timing", weight: 0.15 },
     { key: "technique", label: "Technique", weight: 0.25 },
     { key: "consistency", label: "Consistency", weight: 0.20 },
+    { key: "timing", label: "Timing", weight: 0.15 },
+    { key: "balance", label: "Balance", weight: 0.10 },
   ],
   metrics: [
     {
@@ -40,7 +40,7 @@ export const golfDriveConfig: SportCategoryConfig = {
       icon: "body",
       category: "biomechanics",
       color: "#6C5CE7",
-      description: "Torso rotation angle at top of backswing",
+      description: "Shoulder rotation angle at top of backswing",
       optimalRange: [75, 100],
     },
     {

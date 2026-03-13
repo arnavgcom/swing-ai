@@ -6,11 +6,10 @@ export const tennisVolleyConfig: SportCategoryConfig = {
   configKey: "tennis-volley",
   overallScoreLabel: "Volley Score",
   scores: [
-    { key: "power", label: "Power", weight: 0.10 },
-    { key: "control", label: "Control", weight: 0.61 },
-    { key: "timing", label: "Timing", weight: 0.08 },
-    { key: "technique", label: "Technique", weight: 0.15 },
-    { key: "consistency", label: "Consistency", weight: 0.06 },
+    { key: "reflexes", label: "Reflexes", weight: 0.30 },
+    { key: "stability", label: "Stability", weight: 0.25 },
+    { key: "placement", label: "Placement", weight: 0.25 },
+    { key: "technique", label: "Technique", weight: 0.20 },
   ],
   metrics: [
     {

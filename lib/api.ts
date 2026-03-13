@@ -23,57 +23,9 @@ export interface MetricsResponse {
   analysisId: string;
   configKey: string;
   modelVersion?: string;
-  overallScore: number | null;
-  subScores: Record<string, number | null>;
+  overallScore: number;
+  subScores: Record<string, number>;
   metricValues: Record<string, number>;
-  scoreInputs?: {
-    technical: Record<string, { parameters: string[]; values: Record<string, number | null> }>;
-    movement: Record<string, { parameters: string[]; values: Record<string, number | null> }>;
-    tactical: Record<string, { parameters: string[]; values: Record<string, number | null> }>;
-    metadata: { configKey: string; generatedAt: string };
-  };
-  scoreOutputs?: {
-    technical: {
-      overall: number | null;
-      components: {
-        balance: number | null;
-        inertia: number | null;
-        oppositeForce: number | null;
-        momentum: number | null;
-        elastic: number | null;
-        contact: number | null;
-      };
-    };
-    tactical: {
-      overall: number | null;
-      components: {
-        power: number | null;
-        control: number | null;
-        timing: number | null;
-        technique: number | null;
-      };
-    };
-    movement: {
-      overall: number | null;
-      components: {
-        ready: number | null;
-        read: number | null;
-        react: number | null;
-        respond: number | null;
-        recover: number | null;
-      };
-    };
-    overall: number | null;
-    metadata: { configKey: string; generatedAt: string; scale: "0-10" };
-  };
-  aiDiagnostics?: Record<string, unknown> | null;
-}
-
-export interface ScoreInputsResponse {
-  analysisId: string;
-  configKey: string | null;
-  modelVersion: string | null;
-  scoreInputs: MetricsResponse["scoreInputs"] | null;
 }
 
 export interface ModelEvaluationSettingsResponse {
@@ -189,7 +141,7 @@ export interface SportCategoryConfig {
 export interface ComparisonResponse {
   averages: {
     metricValues: Record<string, number>;
-    subScores: Record<string, number | null>;
+    subScores: Record<string, number>;
   } | null;
   count: number;
 }
@@ -198,33 +150,9 @@ export interface AnalysisMetricTrendsResponse {
   period: string;
   points: Array<{
     analysisId: string;
-    videoFilename?: string | null;
-    sourceFilename?: string | null;
-    videoContentHash?: string | null;
     capturedAt: string;
     overallScore: number | null;
-    subScores: Record<string, number | null>;
-    sectionScores?: {
-      technical: number | null;
-      tactical: number | null;
-      movement: number | null;
-    };
-    scoreOutputs?: {
-      technical?: {
-        overall?: number | null;
-        components?: Record<string, number | null>;
-      } | null;
-      tactical?: {
-        overall?: number | null;
-        components?: Record<string, number | null>;
-      } | null;
-      movement?: {
-        overall?: number | null;
-        components?: Record<string, number | null>;
-      } | null;
-      overall?: number | null;
-      metadata?: Record<string, unknown>;
-    } | null;
+    subScores: Record<string, number>;
     metricValues: Record<string, number>;
   }>;
 }
@@ -351,31 +279,6 @@ export interface AnalysisShotAnnotationResponse {
   updatedAt: string;
 }
 
-export interface ImprovedTennisScoreDetailResponse {
-  key: string;
-  label: string;
-  score: number;
-  explanation: string;
-}
-
-export interface ImprovedTennisReportResponse {
-  stroke: "forehand" | "backhand" | "serve" | "volley";
-  biomechanics: ImprovedTennisScoreDetailResponse[];
-  movement: ImprovedTennisScoreDetailResponse[];
-  strengths: string[];
-  improvementAreas: string[];
-  coachingTips: string[];
-  overallScore: number;
-}
-
-export interface ImprovedTennisAnalysisResponse {
-  analysisId: string;
-  sport: "tennis";
-  report: ImprovedTennisReportResponse;
-  inputMetrics: Record<string, number>;
-  diagnosticsAvailable: boolean;
-}
-
 export async function fetchMyShotAnnotations(): Promise<AnalysisShotAnnotationResponse[]> {
   const baseUrl = getApiUrl();
   const res = await fetch(`${baseUrl}api/shot-annotations`, {
@@ -465,29 +368,7 @@ export async function fetchAnalyses(): Promise<AnalysisResponse[]> {
 
 export interface AnalysisSummary extends AnalysisResponse {
   overallScore: number | null;
-  subScores: Record<string, number | null> | null;
-  metricValues?: Record<string, number> | null;
-  scoreOutputs?: {
-    technical?: {
-      overall?: number | null;
-      components?: Record<string, number | null>;
-    } | null;
-    tactical?: {
-      overall?: number | null;
-      components?: Record<string, number | null>;
-    } | null;
-    movement?: {
-      overall?: number | null;
-      components?: Record<string, number | null>;
-    } | null;
-    overall?: number | null;
-    metadata?: { configKey?: string; generatedAt?: string; scale?: string };
-  } | null;
-  sectionScores?: {
-    technical: number | null;
-    tactical: number | null;
-    movement: number | null;
-  } | null;
+  subScores: Record<string, number> | null;
   configKey: string | null;
   modelVersion?: string | null;
 }
@@ -577,28 +458,6 @@ export async function fetchAnalysisShotAnnotation(
     credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to fetch shot annotation");
-  return res.json();
-}
-
-export async function fetchImprovedTennisAnalysis(
-  id: string,
-): Promise<ImprovedTennisAnalysisResponse> {
-  const baseUrl = getApiUrl();
-  const res = await fetch(`${baseUrl}api/analyses/${id}/improved-tennis`, {
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error("Failed to fetch improved tennis analysis");
-  return res.json();
-}
-
-export async function fetchAnalysisScoreInputs(
-  id: string,
-): Promise<ScoreInputsResponse> {
-  const baseUrl = getApiUrl();
-  const res = await fetch(`${baseUrl}api/analyses/${id}/score-inputs`, {
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error("Failed to fetch analysis score inputs");
   return res.json();
 }
 

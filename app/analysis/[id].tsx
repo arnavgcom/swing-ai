@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+import React, { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -12,6 +12,8 @@ import {
   Modal,
   Dimensions,
   Alert,
+  Animated,
+  PanResponder,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -25,12 +27,10 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import Colors, { sportColors } from "@/constants/colors";
 import {
   fetchAnalysisDetail,
-  type AnalysisDetail,
   fetchAnalysisDiagnostics,
   fetchAnalysisVideoMetadata,
   fetchAnalysisShotAnnotation,
-  fetchImprovedTennisAnalysis,
-  fetchAnalysisMetricTrends,
+  fetchComparison,
   fetchSportConfig,
   fetchFeedback,
   saveAnalysisShotAnnotation,
@@ -39,36 +39,24 @@ import {
 import { getApiUrl } from "@/lib/query-client";
 import { ScoreGauge } from "@/components/ScoreGauge";
 import { MetricCard } from "@/components/MetricCard";
+import { SubScoreBar } from "@/components/SubScoreBar";
 import { CoachingCard } from "@/components/CoachingCard";
 import { useAuth } from "@/lib/auth-context";
-import {
-  buildMetricOptionsWithCatalog,
-  normalizeMetricSelectionKey,
-} from "@/lib/metrics-catalog";
 
-const MPH_TO_KMPH = 1.60934;
-const TECHNICAL_COMPACT_COUNT = 2;
-
-function isMphUnit(unit?: string): boolean {
-  return String(unit || "").trim().toLowerCase() === "mph";
-}
-
-function toDisplaySpeed(value: number): number {
-  return value * MPH_TO_KMPH;
-}
+const CATEGORY_LABELS: Record<string, string> = {
+  biomechanics: "Biomechanics",
+  ball: "Ball Metrics",
+  timing: "Timing & Rhythm",
+  consistency: "Consistency",
+  technique: "Technique",
+  power: "Power",
+};
 
 const FEEDBACK_DISCREPANCY_TAGS = [
   "Wrong Detection",
   "Scores high/low",
   "Other",
 ] as const;
-
-const STANDARDIZED_TACTICAL_SCORES: Array<{ key: string; label: string; weight: number }> = [
-  { key: "power", label: "Power", weight: 0.30 },
-  { key: "control", label: "Control", weight: 0.25 },
-  { key: "timing", label: "Timing", weight: 0.25 },
-  { key: "technique", label: "Technique", weight: 0.20 },
-];
 
 const SPORT_MOVEMENT_OPTIONS: Record<string, string[]> = {
   tennis: ["forehand", "backhand", "serve", "volley", "game"],
@@ -79,301 +67,12 @@ const SPORT_MOVEMENT_OPTIONS: Record<string, string[]> = {
   tabletennis: ["forehand", "backhand", "serve", "loop", "chop"],
 };
 
-function normalizeSelection(value: string): string {
-  return String(value || "").trim().toLowerCase();
-}
-
-function toSportPreferenceKey(sportName?: string | null): string {
-  return String(sportName || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-/g, "");
-}
-
-const METRICS_SCALE10_KEYS = new Set([
-  "balanceScore",
-  "rhythmConsistency",
-  "shotConsistency",
-]);
-
-function normalizeMetricDisplayScale(key: string, value: number): number {
-  if (!Number.isFinite(value)) return value;
-  if (!METRICS_SCALE10_KEYS.has(key)) return value;
-  return value > 10 ? value / 10 : value;
-}
-
-function computePercentDelta(current: number | null, previous: number | null): number | null {
-  if (current == null || previous == null) return null;
-  if (!Number.isFinite(current) || !Number.isFinite(previous)) return null;
-  if (Math.abs(previous) < 1e-6) return null;
-  const pct = ((current - previous) / Math.abs(previous)) * 100;
-  const rounded = Number(pct.toFixed(1));
-  return rounded === 0 ? null : rounded;
-}
-
-function deltaColor(deltaPct: number | null): string {
-  if (deltaPct == null) return "#64748B";
-  if (Math.abs(deltaPct) < 1e-6) return "#94A3B8";
-  return deltaPct >= 0 ? "#34D399" : "#F87171";
-}
-
-function formatDeltaPercent(deltaPct: number | null, suffix = ""): string | null {
-  if (deltaPct == null) return null;
-  if (Math.abs(deltaPct) < 1e-6) return `-${suffix}`;
-  return `${deltaPct >= 0 ? "+" : ""}${deltaPct.toFixed(1)}%${suffix}`;
-}
-
-function deltaTrendIcon(deltaPct: number | null): "caret-up" | "caret-down" | "remove" {
-  if (deltaPct == null || Math.abs(deltaPct) < 1e-6) return "remove";
-  return deltaPct > 0 ? "caret-up" : "caret-down";
-}
-
-function metricHealthScore(
-  value: number,
-  optimalRange?: [number, number],
+function calcChange(
+  current: number | null | undefined,
+  avg: number | null | undefined,
 ): number | null {
-  if (!Number.isFinite(value) || !optimalRange) return null;
-  const [min, max] = optimalRange;
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return null;
-  if (value >= min && value <= max) return 100;
-
-  const span = max - min;
-  const gap = value < min ? min - value : value - max;
-  return Math.max(0, 100 - (gap / span) * 100);
-}
-
-function scoreColor(score: number): string {
-  if (score >= 8) return "#34D399";
-  if (score >= 6) return "#60A5FA";
-  return "#FBBF24";
-}
-
-function TenPointBar({
-  item,
-  compact = false,
-}: {
-  item: { key: string; label: string; score: number | null; explanation: string };
-  compact?: boolean;
-}) {
-  const hasScore = Number.isFinite(item.score);
-  const score = hasScore ? Number(item.score) : null;
-  const pct = score == null ? 0 : Math.max(0, Math.min(100, score * 10));
-  const color = score == null ? "#64748B" : scoreColor(score);
-
-  return (
-    <View style={[styles.tenRow, compact && styles.tenRowCompact]}>
-      <View style={styles.tenHeader}>
-        <Text style={[styles.tenLabel, compact && styles.tenLabelCompact]}>{item.label}</Text>
-        <Text style={[styles.tenScore, { color }]}>{score == null ? "N/A" : `${score}/10`}</Text>
-      </View>
-      <View style={[styles.tenTrack, compact && styles.tenTrackCompact]}>
-        <View style={[styles.tenFill, { width: `${pct}%`, backgroundColor: color }]} />
-      </View>
-      <View style={styles.tenExplanationRow}>
-        <Text style={[styles.tenExplanation, compact && styles.tenExplanationCompact]}>
-          {item.explanation}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-type TacticalScoreDetail = {
-  key: string;
-  label: string;
-  score: number | null;
-  explanation: string;
-};
-
-function formatScoreOutOfTen(value: number): string {
-  const rounded = Math.round((Number.isFinite(value) ? value : 0) * 10) / 10;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
-}
-
-function computeWeightedTacticalScore(
-  scoreConfigs: Array<{ key: string; weight: number }> | undefined,
-  source: Record<string, number> | null | undefined,
-): number | null {
-  if (!scoreConfigs?.length || !source) return null;
-
-  const weighted = scoreConfigs
-    .map((scoreConfig) => ({
-      score: Number(source?.[scoreConfig.key]),
-      weight: Number(scoreConfig.weight || 0),
-    }))
-    .filter((row) => Number.isFinite(row.score) && row.weight > 0);
-
-  if (!weighted.length) return null;
-
-  const totalWeight = weighted.reduce((acc, row) => acc + row.weight, 0);
-  if (totalWeight <= 0) return null;
-  return weighted.reduce((acc, row) => acc + row.score * row.weight, 0) / totalWeight;
-}
-
-function computeAverageSectionScore10(items: Array<{ score: number }> | undefined): number | null {
-  if (!items?.length) return null;
-  const avg = items.reduce((acc, item) => acc + Number(item.score || 0), 0) / items.length;
-  return Number.isFinite(avg) ? avg : null;
-}
-
-function tacticalExplanation(key: string, label: string, score: number): string {
-  const normalizedKey = String(key || "").toLowerCase();
-  const normalizedScore = Number.isFinite(score) ? score : 0;
-  const band = normalizedScore >= 8 ? "high" : normalizedScore >= 6 ? "mid" : "low";
-
-  if (normalizedKey === "power") {
-    if (band === "high") return "Power is being used effectively to create pressure without losing tactical control.";
-    if (band === "mid") return "Power is present, but selective acceleration can improve point pressure.";
-    return "Power output is limiting tactical pressure; load and intent need to rise in key moments.";
-  }
-
-  if (normalizedKey === "control") {
-    if (band === "high") return "Control is strong, supporting reliable depth and directional accuracy under pace.";
-    if (band === "mid") return "Control is serviceable, but depth and targeting drift on tougher balls.";
-    return "Control is inconsistent; simplify targets and stabilize contact for better placement.";
-  }
-
-  if (normalizedKey === "timing") {
-    if (band === "high") return "Timing is sharp, allowing clean setup and efficient strike windows.";
-    if (band === "mid") return "Timing is workable, but earlier preparation would improve shot quality.";
-    return "Timing is late or rushed, reducing tactical options and shot consistency.";
-  }
-
-  if (normalizedKey === "technique") {
-    if (band === "high") return "Technique execution is stable and supports repeatable tactical outcomes.";
-    if (band === "mid") return "Technique is mostly functional, with occasional breakdowns under pressure.";
-    return "Technique inconsistencies are affecting tactical reliability; prioritize repeatable mechanics.";
-  }
-
-  return `${label} is ${band === "high" ? "strong" : band === "mid" ? "developing" : "currently limiting"} tactical execution.`;
-}
-
-function technicalExplanation(key: string, label: string, score: number): string {
-  const normalizedKey = String(key || "").toLowerCase();
-  const normalizedScore = Number.isFinite(score) ? score : 0;
-  const band = normalizedScore >= 8 ? "high" : normalizedScore >= 6 ? "mid" : "low";
-
-  if (normalizedKey === "balance") {
-    if (band === "high") return "Base is stable and supports reliable transfer under pace.";
-    if (band === "mid") return "Base is mostly stable; occasional drift appears under speed.";
-    return "Base stability is inconsistent, reducing clean force transfer into contact.";
-  }
-
-  if (normalizedKey === "inertia") {
-    if (band === "high") return "Stance and body alignment preserve efficient directional energy.";
-    if (band === "mid") return "Alignment is workable, but setup consistency can improve.";
-    return "Stance alignment is inconsistent and limits clean energy direction.";
-  }
-
-  if (normalizedKey === "oppositeForce") {
-    if (band === "high") return "Ground reaction and bracing are synchronized through contact.";
-    if (band === "mid") return "Force exchange is present but fades in faster sequences.";
-    return "Opposing force timing is weak, reducing stability at strike.";
-  }
-
-  if (normalizedKey === "momentum") {
-    if (band === "high") return "Momentum flows efficiently from setup through release.";
-    if (band === "mid") return "Momentum transfer is acceptable with intermittent leaks.";
-    return "Momentum transfer breaks down before or through contact.";
-  }
-
-  if (normalizedKey === "elastic") {
-    if (band === "high") return "Elastic loading and release support repeatable acceleration.";
-    if (band === "mid") return "Elastic sequencing appears but is not fully repeatable.";
-    return "Stretch-shortening timing is limited, reducing racket-head speed potential.";
-  }
-
-  if (normalizedKey === "contact") {
-    if (band === "high") return "Contact quality is stable with strong timing and spacing.";
-    if (band === "mid") return "Contact is mostly clean, with occasional timing drift.";
-    return "Contact consistency is low; timing and spacing break down under pressure.";
-  }
-
-  return `${label} is ${band === "high" ? "strong" : band === "mid" ? "developing" : "currently limiting"} technical execution.`;
-}
-
-function movementExplanation(key: string, label: string, score: number): string {
-  const normalizedKey = String(key || "").toLowerCase();
-  const normalizedScore = Number.isFinite(score) ? score : 0;
-  const band = normalizedScore >= 8 ? "high" : normalizedScore >= 6 ? "mid" : "low";
-
-  if (normalizedKey === "ready") {
-    if (band === "high") return "Split-step timing, knee flex, and base setup prepare efficient lower-body movement.";
-    if (band === "mid") return "Preparation is generally on time with occasional late setup.";
-    return "Preparation is often late, limiting first-step efficiency.";
-  }
-
-  if (normalizedKey === "read") {
-    if (band === "high") return "Early read supports efficient footwork choices and balanced body positioning.";
-    if (band === "mid") return "Ball and opponent cues are read adequately but sometimes delayed.";
-    return "Read timing is delayed, creating rushed positioning decisions.";
-  }
-
-  if (normalizedKey === "react") {
-    if (band === "high") return "Reaction speed supports quick directional change without losing posture.";
-    if (band === "mid") return "Reaction is acceptable but slows on sharper tempo changes.";
-    return "Reaction lag reduces time available for efficient setup.";
-  }
-
-  if (normalizedKey === "respond") {
-    if (band === "high") return "Response quality stays composed across changing rally demands.";
-    if (band === "mid") return "Response quality is serviceable with occasional recovery delays.";
-    return "Response consistency is low, reducing control in transition moments.";
-  }
-
-  if (normalizedKey === "recover") {
-    if (band === "high") return "Recovery steps are efficient, restoring neutral position quickly.";
-    if (band === "mid") return "Recovery is generally timely but drifts after wide contacts.";
-    return "Recovery speed and spacing are limiting transition readiness.";
-  }
-
-  return `${label} is ${band === "high" ? "strong" : band === "mid" ? "developing" : "currently limiting"} movement quality.`;
-}
-
-function TacticalBar({
-  item,
-  compact = false,
-}: {
-  item: TacticalScoreDetail;
-  compact?: boolean;
-}) {
-  const scoreOutOfTen = Number.isFinite(item.score) ? Math.max(0, Math.min(10, Number(item.score))) : null;
-  const pct = scoreOutOfTen == null ? 0 : scoreOutOfTen * 10;
-  const color =
-    scoreOutOfTen == null
-      ? "#64748B"
-      : pct >= 80
-        ? "#34D399"
-        : pct >= 60
-          ? "#60A5FA"
-          : pct >= 40
-            ? "#FBBF24"
-            : "#F87171";
-  const roundedScore = scoreOutOfTen == null ? null : Math.round(scoreOutOfTen * 10) / 10;
-  const displayScore =
-    roundedScore == null
-      ? "N/A"
-      : Number.isInteger(roundedScore)
-        ? String(roundedScore)
-        : roundedScore.toFixed(1);
-  return (
-    <View style={[styles.tenRow, compact && styles.tenRowCompact]}>
-      <View style={styles.tenHeader}>
-        <Text style={[styles.tenLabel, compact && styles.tenLabelCompact]}>{item.label}</Text>
-        <Text style={[styles.tenScore, { color }]}>{displayScore}/10</Text>
-      </View>
-      <View style={[styles.tenTrack, compact && styles.tenTrackCompact]}>
-        <View style={[styles.tenFill, { width: `${pct}%`, backgroundColor: color }]} />
-      </View>
-      <View style={styles.tenExplanationRow}>
-        <Text style={[styles.tenExplanation, compact && styles.tenExplanationCompact]}>
-          {item.explanation}
-        </Text>
-      </View>
-    </View>
-  );
+  if (current == null || avg == null || avg === 0) return null;
+  return ((current - avg) / avg) * 100;
 }
 
 function formatBytes(bytes: number | null | undefined): string {
@@ -500,9 +199,9 @@ export default function AnalysisDetailScreen() {
   const [manualSaveMessage, setManualSaveMessage] = useState("Saved");
   const [manualAnnotationDone, setManualAnnotationDone] = useState(false);
   const [useForModelTraining, setUseForModelTraining] = useState(false);
-  const [showAllTechnical, setShowAllTechnical] = useState(false);
-  const [showAllTactical, setShowAllTactical] = useState(false);
-  const [showAllMovement, setShowAllMovement] = useState(false);
+  const [overallExpanded, setOverallExpanded] = useState(false);
+  const [overallCanExpand, setOverallCanExpand] = useState(false);
+  const feedbackSheetTranslateY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!id) return;
@@ -528,17 +227,11 @@ export default function AnalysisDetailScreen() {
     enabled: !!configKey,
   });
 
-  const { data: trendData } = useQuery({
-    queryKey: ["analysis", id, "metric-trends", "all-sessions"],
-    queryFn: () => fetchAnalysisMetricTrends(id!, "all"),
-    enabled: !!id && data?.analysis?.status === "completed",
-  });
-
-  const { data: improvedData, isLoading: improvedLoading } = useQuery({
-    queryKey: ["analysis", id, "improved-tennis"],
-    queryFn: () => fetchImprovedTennisAnalysis(id!),
-    enabled: !!id && data?.analysis?.status === "completed",
-    staleTime: 5 * 60 * 1000,
+  const { data: comparison } = useQuery({
+    queryKey: ["analysis", id, "comparison", "30d"],
+    queryFn: () => fetchComparison(id!, "30d"),
+    enabled:
+      !!id && data?.analysis?.status === "completed" && !!data?.metrics,
   });
 
   const { data: diagnostics, isLoading: diagnosticsLoading } = useQuery({
@@ -622,8 +315,53 @@ export default function AnalysisDetailScreen() {
   }, []);
 
   const closeFeedbackSheet = useCallback(() => {
+    feedbackSheetTranslateY.setValue(0);
     setFeedbackSheetVisible(false);
-  }, []);
+  }, [feedbackSheetTranslateY]);
+
+  const dismissFeedbackSheetByGesture = useCallback(() => {
+    Animated.timing(feedbackSheetTranslateY, {
+      toValue: 260,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => {
+      setFeedbackSheetVisible(false);
+      feedbackSheetTranslateY.setValue(0);
+    });
+  }, [feedbackSheetTranslateY]);
+
+  const feedbackSheetPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_evt, gestureState) =>
+          Math.abs(gestureState.dy) > 4 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
+        onPanResponderMove: (_evt, gestureState) => {
+          if (gestureState.dy > 0) {
+            feedbackSheetTranslateY.setValue(gestureState.dy);
+          }
+        },
+        onPanResponderRelease: (_evt, gestureState) => {
+          if (gestureState.dy > 110) {
+            dismissFeedbackSheetByGesture();
+            return;
+          }
+
+          Animated.spring(feedbackSheetTranslateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 0,
+            speed: 20,
+          }).start();
+        },
+      }),
+    [dismissFeedbackSheetByGesture, feedbackSheetTranslateY],
+  );
+
+  useEffect(() => {
+    if (feedbackSheetVisible) {
+      feedbackSheetTranslateY.setValue(0);
+    }
+  }, [feedbackSheetVisible, feedbackSheetTranslateY]);
 
   useEffect(() => {
     setManualFormInitialized(false);
@@ -803,64 +541,20 @@ export default function AnalysisDetailScreen() {
     });
   }, []);
 
-  const improvedReport = improvedData?.report;
-
-  const selectedScoreSections = useMemo(() => {
-    const sportKey = toSportPreferenceKey(sportConfig?.sportName);
-    const bySport =
-      user?.selectedScoreSectionsBySport
-      && typeof user.selectedScoreSectionsBySport === "object"
-        ? user.selectedScoreSectionsBySport
-        : {};
-    const scoped = sportKey && Array.isArray(bySport[sportKey]) ? bySport[sportKey] : null;
-    const fallback = Array.isArray(user?.selectedScoreSections) ? user.selectedScoreSections : [];
-    const saved = scoped || fallback;
-    return new Set(saved.map(normalizeSelection));
-  }, [sportConfig?.sportName, user?.selectedScoreSections, user?.selectedScoreSectionsBySport]);
-
-  const selectedMetricKeys = useMemo(() => {
-    const sportKey = toSportPreferenceKey(sportConfig?.sportName);
-    const bySport =
-      user?.selectedMetricKeysBySport
-      && typeof user.selectedMetricKeysBySport === "object"
-        ? user.selectedMetricKeysBySport
-        : {};
-    const scoped = sportKey && Array.isArray(bySport[sportKey]) ? bySport[sportKey] : null;
-    const fallback = Array.isArray(user?.selectedMetricKeys) ? user.selectedMetricKeys : [];
-    const saved = scoped || fallback;
-    return new Set(
-      saved
-        .map((item) => normalizeMetricSelectionKey(String(item || "")))
-        .filter((item) => item.length > 0),
-    );
-  }, [sportConfig?.sportName, user?.selectedMetricKeys, user?.selectedMetricKeysBySport]);
-
-  const availableMetricDefinitions = useMemo(
-    () => buildMetricOptionsWithCatalog(sportConfig?.metrics || []),
-    [sportConfig?.metrics],
-  );
-
-  const availableMetricByKey = useMemo(() => {
-    const map = new Map<string, (typeof availableMetricDefinitions)[number]>();
-    for (const metric of availableMetricDefinitions) {
-      map.set(metric.key, metric);
-    }
-    return map;
-  }, [availableMetricDefinitions]);
-
-  const hasSectionSelection = selectedScoreSections.size > 0;
-  const hasMetricSelection = selectedMetricKeys.size > 0;
-  const showBreakdown =
-    !hasSectionSelection || selectedScoreSections.has("tactical") || selectedScoreSections.has("performance breakdown");
-  const showBiomechanics =
-    !hasSectionSelection || selectedScoreSections.has("technical (biomec)") || selectedScoreSections.has("biomechanics");
-  const showMovement =
-    !hasSectionSelection || selectedScoreSections.has("movement");
+  const avgMetrics = comparison?.averages?.metricValues ?? null;
+  const avgSubScores = comparison?.averages?.subScores ?? null;
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
   const analysis = data?.analysis;
   const m = data?.metrics;
   const coaching = data?.coaching;
+  const overallSummaryText = String(coaching?.simpleExplanation || "").trim();
+
+  useEffect(() => {
+    setOverallExpanded(false);
+    // Fallback for truncated long text when line-measurement is not fully reliable.
+    setOverallCanExpand(overallSummaryText.length > 150);
+  }, [overallSummaryText]);
 
   const displayVideoName = useMemo(() => {
     if (analysis?.videoPath) {
@@ -870,418 +564,28 @@ export default function AnalysisDetailScreen() {
     return analysis?.videoFilename || "Analysis";
   }, [analysis?.videoPath, analysis?.videoFilename]);
 
-  const displayedMetrics = useMemo(() => {
-    if (!hasMetricSelection) {
-      if (!sportConfig) return [];
-      return availableMetricDefinitions.filter((metric) =>
-        (sportConfig.metrics || []).some((configMetric) => configMetric.key === metric.key),
-      );
+  const metricsByCategory = useMemo(() => {
+    if (!sportConfig) return {};
+    const groups: Record<
+      string,
+      Array<{
+        key: string;
+        label: string;
+        unit: string;
+        icon: string;
+        color: string;
+        description: string;
+        optimalRange?: [number, number];
+      }>
+    > = {};
+    for (const metric of sportConfig.metrics) {
+      if (!groups[metric.category]) {
+        groups[metric.category] = [];
+      }
+      groups[metric.category].push(metric);
     }
-
-    return Array.from(selectedMetricKeys)
-      .map((key) => availableMetricByKey.get(key))
-      .filter((metric): metric is NonNullable<typeof metric> => Boolean(metric))
-      .sort((a, b) => String(a.label || "").localeCompare(String(b.label || ""), undefined, { sensitivity: "base" }));
-  }, [
-    availableMetricByKey,
-    availableMetricDefinitions,
-    hasMetricSelection,
-    selectedMetricKeys,
-    sportConfig,
-  ]);
-
-  const benchmarkMetrics = useMemo(() => sportConfig?.metrics || [], [sportConfig?.metrics]);
-
-  const tacticalScores = useMemo(
-    () => STANDARDIZED_TACTICAL_SCORES,
-    [],
-  );
-
-  const tacticalItems = useMemo(() => {
-    const components = m?.scoreOutputs?.tactical?.components;
-    if (!components) return [] as TacticalScoreDetail[];
-    return tacticalScores.map((score) => {
-      const raw = Number((components as Record<string, unknown>)[score.key]);
-      const value = Number.isFinite(raw) ? raw : null;
-      return {
-        key: score.key,
-        label: score.label,
-        score: value,
-        explanation:
-          value == null
-            ? "Insufficient data to score this tactical component."
-            : tacticalExplanation(score.key, score.label, value),
-      };
-    });
-  }, [m?.scoreOutputs?.tactical?.components, tacticalScores]);
-
-  const technicalBiomecItems = useMemo(() => {
-    const components = m?.scoreOutputs?.technical?.components;
-    if (!components) return [] as Array<{ key: string; label: string; score: number | null; explanation: string }>;
-
-    const specs = [
-      { key: "balance", label: "Balance" },
-      { key: "inertia", label: "Inertia / Stance Alignment" },
-      { key: "oppositeForce", label: "Opposite Force" },
-      { key: "momentum", label: "Momentum" },
-      { key: "elastic", label: "Elastic" },
-      { key: "contact", label: "Contact" },
-    ] as const;
-
-    return specs
-      .map((spec) => {
-        const score = Number((components as Record<string, unknown>)[spec.key]);
-        return {
-          key: spec.key,
-          label: spec.label,
-          score: Number.isFinite(score) ? score : null,
-          explanation:
-            Number.isFinite(score)
-              ? technicalExplanation(spec.key, spec.label, score)
-              : "Insufficient data to score this technical component.",
-        };
-      })
-      .filter((item) => item.key !== "follow" && !String(item.label || "").toLowerCase().includes("follow"));
-  }, [m?.scoreOutputs?.technical?.components]);
-
-  const hasMoreTechnicalItems = technicalBiomecItems.length > TECHNICAL_COMPACT_COUNT;
-  const hasMoreTacticalItems = tacticalItems.length > TECHNICAL_COMPACT_COUNT;
-  const movementItems = useMemo(() => {
-    const components = m?.scoreOutputs?.movement?.components;
-    if (!components) return [] as Array<{ key: string; label: string; score: number | null; explanation: string }>;
-
-    const specs = [
-      { key: "ready", label: "Ready" },
-      { key: "read", label: "Read" },
-      { key: "react", label: "React" },
-      { key: "respond", label: "Respond" },
-      { key: "recover", label: "Recover" },
-    ] as const;
-
-    return specs.map((spec) => {
-      const score = Number((components as Record<string, unknown>)[spec.key]);
-      const normalized = Number.isFinite(score) ? score : null;
-      return {
-        key: spec.key,
-        label: spec.label,
-        score: normalized,
-        explanation:
-          normalized == null
-            ? "Insufficient data to score this movement component."
-            : movementExplanation(spec.key, spec.label, normalized),
-      };
-    });
-  }, [m?.scoreOutputs?.movement?.components]);
-  const hasMoreMovementItems = movementItems.length > TECHNICAL_COMPACT_COUNT;
-
-  const visibleTechnicalItems = useMemo(
-    () => (showAllTechnical ? technicalBiomecItems : technicalBiomecItems.slice(0, TECHNICAL_COMPACT_COUNT)),
-    [showAllTechnical, technicalBiomecItems],
-  );
-  const visibleTacticalItems = useMemo(
-    () => (showAllTactical ? tacticalItems : tacticalItems.slice(0, TECHNICAL_COMPACT_COUNT)),
-    [showAllTactical, tacticalItems],
-  );
-  const visibleMovementItems = useMemo(
-    () => (showAllMovement ? movementItems : movementItems.slice(0, TECHNICAL_COMPACT_COUNT)),
-    [movementItems, showAllMovement],
-  );
-
-  useEffect(() => {
-    setShowAllTechnical(false);
-  }, [id, technicalBiomecItems.length]);
-  useEffect(() => {
-    setShowAllTactical(false);
-  }, [id, tacticalItems.length]);
-  useEffect(() => {
-    setShowAllMovement(false);
-  }, [id, movementItems.length]);
-
-  const currentTechnicalScore10 = useMemo(() => {
-    const value = Number(m?.scoreOutputs?.technical?.overall);
-    return Number.isFinite(value) ? value : null;
-  }, [m?.scoreOutputs?.technical?.overall]);
-
-  const currentMovementScore10 = useMemo(() => {
-    const value = Number(m?.scoreOutputs?.movement?.overall);
-    return Number.isFinite(value) ? value : null;
-  }, [m?.scoreOutputs?.movement?.overall]);
-
-  const currentTacticalScore10 = useMemo(() => {
-    const value = Number(m?.scoreOutputs?.tactical?.overall);
-    return Number.isFinite(value) ? value : null;
-  }, [m?.scoreOutputs?.tactical?.overall]);
-
-  const derivedOverallScore10 = useMemo(() => {
-    const value = Number(m?.scoreOutputs?.overall);
-    return Number.isFinite(value) ? value : null;
-  }, [m?.scoreOutputs?.overall]);
-
-  const effectiveOverallScore = useMemo(() => {
-    if (derivedOverallScore10 != null) {
-      return Math.round(Math.max(0, Math.min(100, derivedOverallScore10 * 10)));
-    }
-    return null;
-  }, [
-    derivedOverallScore10,
-  ]);
-
-  const displayOverallScore: number | null = effectiveOverallScore;
-
-  const previousTrendPoint = useMemo(() => {
-    const points = trendData?.points || [];
-    if (!points.length) return null;
-    const currentIdx = points.findIndex((point) => point.analysisId === analysis?.id);
-    if (currentIdx > 0) return points[currentIdx - 1] || null;
-    if (currentIdx === -1 && points.length > 1) return points[points.length - 2] || null;
-    return null;
-  }, [analysis?.id, trendData?.points]);
-
-  const overallDeltaPct = useMemo(() => {
-    const current = displayOverallScore != null ? displayOverallScore / 10 : null;
-    const previousRaw = Number(previousTrendPoint?.overallScore);
-    const previous = Number.isFinite(previousRaw) ? previousRaw / 10 : null;
-    return computePercentDelta(current, previous);
-  }, [displayOverallScore, previousTrendPoint?.overallScore]);
-
-  const sectionDeltaPct = useMemo(() => {
-    const prevTechnicalRaw = Number(previousTrendPoint?.sectionScores?.technical);
-    const prevTacticalRaw = Number(previousTrendPoint?.sectionScores?.tactical);
-    const prevMovementRaw = Number(previousTrendPoint?.sectionScores?.movement);
-
-    const prevTechnical = Number.isFinite(prevTechnicalRaw) ? prevTechnicalRaw : null;
-    const prevTactical = Number.isFinite(prevTacticalRaw) ? prevTacticalRaw : null;
-    const prevMovement = Number.isFinite(prevMovementRaw) ? prevMovementRaw : null;
-
-    return {
-      technical: computePercentDelta(currentTechnicalScore10, prevTechnical),
-      tactical: computePercentDelta(currentTacticalScore10, prevTactical),
-      movement: computePercentDelta(currentMovementScore10, prevMovement),
-    };
-  }, [
-    currentMovementScore10,
-    currentTacticalScore10,
-    currentTechnicalScore10,
-    previousTrendPoint?.sectionScores?.movement,
-    previousTrendPoint?.sectionScores?.tactical,
-    previousTrendPoint?.sectionScores?.technical,
-  ]);
-
-  const effectiveCoaching = useMemo(() => {
-    if (!m) return coaching ?? null;
-
-    type CoachingCandidate = {
-      label: string;
-      domain: "Tactical" | "Technical" | "Movement" | "Metric";
-      score10: number;
-      note: string;
-    };
-
-    const candidates: CoachingCandidate[] = [];
-
-    for (const item of tacticalItems) {
-      if (item.score == null) continue;
-      candidates.push({
-        label: item.label,
-        domain: "Tactical",
-        score10: Number(item.score),
-        note: item.explanation,
-      });
-    }
-
-    for (const item of technicalBiomecItems) {
-      if (item.score == null) continue;
-      candidates.push({
-        label: item.label,
-        domain: "Technical",
-        score10: Number(item.score),
-        note: String(item.explanation || ""),
-      });
-    }
-
-    if (movementItems.length) {
-      for (const item of movementItems) {
-        if (item.score == null) continue;
-        candidates.push({
-          label: item.label,
-          domain: "Movement",
-          score10: Number(item.score),
-          note: String(item.explanation || ""),
-        });
-      }
-    }
-
-    for (const metric of benchmarkMetrics) {
-      const value = Number(m.metricValues?.[metric.key]);
-      const health = Number.isFinite(value) ? metricHealthScore(value, metric.optimalRange) : null;
-      if (health == null) continue;
-
-      let note = "Within expected quality range.";
-      if (metric.optimalRange) {
-        const [min, max] = metric.optimalRange;
-        if (value < min) note = "Below target range; increase this output for stronger execution.";
-        else if (value > max) note = "Above target range; tighten control to stay efficient.";
-      }
-
-      candidates.push({
-        label: metric.label,
-        domain: "Metric",
-        score10: Math.max(0, Math.min(10, health / 10)),
-        note,
-      });
-    }
-
-    if (!candidates.length) {
-      return coaching ?? {
-        keyStrength: "null",
-        improvementArea: "null",
-        trainingSuggestion: "null",
-        simpleExplanation: "null",
-      };
-    }
-
-    const strongestRaw = candidates.reduce((best, item) => (item.score10 > best.score10 ? item : best), candidates[0]);
-    const weakestRaw = candidates.reduce((worst, item) => (item.score10 < worst.score10 ? item : worst), candidates[0]);
-
-    const technicalBalanceCandidate = candidates.find((item) =>
-      item.domain === "Technical" && String(item.label || "").toLowerCase().includes("balance"),
-    );
-
-    const alignBalanceToTechnical = (item: CoachingCandidate): CoachingCandidate => {
-      const labelLower = String(item.label || "").toLowerCase();
-      const refersToBalance = labelLower.includes("balance");
-      if (!refersToBalance || item.domain === "Technical") return item;
-      return technicalBalanceCandidate || item;
-    };
-
-    const strongest = alignBalanceToTechnical(strongestRaw);
-    const weakest = alignBalanceToTechnical(weakestRaw);
-
-    const practicalAction = (item: CoachingCandidate, type: "strength" | "improve"): string => {
-      const label = String(item.label || "").toLowerCase();
-      const domain = item.domain;
-
-      if (label.includes("balance")) {
-        return type === "strength"
-          ? "Keep 10-15 reps focused on the same stable base through contact and finish."
-          : "Do 3 x 8 controlled reps: split-step, load, and hold posture through contact before recovering.";
-      }
-
-      if (label.includes("react") || label.includes("read") || label.includes("recover") || label.includes("ready")) {
-        return type === "strength"
-          ? "Maintain with short reactive footwork sets (2 x 30 seconds) before each hitting block."
-          : "Run 3 x 30-second first-step + recovery footwork sets, then re-check score in the next session.";
-      }
-
-      if (domain === "Technical") {
-        return type === "strength"
-          ? "Keep this mechanic in your warm-up with 2 x 10 clean, slow-to-fast reps."
-          : "Use 3 x 8 slow-to-fast technical reps focused only on this mechanic before full-speed rallies.";
-      }
-
-      if (domain === "Tactical") {
-        return type === "strength"
-          ? "Keep using this pattern in point-play drills with clear targets."
-          : "Spend one drill block on this decision pattern with target zones and scoring constraints.";
-      }
-
-      if (domain === "Movement") {
-        return type === "strength"
-          ? "Keep movement quality with repeatable split-step timing and immediate recovery habits."
-          : "Prioritize movement-only rounds first, then transfer to live-ball reps.";
-      }
-
-      return type === "strength"
-        ? "Keep this quality stable across your next hitting block."
-        : "Make this the first focus block in your next session.";
-    };
-
-    const sectionsUsed: string[] = [];
-  if (technicalBiomecItems.length > 0) sectionsUsed.push("technical");
-  if (tacticalItems.length > 0) sectionsUsed.push("tactical");
-  if (movementItems.length > 0) sectionsUsed.push("movement");
-  if (benchmarkMetrics.length > 0) sectionsUsed.push("metrics");
-
-    const formatMetricValue = (value: number) => {
-      const rounded = Math.round(value * 10) / 10;
-      return Number.isInteger(rounded) ? String(Math.trunc(rounded)) : rounded.toFixed(1);
-    };
-
-    const metricInsightLine = (
-      matcher: (metric: (typeof benchmarkMetrics)[number]) => boolean,
-      fallbackLabel: string,
-    ): string | null => {
-      const metric = benchmarkMetrics.find(matcher);
-      if (!metric) return null;
-      const rawValue = Number(m.metricValues?.[metric.key]);
-      if (!Number.isFinite(rawValue)) return null;
-
-      const health = metricHealthScore(rawValue, metric.optimalRange);
-      const label = metric.label || fallbackLabel;
-      const unit = String(metric.unit || "").trim();
-      const valuePart = `${formatMetricValue(rawValue)}${unit ? ` ${unit}` : ""}`;
-
-      if (!metric.optimalRange || health == null) {
-        return `${label}: current ${valuePart}; keep this consistent in training reps.`;
-      }
-
-      const [min, max] = metric.optimalRange;
-      const healthRounded = Math.round(health);
-      if (rawValue < min) {
-        return `${label}: current ${valuePart} (below target ${formatMetricValue(min)}-${formatMetricValue(max)}${unit ? ` ${unit}` : ""}); focus on increasing this output (${healthRounded}/100).`;
-      }
-      if (rawValue > max) {
-        return `${label}: current ${valuePart} (above target ${formatMetricValue(min)}-${formatMetricValue(max)}${unit ? ` ${unit}` : ""}); focus on controlled reduction for efficiency (${healthRounded}/100).`;
-      }
-      return `${label}: current ${valuePart} is in target range (${healthRounded}/100); maintain under pressure.`;
-    };
-
-    const wristLine = metricInsightLine(
-      (metric) => {
-        const key = String(metric.key || "").toLowerCase();
-        const label = String(metric.label || "").toLowerCase();
-        return key.includes("wrist") || label.includes("wrist");
-      },
-      "Wrist Speed",
-    );
-
-    const shoulderLine = metricInsightLine(
-      (metric) => {
-        const key = String(metric.key || "").toLowerCase();
-        const label = String(metric.label || "").toLowerCase();
-        return (key.includes("shoulder") && key.includes("rotation"))
-          || (label.includes("shoulder") && label.includes("rotation"));
-      },
-      "Shoulder Rotation",
-    );
-
-    const targetedMetricLines = [wristLine, shoulderLine].filter((line): line is string => Boolean(line));
-
-    const trainingSuggestionBase =
-      `Next block: center practice on ${weakest.label} with ${weakest.domain.toLowerCase()}-focused reps, then validate progress in Historical Performance.`;
-    const trainingSuggestion = targetedMetricLines.length
-      ? `${trainingSuggestionBase}\n${targetedMetricLines.map((line) => `- ${line}`).join("\n")}`
-      : trainingSuggestionBase;
-
-    return {
-      keyStrength: `${strongest.label} (${formatScoreOutOfTen(strongest.score10)}/10, ${strongest.domain}) is performing well. ${strongest.note} ${practicalAction(strongest, "strength")}`,
-      improvementArea: `${weakest.label} (${formatScoreOutOfTen(weakest.score10)}/10, ${weakest.domain}) is your highest-impact fix right now. ${weakest.note} ${practicalAction(weakest, "improve")}`,
-      trainingSuggestion,
-      simpleExplanation:
-        displayOverallScore != null
-          ? `Insights are based on current ${sectionsUsed.join(", ")} values shown on this screen.`
-          : "null",
-    };
-  }, [
-    benchmarkMetrics,
-    coaching,
-    displayOverallScore,
-    movementItems,
-    m?.metricValues,
-    m,
-    tacticalItems,
-    technicalBiomecItems,
-  ]);
+    return groups;
+  }, [sportConfig]);
 
   const videoUrl = useMemo(() => {
     if (!analysis?.videoPath) return null;
@@ -1376,17 +680,6 @@ export default function AnalysisDetailScreen() {
   const isProcessing =
     analysis.status === "pending" || analysis.status === "processing";
 
-  const isTennisAnalysis =
-    String(sportConfig?.sportName || "").trim().toLowerCase() === "tennis"
-    || String(configKey || "").trim().toLowerCase().startsWith("tennis-");
-
-  const isImprovedPending =
-    analysis.status === "completed"
-    && !!m
-    && isTennisAnalysis
-    && !improvedReport
-    && improvedLoading;
-
   const movementLabel =
     analysis.detectedMovement || sportConfig?.movementName || "Movement";
 
@@ -1472,7 +765,7 @@ export default function AnalysisDetailScreen() {
                 "Extracting video frames",
                 "Detecting body pose",
                 "Tracking ball trajectory",
-                "Computing technical (BIOMEC)",
+                "Computing biomechanics",
                 "Generating insights",
               ].map((step, i) => (
                 <View key={i} style={styles.stepRow}>
@@ -1549,25 +842,23 @@ export default function AnalysisDetailScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.topMetaRow}>
-            <View style={styles.aiEntryColumn}>
-              <Pressable
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push({ pathname: "/analysis/[id]/diagnostics", params: { id: analysis.id } });
-                }}
-                style={({ pressed }) => [
-                  styles.diagnosticsEntryButton,
-                  {
-                    borderColor: `${sportThemeColor}40`,
-                    backgroundColor: `${sportThemeColor}12`,
-                  },
-                  { opacity: pressed ? 0.8 : 1 },
-                ]}
-              >
-                <Ionicons name="sparkles-outline" size={14} color={sportThemeColor} />
-                <Text style={[styles.diagnosticsEntryButtonText, { color: sportThemeColor }]}>AI &gt;</Text>
-              </Pressable>
-            </View>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({ pathname: "/analysis/[id]/diagnostics", params: { id: analysis.id } });
+              }}
+              style={({ pressed }) => [
+                styles.diagnosticsEntryButton,
+                {
+                  borderColor: `${sportThemeColor}40`,
+                  backgroundColor: `${sportThemeColor}12`,
+                },
+                { opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <Ionicons name="sparkles-outline" size={14} color={sportThemeColor} />
+              <Text style={[styles.diagnosticsEntryButtonText, { color: sportThemeColor }]}>AI &gt;</Text>
+            </Pressable>
             <View style={styles.badgesGroup}>
               {sportConfig?.sportName && (
                 <View
@@ -1605,10 +896,7 @@ export default function AnalysisDetailScreen() {
                   ]}
                 >
                   <Ionicons name="videocam-outline" size={12} color={sportThemeColor} />
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.shotCountBadgeText, { color: sportThemeColor }]}
-                  >
+                  <Text style={[styles.shotCountBadgeText, { color: sportThemeColor }]}>
                     {data.metrics.metricValues.shotCount} shots
                   </Text>
                 </View>
@@ -1629,33 +917,20 @@ export default function AnalysisDetailScreen() {
             }}
             style={({ pressed }) => [styles.scoreSection, { opacity: pressed ? 0.9 : 1 }]}
           >
-            {displayOverallScore != null ? (
-              <>
-                <ScoreGauge
-                  score={displayOverallScore / 10}
-                  maxScore={10}
-                  size={160}
-                  label="Score"
-                />
-                {overallDeltaPct != null ? (
-                  <View style={styles.overallDeltaWrap}>
-                    <Ionicons
-                      name={deltaTrendIcon(overallDeltaPct)}
-                      size={13}
-                      color={deltaColor(overallDeltaPct)}
-                    />
-                    <Text style={[styles.overallDeltaText, { color: deltaColor(overallDeltaPct) }]}>
-                      {formatDeltaPercent(overallDeltaPct)}
-                    </Text>
-                  </View>
-                ) : null}
-              </>
-            ) : (
-              <View style={styles.scoreUnavailableWrap}>
-                <Text style={styles.scoreUnavailableValue}>N/A</Text>
-                <Text style={styles.scoreFilteredHint}>Insufficient score data</Text>
-              </View>
-            )}
+            <ScoreGauge
+              score={m.overallScore}
+              size={160}
+              label="Score"
+              change={calcChange(
+                m.overallScore,
+                avgSubScores
+                  ? Object.values(avgSubScores).reduce(
+                      (a, b) => a + b,
+                      0,
+                    ) / Math.max(Object.keys(avgSubScores).length, 1)
+                  : null,
+              )}
+            />
           </Pressable>
 
           {wasOverridden && (
@@ -1672,163 +947,37 @@ export default function AnalysisDetailScreen() {
             </View>
           )}
 
-          {technicalBiomecItems.length > 0 || isImprovedPending ? (
-            <View style={styles.technicalSectionWrap}>
-              <View style={styles.sectionScoreHeader}>
-                <Text style={styles.sectionTitle}>Technical (BIOMEC)</Text>
-                {currentTechnicalScore10 != null ? (
-                  <View style={[styles.sectionScoreBadge, styles.sectionScoreBadgeTechnical]}>
-                    {sectionDeltaPct.technical != null ? (
-                      <View style={styles.sectionDeltaWrap}>
-                        <Ionicons
-                          name={deltaTrendIcon(sectionDeltaPct.technical)}
-                          size={11}
-                          color={deltaColor(sectionDeltaPct.technical)}
-                        />
-                        <Text style={[styles.sectionDeltaText, { color: deltaColor(sectionDeltaPct.technical) }]}>
-                          {formatDeltaPercent(sectionDeltaPct.technical)}
-                        </Text>
-                      </View>
-                    ) : null}
-                    <Text style={[styles.sectionScoreText, { color: scoreColor(currentTechnicalScore10) }]}>
-                      {formatScoreOutOfTen(currentTechnicalScore10)}/10
-                    </Text>
-                  </View>
-                ) : null}
+          {sportConfig && m.subScores && (
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({
+                  pathname: "/analysis/[id]/trends",
+                  params: {
+                    id: analysis.id,
+                    focusSection: "breakdown",
+                  },
+                });
+              }}
+              style={({ pressed }) => [styles.section, { opacity: pressed ? 0.95 : 1 }]}
+            >
+              <Text style={styles.sectionTitle}>Performance Breakdown</Text>
+              <View style={styles.barsContainer}>
+                {sportConfig.scores.map((score, i) => (
+                  <SubScoreBar
+                    key={score.key}
+                    label={score.label}
+                    score={m.subScores[score.key] ?? 0}
+                    delay={200 + i * 200}
+                    change={calcChange(
+                      m.subScores[score.key],
+                      avgSubScores?.[score.key],
+                    )}
+                  />
+                ))}
               </View>
-
-              <View style={styles.sectionCompactTechnical}>
-              {technicalBiomecItems.length > 0 ? (
-                <View style={styles.tenGroup}>
-                  {visibleTechnicalItems.map((item) => (
-                    <TenPointBar key={`bio-${item.key}`} item={item} compact />
-                  ))}
-
-                  {hasMoreTechnicalItems ? (
-                    <Pressable
-                      onPress={() => setShowAllTechnical((prev) => !prev)}
-                      style={({ pressed }) => [styles.inlineMoreButton, { opacity: pressed ? 0.75 : 1 }]}
-                    >
-                      <Text style={styles.inlineMoreButtonText}>
-                        {showAllTechnical
-                          ? "less"
-                          : `${technicalBiomecItems.length - visibleTechnicalItems.length} more..`}
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              ) : (
-                <View style={styles.inlineSectionLoading}>
-                  <ActivityIndicator size="small" color={sportThemeColor} />
-                  <Text style={styles.inlineSectionLoadingText}>Loading technical insights...</Text>
-                </View>
-              )}
-              </View>
-            </View>
-          ) : null}
-
-          {sportConfig && tacticalItems.length > 0 && (
-            <View style={styles.technicalSectionWrap}>
-              <View style={styles.sectionScoreHeader}>
-                <Text style={styles.sectionTitle}>Tactical</Text>
-                {currentTacticalScore10 != null ? (
-                  <View style={styles.sectionScoreBadge}>
-                    {sectionDeltaPct.tactical != null ? (
-                      <View style={styles.sectionDeltaWrap}>
-                        <Ionicons
-                          name={deltaTrendIcon(sectionDeltaPct.tactical)}
-                          size={11}
-                          color={deltaColor(sectionDeltaPct.tactical)}
-                        />
-                        <Text style={[styles.sectionDeltaText, { color: deltaColor(sectionDeltaPct.tactical) }]}>
-                          {formatDeltaPercent(sectionDeltaPct.tactical)}
-                        </Text>
-                      </View>
-                    ) : null}
-                    <Text style={[styles.sectionScoreText, { color: scoreColor(currentTacticalScore10) }]}>
-                      {formatScoreOutOfTen(currentTacticalScore10)}/10
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-
-              <View style={styles.sectionCompactTechnical}>
-                <View style={styles.tenGroup}>
-                  {visibleTacticalItems.map((item) => (
-                    <TacticalBar key={`tac-${item.key}`} item={item} compact />
-                  ))}
-
-                  {hasMoreTacticalItems ? (
-                    <Pressable
-                      onPress={() => setShowAllTactical((prev) => !prev)}
-                      style={({ pressed }) => [styles.inlineMoreButton, { opacity: pressed ? 0.75 : 1 }]}
-                    >
-                      <Text style={styles.inlineMoreButtonText}>
-                        {showAllTactical
-                          ? "less"
-                          : `${tacticalItems.length - visibleTacticalItems.length} more..`}
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-            </View>
+            </Pressable>
           )}
-
-          {(movementItems.length || 0) > 0 || isImprovedPending ? (
-            <View style={styles.technicalSectionWrap}>
-              <View style={styles.sectionScoreHeader}>
-                <Text style={styles.sectionTitle}>Movement</Text>
-                {currentMovementScore10 != null ? (
-                  <View style={styles.sectionScoreBadge}>
-                    {sectionDeltaPct.movement != null ? (
-                      <View style={styles.sectionDeltaWrap}>
-                        <Ionicons
-                          name={deltaTrendIcon(sectionDeltaPct.movement)}
-                          size={11}
-                          color={deltaColor(sectionDeltaPct.movement)}
-                        />
-                        <Text style={[styles.sectionDeltaText, { color: deltaColor(sectionDeltaPct.movement) }]}>
-                          {formatDeltaPercent(sectionDeltaPct.movement)}
-                        </Text>
-                      </View>
-                    ) : null}
-                    <Text style={[styles.sectionScoreText, { color: scoreColor(currentMovementScore10) }]}>
-                      {formatScoreOutOfTen(currentMovementScore10)}/10
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-
-              <View style={styles.sectionCompactTechnical}>
-                {movementItems.length ? (
-                  <View style={styles.tenGroup}>
-                    {visibleMovementItems.map((item) => (
-                      <TenPointBar key={`move-${item.key}`} item={item} compact />
-                    ))}
-
-                    {hasMoreMovementItems ? (
-                      <Pressable
-                        onPress={() => setShowAllMovement((prev) => !prev)}
-                        style={({ pressed }) => [styles.inlineMoreButton, { opacity: pressed ? 0.75 : 1 }]}
-                      >
-                        <Text style={styles.inlineMoreButtonText}>
-                          {showAllMovement
-                            ? "less"
-                            : `${movementItems.length - visibleMovementItems.length} more..`}
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                ) : (
-                  <View style={styles.inlineSectionLoading}>
-                    <ActivityIndicator size="small" color={sportThemeColor} />
-                    <Text style={styles.inlineSectionLoadingText}>Loading movement insights...</Text>
-                  </View>
-                )}
-                </View>
-            </View>
-          ) : null}
 
           {videoUrl && (
             <View style={styles.videoSection}>
@@ -1879,110 +1028,105 @@ export default function AnalysisDetailScreen() {
             </View>
           )}
 
-          {m.metricValues && displayedMetrics.length > 0 ? (
-            <View style={styles.metricsSection}>
-              <Text style={styles.sectionTitle}>Metrics</Text>
-              <View style={styles.metricsGrid}>
-                {displayedMetrics.map((metric) => (
-                  <View key={metric.key} style={styles.metricCardWrapper}>
-                    <Pressable
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        router.push({
-                          pathname: "/analysis/[id]/trends",
-                          params: { id: analysis.id, focusMetric: metric.key },
-                        });
-                      }}
-                      style={({ pressed }) => [{ opacity: pressed ? 0.86 : 1 }]}
-                    >
-                      {(() => {
-                        const rawMetricValueNumber = Number(m.metricValues[metric.key]);
-                        const hasMetricValue = Number.isFinite(rawMetricValueNumber);
-                        const metricUsesMph = isMphUnit(metric.unit);
-                        const isScale10Metric = METRICS_SCALE10_KEYS.has(metric.key);
-                        const normalizedMetricValue =
-                          hasMetricValue
-                            ? normalizeMetricDisplayScale(metric.key, rawMetricValueNumber)
-                            : null;
-
-                        const displayMetricValue =
-                          hasMetricValue
-                            ? (
-                              metricUsesMph
-                                ? toDisplaySpeed(normalizedMetricValue as number)
-                                : normalizedMetricValue
-                            )
-                            : null;
-                        const metricValuePrecision = 1;
-                        const displayOptimalRange =
-                          metricUsesMph && metric.optimalRange
-                            ? [
-                                toDisplaySpeed(metric.optimalRange[0]),
-                                toDisplaySpeed(metric.optimalRange[1]),
-                              ] as [number, number]
-                            : isScale10Metric && metric.optimalRange
-                              ? [
-                                  metric.optimalRange[0] > 10 ? metric.optimalRange[0] / 10 : metric.optimalRange[0],
-                                  metric.optimalRange[1] > 10 ? metric.optimalRange[1] / 10 : metric.optimalRange[1],
-                                ] as [number, number]
-                            : metric.optimalRange;
-
-                        const previousRaw = Number(previousTrendPoint?.metricValues?.[metric.key]);
-                        const previousNormalized = Number.isFinite(previousRaw)
-                          ? normalizeMetricDisplayScale(metric.key, previousRaw)
-                          : null;
-                        const previousDisplayValue =
-                          previousNormalized == null
-                            ? null
-                            : metricUsesMph
-                              ? toDisplaySpeed(previousNormalized)
-                              : previousNormalized;
-                        const metricDeltaPct = computePercentDelta(
-                          displayMetricValue == null ? null : Number(displayMetricValue),
-                          previousDisplayValue,
-                        );
-
-                        return (
-                      <MetricCard
-                        icon={metric.icon as any}
-                        label={metric.label}
-                        value={displayMetricValue == null ? "null" : displayMetricValue}
-                        valuePrecision={metricValuePrecision}
-                        unit={metricUsesMph ? "kmph" : isScale10Metric ? "/10" : metric.unit}
-                        color={metric.color}
-                        optimalRange={displayOptimalRange}
-                        change={metricDeltaPct}
-                      />
-                        );
-                      })()}
-                    </Pressable>
+          {sportConfig &&
+            m.metricValues &&
+            Object.entries(metricsByCategory).map(
+              ([category, categoryMetrics]) => (
+                <View key={category} style={styles.metricsSection}>
+                  <Text style={styles.sectionTitle}>
+                    {CATEGORY_LABELS[category] || category}
+                  </Text>
+                  <View style={styles.metricsGrid}>
+                    {categoryMetrics.map((metric) => (
+                      <View key={metric.key} style={styles.metricCardWrapper}>
+                        <Pressable
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            router.push({
+                              pathname: "/analysis/[id]/trends",
+                              params: { id: analysis.id, focusMetric: metric.key },
+                            });
+                          }}
+                          style={({ pressed }) => [{ opacity: pressed ? 0.86 : 1 }]}
+                        >
+                          <MetricCard
+                            icon={metric.icon as any}
+                            label={metric.label}
+                            value={m.metricValues[metric.key] ?? 0}
+                            unit={metric.unit}
+                            color={metric.color}
+                            change={calcChange(
+                              m.metricValues[metric.key],
+                              avgMetrics?.[metric.key],
+                            )}
+                          />
+                        </Pressable>
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
-            </View>
-          ) : null}
+                </View>
+              ),
+            )}
 
-          {effectiveCoaching && (
+          {coaching && (
             <View style={styles.coachingSection}>
-              <Text style={styles.sectionTitle}>Insights</Text>
+              <Text style={styles.sectionTitle}>Coaching Insights</Text>
               <CoachingCard
                 icon="trophy"
                 title="Key Strength"
-                content={effectiveCoaching.keyStrength}
+                content={coaching.keyStrength}
                 color="#34D399"
               />
               <CoachingCard
                 icon="warning"
                 title="Improvement Area"
-                content={effectiveCoaching.improvementArea}
+                content={coaching.improvementArea}
                 color="#FBBF24"
               />
               <CoachingCard
                 icon="bulb"
                 title="Training Suggestion"
-                content={effectiveCoaching.trainingSuggestion}
+                content={coaching.trainingSuggestion}
                 color="#60A5FA"
               />
+              <View
+                style={[
+                  styles.overallCard,
+                  {
+                    backgroundColor: `${sportThemeColor}12`,
+                    borderColor: `${sportThemeColor}30`,
+                  },
+                ]}
+              >
+                <View style={styles.overallHeader}>
+                  <Ionicons name="chatbubbles" size={18} color={sportThemeColor} />
+                  <Text style={[styles.overallHeading, { color: sportThemeColor }]}>Overall</Text>
+                </View>
+                <Text
+                  style={styles.summaryText}
+                  numberOfLines={overallExpanded ? undefined : 4}
+                  onTextLayout={(event) => {
+                    if (!overallExpanded) {
+                      const lineCount = event.nativeEvent.lines.length;
+                      if (lineCount > 4 && !overallCanExpand) {
+                        setOverallCanExpand(true);
+                      }
+                    }
+                  }}
+                >
+                  {overallSummaryText}
+                </Text>
+                {overallCanExpand ? (
+                  <Pressable
+                    onPress={() => setOverallExpanded((prev) => !prev)}
+                    style={({ pressed }) => [styles.summaryMoreButton, { opacity: pressed ? 0.75 : 1 }]}
+                  >
+                    <Text style={[styles.summaryMoreText, { color: sportThemeColor }]}> 
+                      {overallExpanded ? ".. less .." : ".. more .."}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
           )}
 
@@ -2043,7 +1187,7 @@ export default function AnalysisDetailScreen() {
       <Modal
         visible={feedbackSheetVisible}
         transparent
-        animationType="none"
+        animationType="slide"
         onRequestClose={closeFeedbackSheet}
       >
         <View style={styles.feedbackOverlay}>
@@ -2053,16 +1197,17 @@ export default function AnalysisDetailScreen() {
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 0}
           >
-            <View
+            <Animated.View
               style={[
                 styles.feedbackSheet,
                 {
                   paddingBottom: Math.max(insets.bottom + 52, 60),
+                  transform: [{ translateY: feedbackSheetTranslateY }],
                 },
               ]}
             >
               <View style={styles.feedbackSheetContent}>
-                <View style={styles.feedbackSheetHandle} />
+                <View style={styles.feedbackSheetHandle} {...feedbackSheetPanResponder.panHandlers} />
                 <Text style={styles.feedbackSheetTitle}>Help us improve AI diagnostics</Text>
                 <Text style={styles.feedbackSheetSubtitle}>
                   Share any discrepancy you notice in diagnostics or metrics.
@@ -2125,14 +1270,14 @@ export default function AnalysisDetailScreen() {
                   </Pressable>
                 </View>
               </View>
-            </View>
+            </Animated.View>
           </KeyboardAvoidingView>
         </View>
       </Modal>
 
       {fullscreen && videoUrl && (
         <Modal
-          animationType="none"
+          animationType="fade"
           transparent={false}
           visible={fullscreen}
           onRequestClose={() => setFullscreen(false)}
@@ -2212,48 +1357,17 @@ const styles = StyleSheet.create({
   topMetaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 8,
-  },
-  aiEntryColumn: {
-    gap: 8,
-    alignItems: "flex-start",
   },
   badgesGroup: {
     flexDirection: "row",
-    gap: 6,
+    gap: 8,
     marginLeft: "auto",
-    marginRight: 8,
-    flexWrap: "nowrap",
-    justifyContent: "flex-end",
-    alignItems: "center",
   },
   scoreSection: {
     alignItems: "center",
     paddingVertical: 20,
-    gap: 8,
-  },
-  scoreUnavailableWrap: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
-    gap: 4,
-  },
-  scoreUnavailableValue: {
-    fontSize: 34,
-    fontFamily: "Inter_700Bold",
-    color: "#94A3B8",
-  },
-  scoreFilteredHint: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
-    textAlign: "center",
   },
   diagnosticsIconButton: {
     width: 24,
@@ -2436,30 +1550,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
-    backgroundColor: "#6C5CE712",
+    backgroundColor: "#60A5FA12",
     borderWidth: 1,
-    borderColor: "#6C5CE730",
+    borderColor: "#60A5FA30",
   },
   shotCountBadgeText: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
-    flexShrink: 0,
-  },
-  shotSpeedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: "#F59E0B12",
-    borderWidth: 1,
-    borderColor: "#F59E0B30",
-  },
-  shotSpeedBadgeText: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F59E0B",
+    color: "#60A5FA",
   },
   compactThumbsRow: {
     flexDirection: "row",
@@ -2589,177 +1687,13 @@ const styles = StyleSheet.create({
     padding: 22,
     gap: 18,
   },
-  sectionCompact: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#13132A",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  technicalSectionWrap: {
-    gap: 8,
-  },
-  sectionCompactTechnical: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#2A2A5050",
-    backgroundColor: "#13132A",
-    paddingHorizontal: 11,
-    paddingVertical: 10,
-    gap: 8,
-  },
   sectionTitle: {
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
     color: "#F8FAFC",
   },
-  sectionScoreHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  sectionScoreBadge: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "flex-end",
-    position: "relative",
-    minWidth: 104,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A90",
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    gap: 4,
-  },
-  sectionScoreBadgeTechnical: {
-    borderColor: "#2A2A5040",
-    backgroundColor: "#0A0A1A66",
-  },
-  sectionScoreText: {
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    color: "#E2E8F0",
-  },
-  sectionDeltaText: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-  },
-  sectionDeltaWrap: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 2,
-    marginRight: 1,
-  },
-  overallDeltaWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 2,
-  },
-  overallDeltaText: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
   barsContainer: {
     gap: 18,
-  },
-  tenGroup: {
-    gap: 8,
-  },
-  tenRow: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#2A2A5030",
-    backgroundColor: "#0A0A1A75",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 5,
-  },
-  tenRowCompact: {
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    gap: 4,
-  },
-  tenHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  tenLabel: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
-    marginRight: 8,
-  },
-  tenLabelCompact: {
-    fontSize: 12,
-    marginRight: 6,
-  },
-  tenScore: {
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
-  },
-  tenTrack: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: "#1F2937",
-    overflow: "hidden",
-  },
-  tenTrackCompact: {
-    height: 6,
-  },
-  tenFill: {
-    height: "100%",
-    borderRadius: 999,
-  },
-  tenExplanation: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
-    lineHeight: 16,
-  },
-  tenExplanationCompact: {
-    fontSize: 10,
-    lineHeight: 14,
-  },
-  inlineSectionLoading: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#2A2A5030",
-    backgroundColor: "#0A0A1A88",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  inlineSectionLoadingText: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
-  },
-  inlineMoreButton: {
-    marginTop: -2,
-    alignSelf: "flex-end",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A",
-  },
-  inlineMoreButtonText: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#60A5FA",
   },
   periodRow: {
     flexDirection: "row",
@@ -2805,6 +1739,39 @@ const styles = StyleSheet.create({
   },
   coachingSection: {
     gap: 14,
+  },
+  overallCard: {
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    backgroundColor: "#6C5CE708",
+    borderColor: "#6C5CE720",
+    gap: 10,
+  },
+  overallHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  overallHeading: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#6C5CE7",
+  },
+  summaryText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 21,
+    color: "#CBD5E1",
+  },
+  summaryMoreButton: {
+    alignSelf: "flex-start",
+    marginTop: 2,
+  },
+  summaryMoreText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
   },
   shotReportCard: {
     borderRadius: 16,
@@ -3272,42 +2239,26 @@ const styles = StyleSheet.create({
   },
   stepRow: {
     flexDirection: "row",
-    fontSize: 12,
+    alignItems: "center",
     gap: 10,
   },
   stepText: {
-    fontSize: 11,
+    fontSize: 14,
     fontFamily: "Inter_400Regular",
-    flex: 1,
-    lineHeight: 16,
   },
   errorText: {
     fontSize: 18,
     fontFamily: "Inter_700Bold",
-    marginTop: 6,
+    marginTop: 12,
   },
   errorSub: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
-    marginTop: 8,
-    textAlign: "center",
-    lineHeight: 20,
-  },
-  tenExplanationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
     marginTop: 4,
   },
   rejectedIconWrap: {
     width: 80,
-    lineHeight: 14,
-  },
-  tenMoreText: {
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
-    color: "#60A5FA",
-    letterSpacing: 0.2,
+    height: 80,
     borderRadius: 40,
     backgroundColor: "#FBBF2414",
     alignItems: "center",

@@ -36,8 +36,6 @@ import {
   validateEvaluationDatasetManifest,
   writeModelRegistryConfig,
 } from "./model-registry";
-import { persistedScoreToApiHundred } from "./score-scale";
-import { normalizeTacticalScoresToApi100, readTacticalScoreValue } from "./tactical-scores";
 
 const uploadDir = path.resolve(process.cwd(), "uploads");
 if (!fs.existsSync(uploadDir)) {
@@ -388,23 +386,15 @@ function normalizeFilterToken(value: unknown): string {
     .replace(/-+/g, "-");
 }
 
-function readSubScoreValue(scoreOutputs: unknown, key: string): number | null {
-  if (!scoreOutputs || typeof scoreOutputs !== "object") return null;
-  return readTacticalScoreValue(scoreOutputs as Record<string, unknown>, key);
-}
-
-function normalizeScoreRow<T extends { overallScore?: unknown; scoreOutputs?: unknown; subScores?: unknown }>(row: T): T {
-  const source =
-    row.scoreOutputs && typeof row.scoreOutputs === "object"
-      ? row.scoreOutputs
-      : null;
-  return {
-    ...row,
-    overallScore: persistedScoreToApiHundred(row.overallScore),
-    subScores: normalizeTacticalScoresToApi100(
-      source as Record<string, unknown> | null | undefined,
-    ),
-  };
+function readSubScoreValue(subScores: unknown, key: string): number | null {
+  if (!subScores || typeof subScores !== "object") return null;
+  const target = key.toLowerCase();
+  for (const [k, v] of Object.entries(subScores as Record<string, unknown>)) {
+    if (k.toLowerCase() !== target) continue;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 function mean(values: number[]): number | null {
@@ -414,28 +404,6 @@ function mean(values: number[]): number | null {
 
 function round1(value: number): number {
   return Number(value.toFixed(1));
-}
-
-const SCALE10_METRIC_KEYS = new Set([
-  "balanceScore",
-  "rhythmConsistency",
-  "shotConsistency",
-]);
-
-function normalizeMetricValuesForApi(metricValuesRaw: unknown): Record<string, number> {
-  const source =
-    metricValuesRaw && typeof metricValuesRaw === "object"
-      ? (metricValuesRaw as Record<string, unknown>)
-      : {};
-
-  const out: Record<string, number> = {};
-  for (const [key, raw] of Object.entries(source)) {
-    const value = Number(raw);
-    if (!Number.isFinite(value)) continue;
-    const normalized = SCALE10_METRIC_KEYS.has(key) && value > 10 ? value / 10 : value;
-    out[key] = round1(normalized);
-  }
-  return out;
 }
 
 function formatMetricName(key: string): string {
@@ -456,346 +424,9 @@ function getMovementLabel(row: {
 
 function getDrillForMetric(metric: string): string {
   if (metric === "timing") return "3 x 15 contact-point timing reps";
-  if (metric === "control") return "4 x 30s split-step + recovery";
-  if (metric === "technique") return "3 x 12 movement-shape checkpoints";
+  if (metric === "stability") return "4 x 30s split-step + recovery";
+  if (metric === "consistency") return "3 rounds of 20-ball rally consistency";
   return "3 x 12 explosive shadow swings";
-}
-
-type ImprovedTennisStrokeType = "forehand" | "backhand" | "serve" | "volley";
-
-type ImprovedTennisScoreDetail = {
-  key: string;
-  label: string;
-  score: number;
-  explanation: string;
-};
-
-type ImprovedTennisReport = {
-  stroke: ImprovedTennisStrokeType;
-  biomechanics: ImprovedTennisScoreDetail[];
-  movement: ImprovedTennisScoreDetail[];
-  strengths: string[];
-  improvementAreas: string[];
-  coachingTips: string[];
-  overallScore: number;
-};
-
-type SummarySectionScores = {
-  technical: number | null;
-  tactical: number | null;
-  movement: number | null;
-};
-
-function improvedClamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function improvedNorm(value: unknown, min: number, max: number): number {
-  const n = Number(value);
-  if (!Number.isFinite(n) || max <= min) return 0.55;
-  return improvedClamp((n - min) / (max - min), 0, 1);
-}
-
-function improvedInvNorm(value: unknown, min: number, max: number): number {
-  return 1 - improvedNorm(value, min, max);
-}
-
-function improvedScore10(raw: number): number {
-  return Math.round(improvedClamp(raw, 1, 10));
-}
-
-function improvedScoreFromUnit(unitScore: number): number {
-  return improvedScore10(1 + unitScore * 9);
-}
-
-function improvedPickMetric(metricValues: Record<string, unknown>, keys: string[]): number | null {
-  for (const key of keys) {
-    const value = Number(metricValues?.[key]);
-    if (Number.isFinite(value)) return value;
-  }
-  return null;
-}
-
-function normalizeBalanceScoreForImprovedModel(value: number | null): number | null {
-  if (!Number.isFinite(Number(value))) return null;
-  const n = Number(value);
-  // Backward/forward compatible: legacy rows may be 0-100, new rows are persisted as 0-10.
-  return n <= 10 ? n * 10 : n;
-}
-
-function buildImprovedTennisReportFromMetrics(
-  detectedMovement: unknown,
-  metricValuesRaw: unknown,
-): ImprovedTennisReport {
-  const metricValues =
-    metricValuesRaw && typeof metricValuesRaw === "object"
-      ? (metricValuesRaw as Record<string, unknown>)
-      : {};
-
-  const detected = String(detectedMovement || "").toLowerCase().trim();
-  const stroke: ImprovedTennisStrokeType =
-    detected === "backhand" || detected === "serve" || detected === "volley"
-      ? (detected as ImprovedTennisStrokeType)
-      : "forehand";
-
-  const stanceAngle = improvedPickMetric(metricValues, ["stanceAngle", "stance_angle"]);
-  const hipRotationSpeed = improvedPickMetric(metricValues, ["hipRotationSpeed", "hip_rotation_speed", "hipRotation"]);
-  const shoulderRotationSpeed = improvedPickMetric(metricValues, ["shoulderRotationSpeed", "shoulder_rotation_speed", "shoulderRotation"]);
-  const kneeBendAngle = improvedPickMetric(metricValues, ["kneeBendAngle", "knee_bend_angle"]);
-  const racketLagAngle = improvedPickMetric(metricValues, ["racketLagAngle", "racket_lag_angle"]);
-  const contactDistance = improvedPickMetric(metricValues, ["contactDistance", "contact_distance"]);
-  const contactHeight = improvedPickMetric(metricValues, ["contactHeight", "contact_height"]);
-  const swingPathAngle = improvedPickMetric(metricValues, ["swingPathAngle", "swing_path_angle", "trajectoryArc"]);
-  const balanceScore = improvedPickMetric(metricValues, ["balanceScore", "balance_score"]);
-  const balanceScoreForModel = normalizeBalanceScoreForImprovedModel(balanceScore);
-  const splitStepTime = improvedPickMetric(metricValues, ["splitStepTime", "splitStepTiming", "split_step_time"]);
-  const reactionTime = improvedPickMetric(metricValues, ["reactionTime", "reactionSpeed", "reaction_time"]);
-  const recoveryTime = improvedPickMetric(metricValues, ["recoveryTime", "recoverySpeed", "recovery_time"]);
-  const ballSpeed = improvedPickMetric(metricValues, ["ballSpeed", "avgBallSpeed", "ball_speed"]);
-
-  const balance = improvedScoreFromUnit(
-    0.8 * improvedNorm(balanceScoreForModel, 55, 98) + 0.2 * improvedInvNorm(reactionTime, 180, 480),
-  );
-  const inertia = improvedScoreFromUnit(
-    0.6 * improvedNorm(stanceAngle, 15, 65) + 0.4 * improvedNorm(shoulderRotationSpeed, 300, 1100),
-  );
-  const momentum = improvedScoreFromUnit(
-    0.45 * improvedNorm(hipRotationSpeed, 250, 1100)
-      + 0.35 * improvedNorm(shoulderRotationSpeed, 300, 1200)
-      + 0.2 * improvedNorm(ballSpeed, 35, 140),
-  );
-  const oppositeForce = improvedScoreFromUnit(
-    0.4 * improvedNorm(kneeBendAngle, 25, 120)
-      + 0.35 * improvedNorm(balanceScoreForModel, 55, 98)
-      + 0.25 * improvedNorm(stanceAngle, 15, 65),
-  );
-  const elastic = improvedScoreFromUnit(
-    0.6 * improvedNorm(racketLagAngle, 15, 75)
-      + 0.2 * improvedNorm(kneeBendAngle, 25, 120)
-      + 0.2 * improvedNorm(swingPathAngle, 5, 45),
-  );
-  const contact = improvedScoreFromUnit(
-    0.45 * improvedNorm(contactDistance, 0.35, 1.15)
-      + 0.35 * improvedNorm(contactHeight, 0.75, 2.9)
-      + 0.2 * improvedInvNorm(reactionTime, 180, 480),
-  );
-  const follow = improvedScoreFromUnit(
-    0.6 * improvedNorm(swingPathAngle, 8, 55) + 0.4 * improvedNorm(shoulderRotationSpeed, 300, 1200),
-  );
-
-  const ready = improvedScoreFromUnit(
-    0.6 * improvedInvNorm(splitStepTime, 0.12, 0.45) + 0.4 * improvedNorm(balanceScoreForModel, 55, 98),
-  );
-  const read = improvedScoreFromUnit(
-    0.55 * improvedInvNorm(reactionTime, 180, 480) + 0.45 * improvedInvNorm(splitStepTime, 0.12, 0.45),
-  );
-  const react = improvedScoreFromUnit(
-    0.7 * improvedInvNorm(reactionTime, 170, 500) + 0.3 * improvedNorm(balanceScoreForModel, 55, 98),
-  );
-  const respond = improvedScoreFromUnit(
-    0.45 * improvedNorm(ballSpeed, 35, 140)
-      + 0.3 * improvedNorm(contactHeight, 0.75, 2.9)
-      + 0.25 * improvedNorm(swingPathAngle, 8, 55),
-  );
-  const recover = improvedScoreFromUnit(
-    0.65 * improvedInvNorm(recoveryTime, 0.6, 3.2) + 0.35 * improvedNorm(balanceScore, 55, 98),
-  );
-
-  const biomechanics: ImprovedTennisScoreDetail[] = [
-    {
-      key: "balance",
-      label: "Balance",
-      score: balance,
-      explanation:
-        balance >= 8
-          ? "Stable base before, through, and after contact with minimal sway."
-          : balance >= 6
-            ? "Base is mostly stable; occasional drift appears under speed."
-            : "Base stability drops through contact; posture control should improve.",
-    },
-    {
-      key: "inertia",
-      label: "Inertia / Stance Alignment",
-      score: inertia,
-      explanation:
-        inertia >= 8
-          ? "Stance and trunk alignment match shot direction well."
-          : inertia >= 6
-            ? "Stance shape is usable but alignment timing is occasionally late."
-            : "Stance alignment is inconsistent and limits clean energy direction.",
-    },
-    {
-      key: "oppositeForce",
-      label: "Opposite Force",
-      score: oppositeForce,
-      explanation:
-        oppositeForce >= 8
-          ? "Bracing and ground-force transfer are strong, supporting stable acceleration."
-          : oppositeForce >= 6
-            ? "Force transfer is usable but can improve with stronger bracing and leg drive."
-            : "Insufficient bracing and push-off reduce stable power transfer.",
-    },
-    {
-      key: "momentum",
-      label: "Momentum (Kinetic Chain)",
-      score: momentum,
-      explanation:
-        momentum >= 8
-          ? "Good legs-to-racket sequencing transfers energy efficiently."
-          : momentum >= 6
-            ? "Partial kinetic chain use; more lower-body drive would help."
-            : "Energy transfer is arm-dominant and misses lower-body contribution.",
-    },
-    {
-      key: "elastic",
-      label: "Elastic Energy",
-      score: elastic,
-      explanation:
-        elastic >= 8
-          ? "Racket lag and stretch-shortening are creating strong acceleration."
-          : elastic >= 6
-            ? "Elastic load is present but could be timed and released better."
-            : "Limited lag/load reduces free racket-head speed.",
-    },
-    {
-      key: "contact",
-      label: "Contact",
-      score: contact,
-      explanation:
-        stroke === "serve"
-          ? "Contact height supports serve geometry; timing consistency remains critical."
-          : stroke === "volley"
-            ? "Contact in front supports compact volley control."
-            : "Contact distance from the body supports cleaner strike mechanics.",
-    },
-    {
-      key: "follow",
-      label: "Follow Through",
-      score: follow,
-      explanation:
-        follow >= 8
-          ? "Finish path is complete and supports control plus spin/drive intent."
-          : follow >= 6
-            ? "Follow-through is mostly complete with minor deceleration."
-            : "Finish path cuts off early and limits control/consistency.",
-    },
-  ];
-
-  const movement: ImprovedTennisScoreDetail[] = [
-    {
-      key: "ready",
-      label: "Ready",
-      score: ready,
-      explanation:
-        ready >= 8
-          ? "Split-step timing, knee flex, and base setup prepare efficient lower-body movement."
-          : ready >= 6
-            ? "Lower-body prep is usable, but earlier split-step and stronger base loading are needed."
-            : "Late split-step and shallow leg load reduce first-move quickness.",
-    },
-    {
-      key: "read",
-      label: "Read",
-      score: read,
-      explanation:
-        read >= 8
-          ? "Early read supports efficient footwork choices and balanced body positioning."
-          : read >= 6
-            ? "Read timing is acceptable, but feet can organize earlier into a stronger base."
-            : "Late read forces rushed footwork and unstable lower-body positioning.",
-    },
-    {
-      key: "react",
-      label: "React",
-      score: react,
-      explanation:
-        react >= 8
-          ? "First step is explosive with clean lower-body direction control."
-          : react >= 6
-            ? "Initial push-off is functional but needs sharper leg drive under pressure."
-            : "Slow or misdirected first step limits movement efficiency.",
-    },
-    {
-      key: "respond",
-      label: "Respond",
-      score: respond,
-      explanation:
-        stroke === "serve"
-          ? "Serve response reflects knee-drive timing, vertical push, and stable landing footwork."
-          : stroke === "backhand"
-            ? "Backhand response depends on base width, outside-leg drive, and balanced transfer through contact."
-            : stroke === "volley"
-              ? "Volley response relies on quick split-step, short adjustment steps, and body control through contact."
-              : "Forehand response is driven by leg load, push-off timing, and clean foot positioning.",
-    },
-    {
-      key: "recover",
-      label: "Recover",
-      score: recover,
-      explanation:
-        recover >= 8
-          ? "Recovery steps are quick and balanced, restoring a strong lower-body base."
-          : recover >= 6
-            ? "Recovery is serviceable but needs faster feet to re-center and reload."
-            : "Slow recovery footwork delays re-centering and next-shot readiness.",
-    },
-  ];
-
-  const bioAvg = biomechanics.reduce((sum, item) => sum + item.score, 0) / Math.max(biomechanics.length, 1);
-  const movAvg = movement.reduce((sum, item) => sum + item.score, 0) / Math.max(movement.length, 1);
-  const overallScore = Math.round(improvedClamp((bioAvg * 0.6 + movAvg * 0.4) * 10, 0, 100));
-
-  const strongest = [...biomechanics, ...movement].sort((a, b) => b.score - a.score).slice(0, 3);
-  const weakest = [...biomechanics, ...movement].sort((a, b) => a.score - b.score).slice(0, 3);
-
-  const coachingTips = [
-    `${weakest[0]?.label || "Ready"}: prioritize this phase with focused, short-interval drills.`,
-    `${weakest[1]?.label || "Contact"}: reinforce this mechanic in slow-to-fast progression reps.`,
-    stroke === "forehand"
-      ? "Load on the outside leg earlier, then rotate hips before arm acceleration."
-      : stroke === "backhand"
-        ? "Initiate with shoulder turn and stabilize contact height through spacing."
-        : stroke === "serve"
-          ? "Increase knee load depth, then push up before full shoulder acceleration."
-          : "Shorten backswing and keep contact in front for controlled volleys.",
-  ];
-
-  return {
-    stroke,
-    biomechanics,
-    movement,
-    strengths: strongest.map((item) => `${item.label} is a strength (${item.score}/10).`),
-    improvementAreas: weakest.map((item) => `${item.label} needs improvement (${item.score}/10).`),
-    coachingTips,
-    overallScore,
-  };
-}
-
-function computeSummarySectionScores(
-  row: {
-    scoreOutputs?: unknown;
-  },
-): SummarySectionScores {
-  const storedScoreOutputs =
-    row.scoreOutputs && typeof row.scoreOutputs === "object"
-      ? (row.scoreOutputs as Record<string, unknown>)
-      : null;
-
-  const parseStored = (key: "technical" | "tactical" | "movement"): number | null => {
-    const section = storedScoreOutputs?.[key];
-    const value = Number(
-      section && typeof section === "object"
-        ? (section as Record<string, unknown>).overall
-        : section,
-    );
-    return Number.isFinite(value) ? value : null;
-  };
-
-  return {
-    technical: parseStored("technical"),
-    tactical: parseStored("tactical"),
-    movement: parseStored("movement"),
-  };
 }
 
 const MODEL_EVALUATION_MODE_KEY = "modelEvaluationMode";
@@ -1217,11 +848,6 @@ async function refreshDiscrepancySnapshotsForAnalysis(
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`alter table users add column if not exists dominant_profile text`);
-  await db.execute(sql`alter table metrics add column if not exists score_inputs jsonb`);
-  await db.execute(sql`alter table metrics add column if not exists score_outputs jsonb`);
-  await db.execute(sql`alter table metrics add column if not exists ai_diagnostics jsonb`);
-  await db.execute(sql`alter table metrics drop column if exists tactical_scores`);
-  await db.execute(sql`alter table metrics drop column if exists sub_scores`);
 
   await db.execute(sql`
     create table if not exists analysis_shot_annotations (
@@ -1317,7 +943,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`alter table analyses add column if not exists video_height real`);
   await db.execute(sql`alter table analyses add column if not exists video_rotation real`);
   await db.execute(sql`alter table analyses add column if not exists video_codec text`);
-  await db.execute(sql`alter table analyses add column if not exists video_content_hash text`);
   await db.execute(sql`alter table analyses add column if not exists video_bitrate_kbps real`);
   await db.execute(sql`alter table analyses add column if not exists file_size_bytes real`);
   await db.execute(sql`alter table analyses add column if not exists container_format text`);
@@ -2193,8 +1818,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           updatedAt: analyses.updatedAt,
           userName: users.name,
           overallScore: metrics.overallScore,
-          metricValues: metrics.metricValues,
-          scoreOutputs: metrics.scoreOutputs,
+          subScores: metrics.subScores,
           configKey: metrics.configKey,
           modelVersion: metrics.modelVersion,
         })
@@ -2208,22 +1832,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .where(eq(analyses.userId, userId))
             .orderBy(sql`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`);
 
-      const normalizedRows = rows.map((row) => {
-        const normalized = normalizeScoreRow(row);
-        return {
-          ...normalized,
-          sectionScores: computeSummarySectionScores({
-            scoreOutputs: row.scoreOutputs,
-          }),
-        };
-      });
-
       if (evaluationVideoMap && isAdmin) {
-        const filteredRows = normalizedRows.filter((row) => getEvaluationMatch(row, evaluationVideoMap));
+        const filteredRows = rows.filter((row) => getEvaluationMatch(row, evaluationVideoMap));
         return res.json(filteredRows);
       }
 
-      res.json(normalizedRows);
+      res.json(rows);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -2259,7 +1873,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           capturedAt: analyses.capturedAt,
           createdAt: analyses.createdAt,
           overallScore: metrics.overallScore,
-          scoreOutputs: metrics.scoreOutputs,
+          subScores: metrics.subScores,
           configKey: metrics.configKey,
         })
         .from(analyses)
@@ -2281,7 +1895,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const scored = filtered
-        .map((row) => normalizeScoreRow(row))
         .filter((row) => row.status === "completed" && typeof row.overallScore === "number")
         .map((row) => ({ ...row, overallScore: Number(row.overallScore) }));
 
@@ -2305,16 +1918,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const overallDelta =
         recentAvg !== null && previousAvg !== null ? round1(recentAvg - previousAvg) : null;
 
-      const metricKeys = ["power", "control", "timing", "technique"] as const;
+      const metricKeys = ["power", "timing", "stability", "consistency"] as const;
       const metricSummary = metricKeys.map((key) => {
-        const latest = readSubScoreValue(scored[0]?.scoreOutputs, key);
+        const latest = readSubScoreValue(scored[0]?.subScores, key);
         const recentMetric = scored
           .slice(0, 3)
-          .map((r) => readSubScoreValue(r.scoreOutputs, key))
+          .map((r) => readSubScoreValue(r.subScores, key))
           .filter((v): v is number => v !== null);
         const prevMetric = scored
           .slice(3, 6)
-          .map((r) => readSubScoreValue(r.scoreOutputs, key))
+          .map((r) => readSubScoreValue(r.subScores, key))
           .filter((v): v is number => v !== null);
         const delta =
           recentMetric.length && prevMetric.length
@@ -2439,104 +2052,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const normalizedMetricsData = metricsData
-        ? {
-            ...metricsData,
-            metricValues: normalizeMetricValuesForApi((metricsData as any).metricValues),
-          }
-        : null;
-
       res.json({
         analysis: {
           ...analysis,
           userName: analysisUser?.name || null,
         },
-        metrics: normalizedMetricsData,
+        metrics: metricsData || null,
         coaching: insights || null,
         selectedMovementName,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.get("/api/analyses/:id/score-inputs", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const userId = req.session.userId!;
-      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
-      const isAdmin = currentUser?.role === "admin";
-
-      const analysis = await storage.getAnalysis(req.params.id);
-      if (!analysis) {
-        return res.status(404).json({ error: "Analysis not found" });
-      }
-
-      if (!isAdmin && analysis.userId !== userId) {
-        return res.status(403).json({ error: "You can only access your own analyses" });
-      }
-
-      const metricsData = await storage.getMetrics(req.params.id);
-      if (!metricsData) {
-        return res.status(404).json({ error: "Metrics not found for analysis" });
-      }
-
-      return res.json({
-        analysisId: req.params.id,
-        configKey: metricsData.configKey || null,
-        modelVersion: metricsData.modelVersion || null,
-        scoreInputs: (metricsData as any).scoreInputs || null,
-      });
-    } catch (error: any) {
-      return res.status(500).json({ error: error.message || "Failed to fetch score inputs" });
-    }
-  });
-
-  app.get("/api/analyses/:id/improved-tennis", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const userId = req.session.userId!;
-      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
-      const isAdmin = currentUser?.role === "admin";
-
-      const analysis = await storage.getAnalysis(req.params.id);
-      if (!analysis) {
-        return res.status(404).json({ error: "Analysis not found" });
-      }
-
-      if (!isAdmin && analysis.userId !== userId) {
-        return res.status(403).json({ error: "You can only access your own analyses" });
-      }
-
-      let sportName = "tennis";
-      if (analysis.sportId) {
-        const [sport] = await db.select().from(sports).where(eq(sports.id, analysis.sportId));
-        if (sport?.name) sportName = String(sport.name).toLowerCase();
-      }
-
-      if (sportName !== "tennis") {
-        return res.status(400).json({ error: "Improved analysis is available for Tennis only" });
-      }
-
-      const metricsData = await storage.getMetrics(req.params.id);
-
-      const baseMetricValues = (metricsData?.metricValues || {}) as Record<string, unknown>;
-      const inputMetrics = {
-        ...baseMetricValues,
-      };
-
-      const report = buildImprovedTennisReportFromMetrics(
-        analysis.detectedMovement,
-        inputMetrics,
-      );
-
-      return res.json({
-        analysisId: analysis.id,
-        sport: "tennis",
-        report,
-        inputMetrics,
-        diagnosticsAvailable: false,
-      });
-    } catch (error: any) {
-      return res.status(500).json({ error: error.message || "Failed to build improved tennis analysis" });
     }
   });
 
@@ -3227,22 +2753,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
 
-      const forceRefresh = String(req.query.refresh || "") === "1";
-      const [metricRow] = await db
-        .select({ aiDiagnostics: metrics.aiDiagnostics })
-        .from(metrics)
-        .where(eq(metrics.analysisId, analysis.id))
-        .limit(1);
-
-      const persistedDiagnostics =
-        metricRow?.aiDiagnostics && typeof metricRow.aiDiagnostics === "object"
-          ? metricRow.aiDiagnostics
-          : null;
-
-      if (persistedDiagnostics && !forceRefresh) {
-        return res.json(persistedDiagnostics);
-      }
-
       if (!analysis.videoPath || !fs.existsSync(analysis.videoPath)) {
         return res.status(404).json({ error: "Video file not found" });
       }
@@ -3266,11 +2776,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         movementName,
         await resolveUserDominantProfile(analysis.userId),
       );
-
-      await db
-        .update(metrics)
-        .set({ aiDiagnostics: diagnostics })
-        .where(eq(metrics.analysisId, analysis.id));
 
       const diagnosticsDetected = String(diagnostics?.detectedMovement || "").trim();
       if (
@@ -3411,13 +2916,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const rows = await db
         .select({
           analysisId: analyses.id,
-          videoFilename: analyses.videoFilename,
-          sourceFilename: analyses.sourceFilename,
-          videoContentHash: analyses.videoContentHash,
           capturedAt: analyses.capturedAt,
           createdAt: analyses.createdAt,
           overallScore: metrics.overallScore,
-          scoreOutputs: metrics.scoreOutputs,
+          subScores: metrics.subScores,
           metricValues: metrics.metricValues,
         })
         .from(analyses)
@@ -3425,35 +2927,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(and(...conditions))
         .orderBy(sql`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) asc`);
 
-      const points = rows.map((row) => {
-        const normalized = normalizeScoreRow(row);
-        const sectionScores = computeSummarySectionScores({
-          scoreOutputs: row.scoreOutputs,
-        });
-        return {
+      const points = rows.map((row) => ({
         analysisId: row.analysisId,
-        videoFilename: row.videoFilename,
-        sourceFilename: row.sourceFilename,
-        videoContentHash: row.videoContentHash,
         capturedAt: (row.capturedAt || row.createdAt).toISOString(),
         overallScore:
-          typeof normalized.overallScore === "number" && Number.isFinite(normalized.overallScore)
-            ? Number(normalized.overallScore)
+          typeof row.overallScore === "number" && Number.isFinite(row.overallScore)
+            ? Number(row.overallScore)
             : null,
-        subScores: normalizeTacticalScoresToApi100(
-          (row.scoreOutputs as Record<string, unknown> | null | undefined) || null,
-        ) as Record<string, number | null>,
-        sectionScores,
-        scoreOutputs:
-          row.scoreOutputs && typeof row.scoreOutputs === "object"
-            ? (row.scoreOutputs as Record<string, unknown>)
-            : null,
+        subScores:
+          row.subScores && typeof row.subScores === "object"
+            ? (row.subScores as Record<string, number>)
+            : {},
         metricValues:
           row.metricValues && typeof row.metricValues === "object"
-            ? normalizeMetricValuesForApi(row.metricValues)
+            ? row.metricValues
             : {},
-        };
-      });
+      }));
 
       res.json({
         period,

@@ -6,11 +6,12 @@ export const pickleballServeConfig: SportCategoryConfig = {
   configKey: "pickleball-serve",
   overallScoreLabel: "Serve Score",
   scores: [
-    { key: "power", label: "Power", weight: 0.15 },
-    { key: "control", label: "Control", weight: 0.35 },
-    { key: "timing", label: "Timing", weight: 0.10 },
     { key: "technique", label: "Technique", weight: 0.25 },
+    { key: "placement", label: "Placement", weight: 0.20 },
+    { key: "power", label: "Power", weight: 0.15 },
+    { key: "stability", label: "Stability", weight: 0.15 },
     { key: "consistency", label: "Consistency", weight: 0.15 },
+    { key: "rhythm", label: "Rhythm", weight: 0.10 },
   ],
   metrics: [
     {

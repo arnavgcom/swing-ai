@@ -6,11 +6,11 @@ export const badmintonClearConfig: SportCategoryConfig = {
   configKey: "badminton-clear",
   overallScoreLabel: "Clear Score",
   scores: [
-    { key: "power", label: "Power", weight: 0.23 },
-    { key: "control", label: "Control", weight: 0.09 },
-    { key: "timing", label: "Timing", weight: 0.14 },
-    { key: "technique", label: "Technique", weight: 0.41 },
-    { key: "consistency", label: "Consistency", weight: 0.13 },
+    { key: "power", label: "Power", weight: 0.25 },
+    { key: "technique", label: "Technique", weight: 0.25 },
+    { key: "footwork", label: "Footwork", weight: 0.20 },
+    { key: "timing", label: "Timing", weight: 0.15 },
+    { key: "consistency", label: "Consistency", weight: 0.15 },
   ],
   metrics: [
     {

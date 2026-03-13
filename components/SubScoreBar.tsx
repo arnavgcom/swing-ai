@@ -1,15 +1,36 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  Easing,
+} from "react-native-reanimated";
 
 interface SubScoreBarProps {
   label: string;
   score: number;
+  delay?: number;
   change?: number | null;
 }
 
-export function SubScoreBar({ label, score, change }: SubScoreBarProps) {
-  const widthPercent = `${Math.max(0, Math.min(100, score))}%`;
+export function SubScoreBar({ label, score, delay = 0, change }: SubScoreBarProps) {
+  const width = useSharedValue(0);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      width.value = withTiming(score, {
+        duration: 1000,
+        easing: Easing.out(Easing.cubic),
+      });
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [score, delay]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    width: `${width.value}%`,
+  }));
 
   const getColor = () => {
     if (score >= 80) return "#34D399";
@@ -43,7 +64,9 @@ export function SubScoreBar({ label, score, change }: SubScoreBarProps) {
         </View>
       </View>
       <View style={styles.track}>
-        <View style={[styles.fill, { width: widthPercent, backgroundColor: getColor() }]} />
+        <Animated.View
+          style={[styles.fill, animatedStyle, { backgroundColor: getColor() }]}
+        />
       </View>
     </View>
   );

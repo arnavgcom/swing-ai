@@ -6,11 +6,11 @@ export const tabletennisLoopConfig: SportCategoryConfig = {
   configKey: "tabletennis-loop",
   overallScoreLabel: "Loop Score",
   scores: [
-    { key: "power", label: "Power", weight: 0.18 },
-    { key: "control", label: "Control", weight: 0.14 },
-    { key: "timing", label: "Timing", weight: 0.09 },
-    { key: "technique", label: "Technique", weight: 0.41 },
-    { key: "consistency", label: "Consistency", weight: 0.18 },
+    { key: "power", label: "Power", weight: 0.20 },
+    { key: "spin", label: "Spin", weight: 0.25 },
+    { key: "technique", label: "Technique", weight: 0.20 },
+    { key: "stability", label: "Stability", weight: 0.15 },
+    { key: "consistency", label: "Consistency", weight: 0.20 },
   ],
   metrics: [
     {

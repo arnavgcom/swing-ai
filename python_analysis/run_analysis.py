@@ -369,27 +369,6 @@ def main():
         )
         analyzer.close()
 
-        metric_values = result.get("metricValues")
-        if isinstance(metric_values, dict):
-            # Expose a normalized shot speed attribute across sports by
-            # reusing the existing speed metric key for that analyzer.
-            speed_keys = (
-                "shotSpeed",
-                "ballSpeed",
-                "avgBallSpeed",
-                "shuttleSpeed",
-            )
-            normalized_shot_speed = None
-            for key in speed_keys:
-                raw_value = metric_values.get(key)
-                if isinstance(raw_value, (int, float)) and float(raw_value) > 0:
-                    normalized_shot_speed = round(float(raw_value), 2)
-                    break
-
-            if normalized_shot_speed is not None:
-                metric_values["shotSpeed"] = normalized_shot_speed
-                result["shotSpeed"] = normalized_shot_speed
-
         result["detectedMovement"] = detected_movement
         result["movementOverridden"] = movement_overridden
         result["userSelectedMovement"] = movement
