@@ -669,7 +669,9 @@ def _classify_tennis_forehand_backhand(features: Dict) -> Tuple[str, float, List
     speed_ratio_lw_rw = max_lw / max(max_rw, 1e-6)
 
     if is_cross_body:
-        backhand_score += 0.55
+        # Cross-body alone can overfire on forehand follow-through, so keep
+        # this cue strong but not overwhelming.
+        backhand_score += 0.46
         reasons.append("cross_body_motion")
     else:
         # Non-cross-body is weak evidence for forehand in real-world clips;
@@ -708,16 +710,20 @@ def _classify_tennis_forehand_backhand(features: Dict) -> Tuple[str, float, List
         reasons.append("wrist_speed_parity_backhand_hint")
 
     # Contact-side profile: dominant wrist spending more time on opposite body side
-    # is a strong backhand cue, while persistent same-side contact leans forehand.
+    # is a backhand cue, while persistent same-side contact leans forehand.
+    # When dominant wrist speed clearly leads, downweight opposite-side signals
+    # to avoid labeling forehand follow-through as backhand.
     if dominant_wrist_opposite_ratio >= 0.42:
-        backhand_score += 0.12
+        opposite_side_weight = 0.12 if dominant_speed_ratio < 1.45 else 0.05
+        backhand_score += opposite_side_weight
         reasons.append("opposite_side_contact_profile")
     elif dominant_wrist_same_ratio >= 0.70:
         forehand_score += 0.10
         reasons.append("same_side_contact_profile")
 
     if dominant_wrist_median_offset <= -0.10:
-        backhand_score += 0.08
+        median_opposite_weight = 0.08 if dominant_speed_ratio < 1.45 else 0.03
+        backhand_score += median_opposite_weight
         reasons.append("median_contact_opposite_side")
     elif dominant_wrist_median_offset >= 0.12:
         forehand_score += 0.08
@@ -740,6 +746,17 @@ def _classify_tennis_forehand_backhand(features: Dict) -> Tuple[str, float, List
                 forehand_score += 0.03
                 reasons.append("torso_rotation_forehand_hint")
 
+    # Cross-body forehands often end opposite-side after contact. If dominant
+    # hand speed clearly leads and torso direction is forehand-like, add a
+    # corrective forehand boost.
+    forehand_torso_dir = (
+        (dominant_side == "right" and shoulder_rotation_delta_deg < -8.0)
+        or (dominant_side != "right" and shoulder_rotation_delta_deg > 8.0)
+    )
+    if is_cross_body and dominant_speed_ratio >= 1.45 and forehand_torso_dir:
+        forehand_score += 0.18
+        reasons.append("cross_body_follow_through_forehand_hint")
+
     if is_compact_forward:
         forehand_score += 0.08
         reasons.append("compact_forward_pattern")
@@ -748,7 +765,18 @@ def _classify_tennis_forehand_backhand(features: Dict) -> Tuple[str, float, List
     total = max(forehand_score + backhand_score, 1e-6)
     confidence = 0.5 + min(0.45, gap / total)
 
-    if gap < 0.14:
+    backhand_lead = backhand_score - forehand_score
+    if (
+        is_cross_body
+        and dominant_speed_ratio >= 1.45
+        and forehand_torso_dir
+        and "wrist_speed_parity_backhand_hint" not in reasons
+        and backhand_lead <= 0.22
+    ):
+        reasons.append("cross_body_forehand_override")
+        return "forehand", float(confidence), reasons
+
+    if gap < 0.16:
         # Bias ambiguous tennis strokes to forehand to avoid over-calling backhand
         # when a forehand follow-through crosses the torso.
         reasons.append("ambiguous_bias_forehand")

@@ -40,7 +40,7 @@ export const paddleForehandConfig: SportCategoryConfig = {
       icon: "refresh-circle",
       category: "biomechanics",
       color: "#6C5CE7",
-      description: "Angular velocity of shoulder rotation during the swing",
+      description: "Angular velocity of torso rotation during the swing",
       optimalRange: [400, 800],
     },
     {

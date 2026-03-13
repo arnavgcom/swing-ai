@@ -11,6 +11,62 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export type ScoreInputDetail = {
+  parameters: string[];
+  values: Record<string, number | null>;
+};
+
+export type ScoreInputsPayload = {
+  technical: Record<string, ScoreInputDetail>;
+  movement: Record<string, ScoreInputDetail>;
+  tactical: Record<string, ScoreInputDetail>;
+  metadata: {
+    configKey: string;
+    generatedAt: string;
+  };
+};
+
+export type ScoreOutputsPayload = {
+  technical: {
+    overall: number | null;
+    components: {
+      balance: number | null;
+      inertia: number | null;
+      oppositeForce: number | null;
+      momentum: number | null;
+      elastic: number | null;
+      contact: number | null;
+    };
+  };
+  tactical: {
+    overall: number | null;
+    components: {
+      power: number | null;
+      control: number | null;
+      timing: number | null;
+      technique: number | null;
+    };
+  };
+  movement: {
+    overall: number | null;
+    components: {
+      ready: number | null;
+      read: number | null;
+      react: number | null;
+      respond: number | null;
+      recover: number | null;
+    };
+  };
+  overall: number | null;
+  metadata: {
+    configKey: string;
+    generatedAt: string;
+    scale: "0-10";
+  };
+};
+
+export type AiDiagnosticsPayload = Record<string, unknown>;
+
 export const users = pgTable("users", {
   id: varchar("id")
     .primaryKey()
@@ -23,6 +79,14 @@ export const users = pgTable("users", {
   address: text("address"),
   country: text("country"),
   dominantProfile: text("dominant_profile"),
+  selectedScoreSections: jsonb("selected_score_sections").$type<string[]>().default(sql`'[]'::jsonb`),
+  selectedMetricKeys: jsonb("selected_metric_keys").$type<string[]>().default(sql`'[]'::jsonb`),
+  selectedScoreSectionsBySport: jsonb("selected_score_sections_by_sport")
+    .$type<Record<string, string[]>>()
+    .default(sql`'{}'::jsonb`),
+  selectedMetricKeysBySport: jsonb("selected_metric_keys_by_sport")
+    .$type<Record<string, string[]>>()
+    .default(sql`'{}'::jsonb`),
   sportsInterests: text("sports_interests"),
   bio: text("bio"),
   role: text("role").default("player").notNull(),
@@ -65,6 +129,7 @@ export const analyses = pgTable("analyses", {
   sourceFilename: text("source_filename"),
   evaluationVideoId: text("evaluation_video_id"),
   videoPath: text("video_path").notNull(),
+  videoContentHash: text("video_content_hash"),
   status: text("status").notNull().default("pending"),
   detectedMovement: text("detected_movement"),
   rejectionReason: text("rejection_reason"),
@@ -101,8 +166,10 @@ export const metrics = pgTable("metrics", {
   configKey: varchar("config_key").notNull().default("tennis-forehand"),
   modelVersion: varchar("model_version").notNull().default("0.1"),
   overallScore: real("overall_score"),
-  subScores: jsonb("sub_scores").$type<Record<string, number>>(),
   metricValues: jsonb("metric_values").$type<Record<string, number>>(),
+  scoreInputs: jsonb("score_inputs").$type<ScoreInputsPayload>(),
+  scoreOutputs: jsonb("score_outputs").$type<ScoreOutputsPayload>(),
+  aiDiagnostics: jsonb("ai_diagnostics").$type<AiDiagnosticsPayload>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

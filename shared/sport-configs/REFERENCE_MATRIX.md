@@ -1,2072 +1,2684 @@
-# Swing AI — Sport Configuration Reference Matrix
+# Swing AI - Sport Configuration Reference Matrix
 
-Complete reference for all sport categories, metrics, optimal ranges, sub-scores, and overall score formulas.
-
----
+Clean, standardized reference for all sport categories.
 
 ## Summary
 
 | # | Sport | Category | Config Key | Metrics | Sub-Scores | Score Label |
 |---|-------|----------|------------|---------|------------|-------------|
-| 1 | Tennis | Forehand | `tennis-forehand` | 13 | 5 | Forehand Score |
-| 2 | Tennis | Backhand | `tennis-backhand` | 13 | 5 | Backhand Score |
-| 3 | Tennis | Serve | `tennis-serve` | 13 | 5 | Serve Score |
-| 4 | Tennis | Volley | `tennis-volley` | 10 | 5 | Volley Score |
-| 5 | Tennis | Game | `tennis-game` | 8 | 5 | Game Score |
-| 6 | Golf | Drive | `golf-drive` | 12 | 5 | Drive Score |
-| 7 | Golf | Iron Shot | `golf-iron` | 10 | 5 | Iron Shot Score |
-| 8 | Golf | Chip | `golf-chip` | 8 | 5 | Chip Score |
-| 9 | Golf | Putt | `golf-putt` | 8 | 5 | Putting Score |
-| 10 | Golf | Full Swing | `golf-full-swing` | 10 | 5 | Full Swing Score |
-| 11 | Pickleball | Dink | `pickleball-dink` | 7 | 5 | Dink Score |
-| 12 | Pickleball | Drive | `pickleball-drive` | 7 | 5 | Drive Score |
-| 13 | Pickleball | Serve | `pickleball-serve` | 6 | 5 | Serve Score |
-| 14 | Pickleball | Volley | `pickleball-volley` | 7 | 5 | Volley Score |
-| 15 | Pickleball | Third Shot Drop | `pickleball-third-shot-drop` | 6 | 5 | Third Shot Drop Score |
-| 16 | Paddle | Forehand | `paddle-forehand` | 9 | 5 | Forehand Score |
-| 17 | Paddle | Backhand | `paddle-backhand` | 8 | 5 | Backhand Score |
-| 18 | Paddle | Serve | `paddle-serve` | 6 | 5 | Serve Score |
-| 19 | Paddle | Smash | `paddle-smash` | 7 | 5 | Smash Score |
-| 20 | Paddle | Bandeja | `paddle-bandeja` | 7 | 5 | Bandeja Score |
-| 21 | Badminton | Clear | `badminton-clear` | 7 | 5 | Clear Score |
-| 22 | Badminton | Smash | `badminton-smash` | 7 | 5 | Smash Score |
-| 23 | Badminton | Drop | `badminton-drop` | 6 | 5 | Drop Shot Score |
-| 24 | Badminton | Net Shot | `badminton-net-shot` | 6 | 5 | Net Shot Score |
-| 25 | Badminton | Serve | `badminton-serve` | 5 | 5 | Serve Score |
-| 26 | Table Tennis | Forehand | `tabletennis-forehand` | 7 | 5 | Forehand Score |
-| 27 | Table Tennis | Backhand | `tabletennis-backhand` | 6 | 5 | Backhand Score |
-| 28 | Table Tennis | Serve | `tabletennis-serve` | 6 | 5 | Serve Score |
-| 29 | Table Tennis | Loop | `tabletennis-loop` | 6 | 5 | Loop Score |
-| 30 | Table Tennis | Chop | `tabletennis-chop` | 6 | 5 | Chop Score |
+| 1 | Tennis | Forehand | `tennis-forehand` | 13 | 4 | Forehand Score |
+| 2 | Tennis | Backhand | `tennis-backhand` | 13 | 4 | Backhand Score |
+| 3 | Tennis | Serve | `tennis-serve` | 13 | 4 | Serve Score |
+| 4 | Tennis | Volley | `tennis-volley` | 10 | 4 | Volley Score |
+| 5 | Tennis | Game | `tennis-game` | 8 | 4 | Game Score |
+| 6 | Golf | Drive | `golf-drive` | 12 | 4 | Drive Score |
+| 7 | Golf | Iron Shot | `golf-iron` | 10 | 4 | Iron Shot Score |
+| 8 | Golf | Chip | `golf-chip` | 8 | 4 | Chip Score |
+| 9 | Golf | Putt | `golf-putt` | 8 | 4 | Putting Score |
+| 10 | Golf | Full Swing | `golf-full-swing` | 10 | 4 | Full Swing Score |
+| 11 | Badminton | Clear | `badminton-clear` | 7 | 4 | Clear Score |
+| 12 | Badminton | Smash | `badminton-smash` | 7 | 4 | Smash Score |
+| 13 | Badminton | Drop Shot | `badminton-drop` | 6 | 4 | Drop Shot Score |
+| 14 | Badminton | Net Shot | `badminton-net-shot` | 6 | 4 | Net Shot Score |
+| 15 | Badminton | Serve | `badminton-serve` | 5 | 4 | Serve Score |
+| 16 | Paddle | Forehand | `paddle-forehand` | 9 | 4 | Forehand Score |
+| 17 | Paddle | Backhand | `paddle-backhand` | 8 | 4 | Backhand Score |
+| 18 | Paddle | Serve | `paddle-serve` | 6 | 4 | Serve Score |
+| 19 | Paddle | Smash | `paddle-smash` | 7 | 4 | Smash Score |
+| 20 | Paddle | Bandeja | `paddle-bandeja` | 7 | 4 | Bandeja Score |
+| 21 | Pickleball | Dink | `pickleball-dink` | 7 | 4 | Dink Score |
+| 22 | Pickleball | Drive | `pickleball-drive` | 7 | 4 | Drive Score |
+| 23 | Pickleball | Serve | `pickleball-serve` | 6 | 4 | Serve Score |
+| 24 | Pickleball | Volley | `pickleball-volley` | 7 | 4 | Volley Score |
+| 25 | Pickleball | Third Shot Drop | `pickleball-third-shot-drop` | 6 | 4 | Third Shot Drop Score |
+| 26 | Table Tennis | Forehand | `tabletennis-forehand` | 7 | 4 | Forehand Score |
+| 27 | Table Tennis | Backhand | `tabletennis-backhand` | 6 | 4 | Backhand Score |
+| 28 | Table Tennis | Serve | `tabletennis-serve` | 6 | 4 | Serve Score |
+| 29 | Table Tennis | Loop | `tabletennis-loop` | 6 | 4 | Loop Score |
+| 30 | Table Tennis | Chop | `tabletennis-chop` | 6 | 4 | Chop Score |
 
----
+## Scoring Contract
 
-## Overall Score Formula
+- Tactical sub-scores are standardized to `power`, `control`, `timing`, and `technique`.
+- Runtime standardized tactical formula: `tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`.
+- `consistency` is excluded from the standardized tactical output.
+- App overall formula: `overallScore = (technicalScore + tacticalScore + movementScore) / 3`.
 
-For every sport category, the overall score is a weighted sum of sub-scores:
+## 1. Tennis - Forehand
 
-```
-overallScore = Σ (weight_i × subScore_i)
-```
+### Sport Category
 
-Each sub-score is computed by the Python analyzer on a 0–100 scale. The weights are listed in each category's Scores table below.
+- Sport: `Tennis`
+- Category: `Forehand`
+- Config Key: `tennis-forehand`
+- Source Config: `shared/sport-configs/tennis-forehand.ts`
 
-## Global Standardized Sub-Score Model (Active)
-
-As of the latest scoring model update, all categories are normalized to these five sub-scores:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Python runtime standardization happens in `python_analysis/base_analyzer.py`:
-
-- `_build_standard_sub_scores(raw_sub_scores)` maps legacy category-specific keys to the five standardized keys.
-- `_compute_standard_overall_score(sub_scores)` computes overall score from standardized keys.
-
-Global overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy keys such as `stability`, `followThrough`, `accuracy`, `placement`, `touch`, `spin`, `reflexes`, and others are preserved for backwards compatibility in payloads/coaching generation, but UI/config scoring now uses the standardized five-key model.
-
-Note: category-specific formula snippets later in this document may still show legacy analyzer-local naming. Runtime scoring and UI score cards should be interpreted through the standardized five-key model above.
-
----
-
-## Video Classification Flow
-
-This is how Swing AI decides what movement a video contains (for example, forehand vs backhand) before scoring.
-
-### 1) Request And Inputs
-
-- Server starts analysis with selected `sport` and `movement` (or `auto-detect`) from the DB record.
-- User dominant side (`right` or `left`) is passed when available.
-- Python entry point: `python_analysis.run_analysis`.
-
-### 2) Sport Validation Gate
-
-- Pose frames are extracted first.
-- `validate_sport_match(...)` checks minimum visible body landmarks and motion signatures for the chosen sport.
-- If validation fails, analysis is rejected with a human-readable reason (no scoring is run).
-
-### 3) Shot Segmentation
-
-- `_segment_swings(...)` splits the clip into swing windows from wrist-speed peaks.
-- Each segment is then classified independently when enough valid pose frames are present.
-
-### 4) Segment-Level Movement Classification
-
-- `classify_segment_movement_with_diagnostics(...)` computes movement features (wrist speed, arc, cross-body pattern, contact profile, overhead/serve cues, etc.).
-- Rule-based sport logic maps features to labels for Tennis/Pickleball/Paddle/Table Tennis (forehand/backhand family plus sport-specific classes such as volley, dink, loop, chop).
-- Rule-based sport logic maps features to labels for Badminton (clear/smash/drop/net-shot/serve).
-- Rule-based sport logic maps features to labels for Golf (putt/chip/iron/full-swing/drive).
-- Tennis forehand/backhand uses a weighted scorer with confidence and diagnostic reasons.
-
-### 5) Clip-Level Classification
-
-- `classify_movement(...)` takes the dominant label (majority vote) across segment labels.
-- `shotCount` is the number of detected swing segments.
-
-### 6) Tennis Normalization And Override Rules
-
-- Tennis drill clips apply additional normalization/smoothing to reduce noisy opposite-side labels in short or near-unanimous clips.
-- If classifier disagrees with user-selected movement, override is applied only when evidence is strong enough (confidence/vote thresholds).
-- Final movement is returned as `detectedMovement`, with `movementOverridden` flag.
-
-### 7) Analyzer Selection And Scoring
-
-- Analyzer key is chosen as `{sport}-{detectedMovement}` when overridden, otherwise `{sport}-{userSelectedMovement}`.
-- `get_analyzer(config_key)` selects the Python analyzer class from `python_analysis/sports/registry.py`.
-- Scoring can be limited to shot windows matching the detected movement, excluding idle/non-target segments.
-
-### 8) Persistence
-
-- Server stores `analyses.detectedMovement`.
-- Server stores `metrics.configKey`, `overallScore`, `subScores`, and `metricValues`.
-- Server stores coaching insights text fields.
-- Very low-confidence/low-score runs can still be rejected by backend guardrails.
-
-### Classification Output Contract
-
-Fields returned by Python and consumed by the server pipeline:
-
-| Field | Type | Meaning | When Present |
-|-----|------|---------|--------------|
-| `configKey` | `string` | Final analyzer key used for scoring (for example `tennis-forehand`). | Successful analyses |
-| `detectedMovement` | `string` | Movement detected by classifier after normalization/smoothing (for example `forehand`, `serve`). | Successful analyses |
-| `movementOverridden` | `boolean` | Whether detected movement overrode the user-selected movement. | Successful analyses |
-| `userSelectedMovement` | `string` | Movement originally requested by the client/user. | Successful analyses |
-| `shotCount` | `number` | Number of swing segments detected in the video. | Successful analyses |
-| `shotsConsideredForScoring` | `number` | Number of detected shots actually used in scoring window selection. | Successful analyses |
-| `frameRangesUsedForScoring` | `Array<[number, number]>` | Frame ranges included for scoring target movement windows. | Successful analyses |
-| `idleTimeExcluded` | `boolean` | Indicates if non-target/idle windows were excluded from scoring. | Successful analyses |
-| `shotLabelDiagnostics` | `Array<object>` | Per-shot label diagnostics (`label`, `confidence`, `reasons`, frame indices, etc.). | Successful analyses |
-| `overallScore` | `number` | Overall normalized score (0-100). | Successful analyses |
-| `subScores` | `Record<string, number>` | Weighted component scores (for example power, timing). | Successful analyses |
-| `metricValues` | `Record<string, number>` | Raw computed metric values used for scoring and UI display. | Successful analyses |
-| `shotSpeed` | `number` | Normalized shot-speed attribute (mph), derived from the analyzer speed metric (for example `ballSpeed`, `avgBallSpeed`, `shuttleSpeed`). | Successful analyses when speed can be measured |
-| `coaching` | `object` | Generated coaching text (`keyStrength`, `improvementArea`, `trainingSuggestion`, `simpleExplanation`). | Successful analyses |
-| `rejected` | `boolean` | Video was rejected before scoring due to validation mismatch. | Rejected analyses |
-| `rejectionReason` | `string` | Human-readable rejection reason. | Rejected analyses |
-| `error` | `string` | Pipeline/runtime error message from Python layer. | Error path only |
-
----
-
-## 1. Tennis — Forehand
-
-**Config Key:** `tennis-forehand`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 25% |
-| control | Control | 20% |
-| timing | Timing | 25% |
-| technique | Technique | 15% |
-| consistency | Consistency | 15% |
-
-**Formula:** `overallScore = 0.25 × power + 0.20 × control + 0.25 × timing + 0.15 × technique + 0.15 × consistency`
-
-### Metrics
+### Metrics Table
 
 | Key | Label | Unit | Category | Optimal Range |
 |-----|-------|------|----------|---------------|
-| wristSpeed | Wrist Speed | m/s | biomechanics | 25 – 40 |
-| elbowAngle | Elbow Angle | deg | biomechanics | 120 – 160 |
-| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 500 – 900 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| ballSpeed | Ball Speed | mph | ball | 55 – 100 |
-| trajectoryArc | Trajectory Arc | deg | ball | 8 – 25 |
-| spinRate | Spin Rate | rpm | ball | 800 – 2800 |
-| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
-| backswingDuration | Backswing | s | timing | 0.3 – 0.7 |
-| contactTiming | Contact Timing | s | timing | 0.02 – 0.08 |
-| followThroughDuration | Follow-through | s | timing | 0.4 – 1.0 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-| contactHeight | Contact Height | m | technique | 0.85 – 1.10 |
+| wristSpeed | Wrist Speed | m/s | biomechanics | 25 - 40 |
+| elbowAngle | Elbow Angle | deg | biomechanics | 120 - 160 |
+| shoulderRotation | Torso Rotation | deg/s | biomechanics | 500 - 900 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| ballSpeed | Ball Speed | mph | ball | 55 - 100 |
+| trajectoryArc | Trajectory Arc | deg | ball | 8 - 25 |
+| spinRate | Spin Rate | rpm | ball | 800 - 2800 |
+| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| backswingDuration | Backswing | s | timing | 0.3 - 0.7 |
+| contactTiming | Contact Timing | s | timing | 0.02 - 0.08 |
+| followThroughDuration | Follow-through | s | timing | 0.4 - 1 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| contactHeight | Contact Height | m | technique | 0.85 - 1.1 |
 
-### Metric Computation Details
+### Scores (Ordered)
 
-Computed from `python_analysis/sports/tennis_forehand.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, swing phase timing, ball-tracker estimates.
+#### Technical
 
-| Key | How It Is Computed |
-|-----|---------------------|
-| `wristSpeed` | Computed from `wrist_speed_ms` and clamped to `15.0–45.0`. |
-| `elbowAngle` | Uses `float(np.mean(elbow_angles))` when `elbow_angles`; otherwise uses `130.0`. |
-| `shoulderRotation` | Computed from `shoulder_rot_vel` and clamped to `350.0–950.0`. |
-| `balanceScore` | Computed from `balance` and clamped to `40.0–98.0`. |
-| `ballSpeed` | Estimated from `ball_speed` and clipped to `40.0–130.0` when `ball_speed > 0` is valid; otherwise falls back to `55–95`. |
-| `trajectoryArc` | Estimated from `trajectory_arc` and clipped to `5.0–30.0` when `trajectory_arc > 0` is valid; otherwise falls back to `10–22`. |
-| `spinRate` | Computed from `spin` and clamped to `400.0–3500.0`. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `backswingDuration` | Taken from swing phase detection as backswing duration. |
-| `contactTiming` | Taken from swing phase detection as contact window timing. |
-| `followThroughDuration` | Taken from swing phase detection as follow-through duration. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-| `contactHeight` | Computed from `contact_height` and clamped to `0.5–1.5`. |
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
 
-### Sub-Score Computation Details
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
 
-`power` calculation in `python_analysis/sports/tennis_forehand.py` (`_compute_sub_scores`):
+#### Tactical
 
-`power = round(((normalize(ballSpeed, 40.0, 130.0) * 0.5) + (normalize(wristSpeed, 15.0, 45.0) * 0.3) + (normalize(spinRate, 400.0, 3500.0) * 0.2)) * 100)`
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 2. Tennis — Backhand
-
-**Config Key:** `tennis-backhand`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 20% |
-| control | Control | 25% |
-| timing | Timing | 25% |
-| technique | Technique | 15% |
-| consistency | Consistency | 15% |
-
-**Formula:** `overallScore = 0.20 × power + 0.25 × control + 0.25 × timing + 0.15 × technique + 0.15 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| wristSpeed | Wrist Speed | m/s | biomechanics | 20 – 35 |
-| elbowAngle | Elbow Angle | deg | biomechanics | 110 – 155 |
-| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 400 – 800 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| ballSpeed | Ball Speed | mph | ball | 45 – 90 |
-| trajectoryArc | Trajectory Arc | deg | ball | 8 – 22 |
-| spinRate | Spin Rate | rpm | ball | 700 – 2500 |
-| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
-| backswingDuration | Backswing | s | timing | 0.3 – 0.8 |
-| contactTiming | Contact Timing | s | timing | 0.02 – 0.08 |
-| followThroughDuration | Follow-through | s | timing | 0.4 – 1.0 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-| contactHeight | Contact Height | m | technique | 0.80 – 1.05 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/tennis_backhand.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, swing phase timing, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `wristSpeed` | Computed from `wrist_speed / pixels_per_meter` and clamped to `12.0–40.0`. |
-| `elbowAngle` | Uses `float(np.mean(elbow_angles))` when `elbow_angles`; otherwise uses `125.0`. |
-| `shoulderRotation` | Computed from `shoulder_rot_vel` and clamped to `300.0–850.0`. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 70.0` and clamped to `40.0–98.0`. |
-| `ballSpeed` | Estimated from `ball_speed` and clipped to `35.0–110.0` when `ball_speed > 0` is valid; otherwise falls back to `45–85`. |
-| `trajectoryArc` | Estimated from `trajectory_arc` and clipped to `5.0–28.0` when `trajectory_arc > 0` is valid; otherwise falls back to `8–20`. |
-| `spinRate` | Computed from `self.ball_tracker.estimate_spin(fps)` and clamped to `400.0–3000.0`. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `backswingDuration` | Taken from swing phase detection as backswing duration. |
-| `contactTiming` | Taken from swing phase detection as contact window timing. |
-| `followThroughDuration` | Taken from swing phase detection as follow-through duration. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-| `contactHeight` | Computed from `float(np.median(contact_heights)) if contact_heights else 0.85` and clamped to `0.5–1.4`. |
-
-### Sub-Score Computation Details
-
-`power` calculation in `python_analysis/sports/tennis_backhand.py` (`_compute_sub_scores`):
-
-`power = round(((normalize(ballSpeed, 35.0, 110.0) * 0.5) + (normalize(wristSpeed, 12.0, 40.0) * 0.3) + (normalize(spinRate, 400.0, 3000.0) * 0.2)) * 100)`
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 3. Tennis — Serve
-
-**Config Key:** `tennis-serve`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
 | power | Power | 30% |
 | control | Control | 25% |
-| timing | Timing | 20% |
-| technique | Technique | 15% |
-| consistency | Consistency | 10% |
-
-**Formula:** `overallScore = 0.30 × power + 0.25 × control + 0.20 × timing + 0.15 × technique + 0.10 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| wristSpeed | Wrist Speed | m/s | biomechanics | 30 – 50 |
-| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 600 – 1100 |
-| tossHeight | Toss Height | m | technique | 0.3 – 0.8 |
-| trophyAngle | Trophy Position | deg | technique | 80 – 110 |
-| pronation | Pronation | deg/s | technique | 400 – 900 |
-| ballSpeed | Serve Speed | mph | ball | 70 – 130 |
-| trajectoryArc | Trajectory Arc | deg | ball | 3 – 15 |
-| spinRate | Spin Rate | rpm | ball | 1000 – 3500 |
-| balanceScore | Balance | /100 | biomechanics | 65 – 95 |
-| backswingDuration | Wind-up | s | timing | 0.8 – 1.5 |
-| contactTiming | Contact Timing | s | timing | 0.02 – 0.06 |
-| contactHeight | Contact Height | m | technique | 2.2 – 2.8 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/tennis_serve.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, swing phase timing, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `wristSpeed` | Computed from `wrist_speed / pixels_per_meter` and clamped to `20.0–55.0`. |
-| `shoulderRotation` | Computed from `shoulder_rot_vel` and clamped to `400.0–1200.0`. |
-| `tossHeight` | Derived using the `toss height` helper in the analyzer pipeline. |
-| `trophyAngle` | Derived using the `trophy angle` helper in the analyzer pipeline. |
-| `pronation` | Derived using the `pronation` helper in the analyzer pipeline. |
-| `ballSpeed` | Estimated from `ball_speed` and clipped to `50.0–140.0` when `ball_speed > 0` is valid; otherwise falls back to `70–110`. |
-| `trajectoryArc` | Estimated from `trajectory_arc` and clipped to `2.0–20.0` when `trajectory_arc > 0` is valid; otherwise falls back to `5–12`. |
-| `spinRate` | Computed from `self.ball_tracker.estimate_spin(fps)` and clamped to `500.0–3800.0`. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 72.0` and clamped to `40.0–98.0`. |
-| `backswingDuration` | Taken from swing phase detection as backswing duration. |
-| `contactTiming` | Taken from swing phase detection as contact window timing. |
-| `contactHeight` | Computed from `contact_height_m * 1.6` and clamped to `1.8–3.0`. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-`power` calculation in `python_analysis/sports/tennis_serve.py` (`_compute_sub_scores`):
-
-`power = round(((normalize(ballSpeed, 50.0, 140.0) * 0.4) + (normalize(wristSpeed, 20.0, 55.0) * 0.35) + (normalize(spinRate, 500.0, 3800.0) * 0.25)) * 100)`
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 4. Tennis — Volley
-
-**Config Key:** `tennis-volley`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 10% |
-| control | Control | 61% |
-| timing | Timing | 8% |
-| technique | Technique | 15% |
-| consistency | Consistency | 6% |
-
-**Formula:** `overallScore = 0.10 × power + 0.61 × control + 0.08 × timing + 0.15 × technique + 0.06 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| reactionSpeed | Reaction Speed | ms | timing | 150 – 350 |
-| racketPrep | Racket Prep | /100 | technique | 70 – 98 |
-| wristFirmness | Wrist Firmness | /100 | technique | 75 – 98 |
-| splitStepTiming | Split Step | s | timing | 0.1 – 0.4 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| contactHeight | Contact Height | m | technique | 0.8 – 1.5 |
-| stepForward | Step Forward | /100 | biomechanics | 60 – 95 |
-| ballSpeed | Ball Speed | mph | ball | 30 – 70 |
-| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/tennis_volley.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `reactionSpeed` | Derived using the `reaction speed` helper in the analyzer pipeline. |
-| `racketPrep` | Derived using the `racket prep` helper in the analyzer pipeline. |
-| `wristFirmness` | Derived using the `wrist firmness` helper in the analyzer pipeline. |
-| `splitStepTiming` | Derived using the `split step timing` helper in the analyzer pipeline. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 72.0` and clamped to `40.0–98.0`. |
-| `contactHeight` | Computed from `float(np.median(contact_heights)) if contact_heights else 1.0` and clamped to `0.5–1.8`. |
-| `stepForward` | Derived using the `step forward` helper in the analyzer pipeline. |
-| `ballSpeed` | Estimated from `ball_speed` and clipped to `20.0–80.0` when `ball_speed > 0` is valid; otherwise falls back to `35–60`. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-`tennis-volley` local sub-scores do not define a raw `power` key in `python_analysis/sports/tennis_volley.py` (`_compute_sub_scores`).
-
-At runtime, `python_analysis/base_analyzer.py` (`_build_standard_sub_scores`) synthesizes standardized keys; because no power-like alias is emitted by the volley analyzer, standardized `power` falls back to the default value `78`.
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 5. Tennis — Game
-
-**Config Key:** `tennis-game`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 21% |
-| control | Control | 42% |
-| timing | Timing | 8% |
-| technique | Technique | 8% |
-| consistency | Consistency | 21% |
-
-**Formula:** `overallScore = 0.21 × power + 0.42 × control + 0.08 × timing + 0.08 × technique + 0.21 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| courtCoverage | Court Coverage | /100 | biomechanics | 60 – 95 |
-| recoverySpeed | Recovery Speed | m/s | biomechanics | 2.0 – 5.0 |
-| avgBallSpeed | Avg Ball Speed | mph | ball | 50 – 90 |
-| shotVariety | Shot Variety | /100 | technique | 50 – 90 |
-| balanceScore | Balance | /100 | biomechanics | 65 – 95 |
-| rallyLength | Rally Length | shots | consistency | 4 – 12 |
-| shotConsistency | Consistency | /100 | consistency | 65 – 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 60 – 90 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/tennis_game.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `courtCoverage` | Derived using the `court coverage` helper in the analyzer pipeline. |
-| `recoverySpeed` | Derived using the `recovery speed` helper in the analyzer pipeline. |
-| `avgBallSpeed` | Estimated from `ball_speed` and clipped to `40.0–100.0` when `ball_speed > 0` is valid; otherwise falls back to `50–80`. |
-| `shotVariety` | Derived using the `shot variety` helper in the analyzer pipeline. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 70.0` and clamped to `40.0–98.0`. |
-| `rallyLength` | Derived from `self._estimate_rally_length(pose_data, fps)`. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-`power` calculation in `python_analysis/sports/tennis_game.py` (`_compute_sub_scores`):
-
-`power = round(((normalize(avgBallSpeed, 40.0, 100.0) * 0.6) + (normalize(recoverySpeed, 1.5, 6.0) * 0.4)) * 100)`
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 6. Golf — Drive
-
-**Config Key:** `golf-drive`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 30% |
-| control | Control | 10% |
-| timing | Timing | 15% |
-| technique | Technique | 25% |
-| consistency | Consistency | 20% |
-
-**Formula:** `overallScore = 0.30 × power + 0.10 × control + 0.15 × timing + 0.25 × technique + 0.20 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| clubHeadSpeed | Club Head Speed | mph | power | 85 – 115 |
-| hipRotation | Hip Rotation | deg | biomechanics | 35 – 55 |
-| shoulderRotation | Shoulder Turn | deg | biomechanics | 75 – 100 |
-| xFactor | X-Factor | deg | biomechanics | 30 – 50 |
-| spineAngle | Spine Angle | deg | technique | 25 – 40 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| tempoRatio | Tempo Ratio | :1 | timing | 2.5 – 3.5 |
-| backswingDuration | Backswing | s | timing | 0.7 – 1.2 |
-| downswingDuration | Downswing | s | timing | 0.2 – 0.4 |
-| followThroughDuration | Follow-through | s | timing | 0.5 – 1.0 |
-| headStability | Head Stability | /100 | technique | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | consistency | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/golf_drive.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, swing phase timing.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `clubHeadSpeed` | Computed from `club_speed_mph` and clamped to `70.0–125.0`. |
-| `hipRotation` | Computed from `hip_rot * 0.08` and clamped to `25.0–65.0`. |
-| `shoulderRotation` | Computed from `shoulder_rot * 0.12` and clamped to `60.0–110.0`. |
-| `xFactor` | Computed from `shoulder_rot_deg - hip_rot_deg` and clamped to `15.0–60.0`. |
-| `spineAngle` | Computed from `spine_angle` and clamped to `15.0–50.0`. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 72.0` and clamped to `40.0–98.0`. |
-| `tempoRatio` | Computed from `backswing / downswing if downswing > 0 else 3.0` and clamped to `1.5–5.0`. |
-| `backswingDuration` | Taken from swing phase detection as backswing duration. |
-| `downswingDuration` | Taken from swing phase detection as contact window timing. |
-| `followThroughDuration` | Taken from swing phase detection as follow-through duration. |
-| `headStability` | Derived using the `head stability` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 7. Golf — Iron Shot
-
-**Config Key:** `golf-iron`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 14% |
-| control | Control | 32% |
-| timing | Timing | 9% |
-| technique | Technique | 27% |
-| consistency | Consistency | 18% |
-
-**Formula:** `overallScore = 0.14 × power + 0.32 × control + 0.09 × timing + 0.27 × technique + 0.18 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| clubHeadSpeed | Club Head Speed | mph | power | 70 – 95 |
-| hipRotation | Hip Rotation | deg | biomechanics | 30 – 50 |
-| shoulderRotation | Shoulder Turn | deg | biomechanics | 70 – 95 |
-| spineAngle | Spine Angle | deg | technique | 28 – 42 |
-| divotAngle | Divot Angle | deg | technique | -5 – -1 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| tempoRatio | Tempo Ratio | :1 | timing | 2.5 – 3.5 |
-| backswingDuration | Backswing | s | timing | 0.6 – 1.1 |
-| headStability | Head Stability | /100 | technique | 75 – 98 |
-| rhythmConsistency | Rhythm | /100 | consistency | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/golf_iron.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, swing phase timing.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `clubHeadSpeed` | Computed from `club_speed_mph` and clamped to `55.0–105.0`. |
-| `hipRotation` | Computed from `hip_rot * 0.08` and clamped to `20.0–58.0`. |
-| `shoulderRotation` | Computed from `shoulder_rot * 0.12` and clamped to `55.0–105.0`. |
-| `spineAngle` | Computed from `spine_angle` and clamped to `18.0–50.0`. |
-| `divotAngle` | Derived using the `divot angle` helper in the analyzer pipeline. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 72.0` and clamped to `40.0–98.0`. |
-| `tempoRatio` | Computed from `backswing / downswing_dur if downswing_dur > 0 else 3.0` and clamped to `1.5–5.0`. |
-| `backswingDuration` | Taken from swing phase detection as backswing duration. |
-| `headStability` | Derived using the `head stability` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 8. Golf — Chip
-
-**Config Key:** `golf-chip`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 10% |
-| control | Control | 33% |
-| timing | Timing | 8% |
-| technique | Technique | 29% |
-| consistency | Consistency | 20% |
-
-**Formula:** `overallScore = 0.10 × power + 0.33 × control + 0.08 × timing + 0.29 × technique + 0.20 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| wristHinge | Wrist Hinge | deg | technique | 5 – 20 |
-| armPendulum | Arm Pendulum | /100 | technique | 75 – 98 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| headStability | Head Stability | /100 | technique | 80 – 98 |
-| strokeLength | Stroke Length | /100 | technique | 60 – 90 |
-| contactQuality | Contact Quality | /100 | technique | 70 – 98 |
-| followThroughRatio | Follow-through | /100 | timing | 70 – 95 |
-| rhythmConsistency | Rhythm | /100 | consistency | 70 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/golf_chip.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, swing phase timing.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `wristHinge` | Derived using the `wrist hinge` helper in the analyzer pipeline. |
-| `armPendulum` | Derived using the `arm pendulum` helper in the analyzer pipeline. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `50.0–98.0`. |
-| `headStability` | Derived using the `head stability` helper in the analyzer pipeline. |
-| `strokeLength` | Derived using the `stroke length` helper in the analyzer pipeline. |
-| `contactQuality` | Derived using the `contact quality` helper in the analyzer pipeline. |
-| `followThroughRatio` | Derived using the `follow through ratio` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 9. Golf — Putt
-
-**Config Key:** `golf-putt`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 10% |
-| control | Control | 33% |
-| timing | Timing | 8% |
-| technique | Technique | 25% |
-| consistency | Consistency | 24% |
-
-**Formula:** `overallScore = 0.10 × power + 0.33 × control + 0.08 × timing + 0.25 × technique + 0.24 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| pendulumScore | Pendulum | /100 | technique | 75 – 98 |
-| headStability | Head Stability | /100 | technique | 85 – 98 |
-| eyeLine | Eye Line | /100 | technique | 75 – 98 |
-| strokeLength | Stroke Length | /100 | technique | 70 – 95 |
-| wristStability | Wrist Stability | /100 | technique | 80 – 98 |
-| balanceScore | Balance | /100 | biomechanics | 80 – 98 |
-| tempoRatio | Tempo | :1 | timing | 0.8 – 1.2 |
-| rhythmConsistency | Rhythm | /100 | consistency | 75 – 98 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/golf_putt.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, swing phase timing.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `pendulumScore` | Derived using the `pendulum` helper in the analyzer pipeline. |
-| `headStability` | Derived using the `head stability` helper in the analyzer pipeline. |
-| `eyeLine` | Derived using the `eye line` helper in the analyzer pipeline. |
-| `strokeLength` | Derived using the `stroke symmetry` helper in the analyzer pipeline. |
-| `wristStability` | Derived using the `wrist stability` helper in the analyzer pipeline. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 78.0` and clamped to `55.0–98.0`. |
-| `tempoRatio` | Computed from `follow / backswing if backswing > 0 else 1.0` and clamped to `0.5–1.5`. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 10. Golf — Full Swing
-
-**Config Key:** `golf-full-swing`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 25% |
-| control | Control | 15% |
-| timing | Timing | 15% |
-| technique | Technique | 25% |
-| consistency | Consistency | 20% |
-
-**Formula:** `overallScore = 0.25 × power + 0.15 × control + 0.15 × timing + 0.25 × technique + 0.20 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| clubHeadSpeed | Club Head Speed | mph | power | 80 – 110 |
-| hipRotation | Hip Rotation | deg | biomechanics | 35 – 55 |
-| shoulderRotation | Shoulder Turn | deg | biomechanics | 75 – 100 |
-| xFactor | X-Factor | deg | biomechanics | 30 – 50 |
-| spineAngle | Spine Angle | deg | technique | 25 – 40 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| tempoRatio | Tempo Ratio | :1 | timing | 2.5 – 3.5 |
-| backswingDuration | Backswing | s | timing | 0.7 – 1.2 |
-| headStability | Head Stability | /100 | technique | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | consistency | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/golf_full_swing.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, swing phase timing.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `clubHeadSpeed` | Computed from `club_speed_mph` and clamped to `65.0–120.0`. |
-| `hipRotation` | Computed from `hip_rot * 0.08` and clamped to `25.0–60.0`. |
-| `shoulderRotation` | Computed from `shoulder_rot * 0.12` and clamped to `60.0–110.0`. |
-| `xFactor` | Computed from `shoulder_rot_deg - hip_rot_deg` and clamped to `15.0–55.0`. |
-| `spineAngle` | Computed from `spine_angle` and clamped to `15.0–48.0`. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 72.0` and clamped to `40.0–98.0`. |
-| `tempoRatio` | Computed from `backswing / downswing_dur if downswing_dur > 0 else 3.0` and clamped to `1.5–5.0`. |
-| `backswingDuration` | Taken from swing phase detection as backswing duration. |
-| `headStability` | Derived using the `head stability` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 11. Pickleball — Dink
-
-**Config Key:** `pickleball-dink`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 11% |
-| control | Control | 36% |
-| timing | Timing | 9% |
-| technique | Technique | 31% |
-| consistency | Consistency | 13% |
-
-**Formula:** `overallScore = 0.11 × power + 0.36 × control + 0.09 × timing + 0.31 × technique + 0.13 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| paddleAngle | Paddle Angle | deg | technique | 25 – 50 |
-| softTouch | Soft Touch | /100 | technique | 70 – 98 |
-| wristStability | Wrist Stability | /100 | biomechanics | 75 – 98 |
-| arcHeight | Arc Height | m | ball | 0.05 – 0.30 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/pickleball_dink.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `paddleAngle` | Derived using the `paddle angle` helper in the analyzer pipeline. |
-| `softTouch` | Derived using the `soft touch` helper in the analyzer pipeline. |
-| `wristStability` | Derived using the `wrist stability` helper in the analyzer pipeline. |
-| `arcHeight` | Derived using the `arc height` helper in the analyzer pipeline. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `50.0–98.0`. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 12. Pickleball — Drive
-
-**Config Key:** `pickleball-drive`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 25% |
-| control | Control | 15% |
-| timing | Timing | 10% |
-| technique | Technique | 35% |
-| consistency | Consistency | 15% |
-
-**Formula:** `overallScore = 0.25 × power + 0.15 × control + 0.10 × timing + 0.35 × technique + 0.15 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| paddleSpeed | Paddle Speed | m/s | power | 15 – 30 |
-| bodyRotation | Body Rotation | deg/s | biomechanics | 300 – 700 |
-| ballSpeed | Ball Speed | mph | ball | 35 – 65 |
-| trajectoryAngle | Trajectory | deg | ball | 2 – 12 |
-| balanceScore | Balance | /100 | biomechanics | 65 – 95 |
-| shotConsistency | Consistency | /100 | consistency | 65 – 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 60 – 90 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/pickleball_drive.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `paddleSpeed` | Computed from `float(np.max(wrist_speeds)) if wrist_speeds else 18.0` and clamped to `5.0–40.0`. |
-| `bodyRotation` | Computed from `float(np.max(shoulder_rotations)) if shoulder_rotations else 400.0` and clamped to `100.0–900.0`. |
-| `ballSpeed` | Estimated from `ball_speed` and clipped to `20.0–70.0` when `ball_speed > 0` is valid; otherwise falls back to `35–55`. |
-| `trajectoryAngle` | Derived using the `trajectory angle` helper in the analyzer pipeline. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 72.0` and clamped to `45.0–98.0`. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 13. Pickleball — Serve
-
-**Config Key:** `pickleball-serve`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 15% |
-| control | Control | 35% |
-| timing | Timing | 10% |
-| technique | Technique | 25% |
-| consistency | Consistency | 15% |
-
-**Formula:** `overallScore = 0.15 × power + 0.35 × control + 0.10 × timing + 0.25 × technique + 0.15 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| paddleAngle | Paddle Angle | deg | technique | 20 – 45 |
-| tossConsistency | Toss Consistency | /100 | technique | 70 – 98 |
-| ballSpeed | Ball Speed | mph | ball | 25 – 50 |
-| placement | Placement | /100 | ball | 65 – 95 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/pickleball_serve.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `paddleAngle` | Derived using the `paddle angle` helper in the analyzer pipeline. |
-| `tossConsistency` | Derived using the `toss consistency` helper in the analyzer pipeline. |
-| `ballSpeed` | Estimated from `ball_speed` and clipped to `15.0–55.0` when `ball_speed > 0` is valid; otherwise falls back to `25–40`. |
-| `placement` | Derived using the `placement` helper in the analyzer pipeline. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `50.0–98.0`. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 14. Pickleball — Volley
-
-**Config Key:** `pickleball-volley`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 15% |
-| control | Control | 40% |
-| timing | Timing | 10% |
-| technique | Technique | 20% |
-| consistency | Consistency | 15% |
-
-**Formula:** `overallScore = 0.15 × power + 0.40 × control + 0.10 × timing + 0.20 × technique + 0.15 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| reactionSpeed | Reaction Speed | ms | timing | 120 – 300 |
-| paddlePrep | Paddle Prep | /100 | technique | 70 – 98 |
-| wristFirmness | Wrist Firmness | /100 | technique | 75 – 98 |
-| balanceScore | Balance | /100 | biomechanics | 65 – 95 |
-| ballSpeed | Ball Speed | mph | ball | 20 – 50 |
-| shotConsistency | Consistency | /100 | consistency | 65 – 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 60 – 90 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/pickleball_volley.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `reactionSpeed` | Derived using the `reaction speed` helper in the analyzer pipeline. |
-| `paddlePrep` | Derived using the `paddle prep` helper in the analyzer pipeline. |
-| `wristFirmness` | Derived using the `wrist firmness` helper in the analyzer pipeline. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 72.0` and clamped to `40.0–98.0`. |
-| `ballSpeed` | Estimated from `ball_speed` and clipped to `15.0–55.0` when `ball_speed > 0` is valid; otherwise falls back to `25–45`. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 15. Pickleball — Third Shot Drop
-
-**Config Key:** `pickleball-third-shot-drop`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 11% |
-| control | Control | 31% |
-| timing | Timing | 9% |
-| technique | Technique | 36% |
-| consistency | Consistency | 13% |
-
-**Formula:** `overallScore = 0.11 × power + 0.31 × control + 0.09 × timing + 0.36 × technique + 0.13 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| arcHeight | Arc Height | m | ball | 0.10 – 0.40 |
-| softTouch | Soft Touch | /100 | technique | 70 – 98 |
-| paddleAngle | Paddle Angle | deg | technique | 30 – 55 |
-| shotConsistency | Consistency | /100 | consistency | 65 – 95 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/pickleball_third_shot_drop.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `arcHeight` | Derived using the `arc height` helper in the analyzer pipeline. |
-| `softTouch` | Derived using the `soft touch` helper in the analyzer pipeline. |
-| `paddleAngle` | Derived using the `paddle angle` helper in the analyzer pipeline. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `50.0–98.0`. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 16. Paddle — Forehand
-
-**Config Key:** `paddle-forehand`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 18% |
-| control | Control | 9% |
-| timing | Timing | 18% |
-| technique | Technique | 41% |
-| consistency | Consistency | 14% |
-
-**Formula:** `overallScore = 0.18 × power + 0.09 × control + 0.18 × timing + 0.41 × technique + 0.14 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| wristSpeed | Wrist Speed | m/s | biomechanics | 18 – 32 |
-| elbowAngle | Elbow Angle | deg | biomechanics | 110 – 150 |
-| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 400 – 800 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| ballSpeed | Ball Speed | mph | ball | 40 – 80 |
-| wallPlayScore | Wall Play | /100 | technique | 60 – 95 |
-| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-| contactHeight | Contact Height | m | technique | 0.70 – 1.10 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/paddle_forehand.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `wristSpeed` | Computed from `wrist_speed_ms` and clamped to `18.0–32.0`. |
-| `elbowAngle` | Uses `float(np.mean(elbow_angles))` when `elbow_angles`; otherwise uses `130.0`. |
-| `shoulderRotation` | Computed from `shoulder_rot` and clamped to `400.0–800.0`. |
-| `balanceScore` | Computed from `balance` and clamped to `70.0–98.0`. |
-| `ballSpeed` | Estimated from `ball_speed` and clipped to `40.0–80.0` when `ball_speed > 0` is valid; otherwise falls back to `45–70`. |
-| `wallPlayScore` | Derived using the `wall play` helper in the analyzer pipeline. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-| `contactHeight` | Computed from `contact_height` and clamped to `0.7–1.10`. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 17. Paddle — Backhand
-
-**Config Key:** `paddle-backhand`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 20% |
-| control | Control | 20% |
-| timing | Timing | 20% |
-| technique | Technique | 25% |
-| consistency | Consistency | 15% |
-
-**Formula:** `overallScore = 0.20 × power + 0.20 × control + 0.20 × timing + 0.25 × technique + 0.15 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| wristSpeed | Wrist Speed | m/s | biomechanics | 15 – 28 |
-| elbowAngle | Elbow Angle | deg | biomechanics | 100 – 145 |
-| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 350 – 750 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| ballSpeed | Ball Speed | mph | ball | 35 – 70 |
-| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-| contactHeight | Contact Height | m | technique | 0.60 – 1.05 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/paddle_backhand.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `wristSpeed` | Computed from `wrist_speed_ms` and clamped to `15.0–28.0`. |
-| `elbowAngle` | Uses `float(np.mean(elbow_angles))` when `elbow_angles`; otherwise uses `125.0`. |
-| `shoulderRotation` | Computed from `shoulder_rot` and clamped to `350.0–750.0`. |
-| `balanceScore` | Computed from `balance` and clamped to `70.0–98.0`. |
-| `ballSpeed` | Estimated from `ball_speed` and clipped to `35.0–70.0` when `ball_speed > 0` is valid; otherwise falls back to `40–60`. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-| `contactHeight` | Computed from `contact_height` and clamped to `0.6–1.05`. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 18. Paddle — Serve
-
-**Config Key:** `paddle-serve`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 11% |
-| control | Control | 22% |
-| timing | Timing | 18% |
-| technique | Technique | 27% |
-| consistency | Consistency | 22% |
-
-**Formula:** `overallScore = 0.11 × power + 0.22 × control + 0.18 × timing + 0.27 × technique + 0.22 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| paddleAngle | Paddle Angle | deg | technique | 15 – 45 |
-| ballSpeed | Ball Speed | mph | ball | 30 – 60 |
-| placementScore | Placement | /100 | technique | 65 – 98 |
-| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/paddle_serve.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `paddleAngle` | Derived using the `paddle angle` helper in the analyzer pipeline. |
-| `ballSpeed` | Estimated from `ball_speed` and clipped to `30.0–60.0` when `ball_speed > 0` is valid; otherwise falls back to `35–50`. |
-| `placementScore` | Derived using the `placement` helper in the analyzer pipeline. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `balanceScore` | Computed from `balance` and clamped to `70.0–98.0`. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 19. Paddle — Smash
-
-**Config Key:** `paddle-smash`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 47% |
-| control | Control | 9% |
-| timing | Timing | 17% |
-| technique | Technique | 21% |
-| consistency | Consistency | 6% |
-
-**Formula:** `overallScore = 0.47 × power + 0.09 × control + 0.17 × timing + 0.21 × technique + 0.06 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| wristSpeed | Wrist Speed | m/s | biomechanics | 22 – 38 |
-| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 500 – 900 |
-| jumpHeight | Jump Height | m | power | 0.10 – 0.50 |
-| ballSpeed | Ball Speed | mph | ball | 50 – 90 |
-| contactHeight | Contact Height | m | technique | 2.0 – 3.0 |
-| balanceScore | Balance | /100 | biomechanics | 65 – 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 60 – 92 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/paddle_smash.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `wristSpeed` | Computed from `wrist_speed_ms` and clamped to `22.0–38.0`. |
-| `shoulderRotation` | Computed from `shoulder_rot` and clamped to `500.0–900.0`. |
-| `jumpHeight` | Derived using the `jump height` helper in the analyzer pipeline. |
-| `ballSpeed` | Estimated from `ball_speed` and clipped to `50.0–90.0` when `ball_speed > 0` is valid; otherwise falls back to `55–80`. |
-| `contactHeight` | Computed from `contact_height` and clamped to `2.0–3.0`. |
-| `balanceScore` | Computed from `balance` and clamped to `65.0–95.0`. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 20. Paddle — Bandeja
-
-**Config Key:** `paddle-bandeja`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 11% |
-| control | Control | 27% |
-| timing | Timing | 18% |
-| technique | Technique | 22% |
-| consistency | Consistency | 22% |
-
-**Formula:** `overallScore = 0.11 × power + 0.27 × control + 0.18 × timing + 0.22 × technique + 0.22 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| paddleAngle | Paddle Angle | deg | technique | 20 – 50 |
-| ballSpeed | Ball Speed | mph | ball | 25 – 55 |
-| wristControl | Wrist Control | /100 | technique | 70 – 98 |
-| contactHeight | Contact Height | m | technique | 1.8 – 2.8 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/paddle_bandeja.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `paddleAngle` | Derived using the `paddle angle` helper in the analyzer pipeline. |
-| `ballSpeed` | Estimated from `ball_speed` and clipped to `25.0–55.0` when `ball_speed > 0` is valid; otherwise falls back to `30–45`. |
-| `wristControl` | Derived using the `wrist control` helper in the analyzer pipeline. |
-| `contactHeight` | Computed from `contact_height` and clamped to `1.8–2.8`. |
-| `balanceScore` | Computed from `balance` and clamped to `70.0–98.0`. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 21. Badminton — Clear
-
-**Config Key:** `badminton-clear`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 23% |
-| control | Control | 9% |
-| timing | Timing | 14% |
-| technique | Technique | 41% |
-| consistency | Consistency | 13% |
-
-**Formula:** `overallScore = 0.23 × power + 0.09 × control + 0.14 × timing + 0.41 × technique + 0.13 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| racketSpeed | Racket Speed | m/s | power | 25 – 45 |
-| shuttleSpeed | Shuttle Speed | mph | ball | 80 – 150 |
-| trajectoryHeight | Trajectory Height | m | ball | 5 – 10 |
-| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 500 – 900 |
-| footworkScore | Footwork | /100 | biomechanics | 65 – 95 |
-| balanceScore | Balance | /100 | biomechanics | 65 – 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/badminton_clear.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `racketSpeed` | Computed from `racket_speed` and clamped to `25.0–45.0`. |
-| `shuttleSpeed` | Estimated from `shuttle_speed` and clipped to `80.0–150.0` when `shuttle_speed > 0` is valid; otherwise falls back to `90–130`. |
-| `trajectoryHeight` | Estimated from `trajectory_arc * 0.8` and clipped to `5.0–10.0` when `trajectory_arc > 0` is valid; otherwise falls back to `6–9`. |
-| `shoulderRotation` | Computed from `shoulder_rot` and clamped to `500.0–900.0`. |
-| `footworkScore` | Derived using the `footwork` helper in the analyzer pipeline. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `65.0–95.0`. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 22. Badminton — Smash
-
-**Config Key:** `badminton-smash`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 41% |
-| control | Control | 9% |
-| timing | Timing | 18% |
-| technique | Technique | 23% |
-| consistency | Consistency | 9% |
-
-**Formula:** `overallScore = 0.41 × power + 0.09 × control + 0.18 × timing + 0.23 × technique + 0.09 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| racketSpeed | Racket Speed | m/s | power | 35 – 60 |
-| shuttleSpeed | Shuttle Speed | mph | ball | 150 – 300 |
-| jumpHeight | Jump Height | m | biomechanics | 0.2 – 0.6 |
-| contactHeight | Contact Height | m | technique | 2.5 – 3.2 |
-| wristSnap | Wrist Snap | deg/s | technique | 400 – 800 |
-| bodyRotation | Body Rotation | deg/s | biomechanics | 500 – 1000 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/badminton_smash.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `racketSpeed` | Computed from `racket_speed` and clamped to `35.0–60.0`. |
-| `shuttleSpeed` | Estimated from `shuttle_speed` and clipped to `150.0–300.0` when `shuttle_speed > 0` is valid; otherwise falls back to `180–260`. |
-| `jumpHeight` | Derived using the `jump height` helper in the analyzer pipeline. |
-| `contactHeight` | Computed from `contact_h * 1.2` and clamped to `2.5–3.2`. |
-| `wristSnap` | Derived using the `wrist snap` helper in the analyzer pipeline. |
-| `bodyRotation` | Computed from `body_rotation` and clamped to `500.0–1000.0`. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 23. Badminton — Drop
-
-**Config Key:** `badminton-drop`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 11% |
-| control | Control | 49% |
-| timing | Timing | 9% |
-| technique | Technique | 20% |
-| consistency | Consistency | 13% |
-
-**Formula:** `overallScore = 0.11 × power + 0.49 × control + 0.09 × timing + 0.18 × technique + 0.13 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| touchScore | Touch | /100 | technique | 70 – 98 |
-| deceptionScore | Deception | /100 | technique | 65 – 95 |
-| netClearance | Net Clearance | cm | ball | 2 – 15 |
-| racketAngle | Racket Angle | deg | technique | 20 – 45 |
-| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/badminton_drop.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `touchScore` | Derived using the `touch score` helper in the analyzer pipeline. |
-| `deceptionScore` | Derived using the `deception score` helper in the analyzer pipeline. |
-| `netClearance` | Estimated from `trajectory_arc * 2.0` and clipped to `2.0–15.0` when `trajectory_arc > 0` is valid; otherwise falls back to `4–10`. |
-| `racketAngle` | Derived using the `racket angle` helper in the analyzer pipeline. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Computed from `python_analysis/sports/badminton_drop.py` (methods `_compute_sub_scores` and `_compute_overall_score`).
-
-```python
-    def _compute_sub_scores(self, m: Dict) -> Dict:
-        touch = int(np.clip(round(
-            (self._normalize(m["touchScore"], 70.0, 98.0) * 0.5
-             + self._normalize(m["netClearance"], 2.0, 15.0) * 0.5) * 100
-        ), 0, 100))
-
-        deception = int(np.clip(round(
-            self._normalize(m["deceptionScore"], 65.0, 95.0) * 100
-        ), 0, 100))
-
-        technique = int(np.clip(round(
-            (self._normalize(m["racketAngle"], 20.0, 45.0) * 0.5
-             + self._normalize(m["touchScore"], 70.0, 98.0) * 0.5) * 100
-        ), 0, 100))
-
-        consistency = int(np.clip(round(
-            self._normalize(m["shotConsistency"], 70.0, 98.0) * 100
-        ), 0, 100))
-
-        timing = int(np.clip(round(
-            self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 100
-        ), 0, 100))
-
-        return {
-            "touch": touch,
-            "deception": deception,
-            "technique": technique,
-            "consistency": consistency,
-            "timing": timing,
-        }
-
-    def _compute_overall_score(self, sub_scores: Dict) -> int:
-        score = round(
-            sub_scores["touch"] * 0.30
-            + sub_scores["deception"] * 0.25
-            + sub_scores["technique"] * 0.20
-            + sub_scores["consistency"] * 0.15
-            + sub_scores["timing"] * 0.10
-        )
-        return int(np.clip(score, 0, 100))
-```
-
----
-
-## 24. Badminton — Net Shot
-
-**Config Key:** `badminton-net-shot`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 11% |
-| control | Control | 49% |
-| timing | Timing | 9% |
-| technique | Technique | 18% |
-| consistency | Consistency | 13% |
-
-**Formula:** `overallScore = 0.11 × power + 0.49 × control + 0.09 × timing + 0.18 × technique + 0.13 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| racketControl | Racket Control | /100 | technique | 70 – 98 |
-| wristFinesse | Wrist Finesse | /100 | technique | 70 – 98 |
-| balanceScore | Balance | /100 | biomechanics | 65 – 95 |
-| footworkScore | Footwork | /100 | biomechanics | 65 – 95 |
-| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/badminton_net_shot.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `racketControl` | Derived using the `racket control` helper in the analyzer pipeline. |
-| `wristFinesse` | Derived using the `wrist finesse` helper in the analyzer pipeline. |
-| `balanceScore` | Computed from `float(np.mean(balance_scores)) if balance_scores else 75.0` and clamped to `65.0–95.0`. |
-| `footworkScore` | Derived using the `footwork` helper in the analyzer pipeline. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 25. Badminton — Serve
-
-**Config Key:** `badminton-serve`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 11% |
-| control | Control | 27% |
-| timing | Timing | 18% |
-| technique | Technique | 22% |
-| consistency | Consistency | 22% |
-
-**Formula:** `overallScore = 0.11 × power + 0.27 × control + 0.18 × timing + 0.22 × technique + 0.22 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| racketAngle | Racket Angle | deg | technique | 15 – 40 |
-| shuttleSpeed | Shuttle Speed | mph | ball | 30 – 100 |
-| placementScore | Placement | /100 | ball | 70 – 98 |
-| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/badminton_serve.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency, ball-tracker estimates.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `racketAngle` | Derived using the `racket angle` helper in the analyzer pipeline. |
-| `shuttleSpeed` | Estimated from `shuttle_speed` and clipped to `30.0–100.0` when `shuttle_speed > 0` is valid; otherwise falls back to `40–75`. |
-| `placementScore` | Derived using the `placement score` helper in the analyzer pipeline. |
-| `shotConsistency` | Derived using the `shot consistency` helper in the analyzer pipeline. |
-| `rhythmConsistency` | Derived using the `rhythm consistency` helper in the analyzer pipeline. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 26. Table Tennis — Forehand
-
-**Config Key:** `tabletennis-forehand`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 17% |
-| control | Control | 8% |
-| timing | Timing | 8% |
-| technique | Technique | 50% |
-| consistency | Consistency | 17% |
-
-**Formula:** `overallScore = 0.17 × power + 0.08 × control + 0.08 × timing + 0.50 × technique + 0.17 × consistency`
-
-### Metrics
-
-| Key | Label | Unit | Category | Optimal Range |
-|-----|-------|------|----------|---------------|
-| batSpeed | Bat Speed | m/s | power | 8 – 18 |
-| wristAction | Wrist Action | deg/s | technique | 300 – 700 |
-| spinRate | Spin Rate | rpm | ball | 2000 – 5000 |
-| footworkScore | Footwork | /100 | biomechanics | 65 – 95 |
-| bodyRotation | Body Rotation | deg/s | biomechanics | 200 – 500 |
-| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
-
-### Metric Computation Details
-
-Computed from `python_analysis/sports/tabletennis_forehand.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency.
-
-| Key | How It Is Computed |
-|-----|---------------------|
-| `batSpeed` | Computed from `bat_speed` and clamped to `8.0–18.0`. |
-| `wristAction` | Computed from `wrist_action` and clamped to `300.0–700.0`. |
-| `spinRate` | Computed from `spin_rate` and clamped to `2000.0–5000.0`. |
-| `footworkScore` | Computed from `footwork_score` and clamped to `65.0–95.0`. |
-| `bodyRotation` | Computed from `body_rotation` and clamped to `200.0–500.0`. |
-| `shotConsistency` | Computed from `shot_consistency` and clamped to `70.0–98.0`. |
-| `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `65.0–95.0`. |
-
-### Sub-Score Computation Details
-
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
-
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
-
-Standardized overall formula used by runtime:
-
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
-
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
----
-
-## 27. Table Tennis — Backhand
-
-**Config Key:** `tabletennis-backhand`
-
-### Scores
-
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 20% |
-| control | Control | 15% |
 | timing | Timing | 25% |
 | technique | Technique | 20% |
-| consistency | Consistency | 20% |
 
-**Formula:** `overallScore = 0.20 × power + 0.15 × control + 0.25 × timing + 0.20 × technique + 0.20 × consistency`
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
 
-### Metrics
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = round(clamp(((bal * 0.5 + rhythm * 0.3 + cc * 0.2) * 100), 0, 100))`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp(((ft * 0.5 + rot * 0.3 + self._normalize(m["contactHeight"], 0.5, 1.5) * 0.2) * 100), 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: ballSpeed, spinRate, wristSpeed
+- control: balanceScore, rhythmConsistency, shotConsistency
+- timing: backswingDuration, contactTiming, rhythmConsistency
+- technique: contactHeight, followThroughDuration, shoulderRotation
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/tennis_forehand.py`):
+- `power = (self._normalize(m["ballSpeed"], 40.0, 130.0) * 0.5 + nr * 0.3 + self._normalize(m["spinRate"], 400.0, 3500.0) * 0.2) * 100`
+- `timing = (self._normalize(0.12 - m["contactTiming"], 0.0, 0.10) * 0.4 + self._normalize(m["backswingDuration"], 0.3, 0.8) * 0.3 + rhythm * 0.3) * 100`
+
+Intermediate variables used above:
+- `bal = self._normalize(m["balanceScore"], 40.0, 98.0)`
+- `cc = self._normalize(m["shotConsistency"], 40.0, 98.0)`
+- `ft = self._normalize(m["followThroughDuration"], 0.3, 1.2)`
+- `nr = self._normalize(m["wristSpeed"], 15.0, 45.0)`
+- `rhythm = self._normalize(m["rhythmConsistency"], 50.0, 98.0)`
+- `rot = self._normalize(m["shoulderRotation"], 350.0, 950.0)`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Forehand Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 2. Tennis - Backhand
+
+### Sport Category
+
+- Sport: `Tennis`
+- Category: `Backhand`
+- Config Key: `tennis-backhand`
+- Source Config: `shared/sport-configs/tennis-backhand.ts`
+
+### Metrics Table
 
 | Key | Label | Unit | Category | Optimal Range |
 |-----|-------|------|----------|---------------|
-| batSpeed | Bat Speed | m/s | power | 6 – 15 |
-| timingScore | Timing | /100 | timing | 70 – 98 |
-| batAngle | Bat Angle | deg | technique | 30 – 70 |
-| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+| wristSpeed | Wrist Speed | m/s | biomechanics | 20 - 35 |
+| elbowAngle | Elbow Angle | deg | biomechanics | 110 - 155 |
+| shoulderRotation | Torso Rotation | deg/s | biomechanics | 400 - 800 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| ballSpeed | Ball Speed | mph | ball | 45 - 90 |
+| trajectoryArc | Trajectory Arc | deg | ball | 8 - 22 |
+| spinRate | Spin Rate | rpm | ball | 700 - 2500 |
+| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| backswingDuration | Backswing | s | timing | 0.3 - 0.8 |
+| contactTiming | Contact Timing | s | timing | 0.02 - 0.08 |
+| followThroughDuration | Follow-through | s | timing | 0.4 - 1 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| contactHeight | Contact Height | m | technique | 0.8 - 1.05 |
 
-### Metric Computation Details
+### Scores (Ordered)
 
-Computed from `python_analysis/sports/tabletennis_backhand.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency.
+#### Technical
 
-| Key | How It Is Computed |
-|-----|---------------------|
-| `batSpeed` | Computed from `bat_speed` and clamped to `6.0–15.0`. |
-| `timingScore` | Computed from `timing_score` and clamped to `70.0–98.0`. |
-| `batAngle` | Computed from `bat_angle` and clamped to `30.0–70.0`. |
-| `shotConsistency` | Computed from `shot_consistency` and clamped to `70.0–98.0`. |
-| `balanceScore` | Computed from `balance` and clamped to `70.0–98.0`. |
-| `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `65.0–95.0`. |
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
 
-### Sub-Score Computation Details
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
 
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+#### Tactical
 
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
 
-Standardized overall formula used by runtime:
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
 
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = round(clamp(((bal * 0.5 + rhythm * 0.3 + cc * 0.2) * 100), 0, 100))`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp(((ft * 0.5 + rot * 0.3 + self._normalize(m["contactHeight"], 0.5, 1.4) * 0.2) * 100), 0, 100))`
 
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
+Underlying parameters influencing each tactical sub-score:
+- power: ballSpeed, spinRate, wristSpeed
+- control: balanceScore, rhythmConsistency, shotConsistency
+- timing: backswingDuration, contactTiming, rhythmConsistency
+- technique: contactHeight, followThroughDuration, shoulderRotation
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/tennis_backhand.py`):
+- `power = (self._normalize(m["ballSpeed"], 35.0, 110.0) * 0.5 + nr * 0.3 + self._normalize(m["spinRate"], 400.0, 3000.0) * 0.2) * 100`
+- `timing = (self._normalize(0.12 - m["contactTiming"], 0.0, 0.10) * 0.4 + self._normalize(m["backswingDuration"], 0.3, 0.8) * 0.3 + rhythm * 0.3) * 100`
+
+Intermediate variables used above:
+- `bal = self._normalize(m["balanceScore"], 40.0, 98.0)`
+- `cc = self._normalize(m["shotConsistency"], 40.0, 98.0)`
+- `ft = self._normalize(m["followThroughDuration"], 0.3, 1.2)`
+- `nr = self._normalize(m["wristSpeed"], 12.0, 40.0)`
+- `rhythm = self._normalize(m["rhythmConsistency"], 50.0, 98.0)`
+- `rot = self._normalize(m["shoulderRotation"], 300.0, 850.0)`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Backhand Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
 ---
 
-## 28. Table Tennis — Serve
+## 3. Tennis - Serve
 
-**Config Key:** `tabletennis-serve`
+### Sport Category
 
-### Scores
+- Sport: `Tennis`
+- Category: `Serve`
+- Config Key: `tennis-serve`
+- Source Config: `shared/sport-configs/tennis-serve.ts`
 
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 10% |
-| control | Control | 29% |
-| timing | Timing | 8% |
-| technique | Technique | 41% |
-| consistency | Consistency | 12% |
-
-**Formula:** `overallScore = 0.10 × power + 0.29 × control + 0.08 × timing + 0.41 × technique + 0.12 × consistency`
-
-### Metrics
+### Metrics Table
 
 | Key | Label | Unit | Category | Optimal Range |
 |-----|-------|------|----------|---------------|
-| spinVariation | Spin Variation | rpm | ball | 1500 – 4500 |
-| batAngle | Bat Angle | deg | technique | 20 – 65 |
-| ballSpeed | Ball Speed | mph | ball | 15 – 40 |
-| tossHeight | Toss Height | cm | technique | 16 – 30 |
-| placementScore | Placement | /100 | technique | 65 – 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+| wristSpeed | Wrist Speed | m/s | biomechanics | 30 - 50 |
+| shoulderRotation | Torso Rotation | deg/s | biomechanics | 600 - 1100 |
+| tossHeight | Toss Height | m | technique | 0.3 - 0.8 |
+| trophyAngle | Trophy Position | deg | technique | 80 - 110 |
+| pronation | Pronation | deg/s | technique | 400 - 900 |
+| ballSpeed | Serve Speed | mph | ball | 70 - 130 |
+| trajectoryArc | Trajectory Arc | deg | ball | 3 - 15 |
+| spinRate | Spin Rate | rpm | ball | 1000 - 3500 |
+| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
+| backswingDuration | Wind-up | s | timing | 0.8 - 1.5 |
+| contactTiming | Contact Timing | s | timing | 0.02 - 0.06 |
+| contactHeight | Contact Height | m | technique | 2.2 - 2.8 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
 
-### Metric Computation Details
+### Scores (Ordered)
 
-Computed from `python_analysis/sports/tabletennis_serve.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency, ball-tracker estimates.
+#### Technical
 
-| Key | How It Is Computed |
-|-----|---------------------|
-| `spinVariation` | Computed from `spin_variation` and clamped to `1500.0–4500.0`. |
-| `batAngle` | Computed from `bat_angle` and clamped to `20.0–65.0`. |
-| `ballSpeed` | Estimated from `ball_speed` and clipped to `15.0–40.0` when `ball_speed > 0` is valid; otherwise falls back to `20–32`. |
-| `tossHeight` | Computed from `toss_height` and clamped to `16.0–30.0`. |
-| `placementScore` | Computed from `placement_score` and clamped to `65.0–95.0`. |
-| `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `65.0–95.0`. |
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
 
-### Sub-Score Computation Details
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
 
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+#### Tactical
 
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
 
-Standardized overall formula used by runtime:
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
 
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = round(clamp(accuracy, 0, 100))`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp((technique * 1 + accuracy * 0.4) / 1.4, 0, 100))`
 
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
+Underlying parameters influencing each tactical sub-score:
+- power: ballSpeed, spinRate, wristSpeed
+- control: contactHeight, tossHeight, trajectoryArc
+- timing: backswingDuration, contactTiming, rhythmConsistency
+- technique: contactHeight, pronation, shoulderRotation, tossHeight, trajectoryArc, trophyAngle
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/tennis_serve.py`):
+- `accuracy = (self._normalize(m["tossHeight"], 0.3, 0.8) * 0.4 + self._normalize(m["contactHeight"], 2.2, 2.8) * 0.35 + self._normalize(m["trajectoryArc"], 3.0, 15.0) * 0.25) * 100`
+- `power = (self._normalize(m["ballSpeed"], 50.0, 140.0) * 0.4 + self._normalize(m["wristSpeed"], 20.0, 55.0) * 0.35 + self._normalize(m["spinRate"], 500.0, 3800.0) * 0.25) * 100`
+- `technique = (self._normalize(m["trophyAngle"], 80.0, 110.0) * 0.35 + self._normalize(m["pronation"], 400.0, 900.0) * 0.35 + self._normalize(m["shoulderRotation"], 400.0, 1200.0) * 0.3) * 100`
+- `timing = (self._normalize(0.08 - m["contactTiming"], 0.0, 0.06) * 0.4 + self._normalize(m["backswingDuration"], 0.8, 1.5) * 0.3 + self._normalize(m["rhythmConsistency"], 50.0, 98.0) * 0.3) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Serve Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
 ---
 
-## 29. Table Tennis — Loop
+## 4. Tennis - Volley
 
-**Config Key:** `tabletennis-loop`
+### Sport Category
 
-### Scores
+- Sport: `Tennis`
+- Category: `Volley`
+- Config Key: `tennis-volley`
+- Source Config: `shared/sport-configs/tennis-volley.ts`
 
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 18% |
-| control | Control | 14% |
-| timing | Timing | 9% |
-| technique | Technique | 41% |
-| consistency | Consistency | 18% |
-
-**Formula:** `overallScore = 0.18 × power + 0.14 × control + 0.09 × timing + 0.41 × technique + 0.18 × consistency`
-
-### Metrics
+### Metrics Table
 
 | Key | Label | Unit | Category | Optimal Range |
 |-----|-------|------|----------|---------------|
-| batSpeed | Bat Speed | m/s | power | 10 – 22 |
-| bodyRotation | Body Rotation | deg/s | biomechanics | 250 – 600 |
-| spinRate | Spin Rate | rpm | ball | 3000 – 6000 |
-| contactPoint | Contact Point | /100 | technique | 65 – 95 |
-| balanceScore | Balance | /100 | biomechanics | 65 – 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 60 – 92 |
+| reactionSpeed | Reaction Speed | ms | timing | 150 - 350 |
+| racketPrep | Racket Prep | /100 | technique | 70 - 98 |
+| wristFirmness | Wrist Firmness | /100 | technique | 75 - 98 |
+| splitStepTiming | Split Step | s | timing | 0.1 - 0.4 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| contactHeight | Contact Height | m | technique | 0.8 - 1.5 |
+| stepForward | Step Forward | /100 | biomechanics | 60 - 95 |
+| ballSpeed | Ball Speed | mph | ball | 30 - 70 |
+| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
 
-### Metric Computation Details
+### Scores (Ordered)
 
-Computed from `python_analysis/sports/tabletennis_loop.py` (method `_compute_metrics`). Uses base helper methods for rhythm consistency.
+#### Technical
 
-| Key | How It Is Computed |
-|-----|---------------------|
-| `batSpeed` | Computed from `bat_speed` and clamped to `10.0–22.0`. |
-| `bodyRotation` | Computed from `body_rotation` and clamped to `250.0–600.0`. |
-| `spinRate` | Computed from `spin_rate` and clamped to `3000.0–6000.0`. |
-| `contactPoint` | Computed from `contact_point` and clamped to `65.0–95.0`. |
-| `balanceScore` | Computed from `balance` and clamped to `65.0–95.0`. |
-| `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `60.0–92.0`. |
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
 
-### Sub-Score Computation Details
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
 
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+#### Tactical
 
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
 
-Standardized overall formula used by runtime:
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
 
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = 78 (fallback; no matching aliases)`
+- `control = round(clamp((((self._normalize(m["balanceScore"], 40, 98) * 0.5 + self._normalize(m["wristFirmness"], 50, 98) * 0.5) * 100) * 0.9 + placement * 0.8 + reflexes * 0.5) / 2.2, 0, 100))`
+- `timing = round(clamp(reflexes, 0, 100))`
+- `technique = round(clamp((technique * 1 + placement * 0.4) / 1.4, 0, 100))`
 
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
+Underlying parameters influencing each tactical sub-score:
+- power: fallback default only
+- control: balanceScore, ballSpeed, contactHeight, racketPrep, reactionSpeed, stepForward, wristFirmness
+- timing: racketPrep, reactionSpeed
+- technique: ballSpeed, contactHeight, racketPrep, shotConsistency, stepForward, wristFirmness
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/tennis_volley.py`):
+- `placement = (self._normalize(m["contactHeight"], 0.8, 1.5) * 0.4 + self._normalize(m["ballSpeed"], 30, 70) * 0.3 + self._normalize(m["stepForward"], 40, 98) * 0.3) * 100`
+- `reflexes = (self._normalize(500 - m["reactionSpeed"], 0, 350) * 0.6 + self._normalize(m["racketPrep"], 50, 98) * 0.4) * 100`
+- `technique = (self._normalize(m["racketPrep"], 50, 98) * 0.35 + self._normalize(m["wristFirmness"], 50, 98) * 0.35 + self._normalize(m["shotConsistency"], 40, 98) * 0.3) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Volley Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
 ---
 
-## 30. Table Tennis — Chop
+## 5. Tennis - Game
 
-**Config Key:** `tabletennis-chop`
+### Sport Category
 
-### Scores
+- Sport: `Tennis`
+- Category: `Game`
+- Config Key: `tennis-game`
+- Source Config: `shared/sport-configs/tennis-game.ts`
 
-| Key | Label | Weight |
-|-----|-------|--------|
-| power | Power | 10% |
-| control | Control | 12% |
-| timing | Timing | 8% |
-| technique | Technique | 49% |
-| consistency | Consistency | 21% |
-
-**Formula:** `overallScore = 0.10 × power + 0.12 × control + 0.08 × timing + 0.49 × technique + 0.21 × consistency`
-
-### Metrics
+### Metrics Table
 
 | Key | Label | Unit | Category | Optimal Range |
 |-----|-------|------|----------|---------------|
-| batAngle | Bat Angle | deg | technique | 40 – 75 |
-| shotConsistency | Consistency | /100 | consistency | 70 – 98 |
-| spinRate | Spin Rate | rpm | ball | 1500 – 4000 |
-| balanceScore | Balance | /100 | biomechanics | 70 – 98 |
-| footworkScore | Footwork | /100 | biomechanics | 65 – 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 – 95 |
+| courtCoverage | Court Coverage | /100 | biomechanics | 60 - 95 |
+| recoverySpeed | Recovery Speed | m/s | biomechanics | 2 - 5 |
+| avgBallSpeed | Avg Ball Speed | mph | ball | 50 - 90 |
+| shotVariety | Shot Variety | /100 | technique | 50 - 90 |
+| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
+| rallyLength | Rally Length | shots | consistency | 4 - 12 |
+| shotConsistency | Consistency | /100 | consistency | 65 - 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 60 - 90 |
 
-### Metric Computation Details
+### Scores (Ordered)
 
-Computed from `python_analysis/sports/tabletennis_chop.py` (method `_compute_metrics`). Uses base helper methods for shot consistency, rhythm consistency.
+#### Technical
 
-| Key | How It Is Computed |
-|-----|---------------------|
-| `batAngle` | Computed from `bat_angle` and clamped to `40.0–75.0`. |
-| `shotConsistency` | Computed from `shot_consistency` and clamped to `70.0–98.0`. |
-| `spinRate` | Computed from `spin_rate` and clamped to `1500.0–4000.0`. |
-| `balanceScore` | Computed from `balance` and clamped to `70.0–98.0`. |
-| `footworkScore` | Computed from `footwork_score` and clamped to `65.0–95.0`. |
-| `rhythmConsistency` | Computed from `rhythm_consistency` and clamped to `65.0–95.0`. |
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
 
-### Sub-Score Computation Details
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
 
-Runtime scoring for this category is standardized to five keys in `python_analysis/base_analyzer.py`:
+#### Tactical
 
-- `power`
-- `control`
-- `timing`
-- `technique`
-- `consistency`
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
 
-Standardized overall formula used by runtime:
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
 
-`overallScore = 0.25 × power + 0.20 × control + 0.20 × timing + 0.20 × technique + 0.15 × consistency`
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = round(clamp((movement * 0.6 + shotSelection * 0.6) / 1.2, 0, 100))`
+- `timing = 78 (fallback; no matching aliases)`
+- `technique = round(clamp((shotSelection * 0.4 + movement * 0.4) / 0.8, 0, 100))`
 
-Legacy analyzer-local keys may still appear in raw payloads/coaching text for backward compatibility, but score cards and config weights are normalized to the five keys above.
+Underlying parameters influencing each tactical sub-score:
+- power: avgBallSpeed, recoverySpeed
+- control: avgBallSpeed, courtCoverage, recoverySpeed, shotVariety
+- timing: fallback default only
+- technique: avgBallSpeed, courtCoverage, recoverySpeed, shotVariety
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/tennis_game.py`):
+- `movement = (self._normalize(m["courtCoverage"], 30, 98) * 0.5 + self._normalize(m["recoverySpeed"], 1.5, 6.0) * 0.5) * 100`
+- `power = (self._normalize(m["avgBallSpeed"], 40, 100) * 0.6 + self._normalize(m["recoverySpeed"], 1.5, 6.0) * 0.4) * 100`
+- `shotSelection = (self._normalize(m["shotVariety"], 30, 95) * 0.5 + self._normalize(m["avgBallSpeed"], 40, 100) * 0.5) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Game Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
 ---
 
-## Source Files
+## 6. Golf - Drive
 
-Each category's config is defined in its own TypeScript file:
+### Sport Category
 
-| Config Key | Source File |
-|------------|------------|
-| tennis-forehand | `shared/sport-configs/tennis-forehand.ts` |
-| tennis-backhand | `shared/sport-configs/tennis-backhand.ts` |
-| tennis-serve | `shared/sport-configs/tennis-serve.ts` |
-| tennis-volley | `shared/sport-configs/tennis-volley.ts` |
-| tennis-game | `shared/sport-configs/tennis-game.ts` |
-| golf-drive | `shared/sport-configs/golf-drive.ts` |
-| golf-iron | `shared/sport-configs/golf-iron.ts` |
-| golf-chip | `shared/sport-configs/golf-chip.ts` |
-| golf-putt | `shared/sport-configs/golf-putt.ts` |
-| golf-full-swing | `shared/sport-configs/golf-full-swing.ts` |
-| pickleball-dink | `shared/sport-configs/pickleball-dink.ts` |
-| pickleball-drive | `shared/sport-configs/pickleball-drive.ts` |
-| pickleball-serve | `shared/sport-configs/pickleball-serve.ts` |
-| pickleball-volley | `shared/sport-configs/pickleball-volley.ts` |
-| pickleball-third-shot-drop | `shared/sport-configs/pickleball-third-shot-drop.ts` |
-| paddle-forehand | `shared/sport-configs/paddle-forehand.ts` |
-| paddle-backhand | `shared/sport-configs/paddle-backhand.ts` |
-| paddle-serve | `shared/sport-configs/paddle-serve.ts` |
-| paddle-smash | `shared/sport-configs/paddle-smash.ts` |
-| paddle-bandeja | `shared/sport-configs/paddle-bandeja.ts` |
-| badminton-clear | `shared/sport-configs/badminton-clear.ts` |
-| badminton-smash | `shared/sport-configs/badminton-smash.ts` |
-| badminton-drop | `shared/sport-configs/badminton-drop.ts` |
-| badminton-net-shot | `shared/sport-configs/badminton-net-shot.ts` |
-| badminton-serve | `shared/sport-configs/badminton-serve.ts` |
-| tabletennis-forehand | `shared/sport-configs/tabletennis-forehand.ts` |
-| tabletennis-backhand | `shared/sport-configs/tabletennis-backhand.ts` |
-| tabletennis-serve | `shared/sport-configs/tabletennis-serve.ts` |
-| tabletennis-loop | `shared/sport-configs/tabletennis-loop.ts` |
-| tabletennis-chop | `shared/sport-configs/tabletennis-chop.ts` |
+- Sport: `Golf`
+- Category: `Drive`
+- Config Key: `golf-drive`
+- Source Config: `shared/sport-configs/golf-drive.ts`
 
-Type definitions: `shared/sport-configs/types.ts`
-Registry & lookup functions: `shared/sport-configs/index.ts`
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| clubHeadSpeed | Club Head Speed | mph | power | 85 - 115 |
+| hipRotation | Hip Rotation | deg | biomechanics | 35 - 55 |
+| shoulderRotation | Shoulder Turn | deg | biomechanics | 75 - 100 |
+| xFactor | X-Factor | deg | biomechanics | 30 - 50 |
+| spineAngle | Spine Angle | deg | technique | 25 - 40 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| tempoRatio | Tempo Ratio | :1 | timing | 2.5 - 3.5 |
+| backswingDuration | Backswing | s | timing | 0.7 - 1.2 |
+| downswingDuration | Downswing | s | timing | 0.2 - 0.4 |
+| followThroughDuration | Follow-through | s | timing | 0.5 - 1 |
+| headStability | Head Stability | /100 | technique | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | consistency | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = round(clamp(balance, 0, 100))`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp(technique, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: clubHeadSpeed, shoulderRotation, xFactor
+- control: balanceScore, headStability
+- timing: backswingDuration, downswingDuration, tempoRatio
+- technique: headStability, hipRotation, spineAngle
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/golf_drive.py`):
+- `balance = (self._normalize(m["balanceScore"], 40, 98) * 0.6 + self._normalize(m["headStability"], 40, 98) * 0.4) * 100`
+- `power = (self._normalize(m["clubHeadSpeed"], 70, 125) * 0.5 + self._normalize(m["shoulderRotation"], 60, 110) * 0.3 + self._normalize(m["xFactor"], 15, 60) * 0.2) * 100`
+- `technique = (self._normalize(m["spineAngle"], 25, 40) * 0.35 + self._normalize(m["headStability"], 40, 98) * 0.35 + self._normalize(m["hipRotation"], 25, 65) * 0.3) * 100`
+- `timing = (self._normalize(m["tempoRatio"], 2.5, 3.5) * 0.4 + self._normalize(m["backswingDuration"], 0.7, 1.2) * 0.3 + self._normalize(m["downswingDuration"], 0.2, 0.4) * 0.3) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Drive Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 7. Golf - Iron Shot
+
+### Sport Category
+
+- Sport: `Golf`
+- Category: `Iron Shot`
+- Config Key: `golf-iron`
+- Source Config: `shared/sport-configs/golf-iron.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| clubHeadSpeed | Club Head Speed | mph | power | 70 - 95 |
+| hipRotation | Hip Rotation | deg | biomechanics | 30 - 50 |
+| shoulderRotation | Shoulder Turn | deg | biomechanics | 70 - 95 |
+| spineAngle | Spine Angle | deg | technique | 28 - 42 |
+| divotAngle | Divot Angle | deg | technique | -5 - -1 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| tempoRatio | Tempo Ratio | :1 | timing | 2.5 - 3.5 |
+| backswingDuration | Backswing | s | timing | 0.6 - 1.1 |
+| headStability | Head Stability | /100 | technique | 75 - 98 |
+| rhythmConsistency | Rhythm | /100 | consistency | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = round(clamp((accuracy * 0.8 + balance * 0.7) / 1.5, 0, 100))`
+- `timing = 78 (fallback; no matching aliases)`
+- `technique = round(clamp((technique * 1 + accuracy * 0.4) / 1.4, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: clubHeadSpeed, hipRotation, shoulderRotation
+- control: balanceScore, divotAngle, headStability, rhythmConsistency
+- timing: fallback default only
+- technique: divotAngle, headStability, hipRotation, rhythmConsistency, spineAngle
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/golf_iron.py`):
+- `accuracy = (self._normalize(abs(m["divotAngle"]), 1, 5) * 0.4 + self._normalize(m["headStability"], 40, 98) * 0.3 + self._normalize(m["rhythmConsistency"], 50, 98) * 0.3) * 100`
+- `balance = (self._normalize(m["balanceScore"], 40, 98) * 0.6 + self._normalize(m["headStability"], 40, 98) * 0.4) * 100`
+- `power = (self._normalize(m["clubHeadSpeed"], 55, 105) * 0.5 + self._normalize(m["shoulderRotation"], 55, 105) * 0.3 + self._normalize(m["hipRotation"], 20, 58) * 0.2) * 100`
+- `technique = (self._normalize(m["spineAngle"], 28, 42) * 0.3 + self._normalize(m["headStability"], 40, 98) * 0.3 + self._normalize(abs(m["divotAngle"]), 1, 5) * 0.2 + self._normalize(m["hipRotation"], 20, 58) * 0.2) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Iron Shot Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 8. Golf - Chip
+
+### Sport Category
+
+- Sport: `Golf`
+- Category: `Chip`
+- Config Key: `golf-chip`
+- Source Config: `shared/sport-configs/golf-chip.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| wristHinge | Wrist Hinge | deg | technique | 5 - 20 |
+| armPendulum | Arm Pendulum | /100 | technique | 75 - 98 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| headStability | Head Stability | /100 | technique | 80 - 98 |
+| strokeLength | Stroke Length | /100 | technique | 60 - 90 |
+| contactQuality | Contact Quality | /100 | technique | 70 - 98 |
+| followThroughRatio | Follow-through | /100 | timing | 70 - 95 |
+| rhythmConsistency | Rhythm | /100 | consistency | 70 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(touch, 0, 100))`
+- `control = round(clamp(balance, 0, 100))`
+- `timing = 78 (fallback; no matching aliases)`
+- `technique = round(clamp(technique, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: contactQuality, followThroughRatio, strokeLength
+- control: balanceScore, headStability
+- timing: fallback default only
+- technique: armPendulum, contactQuality, headStability, wristHinge
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/golf_chip.py`):
+- `balance = (self._normalize(m["balanceScore"], 50, 98) * 0.6 + self._normalize(m["headStability"], 50, 98) * 0.4) * 100`
+- `technique = (self._normalize(m["wristHinge"], 5, 20) * 0.3 + self._normalize(m["armPendulum"], 50, 98) * 0.3 + self._normalize(m["headStability"], 50, 98) * 0.2 + self._normalize(m["contactQuality"], 50, 98) * 0.2) * 100`
+- `touch = (self._normalize(m["strokeLength"], 40, 95) * 0.4 + self._normalize(m["contactQuality"], 50, 98) * 0.3 + self._normalize(m["followThroughRatio"], 50, 98) * 0.3) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Chip Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 9. Golf - Putt
+
+### Sport Category
+
+- Sport: `Golf`
+- Category: `Putt`
+- Config Key: `golf-putt`
+- Source Config: `shared/sport-configs/golf-putt.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| pendulumScore | Pendulum | /100 | technique | 75 - 98 |
+| headStability | Head Stability | /100 | technique | 85 - 98 |
+| eyeLine | Eye Line | /100 | technique | 75 - 98 |
+| strokeLength | Stroke Length | /100 | technique | 70 - 95 |
+| wristStability | Wrist Stability | /100 | technique | 80 - 98 |
+| balanceScore | Balance | /100 | biomechanics | 80 - 98 |
+| tempoRatio | Tempo | :1 | timing | 0.8 - 1.2 |
+| rhythmConsistency | Rhythm | /100 | consistency | 75 - 98 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(touch, 0, 100))`
+- `control = round(clamp(alignment, 0, 100))`
+- `timing = 78 (fallback; no matching aliases)`
+- `technique = round(clamp(technique, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: pendulumScore, strokeLength, tempoRatio
+- control: eyeLine, headStability
+- timing: fallback default only
+- technique: eyeLine, headStability, pendulumScore, wristStability
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/golf_putt.py`):
+- `alignment = (self._normalize(m["eyeLine"], 55, 98) * 0.5 + self._normalize(m["headStability"], 55, 98) * 0.5) * 100`
+- `technique = (self._normalize(m["pendulumScore"], 55, 98) * 0.3 + self._normalize(m["headStability"], 55, 98) * 0.3 + self._normalize(m["eyeLine"], 55, 98) * 0.2 + self._normalize(m["wristStability"], 55, 98) * 0.2) * 100`
+- `touch = (self._normalize(m["strokeLength"], 50, 98) * 0.4 + self._normalize(m["tempoRatio"], 0.8, 1.2) * 0.3 + self._normalize(m["pendulumScore"], 55, 98) * 0.3) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Putting Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 10. Golf - Full Swing
+
+### Sport Category
+
+- Sport: `Golf`
+- Category: `Full Swing`
+- Config Key: `golf-full-swing`
+- Source Config: `shared/sport-configs/golf-full-swing.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| clubHeadSpeed | Club Head Speed | mph | power | 80 - 110 |
+| hipRotation | Hip Rotation | deg | biomechanics | 35 - 55 |
+| shoulderRotation | Shoulder Turn | deg | biomechanics | 75 - 100 |
+| xFactor | X-Factor | deg | biomechanics | 30 - 50 |
+| spineAngle | Spine Angle | deg | technique | 25 - 40 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| tempoRatio | Tempo Ratio | :1 | timing | 2.5 - 3.5 |
+| backswingDuration | Backswing | s | timing | 0.7 - 1.2 |
+| headStability | Head Stability | /100 | technique | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | consistency | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = round(clamp(balance, 0, 100))`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp(technique, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: clubHeadSpeed, shoulderRotation, xFactor
+- control: balanceScore, headStability
+- timing: backswingDuration, tempoRatio
+- technique: headStability, hipRotation, spineAngle
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/golf_full_swing.py`):
+- `balance = (self._normalize(m["balanceScore"], 40, 98) * 0.6 + self._normalize(m["headStability"], 40, 98) * 0.4) * 100`
+- `power = (self._normalize(m["clubHeadSpeed"], 65, 120) * 0.5 + self._normalize(m["shoulderRotation"], 60, 110) * 0.3 + self._normalize(m["xFactor"], 15, 55) * 0.2) * 100`
+- `technique = (self._normalize(m["spineAngle"], 25, 40) * 0.35 + self._normalize(m["headStability"], 40, 98) * 0.35 + self._normalize(m["hipRotation"], 25, 60) * 0.3) * 100`
+- `timing = (self._normalize(m["tempoRatio"], 2.5, 3.5) * 0.5 + self._normalize(m["backswingDuration"], 0.7, 1.2) * 0.5) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Full Swing Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 11. Badminton - Clear
+
+### Sport Category
+
+- Sport: `Badminton`
+- Category: `Clear`
+- Config Key: `badminton-clear`
+- Source Config: `shared/sport-configs/badminton-clear.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| racketSpeed | Racket Speed | m/s | power | 25 - 45 |
+| shuttleSpeed | Shuttle Speed | mph | ball | 80 - 150 |
+| trajectoryHeight | Trajectory Height | m | ball | 5 - 10 |
+| shoulderRotation | Torso Rotation | deg/s | biomechanics | 500 - 900 |
+| footworkScore | Footwork | /100 | biomechanics | 65 - 95 |
+| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = 78 (fallback; no matching aliases)`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp((technique * 1 + footwork * 0.6) / 1.6, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: racketSpeed, shuttleSpeed
+- control: fallback default only
+- timing: rhythmConsistency
+- technique: balanceScore, footworkScore, shoulderRotation, trajectoryHeight
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/badminton_clear.py`):
+- `footwork = (self._normalize(m["footworkScore"], 65.0, 95.0) * 0.6 + self._normalize(m["balanceScore"], 65.0, 95.0) * 0.4) * 100`
+- `power = (self._normalize(m["racketSpeed"], 25.0, 45.0) * 0.5 + self._normalize(m["shuttleSpeed"], 80.0, 150.0) * 0.5) * 100`
+- `technique = (self._normalize(m["shoulderRotation"], 500.0, 900.0) * 0.5 + self._normalize(m["trajectoryHeight"], 5.0, 10.0) * 0.5) * 100`
+- `timing = self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Clear Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 12. Badminton - Smash
+
+### Sport Category
+
+- Sport: `Badminton`
+- Category: `Smash`
+- Config Key: `badminton-smash`
+- Source Config: `shared/sport-configs/badminton-smash.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| racketSpeed | Racket Speed | m/s | power | 35 - 60 |
+| shuttleSpeed | Shuttle Speed | mph | ball | 150 - 300 |
+| jumpHeight | Jump Height | m | biomechanics | 0.2 - 0.6 |
+| contactHeight | Contact Height | m | technique | 2.5 - 3.2 |
+| wristSnap | Wrist Snap | deg/s | technique | 400 - 800 |
+| bodyRotation | Body Rotation | deg/s | biomechanics | 500 - 1000 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp((power * 1 + athleticism * 0.8) / 1.8, 0, 100))`
+- `control = 78 (fallback; no matching aliases)`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp(technique, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: bodyRotation, jumpHeight, racketSpeed, shuttleSpeed, wristSnap
+- control: fallback default only
+- timing: rhythmConsistency
+- technique: bodyRotation, contactHeight, wristSnap
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/badminton_smash.py`):
+- `athleticism = (self._normalize(m["jumpHeight"], 0.2, 0.6) * 0.5 + self._normalize(m["bodyRotation"], 500.0, 1000.0) * 0.5) * 100`
+- `power = (self._normalize(m["racketSpeed"], 35.0, 60.0) * 0.4 + self._normalize(m["shuttleSpeed"], 150.0, 300.0) * 0.4 + self._normalize(m["wristSnap"], 400.0, 800.0) * 0.2) * 100`
+- `technique = (self._normalize(m["wristSnap"], 400.0, 800.0) * 0.4 + self._normalize(m["contactHeight"], 2.5, 3.2) * 0.3 + self._normalize(m["bodyRotation"], 500.0, 1000.0) * 0.3) * 100`
+- `timing = self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Smash Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 13. Badminton - Drop Shot
+
+### Sport Category
+
+- Sport: `Badminton`
+- Category: `Drop Shot`
+- Config Key: `badminton-drop`
+- Source Config: `shared/sport-configs/badminton-drop.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| touchScore | Touch | /100 | technique | 70 - 98 |
+| deceptionScore | Deception | /100 | technique | 65 - 95 |
+| netClearance | Net Clearance | cm | ball | 2 - 15 |
+| racketAngle | Racket Angle | deg | technique | 20 - 45 |
+| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(touch, 0, 100))`
+- `control = round(clamp(deception, 0, 100))`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp((technique * 1 + deception * 0.5) / 1.5, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: netClearance, touchScore
+- control: deceptionScore
+- timing: rhythmConsistency
+- technique: deceptionScore, racketAngle, touchScore
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/badminton_drop.py`):
+- `deception = self._normalize(m["deceptionScore"], 65.0, 95.0) * 100`
+- `technique = (self._normalize(m["racketAngle"], 20.0, 45.0) * 0.5 + self._normalize(m["touchScore"], 70.0, 98.0) * 0.5) * 100`
+- `timing = self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 100`
+- `touch = (self._normalize(m["touchScore"], 70.0, 98.0) * 0.5 + self._normalize(m["netClearance"], 2.0, 15.0) * 0.5) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Drop Shot Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 14. Badminton - Net Shot
+
+### Sport Category
+
+- Sport: `Badminton`
+- Category: `Net Shot`
+- Config Key: `badminton-net-shot`
+- Source Config: `shared/sport-configs/badminton-net-shot.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| racketControl | Racket Control | /100 | technique | 70 - 98 |
+| wristFinesse | Wrist Finesse | /100 | technique | 70 - 98 |
+| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
+| footworkScore | Footwork | /100 | biomechanics | 65 - 95 |
+| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = 78 (fallback; no matching aliases)`
+- `control = round(clamp((control * 1 + finesse * 0.7) / 1.7, 0, 100))`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp((footwork * 0.6 + control * 0.5 + finesse * 0.5) / 1.6, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: fallback default only
+- control: balanceScore, racketControl, wristFinesse
+- timing: rhythmConsistency
+- technique: balanceScore, footworkScore, racketControl, wristFinesse
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/badminton_net_shot.py`):
+- `control = (self._normalize(m["racketControl"], 70.0, 98.0) * 0.6 + self._normalize(m["balanceScore"], 65.0, 95.0) * 0.4) * 100`
+- `finesse = (self._normalize(m["wristFinesse"], 70.0, 98.0) * 0.6 + self._normalize(m["racketControl"], 70.0, 98.0) * 0.4) * 100`
+- `footwork = (self._normalize(m["footworkScore"], 65.0, 95.0) * 0.6 + self._normalize(m["balanceScore"], 65.0, 95.0) * 0.4) * 100`
+- `timing = self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Net Shot Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 15. Badminton - Serve
+
+### Sport Category
+
+- Sport: `Badminton`
+- Category: `Serve`
+- Config Key: `badminton-serve`
+- Source Config: `shared/sport-configs/badminton-serve.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| racketAngle | Racket Angle | deg | technique | 15 - 40 |
+| shuttleSpeed | Shuttle Speed | mph | ball | 30 - 100 |
+| placementScore | Placement | /100 | ball | 70 - 98 |
+| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = 78 (fallback; no matching aliases)`
+- `control = round(clamp(accuracy, 0, 100))`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp((technique * 1 + accuracy * 0.4) / 1.4, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: fallback default only
+- control: placementScore, racketAngle
+- timing: rhythmConsistency
+- technique: placementScore, racketAngle, shuttleSpeed
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/badminton_serve.py`):
+- `accuracy = (self._normalize(m["placementScore"], 70.0, 98.0) * 0.5 + self._normalize(m["racketAngle"], 15.0, 40.0) * 0.5) * 100`
+- `technique = (self._normalize(m["racketAngle"], 15.0, 40.0) * 0.5 + self._normalize(m["shuttleSpeed"], 30.0, 100.0) * 0.5) * 100`
+- `timing = self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Serve Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 16. Paddle - Forehand
+
+### Sport Category
+
+- Sport: `Paddle`
+- Category: `Forehand`
+- Config Key: `paddle-forehand`
+- Source Config: `shared/sport-configs/paddle-forehand.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| wristSpeed | Wrist Speed | m/s | biomechanics | 18 - 32 |
+| elbowAngle | Elbow Angle | deg | biomechanics | 110 - 150 |
+| shoulderRotation | Torso Rotation | deg/s | biomechanics | 400 - 800 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| ballSpeed | Ball Speed | mph | ball | 40 - 80 |
+| wallPlayScore | Wall Play | /100 | technique | 60 - 95 |
+| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| contactHeight | Contact Height | m | technique | 0.7 - 1.1 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = 78 (fallback; no matching aliases)`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp((technique * 1 + wallPlay * 0.6) / 1.6, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: ballSpeed, shoulderRotation, wristSpeed
+- control: fallback default only
+- timing: balanceScore, rhythmConsistency, shotConsistency
+- technique: balanceScore, contactHeight, elbowAngle, shotConsistency, shoulderRotation, wallPlayScore, wristSpeed
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/paddle_forehand.py`):
+- `power = (self._normalize(m["ballSpeed"], 40.0, 80.0) * 0.4 + self._normalize(m["wristSpeed"], 18.0, 32.0) * 0.35 + self._normalize(m["shoulderRotation"], 400.0, 800.0) * 0.25) * 100`
+- `technique = (self._normalize(m["elbowAngle"], 110.0, 150.0) * 0.3 + self._normalize(m["contactHeight"], 0.7, 1.10) * 0.3 + self._normalize(m["shoulderRotation"], 400.0, 800.0) * 0.2 + self._normalize(m["wristSpeed"], 18.0, 32.0) * 0.2) * 100`
+- `timing = (self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 0.5 + self._normalize(m["balanceScore"], 70.0, 98.0) * 0.3 + self._normalize(m["shotConsistency"], 70.0, 98.0) * 0.2) * 100`
+- `wallPlay = (self._normalize(m["wallPlayScore"], 60.0, 95.0) * 0.6 + self._normalize(m["balanceScore"], 70.0, 98.0) * 0.2 + self._normalize(m["shotConsistency"], 70.0, 98.0) * 0.2) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Forehand Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 17. Paddle - Backhand
+
+### Sport Category
+
+- Sport: `Paddle`
+- Category: `Backhand`
+- Config Key: `paddle-backhand`
+- Source Config: `shared/sport-configs/paddle-backhand.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| wristSpeed | Wrist Speed | m/s | biomechanics | 15 - 28 |
+| elbowAngle | Elbow Angle | deg | biomechanics | 100 - 145 |
+| shoulderRotation | Torso Rotation | deg/s | biomechanics | 350 - 750 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| ballSpeed | Ball Speed | mph | ball | 35 - 70 |
+| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| contactHeight | Contact Height | m | technique | 0.6 - 1.05 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = round(clamp(((self._normalize(m["balanceScore"], 70.0, 98.0) * 0.5 + self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 0.3 + self._normalize(m["shotConsistency"], 70.0, 98.0) * 0.2) * 100), 0, 100))`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp(technique, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: ballSpeed, shoulderRotation, wristSpeed
+- control: balanceScore, rhythmConsistency, shotConsistency
+- timing: balanceScore, rhythmConsistency, shotConsistency
+- technique: contactHeight, elbowAngle, shoulderRotation, wristSpeed
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/paddle_backhand.py`):
+- `power = (self._normalize(m["ballSpeed"], 35.0, 70.0) * 0.4 + self._normalize(m["wristSpeed"], 15.0, 28.0) * 0.35 + self._normalize(m["shoulderRotation"], 350.0, 750.0) * 0.25) * 100`
+- `technique = (self._normalize(m["elbowAngle"], 100.0, 145.0) * 0.3 + self._normalize(m["contactHeight"], 0.6, 1.05) * 0.3 + self._normalize(m["shoulderRotation"], 350.0, 750.0) * 0.2 + self._normalize(m["wristSpeed"], 15.0, 28.0) * 0.2) * 100`
+- `timing = (self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 0.5 + self._normalize(m["balanceScore"], 70.0, 98.0) * 0.3 + self._normalize(m["shotConsistency"], 70.0, 98.0) * 0.2) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Backhand Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 18. Paddle - Serve
+
+### Sport Category
+
+- Sport: `Paddle`
+- Category: `Serve`
+- Config Key: `paddle-serve`
+- Source Config: `shared/sport-configs/paddle-serve.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| paddleAngle | Paddle Angle | deg | technique | 15 - 45 |
+| ballSpeed | Ball Speed | mph | ball | 30 - 60 |
+| placementScore | Placement | /100 | technique | 65 - 98 |
+| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = 78 (fallback; no matching aliases)`
+- `control = round(clamp(placement, 0, 100))`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp((technique * 1 + placement * 0.4) / 1.4, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: fallback default only
+- control: ballSpeed, placementScore, shotConsistency
+- timing: balanceScore, paddleAngle, rhythmConsistency
+- technique: balanceScore, ballSpeed, paddleAngle, placementScore, rhythmConsistency, shotConsistency
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/paddle_serve.py`):
+- `placement = (self._normalize(m["placementScore"], 65.0, 98.0) * 0.5 + self._normalize(m["ballSpeed"], 30.0, 60.0) * 0.3 + self._normalize(m["shotConsistency"], 70.0, 98.0) * 0.2) * 100`
+- `technique = (self._normalize(m["paddleAngle"], 15.0, 45.0) * 0.4 + self._normalize(m["balanceScore"], 70.0, 98.0) * 0.3 + self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 0.3) * 100`
+- `timing = (self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 0.5 + self._normalize(m["balanceScore"], 70.0, 98.0) * 0.3 + self._normalize(m["paddleAngle"], 15.0, 45.0) * 0.2) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Serve Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 19. Paddle - Smash
+
+### Sport Category
+
+- Sport: `Paddle`
+- Category: `Smash`
+- Config Key: `paddle-smash`
+- Source Config: `shared/sport-configs/paddle-smash.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| wristSpeed | Wrist Speed | m/s | biomechanics | 22 - 38 |
+| shoulderRotation | Torso Rotation | deg/s | biomechanics | 500 - 900 |
+| jumpHeight | Jump Height | m | power | 0.1 - 0.5 |
+| ballSpeed | Ball Speed | mph | ball | 50 - 90 |
+| contactHeight | Contact Height | m | technique | 2 - 3 |
+| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 60 - 92 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp((power * 1 + athleticism * 0.8) / 1.8, 0, 100))`
+- `control = 78 (fallback; no matching aliases)`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp(technique, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: balanceScore, ballSpeed, contactHeight, jumpHeight, shoulderRotation, wristSpeed
+- control: fallback default only
+- timing: balanceScore, contactHeight, rhythmConsistency
+- technique: contactHeight, shoulderRotation, wristSpeed
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/paddle_smash.py`):
+- `athleticism = (self._normalize(m["jumpHeight"], 0.1, 0.5) * 0.4 + self._normalize(m["balanceScore"], 65.0, 95.0) * 0.3 + self._normalize(m["contactHeight"], 2.0, 3.0) * 0.3) * 100`
+- `power = (self._normalize(m["ballSpeed"], 50.0, 90.0) * 0.4 + self._normalize(m["wristSpeed"], 22.0, 38.0) * 0.35 + self._normalize(m["shoulderRotation"], 500.0, 900.0) * 0.25) * 100`
+- `technique = (self._normalize(m["contactHeight"], 2.0, 3.0) * 0.4 + self._normalize(m["shoulderRotation"], 500.0, 900.0) * 0.3 + self._normalize(m["wristSpeed"], 22.0, 38.0) * 0.3) * 100`
+- `timing = (self._normalize(m["rhythmConsistency"], 60.0, 92.0) * 0.5 + self._normalize(m["balanceScore"], 65.0, 95.0) * 0.3 + self._normalize(m["contactHeight"], 2.0, 3.0) * 0.2) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Smash Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 20. Paddle - Bandeja
+
+### Sport Category
+
+- Sport: `Paddle`
+- Category: `Bandeja`
+- Config Key: `paddle-bandeja`
+- Source Config: `shared/sport-configs/paddle-bandeja.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| paddleAngle | Paddle Angle | deg | technique | 20 - 50 |
+| ballSpeed | Ball Speed | mph | ball | 25 - 55 |
+| wristControl | Wrist Control | /100 | technique | 70 - 98 |
+| contactHeight | Contact Height | m | technique | 1.8 - 2.8 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = 78 (fallback; no matching aliases)`
+- `control = round(clamp(control, 0, 100))`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp((technique * 1 + control * 0.5) / 1.5, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: fallback default only
+- control: ballSpeed, paddleAngle, wristControl
+- timing: balanceScore, rhythmConsistency, shotConsistency
+- technique: ballSpeed, contactHeight, paddleAngle, wristControl
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/paddle_bandeja.py`):
+- `control = (self._normalize(m["wristControl"], 70.0, 98.0) * 0.4 + self._normalize(m["paddleAngle"], 20.0, 50.0) * 0.3 + self._normalize(m["ballSpeed"], 25.0, 55.0) * 0.3) * 100`
+- `technique = (self._normalize(m["paddleAngle"], 20.0, 50.0) * 0.3 + self._normalize(m["contactHeight"], 1.8, 2.8) * 0.35 + self._normalize(m["wristControl"], 70.0, 98.0) * 0.35) * 100`
+- `timing = (self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 0.5 + self._normalize(m["balanceScore"], 70.0, 98.0) * 0.3 + self._normalize(m["shotConsistency"], 70.0, 98.0) * 0.2) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Bandeja Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 21. Pickleball - Dink
+
+### Sport Category
+
+- Sport: `Pickleball`
+- Category: `Dink`
+- Config Key: `pickleball-dink`
+- Source Config: `shared/sport-configs/pickleball-dink.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| paddleAngle | Paddle Angle | deg | technique | 25 - 50 |
+| softTouch | Soft Touch | /100 | technique | 70 - 98 |
+| wristStability | Wrist Stability | /100 | biomechanics | 75 - 98 |
+| arcHeight | Arc Height | m | ball | 0.05 - 0.3 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(touch, 0, 100))`
+- `control = round(clamp(((self._normalize(m["balanceScore"], 50, 98) * 0.6 + self._normalize(m["wristStability"], 50, 98) * 0.4) * 100), 0, 100))`
+- `timing = round(clamp(rhythm, 0, 100))`
+- `technique = round(clamp((technique * 1 + arc * 0.6) / 1.6, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: paddleAngle, softTouch, wristStability
+- control: balanceScore, wristStability
+- timing: rhythmConsistency
+- technique: arcHeight, paddleAngle, softTouch, wristStability
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/pickleball_dink.py`):
+- `arc = (self._normalize(m["arcHeight"], 0.05, 0.30) * 0.6 + self._normalize(m["softTouch"], 50, 98) * 0.4) * 100`
+- `rhythm = self._normalize(m["rhythmConsistency"], 50, 98) * 100`
+- `technique = (self._normalize(m["paddleAngle"], 25, 50) * 0.4 + self._normalize(m["wristStability"], 50, 98) * 0.3 + self._normalize(m["softTouch"], 50, 98) * 0.3) * 100`
+- `touch = (self._normalize(m["softTouch"], 50, 98) * 0.5 + self._normalize(m["wristStability"], 50, 98) * 0.3 + self._normalize(m["paddleAngle"], 25, 50) * 0.2) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Dink Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 22. Pickleball - Drive
+
+### Sport Category
+
+- Sport: `Pickleball`
+- Category: `Drive`
+- Config Key: `pickleball-drive`
+- Source Config: `shared/sport-configs/pickleball-drive.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| paddleSpeed | Paddle Speed | m/s | power | 15 - 30 |
+| bodyRotation | Body Rotation | deg/s | biomechanics | 300 - 700 |
+| ballSpeed | Ball Speed | mph | ball | 35 - 65 |
+| trajectoryAngle | Trajectory | deg | ball | 2 - 12 |
+| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
+| shotConsistency | Consistency | /100 | consistency | 65 - 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 60 - 90 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = round(clamp((self._normalize(m["balanceScore"], 45, 98) * 100), 0, 100))`
+- `timing = round(clamp(rhythm, 0, 100))`
+- `technique = round(clamp(technique, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: ballSpeed, bodyRotation, paddleSpeed
+- control: balanceScore
+- timing: rhythmConsistency
+- technique: bodyRotation, paddleSpeed, shotConsistency
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/pickleball_drive.py`):
+- `power = (self._normalize(m["paddleSpeed"], 15, 30) * 0.5 + self._normalize(m["ballSpeed"], 35, 65) * 0.3 + self._normalize(m["bodyRotation"], 300, 700) * 0.2) * 100`
+- `rhythm = self._normalize(m["rhythmConsistency"], 50, 98) * 100`
+- `technique = (self._normalize(m["bodyRotation"], 300, 700) * 0.4 + self._normalize(m["paddleSpeed"], 15, 30) * 0.3 + self._normalize(m["shotConsistency"], 40, 98) * 0.3) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Drive Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 23. Pickleball - Serve
+
+### Sport Category
+
+- Sport: `Pickleball`
+- Category: `Serve`
+- Config Key: `pickleball-serve`
+- Source Config: `shared/sport-configs/pickleball-serve.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| paddleAngle | Paddle Angle | deg | technique | 20 - 45 |
+| tossConsistency | Toss Consistency | /100 | technique | 70 - 98 |
+| ballSpeed | Ball Speed | mph | ball | 25 - 50 |
+| placement | Placement | /100 | ball | 65 - 95 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = round(clamp(((self._normalize(m["balanceScore"], 50, 98) * 100) * 0.9 + placement * 0.8) / 1.7, 0, 100))`
+- `timing = round(clamp(rhythm, 0, 100))`
+- `technique = round(clamp((technique * 1 + placement * 0.4) / 1.4, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: ballSpeed
+- control: balanceScore, placement, tossConsistency
+- timing: rhythmConsistency
+- technique: paddleAngle, placement, rhythmConsistency, tossConsistency
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/pickleball_serve.py`):
+- `placement = (self._normalize(m["placement"], 50, 98) * 0.6 + self._normalize(m["tossConsistency"], 50, 98) * 0.4) * 100`
+- `power = self._normalize(m["ballSpeed"], 25, 50) * 100`
+- `rhythm = self._normalize(m["rhythmConsistency"], 50, 98) * 100`
+- `technique = (self._normalize(m["paddleAngle"], 20, 45) * 0.4 + self._normalize(m["tossConsistency"], 50, 98) * 0.3 + self._normalize(m["rhythmConsistency"], 50, 98) * 0.3) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Serve Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 24. Pickleball - Volley
+
+### Sport Category
+
+- Sport: `Pickleball`
+- Category: `Volley`
+- Config Key: `pickleball-volley`
+- Source Config: `shared/sport-configs/pickleball-volley.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| reactionSpeed | Reaction Speed | ms | timing | 120 - 300 |
+| paddlePrep | Paddle Prep | /100 | technique | 70 - 98 |
+| wristFirmness | Wrist Firmness | /100 | technique | 75 - 98 |
+| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
+| ballSpeed | Ball Speed | mph | ball | 20 - 50 |
+| shotConsistency | Consistency | /100 | consistency | 65 - 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 60 - 90 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = round(clamp((((self._normalize(m["balanceScore"], 40, 98) * 0.6 + self._normalize(m["wristFirmness"], 50, 98) * 0.4) * 100) * 0.9 + reflexes * 0.5) / 1.4, 0, 100))`
+- `timing = round(clamp((rhythm * 0.8 + reflexes * 0.5) / 1.3, 0, 100))`
+- `technique = round(clamp(technique, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: ballSpeed, paddlePrep
+- control: balanceScore, paddlePrep, reactionSpeed, wristFirmness
+- timing: paddlePrep, reactionSpeed, rhythmConsistency
+- technique: paddlePrep, shotConsistency, wristFirmness
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/pickleball_volley.py`):
+- `power = (self._normalize(m["ballSpeed"], 20, 50) * 0.7 + self._normalize(m["paddlePrep"], 50, 98) * 0.3) * 100`
+- `reflexes = (self._normalize(500 - m["reactionSpeed"], 0, 400) * 0.6 + self._normalize(m["paddlePrep"], 50, 98) * 0.4) * 100`
+- `rhythm = self._normalize(m["rhythmConsistency"], 50, 98) * 100`
+- `technique = (self._normalize(m["paddlePrep"], 50, 98) * 0.4 + self._normalize(m["wristFirmness"], 50, 98) * 0.3 + self._normalize(m["shotConsistency"], 40, 98) * 0.3) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Volley Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 25. Pickleball - Third Shot Drop
+
+### Sport Category
+
+- Sport: `Pickleball`
+- Category: `Third Shot Drop`
+- Config Key: `pickleball-third-shot-drop`
+- Source Config: `shared/sport-configs/pickleball-third-shot-drop.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| arcHeight | Arc Height | m | ball | 0.1 - 0.4 |
+| softTouch | Soft Touch | /100 | technique | 70 - 98 |
+| paddleAngle | Paddle Angle | deg | technique | 30 - 55 |
+| shotConsistency | Consistency | /100 | consistency | 65 - 95 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(touch, 0, 100))`
+- `control = round(clamp((self._normalize(m["balanceScore"], 50, 98) * 100), 0, 100))`
+- `timing = round(clamp(rhythm, 0, 100))`
+- `technique = round(clamp((technique * 1 + arc * 0.6) / 1.6, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: arcHeight, paddleAngle, softTouch
+- control: balanceScore
+- timing: rhythmConsistency
+- technique: arcHeight, paddleAngle, shotConsistency, softTouch
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/pickleball_third_shot_drop.py`):
+- `arc = (self._normalize(m["arcHeight"], 0.10, 0.40) * 0.6 + self._normalize(m["softTouch"], 50, 98) * 0.4) * 100`
+- `rhythm = self._normalize(m["rhythmConsistency"], 50, 98) * 100`
+- `technique = (self._normalize(m["paddleAngle"], 30, 55) * 0.4 + self._normalize(m["softTouch"], 50, 98) * 0.3 + self._normalize(m["shotConsistency"], 40, 98) * 0.3) * 100`
+- `touch = (self._normalize(m["softTouch"], 50, 98) * 0.5 + self._normalize(m["paddleAngle"], 30, 55) * 0.3 + self._normalize(m["arcHeight"], 0.10, 0.40) * 0.2) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Third Shot Drop Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 26. Table Tennis - Forehand
+
+### Sport Category
+
+- Sport: `Table Tennis`
+- Category: `Forehand`
+- Config Key: `tabletennis-forehand`
+- Source Config: `shared/sport-configs/tabletennis-forehand.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| batSpeed | Bat Speed | m/s | power | 8 - 18 |
+| wristAction | Wrist Action | deg/s | technique | 300 - 700 |
+| spinRate | Spin Rate | rpm | ball | 2000 - 5000 |
+| footworkScore | Footwork | /100 | biomechanics | 65 - 95 |
+| bodyRotation | Body Rotation | deg/s | biomechanics | 200 - 500 |
+| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = 78 (fallback; no matching aliases)`
+- `timing = 78 (fallback; no matching aliases)`
+- `technique = round(clamp((technique * 1 + spin * 0.6 + footwork * 0.6) / 2.2, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: batSpeed, bodyRotation, wristAction
+- control: fallback default only
+- timing: fallback default only
+- technique: bodyRotation, footworkScore, rhythmConsistency, spinRate, wristAction
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/tabletennis_forehand.py`):
+- `footwork = (self._normalize(m["footworkScore"], 65.0, 95.0) * 0.7 + self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 0.3) * 100`
+- `power = (self._normalize(m["batSpeed"], 8.0, 18.0) * 0.5 + self._normalize(m["bodyRotation"], 200.0, 500.0) * 0.3 + self._normalize(m["wristAction"], 300.0, 700.0) * 0.2) * 100`
+- `spin = (self._normalize(m["spinRate"], 2000.0, 5000.0) * 0.6 + self._normalize(m["wristAction"], 300.0, 700.0) * 0.4) * 100`
+- `technique = (self._normalize(m["wristAction"], 300.0, 700.0) * 0.4 + self._normalize(m["bodyRotation"], 200.0, 500.0) * 0.3 + self._normalize(m["footworkScore"], 65.0, 95.0) * 0.3) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Forehand Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 27. Table Tennis - Backhand
+
+### Sport Category
+
+- Sport: `Table Tennis`
+- Category: `Backhand`
+- Config Key: `tabletennis-backhand`
+- Source Config: `shared/sport-configs/tabletennis-backhand.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| batSpeed | Bat Speed | m/s | power | 6 - 15 |
+| timingScore | Timing | /100 | timing | 70 - 98 |
+| batAngle | Bat Angle | deg | technique | 30 - 70 |
+| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(speed, 0, 100))`
+- `control = round(clamp(((self._normalize(m["balanceScore"], 70.0, 98.0) * 0.6 + self._normalize(m["shotConsistency"], 70.0, 98.0) * 0.4) * 100), 0, 100))`
+- `timing = round(clamp(timing, 0, 100))`
+- `technique = round(clamp(technique, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: batSpeed, rhythmConsistency
+- control: balanceScore, shotConsistency
+- timing: rhythmConsistency, timingScore
+- technique: balanceScore, batAngle, batSpeed
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/tabletennis_backhand.py`):
+- `speed = (self._normalize(m["batSpeed"], 6.0, 15.0) * 0.7 + self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 0.3) * 100`
+- `technique = (self._normalize(m["batAngle"], 30.0, 70.0) * 0.5 + self._normalize(m["batSpeed"], 6.0, 15.0) * 0.3 + self._normalize(m["balanceScore"], 70.0, 98.0) * 0.2) * 100`
+- `timing = (self._normalize(m["timingScore"], 70.0, 98.0) * 0.6 + self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 0.4) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Backhand Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 28. Table Tennis - Serve
+
+### Sport Category
+
+- Sport: `Table Tennis`
+- Category: `Serve`
+- Config Key: `tabletennis-serve`
+- Source Config: `shared/sport-configs/tabletennis-serve.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| spinVariation | Spin Variation | rpm | ball | 1500 - 4500 |
+| batAngle | Bat Angle | deg | technique | 20 - 65 |
+| ballSpeed | Ball Speed | mph | ball | 15 - 40 |
+| tossHeight | Toss Height | cm | technique | 16 - 30 |
+| placementScore | Placement | /100 | technique | 65 - 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = 78 (fallback; no matching aliases)`
+- `control = round(clamp((placement * 0.8 + deception * 0.6) / 1.4, 0, 100))`
+- `timing = 78 (fallback; no matching aliases)`
+- `technique = round(clamp((technique * 1 + spin * 0.6 + placement * 0.4 + deception * 0.5) / 2.5, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: fallback default only
+- control: ballSpeed, batAngle, placementScore, rhythmConsistency, spinVariation
+- timing: fallback default only
+- technique: ballSpeed, batAngle, placementScore, rhythmConsistency, spinVariation, tossHeight
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/tabletennis_serve.py`):
+- `deception = (self._normalize(m["spinVariation"], 1500.0, 4500.0) * 0.5 + self._normalize(m["batAngle"], 20.0, 65.0) * 0.3 + self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 0.2) * 100`
+- `placement = (self._normalize(m["placementScore"], 65.0, 95.0) * 0.6 + self._normalize(m["ballSpeed"], 15.0, 40.0) * 0.4) * 100`
+- `spin = (self._normalize(m["spinVariation"], 1500.0, 4500.0) * 0.6 + self._normalize(m["batAngle"], 20.0, 65.0) * 0.4) * 100`
+- `technique = (self._normalize(m["batAngle"], 20.0, 65.0) * 0.4 + self._normalize(m["tossHeight"], 16.0, 30.0) * 0.3 + self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 0.3) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Serve Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 29. Table Tennis - Loop
+
+### Sport Category
+
+- Sport: `Table Tennis`
+- Category: `Loop`
+- Config Key: `tabletennis-loop`
+- Source Config: `shared/sport-configs/tabletennis-loop.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| batSpeed | Bat Speed | m/s | power | 10 - 22 |
+| bodyRotation | Body Rotation | deg/s | biomechanics | 250 - 600 |
+| spinRate | Spin Rate | rpm | ball | 3000 - 6000 |
+| contactPoint | Contact Point | /100 | technique | 65 - 95 |
+| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 60 - 92 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = round(clamp(power, 0, 100))`
+- `control = round(clamp(((self._normalize(m["balanceScore"], 65.0, 95.0) * 0.6 + self._normalize(m["rhythmConsistency"], 60.0, 92.0) * 0.4) * 100), 0, 100))`
+- `timing = 78 (fallback; no matching aliases)`
+- `technique = round(clamp((technique * 1 + spin * 0.6) / 1.6, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: batSpeed, bodyRotation, spinRate
+- control: balanceScore, rhythmConsistency
+- timing: fallback default only
+- technique: balanceScore, batSpeed, bodyRotation, contactPoint, spinRate
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/tabletennis_loop.py`):
+- `power = (self._normalize(m["batSpeed"], 10.0, 22.0) * 0.5 + self._normalize(m["bodyRotation"], 250.0, 600.0) * 0.3 + self._normalize(m["spinRate"], 3000.0, 6000.0) * 0.2) * 100`
+- `spin = (self._normalize(m["spinRate"], 3000.0, 6000.0) * 0.6 + self._normalize(m["batSpeed"], 10.0, 22.0) * 0.4) * 100`
+- `technique = (self._normalize(m["contactPoint"], 65.0, 95.0) * 0.4 + self._normalize(m["bodyRotation"], 250.0, 600.0) * 0.3 + self._normalize(m["balanceScore"], 65.0, 95.0) * 0.3) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Loop Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+## 30. Table Tennis - Chop
+
+### Sport Category
+
+- Sport: `Table Tennis`
+- Category: `Chop`
+- Config Key: `tabletennis-chop`
+- Source Config: `shared/sport-configs/tabletennis-chop.ts`
+
+### Metrics Table
+
+| Key | Label | Unit | Category | Optimal Range |
+|-----|-------|------|----------|---------------|
+| batAngle | Bat Angle | deg | technique | 40 - 75 |
+| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| spinRate | Spin Rate | rpm | ball | 1500 - 4000 |
+| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| footworkScore | Footwork | /100 | biomechanics | 65 - 95 |
+| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+
+### Scores (Ordered)
+
+#### Technical
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Balance | `score10(0.8*norm(balanceScore,55,98) + 0.2*invNorm(reactionTime,180,480))` | balanceScore, reactionTime |
+| Inertia | `score10(0.6*norm(stanceAngle,15,65) + 0.4*norm(shoulderRotationSpeed,300,1100))` | shoulderRotationSpeed, stanceAngle |
+| Opposite Force | `score10(0.4*norm(kneeBendAngle,25,120) + 0.35*norm(balanceScore,55,98) + 0.25*norm(stanceAngle,15,65))` | balanceScore, kneeBendAngle, stanceAngle |
+| Momentum | `score10(0.45*norm(hipRotationSpeed,250,1100) + 0.35*norm(shoulderRotationSpeed,300,1200) + 0.2*norm(ballSpeed,35,140))` | ballSpeed, hipRotationSpeed, shoulderRotationSpeed |
+| Elastic Energy | `score10(0.6*norm(racketLagAngle,15,75) + 0.2*norm(kneeBendAngle,25,120) + 0.2*norm(swingPathAngle,5,45))` | kneeBendAngle, racketLagAngle, swingPathAngle |
+| Contact | `score10(0.45*norm(contactDistance,0.35,1.15) + 0.35*norm(contactHeight,0.75,2.9) + 0.2*invNorm(reactionTime,180,480))` | contactDistance, contactHeight, reactionTime |
+
+- `technicalScore = mean([Balance, Inertia, Opposite Force, Momentum, Elastic Energy, Contact])`
+
+#### Tactical
+
+| Sub-Score | Label | Weight |
+|-----------|-------|--------|
+| power | Power | 30% |
+| control | Control | 25% |
+| timing | Timing | 25% |
+| technique | Technique | 20% |
+
+**Standard Tactical Formula**
+`tacticalScore = 0.30 × power + 0.25 × control + 0.25 × timing + 0.20 × technique`
+
+Exact standardized tactical sub-score formulas (`0-100`):
+- `power = 78 (fallback; no matching aliases)`
+- `control = round(clamp(((self._normalize(m["balanceScore"], 70.0, 98.0) * 0.6 + self._normalize(m["rhythmConsistency"], 65.0, 95.0) * 0.4) * 100), 0, 100))`
+- `timing = 78 (fallback; no matching aliases)`
+- `technique = round(clamp((technique * 1 + spin * 0.6 + footwork * 0.6) / 2.2, 0, 100))`
+
+Underlying parameters influencing each tactical sub-score:
+- power: fallback default only
+- control: balanceScore, rhythmConsistency
+- timing: fallback default only
+- technique: balanceScore, batAngle, footworkScore, spinRate
+
+Raw analyzer formulas used by standardization (from `python_analysis/sports/tabletennis_chop.py`):
+- `footwork = (self._normalize(m["footworkScore"], 65.0, 95.0) * 0.7 + self._normalize(m["balanceScore"], 70.0, 98.0) * 0.3) * 100`
+- `spin = (self._normalize(m["spinRate"], 1500.0, 4000.0) * 0.6 + self._normalize(m["batAngle"], 40.0, 75.0) * 0.4) * 100`
+- `technique = (self._normalize(m["batAngle"], 40.0, 75.0) * 0.5 + self._normalize(m["spinRate"], 1500.0, 4000.0) * 0.3 + self._normalize(m["balanceScore"], 70.0, 98.0) * 0.2) * 100`
+
+Note: `consistency` is excluded from standardized tactical sub-scores.
+
+#### Movement
+
+| Score | Formula | Underlying Parameters |
+|-------|---------|------------------------|
+| Ready | `score10(0.6*invNorm(splitStepTime,0.12,0.45) + 0.4*norm(balanceScore,55,98))` | balanceScore, splitStepTime |
+| Read | `score10(0.55*invNorm(reactionTime,180,480) + 0.45*invNorm(splitStepTime,0.12,0.45))` | reactionTime, splitStepTime |
+| React | `score10(0.7*invNorm(reactionTime,170,500) + 0.3*norm(balanceScore,55,98))` | balanceScore, reactionTime |
+| Respond | `score10(0.45*norm(ballSpeed,35,140) + 0.3*norm(contactHeight,0.75,2.9) + 0.25*norm(swingPathAngle,8,55))` | ballSpeed, contactHeight, swingPathAngle |
+| Recover | `score10(0.65*invNorm(recoveryTime,0.6,3.2) + 0.35*norm(balanceScore,55,98))` | balanceScore, recoveryTime |
+
+- `movementScore = mean([Ready, Read, React, Respond, Recover])`
+
+### Overall Score
+
+- Score Label: `Chop Score`
+- `overallScore = (technicalScore + tacticalScore + movementScore) / 3`
+
+---
+
+> Maintenance: regenerate this document via `node scripts/update_reference_matrix_standardized.js` whenever configs or scoring logic change.

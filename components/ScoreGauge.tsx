@@ -2,56 +2,60 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
-import Animated, {
-  useAnimatedProps,
-  useSharedValue,
-  withTiming,
-  Easing,
-} from "react-native-reanimated";
-import { useEffect } from "react";
 import { ds } from "@/constants/design-system";
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 interface ScoreGaugeProps {
   score: number;
+  maxScore?: number;
   size?: number;
   strokeWidth?: number;
   label?: string;
   change?: number | null;
+  changeLayout?: "leftOfScore" | "belowScore";
 }
 
 export function ScoreGauge({
   score,
+  maxScore = 100,
   size = 140,
   strokeWidth = 10,
   label,
   change,
+  changeLayout = "leftOfScore",
 }: ScoreGaugeProps) {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
-  const progress = useSharedValue(0);
-
-  useEffect(() => {
-    progress.value = withTiming(score / 100, {
-      duration: 1200,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [score]);
-
-  const animatedProps = useAnimatedProps(() => ({
-    strokeDashoffset: circumference * (1 - progress.value),
-  }));
+  const clampedMaxScore = Number.isFinite(maxScore) && maxScore > 0 ? maxScore : 100;
+  const clampedScore = Math.max(0, Math.min(clampedMaxScore, Number.isFinite(score) ? score : 0));
+  const normalizedScore = (clampedScore / clampedMaxScore) * 100;
+  const strokeDashoffset = circumference * (1 - normalizedScore / 100);
 
   const getScoreColor = () => {
-    if (score >= 80) return ds.color.success;
-    if (score >= 60) return "#60A5FA";
-    if (score >= 40) return ds.color.warning;
+    if (normalizedScore >= 80) return ds.color.success;
+    if (normalizedScore >= 60) return "#60A5FA";
+    if (normalizedScore >= 40) return ds.color.warning;
     return ds.color.danger;
   };
 
   const hasChange = change !== null && change !== undefined;
-  const changeColor = hasChange ? (change >= 0 ? ds.color.success : ds.color.danger) : null;
+  const hasRenderableChange = hasChange && Math.abs(change) >= 1e-6;
+  const changeColor = hasRenderableChange
+    ? Math.abs(change) < 1e-6
+      ? "#94A3B8"
+      : change > 0
+        ? ds.color.success
+        : ds.color.danger
+    : null;
+  const changeIcon = hasRenderableChange
+    ? Math.abs(change) < 1e-6
+      ? "remove"
+      : change > 0
+        ? "caret-up"
+        : "caret-down"
+    : null;
+  const changeLabel = hasRenderableChange
+    ? `${change > 0 ? "+" : ""}${change.toFixed(1)}%`
+    : null;
 
   return (
     <View style={styles.container}>
@@ -67,7 +71,7 @@ export function ScoreGauge({
           rotation="-90"
           origin={`${size / 2}, ${size / 2}`}
         />
-        <AnimatedCircle
+        <Circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
@@ -75,37 +79,67 @@ export function ScoreGauge({
           strokeWidth={strokeWidth}
           fill="none"
           strokeDasharray={circumference}
-          animatedProps={animatedProps}
+          strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
           rotation="-90"
           origin={`${size / 2}, ${size / 2}`}
         />
       </Svg>
       <View style={[styles.scoreContainer, { width: size, height: size }]}>
-        <Text
-          style={[styles.scoreText, { color: getScoreColor(), fontSize: size * 0.25 }]}
-        >
-          {score}
-        </Text>
-        {label && (
+        {changeLayout === "leftOfScore" ? (
+          <View style={styles.scoreRow}>
+            {hasRenderableChange && changeColor && changeIcon && changeLabel ? (
+              <View style={styles.changePill}>
+                <Ionicons
+                  name={changeIcon as any}
+                  size={Math.max(12, Math.round(size * 0.07))}
+                  color={changeColor}
+                />
+                <Text style={[styles.changeText, { color: changeColor, fontSize: Math.max(12, Math.round(size * 0.08)) }]}>
+                  {changeLabel}
+                </Text>
+              </View>
+            ) : null}
+            <Text
+              style={[styles.scoreText, { color: getScoreColor(), fontSize: size * 0.25 }]}
+            >
+              {clampedMaxScore === 10 ? clampedScore.toFixed(1) : clampedScore}
+            </Text>
+          </View>
+        ) : (
+          <>
+            <Text
+              style={[styles.scoreText, { color: getScoreColor(), fontSize: size * 0.25 }]}
+            >
+              {clampedMaxScore === 10 ? clampedScore.toFixed(1) : clampedScore}
+            </Text>
+            {label && (
+              <Text
+                style={[styles.label, { fontSize: size * 0.085 }]}
+              >
+                {label}
+              </Text>
+            )}
+            {hasRenderableChange && changeColor && changeIcon && changeLabel ? (
+              <View style={styles.changeRowBelow}>
+                <Ionicons
+                  name={changeIcon as any}
+                  size={Math.max(12, Math.round(size * 0.07))}
+                  color={changeColor}
+                />
+                <Text style={[styles.changeText, { color: changeColor, fontSize: Math.max(12, Math.round(size * 0.08)) }]}>
+                  {changeLabel}
+                </Text>
+              </View>
+            ) : null}
+          </>
+        )}
+        {changeLayout === "leftOfScore" && label && (
           <Text
             style={[styles.label, { fontSize: size * 0.085 }]}
           >
             {label}
           </Text>
-        )}
-        {hasChange && changeColor && (
-          <View style={styles.changeRow}>
-            <Ionicons
-              name={change >= 0 ? "caret-up" : "caret-down"}
-              size={11}
-              color={changeColor}
-            />
-            <Text style={[styles.changeText, { color: changeColor }]}>
-              {change >= 0 ? "+" : ""}
-              {change.toFixed(1)}%
-            </Text>
-          </View>
         )}
       </View>
     </View>
@@ -122,6 +156,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  scoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
   scoreText: {
     fontFamily: "Inter_700Bold",
   },
@@ -132,14 +172,18 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     color: ds.color.textTertiary,
   },
-  changeRow: {
+  changePill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
-    marginTop: 4,
+    gap: 3,
+  },
+  changeRowBelow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginTop: 2,
   },
   changeText: {
-    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
   },
 });

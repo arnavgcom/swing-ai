@@ -40,7 +40,7 @@ export const golfDriveConfig: SportCategoryConfig = {
       icon: "body",
       category: "biomechanics",
       color: "#6C5CE7",
-      description: "Shoulder rotation angle at top of backswing",
+      description: "Torso rotation angle at top of backswing",
       optimalRange: [75, 100],
     },
     {

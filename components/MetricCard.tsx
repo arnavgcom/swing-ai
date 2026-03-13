@@ -9,6 +9,7 @@ interface MetricCardProps {
   label: string;
   value: string | number;
   unit?: string;
+  valuePrecision?: number;
   color?: string;
   change?: number | null;
   optimalRange?: [number, number];
@@ -19,6 +20,7 @@ export function MetricCard({
   label,
   value,
   unit,
+  valuePrecision,
   color,
   change,
   optimalRange,
@@ -29,8 +31,7 @@ export function MetricCard({
     !!optimalRange
     && Number.isFinite(optimalRange[0])
     && Number.isFinite(optimalRange[1])
-    && optimalRange[1] > optimalRange[0]
-    && numericValue !== null;
+    && optimalRange[1] > optimalRange[0];
 
   const rangeMin = hasOptimalRange ? optimalRange[0] : null;
   const rangeMax = hasOptimalRange ? optimalRange[1] : null;
@@ -87,19 +88,35 @@ export function MetricCard({
     ? `${fmtRangeValue(rangeMin)}-${fmtRangeValue(rangeMax)}`
     : null;
 
+  const hasRenderableChange = change !== null && change !== undefined && Math.abs(change) >= 1e-6;
+
   const changeColor =
-    change !== null && change !== undefined
-      ? change >= 0
+    hasRenderableChange
+      ? Math.abs(change) < 1e-6
+        ? "#94A3B8"
+        : change >= 0
         ? "#34D399"
         : "#F87171"
       : null;
 
   const changeIcon =
-    change !== null && change !== undefined
-      ? change >= 0
+    hasRenderableChange
+      ? Math.abs(change) < 1e-6
+        ? ("remove" as const)
+        : change >= 0
         ? ("caret-up" as const)
         : ("caret-down" as const)
       : null;
+
+  const changeLabel =
+    hasRenderableChange
+      ? `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`
+      : null;
+
+  const displayValue =
+    typeof value === "number" && Number.isFinite(value)
+      ? value.toFixed(valuePrecision ?? 1)
+      : String(value);
 
   return (
     <GlassCard style={styles.card}>
@@ -108,7 +125,7 @@ export function MetricCard({
       </View>
       <Text style={styles.label}>{label}</Text>
       <View style={styles.valueRow}>
-        <Text style={styles.value}>{value}</Text>
+        <Text style={styles.value}>{displayValue}</Text>
         {unit && <Text style={styles.unit}>{unit}</Text>}
       </View>
       {hasOptimalRange && rangeMin !== null && rangeMax !== null && (
@@ -134,25 +151,26 @@ export function MetricCard({
                 },
               ]}
             />
-            <View
-              style={[
-                styles.rangeMarker,
-                {
-                  left: `${markerPct}%`,
-                  borderColor: accentColor,
-                  backgroundColor: "#F8FAFC",
-                },
-              ]}
-            />
+            {numericValue !== null && (
+              <View
+                style={[
+                  styles.rangeMarker,
+                  {
+                    left: `${markerPct}%`,
+                    borderColor: accentColor,
+                    backgroundColor: "#F8FAFC",
+                  },
+                ]}
+              />
+            )}
           </View>
         </View>
       )}
-      {change !== null && change !== undefined && changeColor && changeIcon && (
+      {hasRenderableChange && changeColor && changeIcon && (
         <View style={styles.changeRow}>
           <Ionicons name={changeIcon} size={11} color={changeColor} />
           <Text style={[styles.changeText, { color: changeColor }]}>
-            {change >= 0 ? "+" : ""}
-            {change.toFixed(1)}%
+            {changeLabel}
           </Text>
         </View>
       )}

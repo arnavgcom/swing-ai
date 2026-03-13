@@ -65,12 +65,54 @@ const configRegistry: Record<string, SportCategoryConfig> = {
   "tabletennis-chop": tabletennisChopConfig,
 };
 
+function normalizeScoresWithoutConsistency(config: SportCategoryConfig): SportCategoryConfig {
+  const filteredScores = (config.scores || []).filter(
+    (score) => String(score.key || "").toLowerCase() !== "consistency",
+  );
+
+  if (!filteredScores.length) {
+    return { ...config, scores: [] };
+  }
+
+  const totalWeight = filteredScores.reduce((sum, score) => sum + Number(score.weight || 0), 0);
+  if (totalWeight <= 0) {
+    const equal = Number((1 / filteredScores.length).toFixed(2));
+    return {
+      ...config,
+      scores: filteredScores.map((score, idx) => ({
+        ...score,
+        weight: idx === filteredScores.length - 1
+          ? Number((1 - equal * (filteredScores.length - 1)).toFixed(2))
+          : equal,
+      })),
+    };
+  }
+
+  let used = 0;
+  const normalized = filteredScores.map((score, idx) => {
+    if (idx === filteredScores.length - 1) {
+      return {
+        ...score,
+        weight: Number((1 - used).toFixed(2)),
+      };
+    }
+    const weight = Number((Number(score.weight || 0) / totalWeight).toFixed(2));
+    used += weight;
+    return { ...score, weight };
+  });
+
+  return { ...config, scores: normalized };
+}
+
 export function getSportConfig(configKey: string): SportCategoryConfig | undefined {
-  return configRegistry[configKey];
+  const config = configRegistry[configKey];
+  return config ? normalizeScoresWithoutConsistency(config) : undefined;
 }
 
 export function getAllConfigs(): Record<string, SportCategoryConfig> {
-  return { ...configRegistry };
+  return Object.fromEntries(
+    Object.entries(configRegistry).map(([key, config]) => [key, normalizeScoresWithoutConsistency(config)]),
+  );
 }
 
 const movementAliases: Record<string, string> = {

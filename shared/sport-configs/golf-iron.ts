@@ -40,7 +40,7 @@ export const golfIronConfig: SportCategoryConfig = {
       icon: "body",
       category: "biomechanics",
       color: "#6C5CE7",
-      description: "Shoulder rotation at top of backswing",
+      description: "Torso rotation at top of backswing",
       optimalRange: [70, 95],
     },
     {

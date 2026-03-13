@@ -71,35 +71,43 @@ function RootNavigator() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen
         name="profile"
-        options={{ headerShown: false, animation: "slide_from_right" }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="analysis/[id]"
-        options={{ headerShown: false, animation: "slide_from_right" }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="analysis/[id]/trends"
-        options={{ headerShown: false, animation: "slide_from_right" }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="analysis/[id]/diagnostics"
-        options={{ headerShown: false, animation: "slide_from_right" }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="analysis/[id]/manual-annotation"
-        options={{ headerShown: false, animation: "slide_from_right" }}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="analysis/[id]/improved"
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="model-config"
-        options={{ headerShown: false, animation: "slide_from_right" }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="model-version/[id]"
-        options={{ headerShown: false, animation: "slide_from_right" }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="profile/add-player"
-        options={{ headerShown: false, animation: "slide_from_right" }}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="profile/score-metrics-selection"
+        options={{ headerShown: false }}
       />
     </Stack>
   );

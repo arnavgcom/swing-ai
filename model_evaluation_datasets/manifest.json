@@ -1,4 +1,6 @@
 {
+  "activeModelVersion": "0.1",
+  "versionHistory": [],
   "datasets": [
     {
       "name": "0.1",
@@ -7,11 +9,6 @@
     {
       "name": "manual-annotations",
       "videos": [
-        {
-          "videoId": "72383f9f-6860-47a4-9674-73462c31d846",
-          "filename": "model_evaluation_datasets/dataset/D0C41657-3AC0-4CA1-B698-BF3AEAB4B86A.mp4",
-          "movementType": "forehand"
-        }
       ]
     }
   ]

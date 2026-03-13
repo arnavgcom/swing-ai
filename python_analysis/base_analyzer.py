@@ -394,8 +394,15 @@ class BaseAnalyzer(ABC):
 
     def _build_standard_sub_scores(self, raw_sub_scores: Dict) -> Dict:
         # Preserve original keys for backwards-compatible coaching copy while
-        # exposing the new five-key model consistently across sports.
+        # exposing the standardized four-key model consistently across sports.
         merged: Dict = dict(raw_sub_scores or {})
+
+        # Consistency is no longer part of the standardized tactical model.
+        # Drop it from the merged payload so downstream consumers only receive
+        # power/control/timing/technique as tactical keys.
+        for key in list(merged.keys()):
+            if self._canonical_score_key(key) == "consistency":
+                merged.pop(key, None)
 
         canonical_values: Dict[str, float] = {}
         for key, value in merged.items():
@@ -444,10 +451,6 @@ class BaseAnalyzer(ABC):
                 "deception": 0.5,
                 "finesse": 0.5,
             },
-            "consistency": {
-                "consistency": 1.0,
-                "rhythm": 0.4,
-            },
         }
 
         fallback_defaults = {
@@ -455,7 +458,6 @@ class BaseAnalyzer(ABC):
             "control": 78.0,
             "timing": 78.0,
             "technique": 78.0,
-            "consistency": 78.0,
         }
 
         standard_scores: Dict[str, int] = {}
@@ -479,11 +481,10 @@ class BaseAnalyzer(ABC):
 
     def _compute_standard_overall_score(self, sub_scores: Dict) -> int:
         score = round(
-            float(sub_scores.get("power", 0)) * 0.25
-            + float(sub_scores.get("control", 0)) * 0.20
-            + float(sub_scores.get("timing", 0)) * 0.20
+            float(sub_scores.get("power", 0)) * 0.30
+            + float(sub_scores.get("control", 0)) * 0.25
+            + float(sub_scores.get("timing", 0)) * 0.25
             + float(sub_scores.get("technique", 0)) * 0.20
-            + float(sub_scores.get("consistency", 0)) * 0.15
         )
         return int(np.clip(score, 0, 100))
 

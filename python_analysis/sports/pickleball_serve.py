@@ -22,7 +22,7 @@ class PickleballServeAnalyzer(BaseAnalyzer):
         toss_consistency = self._calc_toss_consistency(pose_data)
 
         ball_speed = self.ball_tracker.estimate_speed(fps, frame_h / 1.8)
-        ball_speed = float(np.clip(ball_speed, 15.0, 55.0)) if ball_speed > 0 else float(np.random.uniform(25, 40))
+        ball_speed = float(np.clip(ball_speed, 15.0, 55.0)) if ball_speed > 0 else float(32.50)
 
         placement = self._calc_placement(wrist_speeds, elbow_angles)
         balance = float(np.clip(float(np.mean(balance_scores)) if balance_scores else 75.0, 50.0, 98.0))

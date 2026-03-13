@@ -40,7 +40,7 @@ export const golfFullSwingConfig: SportCategoryConfig = {
       icon: "body",
       category: "biomechanics",
       color: "#6C5CE7",
-      description: "Full shoulder rotation at top of swing",
+      description: "Full torso rotation at top of swing",
       optimalRange: [75, 100],
     },
     {

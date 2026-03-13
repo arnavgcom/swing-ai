@@ -10,6 +10,10 @@ interface AuthUser {
   address: string | null;
   country: string | null;
   dominantProfile: string | null;
+  selectedScoreSections?: string[];
+  selectedMetricKeys?: string[];
+  selectedScoreSectionsBySport?: Record<string, string[]>;
+  selectedMetricKeysBySport?: Record<string, string[]>;
   sportsInterests: string | null;
   bio: string | null;
   role: string;

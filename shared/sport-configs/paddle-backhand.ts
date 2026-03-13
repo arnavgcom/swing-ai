@@ -40,7 +40,7 @@ export const paddleBackhandConfig: SportCategoryConfig = {
       icon: "refresh-circle",
       category: "biomechanics",
       color: "#6C5CE7",
-      description: "Angular velocity of shoulder rotation during the backhand",
+      description: "Angular velocity of torso rotation during the backhand",
       optimalRange: [350, 750],
     },
     {

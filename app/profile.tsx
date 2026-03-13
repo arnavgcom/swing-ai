@@ -545,7 +545,22 @@ export default function ProfileScreen() {
               ) : null}
             </View>
           )}
+
         </View>
+
+        <Pressable
+          onPress={() => {
+            router.push("/profile/score-metrics-selection");
+          }}
+          style={({ pressed }) => [
+            styles.recalculateButton,
+            { transform: [{ scale: pressed ? 0.97 : 1 }] },
+          ]}
+          testID="score-metrics-selection"
+        >
+          <Ionicons name="options-outline" size={20} color="#6C5CE7" />
+          <Text style={styles.recalculateText}>Score/Metrics Selection</Text>
+        </Pressable>
 
         {/* Only show Recalc button for admins */}
         {showAdminControls && (
@@ -739,7 +754,7 @@ function PickerModal({
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="none"
       onRequestClose={onClose}
     >
       <Pressable style={styles.modalOverlay} onPress={onClose}>

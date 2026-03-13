@@ -10,6 +10,12 @@ import {
   type CoachingInsight,
 } from "@shared/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
+import { persistedScoreToApiHundred } from "./score-scale";
+import { normalizeTacticalScoresToApi100 } from "./tactical-scores";
+
+export type MetricWithCompatSubScores = Metric & {
+  subScores: Record<string, number | null>;
+};
 
 export interface AnalysisMetadataInput {
   capturedAt?: Date | null;
@@ -46,7 +52,7 @@ export interface IStorage {
   ): Promise<Analysis>;
   getAnalysis(id: string): Promise<Analysis | undefined>;
   getAllAnalyses(userId: string | null, sportId?: string): Promise<Analysis[]>;
-  getMetrics(analysisId: string): Promise<Metric | undefined>;
+  getMetrics(analysisId: string): Promise<MetricWithCompatSubScores | undefined>;
   getCoachingInsights(analysisId: string): Promise<CoachingInsight | undefined>;
   deleteAnalysis(id: string): Promise<void>;
 }
@@ -144,12 +150,18 @@ export class DatabaseStorage implements IStorage {
     return rows;
   }
 
-  async getMetrics(analysisId: string): Promise<Metric | undefined> {
+  async getMetrics(analysisId: string): Promise<MetricWithCompatSubScores | undefined> {
     const [metric] = await db
       .select()
       .from(metrics)
       .where(eq(metrics.analysisId, analysisId));
-    return metric;
+    if (!metric) return undefined;
+
+    return {
+      ...metric,
+      overallScore: persistedScoreToApiHundred(metric.overallScore),
+      subScores: normalizeTacticalScoresToApi100(metric.scoreOutputs as Record<string, unknown> | null),
+    };
   }
 
   async getCoachingInsights(
@@ -213,10 +225,16 @@ export class DatabaseStorage implements IStorage {
     );
 
     const subScoreAvgResult = await db.execute(
-      sql`SELECT kv.key, AVG(kv.value::numeric) as avg_val
+      sql`SELECT kv.key,
+                 AVG(
+                   CASE
+                     WHEN kv.value::numeric <= 10 THEN kv.value::numeric * 10
+                     ELSE kv.value::numeric
+                   END
+                 ) as avg_val
           FROM analyses a
           JOIN metrics m ON m.analysis_id = a.id,
-          LATERAL jsonb_each_text(m.sub_scores) AS kv(key, value)
+          LATERAL jsonb_each_text(COALESCE(m.score_outputs -> 'tactical' -> 'components', m.score_outputs -> 'tacticalComponents', '{}'::jsonb)) AS kv(key, value)
           WHERE ${whereClause}
           GROUP BY kv.key`
     );

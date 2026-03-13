@@ -40,7 +40,7 @@ export const tennisForehandConfig: SportCategoryConfig = {
       icon: "refresh-circle",
       category: "biomechanics",
       color: "#6C5CE7",
-      description: "Angular velocity of shoulder rotation, measuring trunk rotation power",
+      description: "Angular velocity of torso rotation, measuring trunk rotation power",
       optimalRange: [500, 900],
     },
     {

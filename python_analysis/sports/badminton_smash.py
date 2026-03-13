@@ -25,7 +25,7 @@ class BadmintonSmashAnalyzer(BaseAnalyzer):
         racket_speed = float(np.clip(racket_speed, 35.0, 60.0))
 
         shuttle_speed = self.ball_tracker.estimate_speed(fps, pixels_per_meter)
-        shuttle_speed = float(np.clip(shuttle_speed, 150.0, 300.0)) if shuttle_speed > 0 else float(np.random.uniform(180, 260))
+        shuttle_speed = float(np.clip(shuttle_speed, 150.0, 300.0)) if shuttle_speed > 0 else float(220.00)
 
         jump_height = self._calc_jump_height(pose_data, frame_h)
 

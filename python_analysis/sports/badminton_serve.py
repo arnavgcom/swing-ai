@@ -22,7 +22,7 @@ class BadmintonServeAnalyzer(BaseAnalyzer):
 
         pixels_per_meter = frame_h / 1.8
         shuttle_speed = self.ball_tracker.estimate_speed(fps, pixels_per_meter)
-        shuttle_speed = float(np.clip(shuttle_speed, 30.0, 100.0)) if shuttle_speed > 0 else float(np.random.uniform(40, 75))
+        shuttle_speed = float(np.clip(shuttle_speed, 30.0, 100.0)) if shuttle_speed > 0 else float(57.50)
 
         placement_score = self._calc_placement_score(wrist_speeds, elbow_angles)
         shot_consistency = self._calc_shot_consistency(elbow_angles, wrist_speeds)

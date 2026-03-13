@@ -26,7 +26,7 @@ class TableTennisServeAnalyzer(BaseAnalyzer):
         bat_angle = float(np.clip(bat_angle, 20.0, 65.0))
 
         ball_speed = self.ball_tracker.estimate_speed(fps, pixels_per_meter)
-        ball_speed = float(np.clip(ball_speed, 15.0, 40.0)) if ball_speed > 0 else float(np.random.uniform(20, 32))
+        ball_speed = float(np.clip(ball_speed, 15.0, 40.0)) if ball_speed > 0 else float(26.00)
 
         toss_height = self._calc_toss_height(valid_poses, frame_h)
         toss_height = float(np.clip(toss_height, 16.0, 30.0))

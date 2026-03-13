@@ -30,7 +30,7 @@ export const paddleSmashConfig: SportCategoryConfig = {
       icon: "refresh-circle",
       category: "biomechanics",
       color: "#6C5CE7",
-      description: "Angular velocity of shoulder rotation during the smash",
+      description: "Angular velocity of torso rotation during the smash",
       optimalRange: [500, 900],
     },
     {
