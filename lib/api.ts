@@ -293,6 +293,15 @@ export interface AnalysisDiagnosticsResponse {
     count: number;
     reasons: string[];
   };
+  movementTypeCounts: Record<string, number>;
+  aiConfidencePct: number;
+  detectedMovement: string;
+  classificationRationale: string;
+  validation: {
+    valid: boolean;
+    confidence: number;
+    reason: string;
+  };
 }
 
 export interface ShotSkeletonResponse {
@@ -324,19 +333,6 @@ export interface FrameSkeletonResponse {
       z: number;
       visibility: number;
     }>;
-  };
-}
-    count: number;
-    reasons: string[];
-  };
-  movementTypeCounts: Record<string, number>;
-  aiConfidencePct: number;
-  detectedMovement: string;
-  classificationRationale: string;
-  validation: {
-    valid: boolean;
-    confidence: number;
-    reason: string;
   };
 }
 
