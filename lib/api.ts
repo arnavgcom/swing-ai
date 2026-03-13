@@ -272,7 +272,56 @@ export interface AnalysisDiagnosticsResponse {
       contactHeightRatio?: number;
     };
   }>;
+  skeletonData?: {
+    video_id: string;
+    shots: Array<{
+      shot_id: number;
+      frames: Array<{
+        frame_number: number;
+        timestamp: number;
+        landmarks: Array<{
+          id: number;
+          x: number;
+          y: number;
+          z: number;
+          visibility: number;
+        }>;
+      }>;
+    }>;
+  };
   excludedShots: {
+
+export interface ShotSkeletonResponse {
+  video_id: string;
+  shot_id: number;
+  frames: Array<{
+    frame_number: number;
+    timestamp: number;
+    landmarks: Array<{
+      id: number;
+      x: number;
+      y: number;
+      z: number;
+      visibility: number;
+    }>;
+  }>;
+}
+
+export interface FrameSkeletonResponse {
+  video_id: string;
+  shot_id: number;
+  frame: {
+    frame_number: number;
+    timestamp: number;
+    landmarks: Array<{
+      id: number;
+      x: number;
+      y: number;
+      z: number;
+      visibility: number;
+    }>;
+  };
+}
     count: number;
     reasons: string[];
   };
@@ -555,6 +604,53 @@ export async function fetchAnalysisDiagnostics(
     credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to fetch diagnostics");
+  return res.json();
+}
+
+export async function fetchShotSkeleton(
+  id: string,
+  shotId: number,
+  options?: { startFrame?: number; endFrame?: number },
+): Promise<ShotSkeletonResponse> {
+  const baseUrl = getApiUrl();
+  const params = new URLSearchParams();
+  if (Number.isFinite(options?.startFrame)) params.set("startFrame", String(options?.startFrame));
+  if (Number.isFinite(options?.endFrame)) params.set("endFrame", String(options?.endFrame));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`${baseUrl}api/analyses/${id}/skeleton/shot/${shotId}${suffix}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch shot skeleton");
+  return res.json();
+}
+
+export async function fetchSkeletonPlayback(
+  id: string,
+  shotId: number,
+  options?: { startFrame?: number; endFrame?: number },
+): Promise<ShotSkeletonResponse> {
+  const baseUrl = getApiUrl();
+  const params = new URLSearchParams();
+  if (Number.isFinite(options?.startFrame)) params.set("startFrame", String(options?.startFrame));
+  if (Number.isFinite(options?.endFrame)) params.set("endFrame", String(options?.endFrame));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`${baseUrl}api/analyses/${id}/skeleton/shot/${shotId}/playback${suffix}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch skeleton playback data");
+  return res.json();
+}
+
+export async function fetchFrameSkeleton(
+  id: string,
+  shotId: number,
+  frameNumber: number,
+): Promise<FrameSkeletonResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/analyses/${id}/skeleton/shot/${shotId}/frame/${frameNumber}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch frame skeleton");
   return res.json();
 }
 

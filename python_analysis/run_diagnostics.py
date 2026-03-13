@@ -7,6 +7,7 @@ from collections import Counter
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+from python_analysis.skeleton_store import build_skeleton_dataset
 
 
 def _has_strong_backhand_evidence(reasons: List[str]) -> bool:
@@ -854,12 +855,14 @@ def main():
         detector = PoseDetector()
         cap2 = cv2.VideoCapture(args.video_path)
         pose_data: List[Optional[Dict]] = []
+        full_pose_landmarks_per_frame: List[List[Dict[str, Any]]] = []
         while True:
             ret, frame = cap2.read()
             if not ret:
                 break
-            landmarks = detector.detect(frame)
+            landmarks, full_landmarks = detector.detect_with_skeleton(frame)
             pose_data.append(landmarks)
+            full_pose_landmarks_per_frame.append(full_landmarks)
         cap2.release()
         detector.close()
 
@@ -1150,6 +1153,12 @@ def main():
             "shotsDetected": int(shot_count),
             "shotsConsideredForScoring": shots_considered_for_scoring,
             "shotSegments": shot_segments,
+            "skeletonData": build_skeleton_dataset(
+                video_id=os.path.basename(args.video_path),
+                shot_segments=shot_segments,
+                frame_landmarks=full_pose_landmarks_per_frame,
+                fps=float(fps),
+            ),
             "excludedShots": {
                 "count": int(len([s for s in shot_segments if not s.get("includedForScoring")])),
                 "reasons": excluded_shot_reasons,
