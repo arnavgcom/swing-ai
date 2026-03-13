@@ -290,6 +290,10 @@ export interface AnalysisDiagnosticsResponse {
     }>;
   };
   excludedShots: {
+    count: number;
+    reasons: string[];
+  };
+}
 
 export interface ShotSkeletonResponse {
   video_id: string;
