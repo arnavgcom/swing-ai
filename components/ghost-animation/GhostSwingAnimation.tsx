@@ -7,13 +7,24 @@ import { ds } from "@/constants/design-system";
 import { SkeletonRenderer } from "./SkeletonRenderer";
 import { SwingPathRenderer } from "./SwingPathRenderer";
 import { PlaybackControls } from "./PlaybackControls";
-import { CorrectionVisualizer } from "./CorrectionVisualizer";
+import { JointHeatmapRenderer } from "./JointHeatmapRenderer";
+import { CorrectionArrowRenderer } from "./CorrectionArrowRenderer";
 import type { CorrectionResult, SkeletonFrame } from "@/lib/ghost-correction";
 import { generateCorrectedFrames } from "@/lib/ghost-correction";
+import {
+  calculateDeviationScores,
+  buildJointDeviationMap,
+  type PlayerMetrics,
+  type OptimalRanges,
+  type JointDeviationMap,
+} from "@/lib/joint-heatmap";
 
 interface GhostSwingAnimationProps {
   playerFrames: SkeletonFrame[];
   correction: CorrectionResult;
+  corrections?: CorrectionResult[];
+  playerMetrics?: PlayerMetrics;
+  optimalRanges?: OptimalRanges;
 }
 
 const CANVAS_WIDTH = 340;
@@ -23,18 +34,53 @@ const TARGET_FPS = 60;
 export function GhostSwingAnimation({
   playerFrames,
   correction,
+  corrections,
+  playerMetrics,
+  optimalRanges,
 }: GhostSwingAnimationProps) {
   const [currentFrame, setCurrentFrame] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(0.5);
   const [showPaths, setShowPaths] = useState(true);
+  const [showCorrectionArrow, setShowCorrectionArrow] = useState(true);
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [viewMode, setViewMode] = useState<"fit" | "zoom">("fit");
+  const [selectedCorrectionIndex, setSelectedCorrectionIndex] = useState(0);
   const animationRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
 
+  const correctionChips = useMemo(() => {
+    if (Array.isArray(corrections) && corrections.length > 0) {
+      return corrections;
+    }
+    return [correction];
+  }, [corrections, correction]);
+
+  const activeCorrection = correctionChips[selectedCorrectionIndex] || correction;
+
+  useEffect(() => {
+    if (!correctionChips.length) {
+      setSelectedCorrectionIndex(0);
+      return;
+    }
+    const preferredIndex = correctionChips.findIndex(
+      (item) => item.metricKey === correction.metricKey,
+    );
+    setSelectedCorrectionIndex(preferredIndex >= 0 ? preferredIndex : 0);
+  }, [correction.metricKey, correctionChips]);
+
   const correctedFrames = useMemo(
-    () => generateCorrectedFrames(playerFrames, correction),
-    [playerFrames, correction],
+    () => generateCorrectedFrames(playerFrames, activeCorrection),
+    [playerFrames, activeCorrection],
   );
+
+  const jointDeviationMap = useMemo<JointDeviationMap>(() => {
+    if (!playerMetrics || !optimalRanges) return new Map();
+    const scores = calculateDeviationScores(playerMetrics, optimalRanges);
+    return buildJointDeviationMap(scores);
+  }, [playerMetrics, optimalRanges]);
+
+  const heatmapAvailable = jointDeviationMap.size > 0;
 
   const totalFrames = playerFrames.length;
   const frameDuration = (1000 / TARGET_FPS) / speed;
@@ -92,25 +138,58 @@ export function GhostSwingAnimation({
   const correctedLandmarks = correctedFrames[currentFrame]?.landmarks || [];
 
   const correctionLabel = useMemo(() => {
-    if (correction.correctionType === "rotation") return "Rotate";
-    if (correction.correctionType === "angle") return "Adjust angle";
-    if (correction.correctionType === "position") return "Reposition";
+    if (activeCorrection.correctionType === "rotation") return "Rotate";
+    if (activeCorrection.correctionType === "angle") return "Adjust angle";
+    if (activeCorrection.correctionType === "position") return "Reposition";
     return "Adjust";
-  }, [correction.correctionType]);
+  }, [activeCorrection.correctionType]);
 
-  const labelJoint = useMemo(() => {
-    if (!correction.jointIndices.length || !correctedLandmarks.length) return null;
-    const targetId = correction.jointIndices[0];
-    const lm = correctedLandmarks.find((l) => l.id === targetId);
-    if (!lm) return null;
-    return { x: lm.x * CANVAS_WIDTH, y: lm.y * CANVAS_HEIGHT };
-  }, [correction.jointIndices, correctedLandmarks]);
+  const canvasScale = viewMode === "zoom" ? 1.35 : 1;
 
   return (
     <GlassCard style={styles.card}>
+      <View style={styles.correctionChipRow}>
+        {correctionChips.map((item, index) => {
+          const isActive = index === selectedCorrectionIndex;
+          return (
+            <Pressable
+              key={`${item.metricKey}-${index}`}
+              style={[styles.correctionChip, isActive && styles.correctionChipActive]}
+              onPress={() => {
+                setSelectedCorrectionIndex(index);
+                setCurrentFrame(0);
+                setIsPlaying(false);
+              }}
+              hitSlop={6}
+            >
+              <Text
+                style={[styles.correctionChipText, isActive && styles.correctionChipTextActive]}
+                numberOfLines={1}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       <View style={styles.titleRow}>
-        <Ionicons name="body" size={18} color="#60A5FA" />
-        <Text style={styles.title}>Swing Correction</Text>
+        <View style={styles.viewModeGroup}>
+          <Pressable
+            style={[styles.pathToggle, viewMode === "fit" && styles.pathToggleActive]}
+            onPress={() => setViewMode("fit")}
+            hitSlop={8}
+          >
+            <Text style={[styles.pathToggleText, viewMode === "fit" && styles.pathToggleTextActive]}>Fit</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.pathToggle, viewMode === "zoom" && styles.pathToggleActive]}
+            onPress={() => setViewMode("zoom")}
+            hitSlop={8}
+          >
+            <Text style={[styles.pathToggleText, viewMode === "zoom" && styles.pathToggleTextActive]}>Zoom</Text>
+          </Pressable>
+        </View>
         <Pressable
           style={[styles.pathToggle, showPaths && styles.pathToggleActive]}
           onPress={() => setShowPaths((v) => !v)}
@@ -119,54 +198,86 @@ export function GhostSwingAnimation({
           <Ionicons name="analytics" size={14} color={showPaths ? "#fff" : ds.color.textTertiary} />
           <Text style={[styles.pathToggleText, showPaths && styles.pathToggleTextActive]}>Path</Text>
         </Pressable>
+        <Pressable
+          style={[styles.pathToggle, showCorrectionArrow && styles.arrowToggleActive]}
+          onPress={() => setShowCorrectionArrow((v) => !v)}
+          hitSlop={8}
+        >
+          <Ionicons
+            name="arrow-forward"
+            size={14}
+            color={showCorrectionArrow ? "#fff" : ds.color.textTertiary}
+          />
+          <Text style={[styles.pathToggleText, showCorrectionArrow && styles.pathToggleTextActive]}>Arrow</Text>
+        </Pressable>
+        {heatmapAvailable && (
+          <Pressable
+            style={[styles.pathToggle, showHeatmap && styles.heatmapToggleActive]}
+            onPress={() => setShowHeatmap((v) => !v)}
+            hitSlop={8}
+          >
+            <Ionicons name="body" size={14} color={showHeatmap ? "#fff" : ds.color.textTertiary} />
+            <Text style={[styles.pathToggleText, showHeatmap && styles.heatmapToggleTextActive]}>Heat</Text>
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.canvasContainer}>
-        <Svg width={CANVAS_WIDTH} height={CANVAS_HEIGHT} style={styles.canvas}>
-          {showPaths && (
-            <SwingPathRenderer
-              playerFrames={playerFrames}
-              correctedFrames={correctedFrames}
-              currentFrame={currentFrame}
+        <View style={[styles.canvasScaleWrap, { transform: [{ scale: canvasScale }] }]}>
+          <Svg width={CANVAS_WIDTH} height={CANVAS_HEIGHT} style={styles.canvas}>
+            {showPaths && (
+              <SwingPathRenderer
+                playerFrames={playerFrames}
+                correctedFrames={correctedFrames}
+                currentFrame={currentFrame}
+                width={CANVAS_WIDTH}
+                height={CANVAS_HEIGHT}
+              />
+            )}
+
+            <SkeletonRenderer
+              landmarks={correctedLandmarks}
+              color="#34D399"
+              opacity={0.55}
               width={CANVAS_WIDTH}
               height={CANVAS_HEIGHT}
             />
-          )}
 
-          <SkeletonRenderer
-            landmarks={correctedLandmarks}
-            color="#34D399"
-            opacity={0.55}
-            width={CANVAS_WIDTH}
-            height={CANVAS_HEIGHT}
-          />
+            <SkeletonRenderer
+              landmarks={playerLandmarks}
+              color="#60A5FA"
+              highlightJoints={activeCorrection.jointIndices}
+              highlightColor="#F87171"
+              opacity={0.9}
+              width={CANVAS_WIDTH}
+              height={CANVAS_HEIGHT}
+            />
 
-          <SkeletonRenderer
-            landmarks={playerLandmarks}
-            color="#60A5FA"
-            highlightJoints={correction.jointIndices}
-            highlightColor="#F87171"
-            opacity={0.9}
-            width={CANVAS_WIDTH}
-            height={CANVAS_HEIGHT}
-          />
-        </Svg>
+            {showCorrectionArrow && (
+              <CorrectionArrowRenderer
+                correction={activeCorrection}
+                landmarks={playerLandmarks}
+                width={CANVAS_WIDTH}
+                height={CANVAS_HEIGHT}
+              />
+            )}
 
-        {labelJoint && (
-          <View
-            style={[
-              styles.floatingLabel,
-              {
-                left: Math.min(Math.max(labelJoint.x - 60, 4), CANVAS_WIDTH - 130),
-                top: Math.max(labelJoint.y - 32, 4),
-              },
-            ]}
-          >
-            <Text style={styles.floatingLabelText}>
-              {correctionLabel}: {correction.label}
-            </Text>
-          </View>
-        )}
+            {showHeatmap && (
+              <JointHeatmapRenderer
+                landmarks={playerLandmarks}
+                jointDeviationMap={jointDeviationMap}
+                width={CANVAS_WIDTH}
+                height={CANVAS_HEIGHT}
+              />
+            )}
+          </Svg>
+        </View>
+
+        <View style={styles.floatingLabelBottom}>
+          <Text style={styles.floatingLabelText}>
+            {correctionLabel}: {activeCorrection.label}
+          </Text>
+        </View>
       </View>
 
       {showPaths && (
@@ -178,6 +289,29 @@ export function GhostSwingAnimation({
           <View style={styles.pathLegendItem}>
             <View style={[styles.pathLegendDot, { backgroundColor: "#34D399" }]} />
             <Text style={styles.pathLegendLabel}>Optimal Path</Text>
+          </View>
+          {showCorrectionArrow && (
+            <View style={styles.pathLegendItem}>
+              <View style={[styles.pathLegendDot, { backgroundColor: "#F59E0B" }]} />
+              <Text style={styles.pathLegendLabel}>Correction Arrow</Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {showHeatmap && (
+        <View style={styles.pathLegend}>
+          <View style={styles.pathLegendItem}>
+            <View style={[styles.pathLegendDot, { backgroundColor: "#34D399" }]} />
+            <Text style={styles.pathLegendLabel}>Good</Text>
+          </View>
+          <View style={styles.pathLegendItem}>
+            <View style={[styles.pathLegendDot, { backgroundColor: "#FBBF24" }]} />
+            <Text style={styles.pathLegendLabel}>Small deviation</Text>
+          </View>
+          <View style={styles.pathLegendItem}>
+            <View style={[styles.pathLegendDot, { backgroundColor: "#F87171" }]} />
+            <Text style={styles.pathLegendLabel}>Large deviation</Text>
           </View>
         </View>
       )}
@@ -191,8 +325,6 @@ export function GhostSwingAnimation({
         onSeek={handleSeek}
         onSpeedChange={handleSpeedChange}
       />
-
-      <CorrectionVisualizer correction={correction} />
     </GlassCard>
   );
 }
@@ -203,34 +335,75 @@ const styles = StyleSheet.create({
     marginVertical: 12,
     overflow: "hidden",
   },
+  correctionChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 2,
+  },
+  correctionChip: {
+    borderRadius: ds.radius.pill,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.24)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    maxWidth: "100%",
+  },
+  correctionChipActive: {
+    borderColor: "rgba(248,113,113,0.55)",
+    backgroundColor: "rgba(248,113,113,0.2)",
+  },
+  correctionChipText: {
+    color: ds.color.textSecondary,
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  correctionChipTextActive: {
+    color: "#FECACA",
+    fontFamily: "Inter_600SemiBold",
+  },
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 8,
     paddingBottom: 8,
+    flexWrap: "wrap",
   },
-  title: {
-    flex: 1,
-    color: ds.color.textPrimary,
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+  viewModeGroup: {
+    flexDirection: "row",
+    gap: 6,
+    marginRight: "auto",
   },
   pathToggle: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
     borderRadius: ds.radius.pill,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(255,255,255,0.22)",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   pathToggleActive: {
     backgroundColor: "rgba(248,113,113,0.2)",
     borderColor: "rgba(248,113,113,0.4)",
+  },
+  arrowToggleActive: {
+    backgroundColor: "rgba(245,158,11,0.2)",
+    borderColor: "rgba(245,158,11,0.4)",
+  },
+  heatmapToggleActive: {
+    backgroundColor: "rgba(251,191,36,0.2)",
+    borderColor: "rgba(251,191,36,0.4)",
+  },
+  heatmapToggleTextActive: {
+    color: "#FBBF24",
   },
   pathToggleText: {
     color: ds.color.textTertiary,
@@ -243,24 +416,36 @@ const styles = StyleSheet.create({
   canvasContainer: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.3)",
+    backgroundColor: "rgba(8, 18, 34, 0.72)",
     marginHorizontal: 12,
-    borderRadius: ds.radius.md,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
     overflow: "hidden",
     position: "relative",
   },
   canvas: {
     backgroundColor: "transparent",
   },
-  floatingLabel: {
+  canvasScaleWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  floatingLabelBottom: {
     position: "absolute",
-    backgroundColor: "rgba(248,113,113,0.9)",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    left: 10,
+    right: 10,
+    bottom: 8,
+    backgroundColor: "rgba(15, 23, 42, 0.82)",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(248,113,113,0.45)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: "center",
   },
   floatingLabelText: {
-    color: "#fff",
+    color: "#F8FAFC",
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
   },

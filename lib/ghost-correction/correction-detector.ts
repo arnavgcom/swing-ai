@@ -93,52 +93,67 @@ function getRecommendation(metricKey: string, direction: "increase" | "decrease"
     : `Decrease ${metricKey} to stay within the optimal range`;
 }
 
+function buildCorrectionFromDefinition(
+  value: number,
+  def: MetricDefinition,
+): CorrectionResult | null {
+  if (!def.optimalRange || !Number.isFinite(value)) return null;
+
+  const [lo, hi] = def.optimalRange;
+  const rangeSpan = Math.max(hi - lo, 1e-6);
+  let deviation = 0;
+  let direction: "increase" | "decrease" = "increase";
+
+  if (value < lo) {
+    deviation = (lo - value) / rangeSpan;
+    direction = "increase";
+  } else if (value > hi) {
+    deviation = (value - hi) / rangeSpan;
+    direction = "decrease";
+  }
+
+  if (deviation <= 0) return null;
+
+  const jointMapping = METRIC_JOINT_MAP[def.key];
+  if (!jointMapping) return null;
+
+  return {
+    metricKey: def.key,
+    label: def.label,
+    unit: def.unit,
+    playerValue: value,
+    optimalRange: def.optimalRange,
+    deviation,
+    direction,
+    recommendation: getRecommendation(def.key, direction),
+    jointIndices: jointMapping.joints,
+    correctionType: jointMapping.type,
+  };
+}
+
+export function detectAllCorrections(
+  metricValues: Record<string, number>,
+  metricDefinitions: MetricDefinition[],
+): CorrectionResult[] {
+  const corrections: CorrectionResult[] = [];
+
+  for (const def of metricDefinitions) {
+    const value = metricValues[def.key];
+    if (value == null || !Number.isFinite(value)) continue;
+
+    const correction = buildCorrectionFromDefinition(value, def);
+    if (correction) {
+      corrections.push(correction);
+    }
+  }
+
+  return corrections.sort((left, right) => right.deviation - left.deviation);
+}
+
 export function detectPriorityCorrection(
   metricValues: Record<string, number>,
   metricDefinitions: MetricDefinition[],
 ): CorrectionResult | null {
-  let bestCorrection: CorrectionResult | null = null;
-  let maxDeviation = 0;
-
-  for (const def of metricDefinitions) {
-    if (!def.optimalRange) continue;
-    const value = metricValues[def.key];
-    if (value == null || !Number.isFinite(value)) continue;
-
-    const [lo, hi] = def.optimalRange;
-    const rangeSpan = Math.max(hi - lo, 1e-6);
-    let deviation = 0;
-    let direction: "increase" | "decrease" = "increase";
-
-    if (value < lo) {
-      deviation = (lo - value) / rangeSpan;
-      direction = "increase";
-    } else if (value > hi) {
-      deviation = (value - hi) / rangeSpan;
-      direction = "decrease";
-    }
-
-    if (deviation <= 0) continue;
-
-    const jointMapping = METRIC_JOINT_MAP[def.key];
-    if (!jointMapping) continue;
-
-    if (deviation > maxDeviation) {
-      maxDeviation = deviation;
-      bestCorrection = {
-        metricKey: def.key,
-        label: def.label,
-        unit: def.unit,
-        playerValue: value,
-        optimalRange: def.optimalRange,
-        deviation,
-        direction,
-        recommendation: getRecommendation(def.key, direction),
-        jointIndices: jointMapping.joints,
-        correctionType: jointMapping.type,
-      };
-    }
-  }
-
-  return bestCorrection;
+  const all = detectAllCorrections(metricValues, metricDefinitions);
+  return all.length > 0 ? all[0] : null;
 }

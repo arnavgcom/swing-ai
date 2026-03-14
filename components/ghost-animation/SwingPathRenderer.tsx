@@ -10,13 +10,13 @@ interface PathConfig {
 }
 
 const TRACKED_JOINTS: PathConfig[] = [
-  { jointIds: [16], strokeWidth: 2.5, opacity: 0.9 },
-  { jointIds: [14], strokeWidth: 1.5, opacity: 0.5 },
-  { jointIds: [23, 24], aggregate: true, strokeWidth: 1.5, opacity: 0.4 },
+  { jointIds: [16], strokeWidth: 2.8, opacity: 0.95 },
+  { jointIds: [14], strokeWidth: 1.8, opacity: 0.65 },
+  { jointIds: [23, 24], aggregate: true, strokeWidth: 1.8, opacity: 0.55 },
 ];
 
 const PLAYER_COLOR = "#F87171";
-const OPTIMAL_COLOR = "#34D399";
+const OPTIMAL_COLOR = "#22C55E";
 
 function extractPoint(
   landmarks: Landmark[],
@@ -93,17 +93,6 @@ export function SwingPathRenderer({
 
         return (
           <G key={i}>
-            {optimalPts.length > 0 && (
-              <Polyline
-                points={optimalPts}
-                fill="none"
-                stroke={OPTIMAL_COLOR}
-                strokeWidth={config.strokeWidth}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                opacity={config.opacity * 0.7}
-              />
-            )}
             {playerPts.length > 0 && (
               <Polyline
                 points={playerPts}
@@ -113,6 +102,17 @@ export function SwingPathRenderer({
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 opacity={config.opacity}
+              />
+            )}
+            {optimalPts.length > 0 && (
+              <Polyline
+                points={optimalPts}
+                fill="none"
+                stroke={OPTIMAL_COLOR}
+                strokeWidth={config.strokeWidth + 0.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity={Math.min(config.opacity + 0.2, 1)}
               />
             )}
           </G>

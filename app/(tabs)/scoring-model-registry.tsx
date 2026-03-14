@@ -12,6 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { TabHeader } from "@/components/TabHeader";
 import { fetchScoringModelRegistry } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { resolveUserTimeZone } from "@/lib/timezone";
 import { ds } from "@/constants/design-system";
 import { GlassCard } from "@/components/ui/GlassCard";
 
@@ -22,7 +23,7 @@ type VersionTrendPoint = {
   sampleCount: number;
 };
 
-function formatDateTime(value: string): string {
+function formatDateTime(value: string, timeZone?: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown date";
   return date.toLocaleString(undefined, {
@@ -31,11 +32,13 @@ function formatDateTime(value: string): string {
     day: "2-digit",
     hour: "numeric",
     minute: "2-digit",
+    timeZone,
   });
 }
 
 export default function ScoringModelRegistryScreen() {
   const { user } = useAuth();
+  const profileTimeZone = resolveUserTimeZone(user);
   const isAdmin = user?.role === "admin";
 
   const {
@@ -149,7 +152,7 @@ export default function ScoringModelRegistryScreen() {
             <GlassCard key={entry.id} style={styles.card}>
               <View style={styles.rowBetween}>
                 <Text style={styles.versionText}>Model {entry.modelVersion}</Text>
-                <Text style={styles.dateText}>{formatDateTime(entry.createdAt)}</Text>
+                <Text style={styles.dateText}>{formatDateTime(entry.createdAt, profileTimeZone)}</Text>
               </View>
               <Text style={styles.metaText}>Movement: {entry.movementType}</Text>
               <Text style={styles.metaText}>

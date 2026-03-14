@@ -13,6 +13,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { fetchScoringModelRegistryEntry } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { resolveUserTimeZone } from "@/lib/timezone";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ds } from "@/constants/design-system";
 
@@ -24,7 +26,7 @@ function formatLabel(label: string): string {
     .join(" ");
 }
 
-function formatDateTime(value: string): string {
+function formatDateTime(value: string, timeZone?: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown date";
   return date.toLocaleString(undefined, {
@@ -33,6 +35,7 @@ function formatDateTime(value: string): string {
     day: "2-digit",
     hour: "numeric",
     minute: "2-digit",
+    timeZone,
   });
 }
 
@@ -58,6 +61,8 @@ function getDeltaPalette(delta: number): { color: string; icon: "arrow-up" | "ar
 
 export default function ModelVersionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
+  const profileTimeZone = resolveUserTimeZone(user);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["scoring-model-registry-entry", id],
@@ -123,7 +128,7 @@ export default function ModelVersionScreen() {
                 </View>
               );
             })()}
-            <Text style={styles.summaryLine}>{formatDateTime(data.createdAt)}</Text>
+            <Text style={styles.summaryLine}>{formatDateTime(data.createdAt, profileTimeZone)}</Text>
             {String(data.movementType || "").trim().toLowerCase() !== "all" ? (
               <Text style={styles.summaryLine}>Movement: {formatLabel(data.movementType)}</Text>
             ) : null}
@@ -148,7 +153,7 @@ export default function ModelVersionScreen() {
                     <Text style={styles.videoMeta} numberOfLines={1}>
                       {`${String(item.sportName || "Sport")} • ${formatLabel(item.movementName)}`}
                     </Text>
-                    <Text style={styles.videoMeta}>{formatDateTime(item.createdAt)}</Text>
+                    <Text style={styles.videoMeta}>{formatDateTime(item.createdAt, profileTimeZone)}</Text>
                     <Text style={styles.videoMeta}>{`${item.mismatches}/${item.manualShots} shots mismatched`}</Text>
                   </View>
                   <View style={styles.discrepancyRight}>

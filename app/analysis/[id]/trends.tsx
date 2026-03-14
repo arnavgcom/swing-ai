@@ -21,6 +21,7 @@ import {
   type SportCategoryConfig,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { resolveUserTimeZone } from "@/lib/timezone";
 import { normalizeMetricSelectionKey } from "@/lib/metrics-catalog";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ds } from "@/constants/design-system";
@@ -112,10 +113,10 @@ function normalizeMetricDisplayScale(key: string, value: number): number {
   return value > 10 ? value / 10 : value;
 }
 
-function formatDateLabel(value: string): string {
+function formatDateLabel(value: string, timeZone?: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone });
 }
 
 function computePercentDelta(current: number | null, previous: number | null): number | null {
@@ -304,6 +305,7 @@ export default function AnalysisMetricTrendsScreen() {
   const [metricOffsets, setMetricOffsets] = useState<Record<string, number>>({});
   const [sectionOffsets, setSectionOffsets] = useState<Record<string, number>>({});
   const { user } = useAuth();
+  const profileTimeZone = resolveUserTimeZone(user);
 
   const { data: analysisDetail } = useQuery({
     queryKey: ["analysis", id],
@@ -415,7 +417,7 @@ export default function AnalysisMetricTrendsScreen() {
           const value = Number(point.overallScore);
           if (!Number.isFinite(value)) return null;
           return {
-            label: formatDateLabel(point.capturedAt),
+            label: formatDateLabel(point.capturedAt, profileTimeZone),
             value: value / 10,
           };
         })
@@ -450,7 +452,7 @@ export default function AnalysisMetricTrendsScreen() {
           const value = Number(raw);
           if (!Number.isFinite(value)) return null;
           return {
-            label: formatDateLabel(point.capturedAt),
+            label: formatDateLabel(point.capturedAt, profileTimeZone),
             value,
           };
         })
@@ -493,7 +495,7 @@ export default function AnalysisMetricTrendsScreen() {
               const value100 = Number(raw);
               if (!Number.isFinite(value100)) return null;
               return {
-                label: formatDateLabel(point.capturedAt),
+                label: formatDateLabel(point.capturedAt, profileTimeZone),
                 value: value100 / 10,
               };
             }
@@ -503,7 +505,7 @@ export default function AnalysisMetricTrendsScreen() {
             if (!Number.isFinite(value)) return null;
 
             return {
-              label: formatDateLabel(point.capturedAt),
+              label: formatDateLabel(point.capturedAt, profileTimeZone),
               value: value > 10 ? value / 10 : value,
             };
           })
@@ -720,7 +722,7 @@ export default function AnalysisMetricTrendsScreen() {
                       : normalizedValue;
                   if (!Number.isFinite(value)) return null;
                   return {
-                    label: formatDateLabel(point.capturedAt),
+                    label: formatDateLabel(point.capturedAt, profileTimeZone),
                     value,
                   };
                 })

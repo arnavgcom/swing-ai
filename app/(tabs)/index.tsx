@@ -35,6 +35,7 @@ import {
 import type { AnalysisSummary } from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
+import { resolveUserTimeZone } from "@/lib/timezone";
 import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
 import { ds } from "@/constants/design-system";
@@ -77,7 +78,7 @@ function toWeekdayInitial(day: string): string {
   return initials[date.getUTCDay()] || "-";
 }
 
-function formatDateTime(value: string): string {
+function formatDateTime(value: string, timeZone?: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown date";
   return date.toLocaleString(undefined, {
@@ -86,6 +87,7 @@ function formatDateTime(value: string): string {
     day: "2-digit",
     hour: "numeric",
     minute: "2-digit",
+    timeZone,
   });
 }
 
@@ -592,6 +594,7 @@ function ModelRegistryTrendLineChart({
 
 export default function DashboardScreen() {
   const { user } = useAuth();
+  const profileTimeZone = resolveUserTimeZone(user);
   const { selectedSport, selectedMovement } = useSport();
   const isAdmin = user?.role === "admin";
   const greetingFirstName = getGreetingFirstName(user?.name);
@@ -1189,7 +1192,7 @@ export default function DashboardScreen() {
                               {`${String(item.sportName || "Sport")} • ${formatLabel(item.movementName)}`}
                             </Text>
                             <Text style={styles.discrepancyMetaSecondary}>
-                              {formatDateTime(item.createdAt)}
+                              {formatDateTime(item.createdAt, profileTimeZone)}
                             </Text>
                             <Text style={styles.discrepancyMetaSecondary}>
                               {`${item.mismatches}/${item.manualShots} shots mismatched`}
@@ -1281,7 +1284,7 @@ export default function DashboardScreen() {
                         );
                       })()}
                     </View>
-                    <Text style={styles.registryEntryDateText}>{formatDateTime(entry.createdAt)}</Text>
+                    <Text style={styles.registryEntryDateText}>{formatDateTime(entry.createdAt, profileTimeZone)}</Text>
                     {String(entry.movementType || "").trim().toLowerCase() !== "all" ? (
                       <Text style={styles.registryEntryMetaText}>Movement: {entry.movementType}</Text>
                     ) : null}

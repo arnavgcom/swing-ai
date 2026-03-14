@@ -28,28 +28,46 @@ function RootNavigator() {
   const isLoading = authLoading || sportLoading;
 
   useEffect(() => {
-    if (!isLoading) {
-      const timer = setTimeout(() => setNavigationReady(true), 100);
-      return () => clearTimeout(timer);
+    if (isLoading) {
+      setNavigationReady(false);
+      return;
     }
-  }, [isLoading]);
-
-  useEffect(() => {
-    if (!navigationReady) return;
 
     const inAuthGroup = segments[0] === "login";
     const inSportSelect = segments[0] === "sport-select";
 
-    if (!user && !inAuthGroup) {
-      router.replace("/login");
-    } else if (user && !selectedSport && !inSportSelect) {
-      router.replace("/sport-select");
-    } else if (user && selectedSport && inAuthGroup) {
-      router.replace("/(tabs)");
-    }
-  }, [user, selectedSport, segments, navigationReady]);
+    if (!user) {
+      if (!inAuthGroup) {
+        setNavigationReady(false);
+        router.replace("/login");
+        return;
+      }
 
-  if (isLoading) {
+      setNavigationReady(true);
+      return;
+    }
+
+    if (!selectedSport) {
+      if (!inSportSelect) {
+        setNavigationReady(false);
+        router.replace("/sport-select");
+        return;
+      }
+
+      setNavigationReady(true);
+      return;
+    }
+
+    if (inAuthGroup || inSportSelect) {
+      setNavigationReady(false);
+      router.replace("/(tabs)");
+      return;
+    }
+
+    setNavigationReady(true);
+  }, [isLoading, user, selectedSport, segments, router]);
+
+  if (isLoading || !navigationReady) {
     return (
       <View
         style={{
@@ -65,7 +83,7 @@ function RootNavigator() {
   }
 
   return (
-    <Stack screenOptions={{ headerBackTitle: "Back" }}>
+    <Stack initialRouteName="login" screenOptions={{ headerBackTitle: "Back" }}>
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="sport-select" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

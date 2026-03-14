@@ -24,6 +24,7 @@ import { fetchAnalysesSummary, deleteAnalysis } from "@/lib/api";
 import type { AnalysisSummary } from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
+import { resolveUserTimeZone } from "@/lib/timezone";
 import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
 
@@ -345,6 +346,7 @@ function SummaryCard({
   highlightColor,
   onPress,
   onDelete,
+  timeZone,
 }: {
   item: AnalysisSummary;
   deltas?: {
@@ -357,6 +359,7 @@ function SummaryCard({
   highlightColor: string;
   onPress: () => void;
   onDelete: () => void;
+  timeZone?: string;
 }) {
   const date = new Date(getVideoDate(item));
   const timeStr = date.toLocaleDateString("en-US", {
@@ -365,6 +368,7 @@ function SummaryCard({
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone,
   });
 
   const score = getSessionOverallScore10(item);
@@ -677,6 +681,7 @@ const summaryStyles = StyleSheet.create({
 export default function HistoryScreen() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const profileTimeZone = resolveUserTimeZone(user);
   const isAdmin = user?.role === "admin";
   const { selectedSport, selectedMovement } = useSport();
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("all");
@@ -905,6 +910,7 @@ export default function HistoryScreen() {
       isAdmin={isAdmin}
       isHighlighted={item.id === lastWorkedAnalysisId}
       highlightColor={historyHighlightColor}
+      timeZone={profileTimeZone}
       onPress={() =>
         router.push({
           pathname: "/analysis/[id]",

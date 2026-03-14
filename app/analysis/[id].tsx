@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -12,6 +12,8 @@ import {
   Modal,
   Dimensions,
   Alert,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -33,6 +35,7 @@ import {
   fetchAnalysisMetricTrends,
   fetchSportConfig,
   fetchFeedback,
+  fetchSkeletonPlayback,
   saveAnalysisShotAnnotation,
   submitFeedback,
   fetchGhostCorrection,
@@ -42,9 +45,10 @@ import { getApiUrl } from "@/lib/query-client";
 import { ScoreGauge } from "@/components/ScoreGauge";
 import { MetricCard } from "@/components/MetricCard";
 import { CoachingCard } from "@/components/CoachingCard";
-import { GhostSwingAnimation } from "@/components/ghost-animation/GhostSwingAnimation";
-import { detectPriorityCorrection } from "@/lib/ghost-correction";
+import { SwingAnimationTabs } from "@/components/ghost-animation/SwingAnimationTabs";
+import { detectAllCorrections, detectPriorityCorrection } from "@/lib/ghost-correction";
 import { useAuth } from "@/lib/auth-context";
+import { resolveUserTimeZone } from "@/lib/timezone";
 import {
   buildMetricOptionsWithCatalog,
   normalizeMetricSelectionKey,
@@ -52,6 +56,8 @@ import {
 
 const MPH_TO_KMPH = 1.60934;
 const TECHNICAL_COMPACT_COUNT = 2;
+type PerformanceSectionKey = "technical" | "tactical" | "movement";
+const PERFORMANCE_SECTION_ORDER: PerformanceSectionKey[] = ["technical", "tactical", "movement"];
 
 function isMphUnit(unit?: string): boolean {
   return String(unit || "").trim().toLowerCase() === "mph";
@@ -507,6 +513,9 @@ export default function AnalysisDetailScreen() {
   const [showAllTechnical, setShowAllTechnical] = useState(false);
   const [showAllTactical, setShowAllTactical] = useState(false);
   const [showAllMovement, setShowAllMovement] = useState(false);
+  const scrollRef = useRef<ScrollView | null>(null);
+  const [sectionOffsets, setSectionOffsets] = useState<Partial<Record<PerformanceSectionKey, number>>>({});
+  const [activePerformanceSection, setActivePerformanceSection] = useState<PerformanceSectionKey>("technical");
 
   useEffect(() => {
     if (!id) return;
@@ -575,27 +584,146 @@ export default function AnalysisDetailScreen() {
     return scoring ? scoring.index : diagnostics.shotSegments[0].index;
   }, [diagnostics?.shotSegments]);
 
+  const scoringShotIds = useMemo(() => {
+    const fromDiagnostics = (diagnostics?.shotSegments || [])
+      .filter((segment: any) => segment.includedForScoring)
+      .map((segment: any) => Number(segment.index))
+      .filter((index: number) => Number.isInteger(index) && index > 0);
+
+    if (fromDiagnostics.length > 0) {
+      return Array.from(new Set(fromDiagnostics));
+    }
+
+    return primaryShotId != null ? [primaryShotId] : [];
+  }, [diagnostics?.shotSegments, primaryShotId]);
+
   const { data: ghostData } = useQuery({
     queryKey: ["analysis", id, "ghost-correction", primaryShotId],
     queryFn: () => fetchGhostCorrection(id!, primaryShotId!),
     enabled: !!id && primaryShotId != null && data?.analysis?.status === "completed",
   });
 
-  const ghostCorrection = useMemo(() => {
-    if (!ghostData?.correction || !ghostData.frames?.length) return null;
-    if (!sportConfig?.metrics) return null;
+  const { data: scoringShotSkeletons } = useQuery({
+    queryKey: ["analysis", id, "skeleton-playback-scoring-shots", scoringShotIds.join(",")],
+    queryFn: () => Promise.all(scoringShotIds.map((shotId) => fetchSkeletonPlayback(id!, shotId))),
+    enabled: !!id && data?.analysis?.status === "completed" && scoringShotIds.length > 0,
+    staleTime: 60 * 1000,
+  });
 
-    const correction = detectPriorityCorrection(
-      ghostData.metricValues || {},
-      sportConfig.metrics,
+  const ghostCorrection = useMemo(() => {
+    if (!ghostData || !sportConfig?.metrics) return null;
+
+    const metricValues = ghostData.metricValues || {};
+    const fallback = detectPriorityCorrection(metricValues, sportConfig.metrics);
+
+    if (!ghostData.correction) {
+      return fallback;
+    }
+
+    const serverMetricKey = String(ghostData.correction.metricKey || "").trim();
+    if (!serverMetricKey) {
+      return fallback;
+    }
+
+    const metricDef = sportConfig.metrics.find((metric) => metric.key === serverMetricKey);
+    if (!metricDef?.optimalRange) {
+      return fallback;
+    }
+
+    const serverPlayerValue = Number(ghostData.correction.playerValue);
+    if (!Number.isFinite(serverPlayerValue)) {
+      return fallback;
+    }
+
+    const synthesized = detectPriorityCorrection(
+      { [metricDef.key]: serverPlayerValue },
+      [metricDef],
     );
-    return correction;
+
+    if (!synthesized) {
+      return fallback;
+    }
+
+    return {
+      ...synthesized,
+      label: String(ghostData.correction.label || synthesized.label),
+      unit: String(ghostData.correction.unit || synthesized.unit || ""),
+      playerValue: serverPlayerValue,
+      optimalRange: [
+        Number(ghostData.correction.optimalRange?.[0] ?? synthesized.optimalRange[0]),
+        Number(ghostData.correction.optimalRange?.[1] ?? synthesized.optimalRange[1]),
+      ] as [number, number],
+      deviation: Number.isFinite(Number(ghostData.correction.deviation))
+        ? Number(ghostData.correction.deviation)
+        : synthesized.deviation,
+      direction:
+        ghostData.correction.direction === "increase" || ghostData.correction.direction === "decrease"
+          ? ghostData.correction.direction
+          : synthesized.direction,
+    };
+  }, [ghostData, sportConfig?.metrics]);
+
+  const ghostCorrections = useMemo(() => {
+    if (!ghostData || !sportConfig?.metrics) return [];
+
+    const all = detectAllCorrections(ghostData.metricValues || {}, sportConfig.metrics);
+    if (!ghostData.correction || all.length <= 1) {
+      return all;
+    }
+
+    const serverMetricKey = String(ghostData.correction.metricKey || "").trim();
+    if (!serverMetricKey) {
+      return all;
+    }
+
+    const serverPlayerValue = Number(ghostData.correction.playerValue);
+    const serverCorrectionIndex = all.findIndex((item) => item.metricKey === serverMetricKey);
+    if (serverCorrectionIndex < 0) {
+      return all;
+    }
+
+    const normalizedRange = [
+      Number(ghostData.correction.optimalRange?.[0] ?? all[serverCorrectionIndex].optimalRange[0]),
+      Number(ghostData.correction.optimalRange?.[1] ?? all[serverCorrectionIndex].optimalRange[1]),
+    ] as [number, number];
+
+    const patchedServer = {
+      ...all[serverCorrectionIndex],
+      label: String(ghostData.correction.label || all[serverCorrectionIndex].label),
+      unit: String(ghostData.correction.unit || all[serverCorrectionIndex].unit),
+      playerValue: Number.isFinite(serverPlayerValue)
+        ? serverPlayerValue
+        : all[serverCorrectionIndex].playerValue,
+      optimalRange: normalizedRange,
+      deviation: Number.isFinite(Number(ghostData.correction.deviation))
+        ? Number(ghostData.correction.deviation)
+        : all[serverCorrectionIndex].deviation,
+      direction:
+        ghostData.correction.direction === "increase" || ghostData.correction.direction === "decrease"
+          ? ghostData.correction.direction
+          : all[serverCorrectionIndex].direction,
+    };
+
+    return [
+      patchedServer,
+      ...all.filter((_, index) => index !== serverCorrectionIndex),
+    ];
   }, [ghostData, sportConfig?.metrics]);
 
   const ghostPlayerFrames = useMemo(() => {
+    const mergedScoringFrames = (scoringShotSkeletons || [])
+      .flatMap((shot) => (Array.isArray(shot?.frames) ? shot.frames : []))
+      .filter((frame) => Number.isFinite(Number(frame?.frame_number)));
+
+    if (mergedScoringFrames.length > 0) {
+      return [...mergedScoringFrames].sort(
+        (left, right) => Number(left.frame_number) - Number(right.frame_number),
+      );
+    }
+
     if (!ghostData?.frames?.length) return [];
     return ghostData.frames;
-  }, [ghostData?.frames]);
+  }, [scoringShotSkeletons, ghostData?.frames]);
 
   const feedbackMutation = useMutation({
     mutationFn: (vars: { rating: "up" | "down"; comment?: string }) =>
@@ -1372,6 +1500,76 @@ export default function AnalysisDetailScreen() {
     }
   }, [displayVideoName]);
 
+  const isProcessing =
+    analysis?.status === "pending" || analysis?.status === "processing";
+
+  const isTennisAnalysis =
+    String(sportConfig?.sportName || "").trim().toLowerCase() === "tennis"
+    || String(configKey || "").trim().toLowerCase().startsWith("tennis-");
+
+  const isImprovedPending =
+    analysis?.status === "completed"
+    && !!m
+    && isTennisAnalysis
+    && !improvedReport
+    && improvedLoading;
+
+  const performanceSectionAvailability = useMemo(
+    () => ({
+      technical: technicalBiomecItems.length > 0 || isImprovedPending,
+      tactical: Boolean(sportConfig && tacticalItems.length > 0),
+      movement: movementItems.length > 0 || isImprovedPending,
+    }),
+    [isImprovedPending, movementItems.length, sportConfig, tacticalItems.length, technicalBiomecItems.length],
+  );
+
+  const registerSectionOffset = useCallback((section: PerformanceSectionKey, y: number) => {
+    setSectionOffsets((prev) => {
+      if (prev[section] === y) return prev;
+      return { ...prev, [section]: y };
+    });
+  }, []);
+
+  const scrollToPerformanceSection = useCallback((section: PerformanceSectionKey) => {
+    const targetOffset = sectionOffsets[section];
+    if (typeof targetOffset !== "number") return;
+
+    setActivePerformanceSection(section);
+    scrollRef.current?.scrollTo({
+      y: Math.max(0, targetOffset - 88),
+      animated: true,
+    });
+  }, [sectionOffsets]);
+
+  const handlePerformanceScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = event.nativeEvent.contentOffset.y + 96;
+    const availableSections = PERFORMANCE_SECTION_ORDER.filter(
+      (section) => performanceSectionAvailability[section] && typeof sectionOffsets[section] === "number",
+    );
+
+    if (!availableSections.length) return;
+
+    let focusedSection = availableSections[0];
+    for (const section of availableSections) {
+      const offset = sectionOffsets[section];
+      if (typeof offset === "number" && y >= offset - 4) {
+        focusedSection = section;
+      }
+    }
+
+    if (focusedSection !== activePerformanceSection) {
+      setActivePerformanceSection(focusedSection);
+    }
+  }, [activePerformanceSection, performanceSectionAvailability, sectionOffsets]);
+
+  useEffect(() => {
+    const firstAvailable = PERFORMANCE_SECTION_ORDER.find((section) => performanceSectionAvailability[section]);
+    if (!firstAvailable) return;
+    if (!performanceSectionAvailability[activePerformanceSection]) {
+      setActivePerformanceSection(firstAvailable);
+    }
+  }, [activePerformanceSection, performanceSectionAvailability]);
+
   if (isLoading) {
     return (
       <View style={[styles.container, styles.center]}>
@@ -1405,20 +1603,6 @@ export default function AnalysisDetailScreen() {
     );
   }
 
-  const isProcessing =
-    analysis.status === "pending" || analysis.status === "processing";
-
-  const isTennisAnalysis =
-    String(sportConfig?.sportName || "").trim().toLowerCase() === "tennis"
-    || String(configKey || "").trim().toLowerCase().startsWith("tennis-");
-
-  const isImprovedPending =
-    analysis.status === "completed"
-    && !!m
-    && isTennisAnalysis
-    && !improvedReport
-    && improvedLoading;
-
   const movementLabel =
     analysis.detectedMovement || sportConfig?.movementName || "Movement";
 
@@ -1428,8 +1612,7 @@ export default function AnalysisDetailScreen() {
 
   const selectedMovement = data?.selectedMovementName;
   const detectedMovement = analysis.detectedMovement;
-  const profileTimeZone =
-    (user as any)?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const profileTimeZone = resolveUserTimeZone(user);
   const filenamePlayerName = derivePlayerNameFromVideoName(displayVideoName);
   const headerPlayerNameResolved =
     String(analysis.userName || "").trim()
@@ -1504,7 +1687,7 @@ export default function AnalysisDetailScreen() {
                 "Extracting video frames",
                 "Detecting body pose",
                 "Tracking ball trajectory",
-                "Computing technical (BIOMEC)",
+                "Computing technical (Biomec)",
                 "Generating insights",
               ].map((step, i) => (
                 <View key={i} style={styles.stepRow}>
@@ -1574,11 +1757,15 @@ export default function AnalysisDetailScreen() {
         </View>
       ) : m ? (
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={[
             styles.scrollContent,
             { paddingBottom: insets.bottom + 34 },
           ]}
           showsVerticalScrollIndicator={false}
+          stickyHeaderIndices={[2]}
+          onScroll={handlePerformanceScroll}
+          scrollEventThrottle={16}
         >
           <View style={styles.topMetaRow}>
             <View style={styles.aiEntryColumn}>
@@ -1690,6 +1877,43 @@ export default function AnalysisDetailScreen() {
             )}
           </Pressable>
 
+          <View style={styles.performanceJumpStickyWrap}>
+            <View style={styles.performanceJumpRow}>
+              {PERFORMANCE_SECTION_ORDER.map((section) => {
+                const isActive = section === activePerformanceSection;
+                const isEnabled = performanceSectionAvailability[section];
+                const label = section.charAt(0).toUpperCase() + section.slice(1);
+
+                return (
+                  <Pressable
+                    key={section}
+                    disabled={!isEnabled}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      scrollToPerformanceSection(section);
+                    }}
+                    style={({ pressed }) => [
+                      styles.performanceJumpPill,
+                      isActive && styles.performanceJumpPillActive,
+                      !isEnabled && styles.performanceJumpPillDisabled,
+                      { opacity: pressed && isEnabled ? 0.82 : 1 },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.performanceJumpText,
+                        isActive && styles.performanceJumpTextActive,
+                        !isEnabled && styles.performanceJumpTextDisabled,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
           {wasOverridden && (
             <View style={styles.overrideBanner}>
               <Ionicons name="information-circle" size={18} color="#60A5FA" />
@@ -1705,9 +1929,12 @@ export default function AnalysisDetailScreen() {
           )}
 
           {technicalBiomecItems.length > 0 || isImprovedPending ? (
-            <View style={styles.technicalSectionWrap}>
+            <View
+              style={styles.technicalSectionWrap}
+              onLayout={(event) => registerSectionOffset("technical", event.nativeEvent.layout.y)}
+            >
               <View style={styles.sectionScoreHeader}>
-                <Text style={styles.sectionTitle}>Technical (BIOMEC)</Text>
+                <Text style={styles.sectionTitle}>Technical (Biomec)</Text>
                 {currentTechnicalScore10 != null ? (
                   <View style={[styles.sectionScoreBadge, styles.sectionScoreBadgeTechnical]}>
                     {sectionDeltaPct.technical != null ? (
@@ -1760,7 +1987,10 @@ export default function AnalysisDetailScreen() {
           ) : null}
 
           {sportConfig && tacticalItems.length > 0 && (
-            <View style={styles.technicalSectionWrap}>
+            <View
+              style={styles.technicalSectionWrap}
+              onLayout={(event) => registerSectionOffset("tactical", event.nativeEvent.layout.y)}
+            >
               <View style={styles.sectionScoreHeader}>
                 <Text style={styles.sectionTitle}>Tactical</Text>
                 {currentTacticalScore10 != null ? (
@@ -1808,7 +2038,10 @@ export default function AnalysisDetailScreen() {
           )}
 
           {(movementItems.length || 0) > 0 || isImprovedPending ? (
-            <View style={styles.technicalSectionWrap}>
+            <View
+              style={styles.technicalSectionWrap}
+              onLayout={(event) => registerSectionOffset("movement", event.nativeEvent.layout.y)}
+            >
               <View style={styles.sectionScoreHeader}>
                 <Text style={styles.sectionTitle}>Movement</Text>
                 {currentMovementScore10 != null ? (
@@ -1995,9 +2228,11 @@ export default function AnalysisDetailScreen() {
           ) : null}
 
           {ghostCorrection && ghostPlayerFrames.length > 0 && (
-            <GhostSwingAnimation
+            <SwingAnimationTabs
               playerFrames={ghostPlayerFrames}
               correction={ghostCorrection}
+              corrections={ghostCorrections}
+              accentColor={sportThemeColor}
             />
           )}
 
@@ -2639,6 +2874,47 @@ const styles = StyleSheet.create({
   },
   technicalSectionWrap: {
     gap: 8,
+  },
+  performanceJumpStickyWrap: {
+    marginTop: 6,
+    marginBottom: 4,
+    marginHorizontal: -4,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+    backgroundColor: "#0F0F2EDB",
+  },
+  performanceJumpRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  performanceJumpPill: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#334155AA",
+    backgroundColor: "#101828",
+  },
+  performanceJumpPillActive: {
+    borderColor: "#60A5FA",
+    backgroundColor: "#1E3A8A66",
+  },
+  performanceJumpPillDisabled: {
+    borderColor: "#1F293780",
+    backgroundColor: "#0B122080",
+  },
+  performanceJumpText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#CBD5E1",
+  },
+  performanceJumpTextActive: {
+    color: "#E0F2FE",
+  },
+  performanceJumpTextDisabled: {
+    color: "#64748B",
   },
   sectionCompactTechnical: {
     borderRadius: 12,

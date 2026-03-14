@@ -17,6 +17,8 @@ import {
   fetchAnalysisDiagnostics,
   fetchAnalysisVideoMetadata,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { resolveUserTimeZone } from "@/lib/timezone";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ds } from "@/constants/design-system";
 
@@ -32,11 +34,11 @@ function formatBytes(bytes: number | null | undefined): string {
   return `${value.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
 }
 
-function formatDate(value?: string | null): string {
+function formatDate(value?: string | null, timeZone?: string): string {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString();
+  return date.toLocaleString(undefined, { timeZone });
 }
 
 function toTitle(value: string): string {
@@ -51,6 +53,8 @@ function toTitle(value: string): string {
 
 export default function AnalysisDiagnosticsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
+  const profileTimeZone = resolveUserTimeZone(user);
   const [videoTechnicalExpanded, setVideoTechnicalExpanded] = React.useState(false);
 
   const { data: detail } = useQuery({
@@ -157,8 +161,8 @@ export default function AnalysisDiagnosticsScreen() {
             </Pressable>
             {videoTechnicalExpanded ? (
               <>
-                <Text style={styles.rowText}>Captured: {formatDate(detail?.analysis?.capturedAt)}</Text>
-                <Text style={styles.rowText}>Created: {formatDate(detail?.analysis?.createdAt)}</Text>
+                <Text style={styles.rowText}>Captured: {formatDate(detail?.analysis?.capturedAt, profileTimeZone)}</Text>
+                <Text style={styles.rowText}>Created: {formatDate(detail?.analysis?.createdAt, profileTimeZone)}</Text>
                 <Text style={styles.rowText}>Duration: {diagnostics.videoDurationSec.toFixed(2)}s</Text>
                 <Text style={styles.rowText}>FPS: {diagnostics.fps.toFixed(2)}</Text>
                 <Text style={styles.rowText}>Resolution: {diagnostics.resolution.width}x{diagnostics.resolution.height}</Text>

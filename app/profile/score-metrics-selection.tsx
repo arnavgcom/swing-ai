@@ -27,14 +27,14 @@ import {
 } from "@/lib/metrics-catalog";
 
 const SCORE_SECTION_OPTIONS = [
-  "Technical (BIOMEC)",
+  "Technical (Biomechanics)",
   "Tactical",
   "Movement",
 ];
 
 const LEGACY_SECTION_LABEL_MAP: Record<string, string> = {
   "performance breakdown": "Tactical",
-  biomechanics: "Technical (BIOMEC)",
+  biomechanics: "Technical (Biomechanics)",
 };
 
 const mapLegacySectionLabel = (value: string): string => {

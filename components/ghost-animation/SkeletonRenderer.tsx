@@ -24,8 +24,8 @@ const CONNECTIONS: [number, number][] = [
   [0, 11], [0, 12],
 ];
 
-const JOINT_RADIUS = 4;
-const HIGHLIGHT_RADIUS = 7;
+const JOINT_RADIUS = 2.5;
+const HIGHLIGHT_RADIUS = 4.5;
 const LINE_WIDTH = 2.5;
 
 export function SkeletonRenderer({
