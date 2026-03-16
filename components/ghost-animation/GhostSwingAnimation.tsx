@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import Svg from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -30,6 +30,56 @@ interface GhostSwingAnimationProps {
 const CANVAS_WIDTH = 340;
 const CANVAS_HEIGHT = 400;
 const TARGET_FPS = 60;
+const TRAIL_STEPS = 8;
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function interpolateLandmarks(
+  current: SkeletonFrame["landmarks"],
+  next: SkeletonFrame["landmarks"] | undefined,
+  t: number,
+): SkeletonFrame["landmarks"] {
+  if (!next || !current.length) return current;
+  const alpha = clamp01(t);
+  if (alpha <= 0) return current;
+
+  const nextById = new Map<number, SkeletonFrame["landmarks"][number]>();
+  for (const landmark of next) {
+    nextById.set(landmark.id, landmark);
+  }
+
+  return current.map((landmark) => {
+    const target = nextById.get(landmark.id);
+    if (!target) return landmark;
+    return {
+      ...landmark,
+      x: landmark.x + (target.x - landmark.x) * alpha,
+      y: landmark.y + (target.y - landmark.y) * alpha,
+      z: landmark.z + (target.z - landmark.z) * alpha,
+      visibility: landmark.visibility + (target.visibility - landmark.visibility) * alpha,
+    };
+  });
+}
+
+function formatMetricValue(value: number, unit: string): string {
+  const rounded = Math.round(value * 10) / 10;
+  return unit ? `${rounded} ${unit}` : `${rounded}`;
+}
+
+function formatRangeValue(range: [number, number], unit: string): string {
+  const lo = Math.round(range[0] * 10) / 10;
+  const hi = Math.round(range[1] * 10) / 10;
+  return unit ? `${lo}-${hi} ${unit}` : `${lo}-${hi}`;
+}
+
+function correctionTypeIcon(type: CorrectionResult["correctionType"]): keyof typeof Ionicons.glyphMap {
+  if (type === "rotation") return "refresh-circle";
+  if (type === "angle") return "git-compare";
+  if (type === "speed") return "speedometer";
+  return "move";
+}
 
 export function GhostSwingAnimation({
   playerFrames,
@@ -46,6 +96,10 @@ export function GhostSwingAnimation({
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [viewMode, setViewMode] = useState<"fit" | "zoom">("fit");
   const [selectedCorrectionIndex, setSelectedCorrectionIndex] = useState(0);
+  const [frameBlend, setFrameBlend] = useState(0);
+  const [showTrail, setShowTrail] = useState(true);
+  const [splitMode, setSplitMode] = useState(false);
+  const [isWalkthrough, setIsWalkthrough] = useState(false);
   const animationRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
 
@@ -92,6 +146,7 @@ export function GhostSwingAnimation({
 
       if (elapsed >= frameDuration) {
         lastTimeRef.current = timestamp;
+        setFrameBlend(0);
         setCurrentFrame((prev) => {
           if (prev >= totalFrames - 1) {
             setIsPlaying(false);
@@ -99,6 +154,8 @@ export function GhostSwingAnimation({
           }
           return prev + 1;
         });
+      } else {
+        setFrameBlend(elapsed / frameDuration);
       }
 
       animationRef.current = requestAnimationFrame(animate);
@@ -116,6 +173,39 @@ export function GhostSwingAnimation({
     };
   }, [isPlaying, animate]);
 
+  // Auto walkthrough: advance to next chip when an animation loop ends
+  useEffect(() => {
+    if (!isWalkthrough || isPlaying) return;
+    if (currentFrame < totalFrames - 1) return;
+
+    const nextIndex = selectedCorrectionIndex + 1;
+    if (nextIndex < correctionChips.length) {
+      const timer = setTimeout(() => {
+        setSelectedCorrectionIndex(nextIndex);
+        setCurrentFrame(0);
+        setFrameBlend(0);
+        setIsPlaying(true);
+      }, 700);
+      return () => clearTimeout(timer);
+    }
+    // finished all chips
+    setIsWalkthrough(false);
+  }, [isWalkthrough, isPlaying, currentFrame, totalFrames, selectedCorrectionIndex, correctionChips.length]);
+
+  const handleStartWalkthrough = useCallback(() => {
+    setSplitMode(false);
+    setSelectedCorrectionIndex(0);
+    setCurrentFrame(0);
+    setFrameBlend(0);
+    setIsWalkthrough(true);
+    setIsPlaying(true);
+  }, []);
+
+  const handleStopWalkthrough = useCallback(() => {
+    setIsWalkthrough(false);
+    setIsPlaying(false);
+  }, []);
+
   const handleTogglePlay = useCallback(() => {
     if (currentFrame >= totalFrames - 1) {
       setCurrentFrame(0);
@@ -125,7 +215,9 @@ export function GhostSwingAnimation({
 
   const handleSeek = useCallback((frame: number) => {
     setCurrentFrame(Math.max(0, Math.min(frame, totalFrames - 1)));
+    setFrameBlend(0);
     setIsPlaying(false);
+    setIsWalkthrough(false);
   }, [totalFrames]);
 
   const handleSpeedChange = useCallback((s: number) => {
@@ -134,8 +226,46 @@ export function GhostSwingAnimation({
 
   if (totalFrames === 0) return null;
 
-  const playerLandmarks = playerFrames[currentFrame]?.landmarks || [];
-  const correctedLandmarks = correctedFrames[currentFrame]?.landmarks || [];
+  const effectiveBlend = isPlaying ? frameBlend : 0;
+  const playerLandmarks = useMemo(
+    () => interpolateLandmarks(
+      playerFrames[currentFrame]?.landmarks || [],
+      playerFrames[currentFrame + 1]?.landmarks,
+      effectiveBlend,
+    ),
+    [playerFrames, currentFrame, effectiveBlend],
+  );
+  const correctedLandmarks = useMemo(
+    () => interpolateLandmarks(
+      correctedFrames[currentFrame]?.landmarks || [],
+      correctedFrames[currentFrame + 1]?.landmarks,
+      effectiveBlend,
+    ),
+    [correctedFrames, currentFrame, effectiveBlend],
+  );
+  const playerTrailFrames = useMemo(() => {
+    const trail: Array<{ landmarks: SkeletonFrame["landmarks"]; opacity: number }> = [];
+
+    for (let step = TRAIL_STEPS; step >= 1; step -= 1) {
+      const frameIndex = currentFrame - step;
+      if (frameIndex < 0) continue;
+
+      const landmarks = interpolateLandmarks(
+        playerFrames[frameIndex]?.landmarks || [],
+        playerFrames[frameIndex + 1]?.landmarks,
+        effectiveBlend,
+      );
+
+      if (!landmarks.length) continue;
+
+      trail.push({
+        landmarks,
+        opacity: 0.03 + (TRAIL_STEPS - step + 1) * 0.025,
+      });
+    }
+
+    return trail;
+  }, [playerFrames, currentFrame, effectiveBlend]);
 
   const correctionLabel = useMemo(() => {
     if (activeCorrection.correctionType === "rotation") return "Rotate";
@@ -145,10 +275,29 @@ export function GhostSwingAnimation({
   }, [activeCorrection.correctionType]);
 
   const canvasScale = viewMode === "zoom" ? 1.35 : 1;
+  const targetMid = (activeCorrection.optimalRange[0] + activeCorrection.optimalRange[1]) / 2;
+  const metricDelta = Math.round((targetMid - activeCorrection.playerValue) * 10) / 10;
+  const metricDeltaText = `${metricDelta >= 0 ? "+" : ""}${metricDelta}`;
 
   return (
     <GlassCard style={styles.card}>
-      <View style={styles.correctionChipRow}>
+      {isWalkthrough && (
+        <View style={styles.walkthroughBanner}>
+          <Ionicons name="walk" size={14} color="#A78BFA" />
+          <Text style={styles.walkthroughBannerText}>
+            Tour · {selectedCorrectionIndex + 1} / {correctionChips.length}
+          </Text>
+          <Pressable onPress={handleStopWalkthrough} style={styles.walkthroughStop} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color="#FECACA" />
+          </Pressable>
+        </View>
+      )}
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.correctionChipRow}
+      >
         {correctionChips.map((item, index) => {
           const isActive = index === selectedCorrectionIndex;
           return (
@@ -158,10 +307,16 @@ export function GhostSwingAnimation({
               onPress={() => {
                 setSelectedCorrectionIndex(index);
                 setCurrentFrame(0);
+                setFrameBlend(0);
                 setIsPlaying(false);
               }}
               hitSlop={6}
             >
+              <Ionicons
+                name={correctionTypeIcon(item.correctionType)}
+                size={12}
+                color={isActive ? "#FECACA" : "#A7B7D2"}
+              />
               <Text
                 style={[styles.correctionChipText, isActive && styles.correctionChipTextActive]}
                 numberOfLines={1}
@@ -171,6 +326,20 @@ export function GhostSwingAnimation({
             </Pressable>
           );
         })}
+      </ScrollView>
+
+      <View style={styles.insightPanel}>
+        <View style={styles.insightMetricRow}>
+          <Text style={styles.insightMetricValue}>{formatMetricValue(activeCorrection.playerValue, activeCorrection.unit)}</Text>
+          <Text style={styles.insightMetricArrow}>-></Text>
+          <Text style={styles.insightMetricTarget}>{formatRangeValue(activeCorrection.optimalRange, activeCorrection.unit)}</Text>
+          <View style={styles.insightDeltaBadge}>
+            <Text style={styles.insightDeltaText}>{metricDeltaText}</Text>
+          </View>
+        </View>
+        <Text style={styles.insightRecommendation} numberOfLines={2}>
+          {activeCorrection.recommendation}
+        </Text>
       </View>
 
       <View style={styles.titleRow}>
@@ -220,64 +389,180 @@ export function GhostSwingAnimation({
             <Text style={[styles.pathToggleText, showHeatmap && styles.heatmapToggleTextActive]}>Heat</Text>
           </Pressable>
         )}
+        <Pressable
+          style={[styles.pathToggle, showTrail && styles.trailToggleActive]}
+          onPress={() => setShowTrail((v) => !v)}
+          hitSlop={8}
+        >
+          <Ionicons name="footsteps" size={14} color={showTrail ? "#fff" : ds.color.textTertiary} />
+          <Text style={[styles.pathToggleText, showTrail && styles.pathToggleTextActive]}>Trail</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.pathToggle, splitMode && styles.splitToggleActive]}
+          onPress={() => setSplitMode((v) => !v)}
+          hitSlop={8}
+        >
+          <Ionicons name="albums" size={14} color={splitMode ? "#fff" : ds.color.textTertiary} />
+          <Text style={[styles.pathToggleText, splitMode && styles.pathToggleTextActive]}>Split</Text>
+        </Pressable>
+        {correctionChips.length > 1 && (
+          <Pressable
+            style={[styles.pathToggle, isWalkthrough && styles.tourToggleActive]}
+            onPress={isWalkthrough ? handleStopWalkthrough : handleStartWalkthrough}
+            hitSlop={8}
+          >
+            <Ionicons
+              name={isWalkthrough ? "stop-circle" : "play-skip-forward"}
+              size={14}
+              color={isWalkthrough ? "#A78BFA" : ds.color.textTertiary}
+            />
+            <Text style={[styles.pathToggleText, isWalkthrough && styles.tourToggleTextActive]}>Tour</Text>
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.canvasContainer}>
-        <View style={[styles.canvasScaleWrap, { transform: [{ scale: canvasScale }] }]}>
-          <Svg width={CANVAS_WIDTH} height={CANVAS_HEIGHT} style={styles.canvas}>
-            {showPaths && (
-              <SwingPathRenderer
-                playerFrames={playerFrames}
-                correctedFrames={correctedFrames}
-                currentFrame={currentFrame}
+        <View style={styles.canvasGlowOne} />
+        <View style={styles.canvasGlowTwo} />
+        {splitMode ? (
+          <View style={styles.splitRow}>
+            <View style={styles.splitPanel}>
+              <Text style={styles.splitPanelLabel}>Your Swing</Text>
+              <Svg
+                width={CANVAS_WIDTH / 2}
+                height={CANVAS_HEIGHT}
+                viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
+              >
+                {showPaths && (
+                  <SwingPathRenderer
+                    playerFrames={playerFrames}
+                    correctedFrames={correctedFrames}
+                    currentFrame={currentFrame}
+                    width={CANVAS_WIDTH}
+                    height={CANVAS_HEIGHT}
+                  />
+                )}
+                {showTrail && playerTrailFrames.map((trailItem, index) => (
+                  <SkeletonRenderer
+                    key={`trail-s-${index}`}
+                    landmarks={trailItem.landmarks}
+                    color="#60A5FA"
+                    opacity={trailItem.opacity}
+                    width={CANVAS_WIDTH}
+                    height={CANVAS_HEIGHT}
+                  />
+                ))}
+                <SkeletonRenderer
+                  landmarks={playerLandmarks}
+                  color="#60A5FA"
+                  highlightJoints={activeCorrection.jointIndices}
+                  highlightColor="#F87171"
+                  opacity={0.9}
+                  width={CANVAS_WIDTH}
+                  height={CANVAS_HEIGHT}
+                />
+              </Svg>
+            </View>
+            <View style={styles.splitDivider} />
+            <View style={styles.splitPanel}>
+              <Text style={styles.splitPanelLabel}>Corrected</Text>
+              <Svg
+                width={CANVAS_WIDTH / 2}
+                height={CANVAS_HEIGHT}
+                viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
+              >
+                {showPaths && (
+                  <SwingPathRenderer
+                    playerFrames={playerFrames}
+                    correctedFrames={correctedFrames}
+                    currentFrame={currentFrame}
+                    width={CANVAS_WIDTH}
+                    height={CANVAS_HEIGHT}
+                  />
+                )}
+                <SkeletonRenderer
+                  landmarks={correctedLandmarks}
+                  color="#34D399"
+                  opacity={0.9}
+                  width={CANVAS_WIDTH}
+                  height={CANVAS_HEIGHT}
+                />
+                {showCorrectionArrow && (
+                  <CorrectionArrowRenderer
+                    correction={activeCorrection}
+                    landmarks={correctedLandmarks}
+                    width={CANVAS_WIDTH}
+                    height={CANVAS_HEIGHT}
+                  />
+                )}
+              </Svg>
+            </View>
+          </View>
+        ) : (
+          <View style={[styles.canvasScaleWrap, { transform: [{ scale: canvasScale }] }]}>
+            <Svg width={CANVAS_WIDTH} height={CANVAS_HEIGHT} style={styles.canvas}>
+              {showPaths && (
+                <SwingPathRenderer
+                  playerFrames={playerFrames}
+                  correctedFrames={correctedFrames}
+                  currentFrame={currentFrame}
+                  width={CANVAS_WIDTH}
+                  height={CANVAS_HEIGHT}
+                />
+              )}
+              {showTrail && playerTrailFrames.map((trailItem, index) => (
+                <SkeletonRenderer
+                  key={`trail-${index}`}
+                  landmarks={trailItem.landmarks}
+                  color="#60A5FA"
+                  opacity={trailItem.opacity}
+                  width={CANVAS_WIDTH}
+                  height={CANVAS_HEIGHT}
+                />
+              ))}
+              <SkeletonRenderer
+                landmarks={correctedLandmarks}
+                color="#34D399"
+                opacity={0.55}
                 width={CANVAS_WIDTH}
                 height={CANVAS_HEIGHT}
               />
-            )}
-
-            <SkeletonRenderer
-              landmarks={correctedLandmarks}
-              color="#34D399"
-              opacity={0.55}
-              width={CANVAS_WIDTH}
-              height={CANVAS_HEIGHT}
-            />
-
-            <SkeletonRenderer
-              landmarks={playerLandmarks}
-              color="#60A5FA"
-              highlightJoints={activeCorrection.jointIndices}
-              highlightColor="#F87171"
-              opacity={0.9}
-              width={CANVAS_WIDTH}
-              height={CANVAS_HEIGHT}
-            />
-
-            {showCorrectionArrow && (
-              <CorrectionArrowRenderer
-                correction={activeCorrection}
+              <SkeletonRenderer
                 landmarks={playerLandmarks}
+                color="#60A5FA"
+                highlightJoints={activeCorrection.jointIndices}
+                highlightColor="#F87171"
+                opacity={0.9}
                 width={CANVAS_WIDTH}
                 height={CANVAS_HEIGHT}
               />
-            )}
+              {showCorrectionArrow && (
+                <CorrectionArrowRenderer
+                  correction={activeCorrection}
+                  landmarks={playerLandmarks}
+                  width={CANVAS_WIDTH}
+                  height={CANVAS_HEIGHT}
+                />
+              )}
+              {showHeatmap && (
+                <JointHeatmapRenderer
+                  landmarks={playerLandmarks}
+                  jointDeviationMap={jointDeviationMap}
+                  width={CANVAS_WIDTH}
+                  height={CANVAS_HEIGHT}
+                />
+              )}
+            </Svg>
+          </View>
+        )}
 
-            {showHeatmap && (
-              <JointHeatmapRenderer
-                landmarks={playerLandmarks}
-                jointDeviationMap={jointDeviationMap}
-                width={CANVAS_WIDTH}
-                height={CANVAS_HEIGHT}
-              />
-            )}
-          </Svg>
-        </View>
-
-        <View style={styles.floatingLabelBottom}>
-          <Text style={styles.floatingLabelText}>
-            {correctionLabel}: {activeCorrection.label}
-          </Text>
-        </View>
+        {!splitMode && (
+          <View style={styles.floatingLabelBottom}>
+            <Text style={styles.floatingLabelText}>
+              {correctionLabel}: {activeCorrection.label}
+            </Text>
+          </View>
+        )}
       </View>
 
       {showPaths && (
@@ -337,19 +622,22 @@ const styles = StyleSheet.create({
   },
   correctionChipRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 8,
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 2,
+    paddingBottom: 6,
+    paddingRight: 20,
   },
   correctionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     borderRadius: ds.radius.pill,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.24)",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(148,163,184,0.14)",
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     maxWidth: "100%",
   },
   correctionChipActive: {
@@ -364,6 +652,57 @@ const styles = StyleSheet.create({
   correctionChipTextActive: {
     color: "#FECACA",
     fontFamily: "Inter_600SemiBold",
+  },
+  insightPanel: {
+    marginHorizontal: 16,
+    marginBottom: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(125,211,252,0.35)",
+    backgroundColor: "rgba(15,23,42,0.52)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  insightMetricRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  insightMetricValue: {
+    color: "#F8FAFC",
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  insightMetricArrow: {
+    color: "#7DD3FC",
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  insightMetricTarget: {
+    color: "#86EFAC",
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  insightDeltaBadge: {
+    marginLeft: "auto",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(248,113,113,0.45)",
+    backgroundColor: "rgba(248,113,113,0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  insightDeltaText: {
+    color: "#FECACA",
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  insightRecommendation: {
+    color: "#CBD5E1",
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 17,
   },
   titleRow: {
     flexDirection: "row",
@@ -416,13 +755,31 @@ const styles = StyleSheet.create({
   canvasContainer: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(8, 18, 34, 0.72)",
+    backgroundColor: "rgba(6, 15, 30, 0.9)",
     marginHorizontal: 12,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
+    borderColor: "rgba(125,211,252,0.25)",
     overflow: "hidden",
     position: "relative",
+  },
+  canvasGlowOne: {
+    position: "absolute",
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    backgroundColor: "rgba(34,197,94,0.16)",
+    top: -60,
+    right: -20,
+  },
+  canvasGlowTwo: {
+    position: "absolute",
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    backgroundColor: "rgba(96,165,250,0.16)",
+    bottom: -70,
+    left: -30,
   },
   canvas: {
     backgroundColor: "transparent",
@@ -471,5 +828,64 @@ const styles = StyleSheet.create({
     color: ds.color.textSecondary,
     fontSize: 11,
     fontFamily: "Inter_400Regular",
+  },
+  trailToggleActive: {
+    backgroundColor: "rgba(96,165,250,0.2)",
+    borderColor: "rgba(96,165,250,0.4)",
+  },
+  splitToggleActive: {
+    backgroundColor: "rgba(167,139,250,0.2)",
+    borderColor: "rgba(167,139,250,0.4)",
+  },
+  tourToggleActive: {
+    backgroundColor: "rgba(167,139,250,0.22)",
+    borderColor: "rgba(167,139,250,0.5)",
+  },
+  tourToggleTextActive: {
+    color: "#C4B5FD",
+  },
+  walkthroughBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(167,139,250,0.25)",
+    backgroundColor: "rgba(109,40,217,0.15)",
+  },
+  walkthroughBannerText: {
+    flex: 1,
+    color: "#C4B5FD",
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  walkthroughStop: {
+    padding: 4,
+  },
+  splitRow: {
+    flexDirection: "row",
+    width: CANVAS_WIDTH,
+    height: CANVAS_HEIGHT,
+  },
+  splitPanel: {
+    flex: 1,
+    alignItems: "center",
+    position: "relative",
+  },
+  splitPanelLabel: {
+    position: "absolute",
+    top: 8,
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    zIndex: 1,
+  },
+  splitDivider: {
+    width: 1,
+    backgroundColor: "rgba(255,255,255,0.2)",
   },
 });
