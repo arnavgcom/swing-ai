@@ -10,7 +10,7 @@ import express from "express";
 // server/routes.ts
 import { createServer } from "node:http";
 import { execFile as execFile2 } from "child_process";
-import { randomUUID as randomUUID2 } from "crypto";
+import { randomUUID as randomUUID3 } from "crypto";
 import multer2 from "multer";
 import path5 from "path";
 import fs5 from "fs";
@@ -69,7 +69,10 @@ var users = pgTable("users", {
   sportsInterests: text("sports_interests"),
   bio: text("bio"),
   role: text("role").default("player").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id"),
+  updatedByUserId: varchar("updated_by_user_id")
 });
 var sports = pgTable("sports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -78,7 +81,11 @@ var sports = pgTable("sports", {
   color: text("color").notNull(),
   description: text("description").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
-  sortOrder: real("sort_order").default(0).notNull()
+  sortOrder: real("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
 });
 var sportMovements = pgTable("sport_movements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -86,7 +93,11 @@ var sportMovements = pgTable("sport_movements", {
   name: text("name").notNull(),
   description: text("description").notNull(),
   icon: text("icon").notNull(),
-  sortOrder: real("sort_order").default(0).notNull()
+  sortOrder: real("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
 });
 var analyses = pgTable("analyses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -121,7 +132,9 @@ var analyses = pgTable("analyses", {
   gpsTimestamp: timestamp("gps_timestamp", { withTimezone: true }),
   gpsSource: text("gps_source"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
 });
 var metrics = pgTable("metrics", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -133,7 +146,10 @@ var metrics = pgTable("metrics", {
   scoreInputs: jsonb("score_inputs").$type(),
   scoreOutputs: jsonb("score_outputs").$type(),
   aiDiagnostics: jsonb("ai_diagnostics").$type(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
 });
 var coachingInsights = pgTable("coaching_insights", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -142,7 +158,10 @@ var coachingInsights = pgTable("coaching_insights", {
   improvementArea: text("improvement_area").notNull(),
   trainingSuggestion: text("training_suggestion").notNull(),
   simpleExplanation: text("simple_explanation").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
 });
 var analysisFeedback = pgTable("analysis_feedback", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -150,7 +169,10 @@ var analysisFeedback = pgTable("analysis_feedback", {
   userId: varchar("user_id").notNull().references(() => users.id),
   rating: text("rating").notNull(),
   comment: text("comment"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
 });
 var analysisShotAnnotations = pgTable("analysis_shot_annotations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -161,7 +183,9 @@ var analysisShotAnnotations = pgTable("analysis_shot_annotations", {
   usedForScoringShotIndexes: jsonb("used_for_scoring_shot_indexes").$type().notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
 });
 var analysisShotDiscrepancies = pgTable("analysis_shot_discrepancies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -179,12 +203,17 @@ var analysisShotDiscrepancies = pgTable("analysis_shot_discrepancies", {
   countMismatch: real("count_mismatch").notNull(),
   confusionPairs: jsonb("confusion_pairs").$type().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
 });
 var appSettings = pgTable("app_settings", {
   key: varchar("key").primaryKey(),
   value: jsonb("value").notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
 });
 var scoringModelRegistryEntries = pgTable("scoring_model_registry_entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -197,7 +226,9 @@ var scoringModelRegistryEntries = pgTable("scoring_model_registry_entries", {
   manifestModelVersion: varchar("manifest_model_version").notNull().default("0.1"),
   manifestDatasets: jsonb("manifest_datasets").$type().notNull().default(sql`'[]'::jsonb`),
   createdByUserId: varchar("created_by_user_id").references(() => users.id),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
 });
 var scoringModelRegistryDatasetMetrics = pgTable("scoring_model_registry_dataset_metrics", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -205,7 +236,11 @@ var scoringModelRegistryDatasetMetrics = pgTable("scoring_model_registry_dataset
   datasetName: text("dataset_name").notNull(),
   movementType: text("movement_type").notNull(),
   movementDetectionAccuracyPct: real("movement_detection_accuracy_pct").notNull(),
-  scoringAccuracyPct: real("scoring_accuracy_pct").notNull()
+  scoringAccuracyPct: real("scoring_accuracy_pct").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
 });
 var sportCategoryMetricRanges = pgTable("sport_category_metric_ranges", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -220,7 +255,9 @@ var sportCategoryMetricRanges = pgTable("sport_category_metric_ranges", {
   isActive: boolean("is_active").notNull().default(true),
   source: text("source").notNull().default("config"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
 });
 var insertUserSchema = createInsertSchema(users).pick({
   email: true,
@@ -383,9 +420,28 @@ function readTacticalScoreValue(values, key) {
   return null;
 }
 
+// server/audit-metadata.ts
+function buildInsertAuditFields(actorUserId) {
+  const actor = String(actorUserId || "").trim() || null;
+  const now = /* @__PURE__ */ new Date();
+  return {
+    createdAt: now,
+    updatedAt: now,
+    createdByUserId: actor,
+    updatedByUserId: actor
+  };
+}
+function buildUpdateAuditFields(actorUserId) {
+  const actor = String(actorUserId || "").trim() || null;
+  return {
+    updatedAt: /* @__PURE__ */ new Date(),
+    updatedByUserId: actor
+  };
+}
+
 // server/storage.ts
 var DatabaseStorage = class {
-  async createAnalysis(videoFilename, videoPath, userId, sportId, movementId, metadata, sourceFilename, evaluationVideoId) {
+  async createAnalysis(videoFilename, videoPath, userId, sportId, movementId, metadata, sourceFilename, evaluationVideoId, actorUserId) {
     const [analysis] = await db.insert(analyses).values({
       videoFilename,
       sourceFilename: sourceFilename || null,
@@ -413,7 +469,8 @@ var DatabaseStorage = class {
       gpsHeadingDeg: metadata?.gpsHeadingDeg ?? null,
       gpsAccuracyM: metadata?.gpsAccuracyM ?? null,
       gpsTimestamp: metadata?.gpsTimestamp ?? null,
-      gpsSource: metadata?.gpsSource ?? null
+      gpsSource: metadata?.gpsSource ?? null,
+      ...buildInsertAuditFields(actorUserId)
     }).returning();
     return analysis;
   }
@@ -545,7 +602,7 @@ var DatabaseStorage = class {
 var storage = new DatabaseStorage();
 
 // server/analysis-engine.ts
-import { and as and2, desc as desc2, eq as eq2, isNotNull, ne, or } from "drizzle-orm";
+import { and as and2, desc as desc2, eq as eq3, isNotNull, ne, or } from "drizzle-orm";
 import { execFile } from "child_process";
 import { createHash as createHash2 } from "crypto";
 
@@ -4291,20 +4348,298 @@ function buildScoreOutputsPayload(input) {
 }
 
 // server/analysis-engine.ts
-import fs3 from "fs";
-import path3 from "path";
+import fs4 from "fs";
+import path4 from "path";
+
+// server/media-storage.ts
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { eq as eq2 } from "drizzle-orm";
+import { randomUUID as randomUUID2 } from "node:crypto";
+import fs3 from "node:fs";
+import os from "node:os";
+import path3 from "node:path";
+import { pipeline } from "node:stream/promises";
+var VIDEO_STORAGE_MODE_KEY = "VIDEO_STORAGE_MODE";
+var uploadsRoot = path3.resolve(process.cwd(), "uploads");
+var avatarUploadsDir = path3.join(uploadsRoot, "avatars");
+var cachedR2Client = null;
+function isVideoStorageMode(value) {
+  return value === "filesystem" || value === "r2";
+}
+function getDefaultVideoStorageMode() {
+  const envValue = String(process.env.VIDEO_STORAGE_MODE || "").trim().toLowerCase();
+  if (isVideoStorageMode(envValue)) {
+    return envValue;
+  }
+  const isReplitProduction = Boolean(process.env.REPLIT_DOMAINS) && !Boolean(process.env.REPLIT_DEV_DOMAIN);
+  return isReplitProduction ? "r2" : "filesystem";
+}
+function ensureDirectory(dirPath) {
+  if (!fs3.existsSync(dirPath)) {
+    fs3.mkdirSync(dirPath, { recursive: true });
+  }
+}
+function isHttpUrl(value) {
+  return /^https?:\/\//i.test(String(value || "").trim());
+}
+function toPosixPath(value) {
+  return String(value || "").replace(/\\/g, "/");
+}
+function normalizeKeyPrefix(value, fallback) {
+  const raw = String(value || fallback).trim().replace(/^\/+|\/+$/g, "");
+  return raw || fallback;
+}
+function getR2Bucket() {
+  const bucket = String(process.env.R2_BUCKET || "").trim();
+  if (!bucket) {
+    throw new Error("R2_BUCKET is required when VIDEO_STORAGE_MODE is r2");
+  }
+  return bucket;
+}
+function getR2Client() {
+  if (cachedR2Client) {
+    return cachedR2Client;
+  }
+  const endpoint = String(process.env.R2_ENDPOINT || "").trim();
+  const accessKeyId = String(process.env.R2_ACCESS_KEY_ID || "").trim();
+  const secretAccessKey = String(process.env.R2_SECRET_ACCESS_KEY || "").trim();
+  const region = String(process.env.R2_REGION || "auto").trim() || "auto";
+  if (!endpoint || !accessKeyId || !secretAccessKey) {
+    throw new Error("R2 credentials are incomplete. Set R2_ENDPOINT, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY.");
+  }
+  cachedR2Client = new S3Client({
+    region,
+    endpoint,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId,
+      secretAccessKey
+    }
+  });
+  return cachedR2Client;
+}
+function getR2Prefix(kind) {
+  return kind === "avatar" ? normalizeKeyPrefix(process.env.R2_PLAYER_AVATAR_FOLDER || process.env.R2_PLAYER_AVATAR || "avatar", "avatar") : normalizeKeyPrefix(process.env.R2_PLAYER_VIDEO_FOLDER || process.env.R2_PLAYER_VIDEO || "video", "video");
+}
+function buildR2Key(kind, filename) {
+  return `${getR2Prefix(kind)}/${String(filename || "").replace(/^\/+/, "")}`;
+}
+function toR2Reference(key) {
+  return `r2://${String(key || "").replace(/^\/+/, "")}`;
+}
+function parseR2Reference(value) {
+  const raw = String(value || "").trim();
+  if (!raw.toLowerCase().startsWith("r2://")) {
+    return null;
+  }
+  const key = raw.slice(5).replace(/^\/+/, "");
+  return key || null;
+}
+function getFilesystemPublicPath(storedPath) {
+  const raw = String(storedPath || "").trim();
+  if (!raw) return null;
+  if (raw.startsWith("/uploads/")) {
+    return raw;
+  }
+  if (!path3.isAbsolute(raw)) {
+    return null;
+  }
+  const relative = path3.relative(uploadsRoot, raw);
+  if (!relative || relative.startsWith("..") || path3.isAbsolute(relative)) {
+    return null;
+  }
+  return `/uploads/${toPosixPath(relative)}`;
+}
+function getFilesystemLocalPath(storedPath) {
+  const raw = String(storedPath || "").trim();
+  if (!raw) return null;
+  if (path3.isAbsolute(raw)) {
+    return raw;
+  }
+  if (raw.startsWith("/uploads/")) {
+    const relative = raw.replace(/^\/uploads\/?/, "");
+    return path3.join(uploadsRoot, relative);
+  }
+  return null;
+}
+async function downloadR2ObjectToFile(key, targetPath) {
+  ensureDirectory(path3.dirname(targetPath));
+  const client = getR2Client();
+  const response = await client.send(new GetObjectCommand({
+    Bucket: getR2Bucket(),
+    Key: key
+  }));
+  if (!response.Body) {
+    throw new Error(`R2 object not found: ${key}`);
+  }
+  const writeStream = fs3.createWriteStream(targetPath);
+  await pipeline(response.Body, writeStream);
+}
+async function ensureVideoStorageModeSetting() {
+  const defaultMode = getDefaultVideoStorageMode();
+  const [existing] = await db.select().from(appSettings).where(eq2(appSettings.key, VIDEO_STORAGE_MODE_KEY)).limit(1);
+  const storedMode = existing?.value && typeof existing.value === "object" ? String(existing.value.mode || "").trim().toLowerCase() : "";
+  if (isVideoStorageMode(storedMode)) {
+    return storedMode;
+  }
+  await db.insert(appSettings).values({
+    key: VIDEO_STORAGE_MODE_KEY,
+    value: { mode: defaultMode },
+    ...buildInsertAuditFields(null)
+  }).onConflictDoUpdate({
+    target: appSettings.key,
+    set: {
+      value: { mode: defaultMode },
+      ...buildUpdateAuditFields(null)
+    }
+  });
+  return defaultMode;
+}
+async function getVideoStorageMode() {
+  const [existing] = await db.select().from(appSettings).where(eq2(appSettings.key, VIDEO_STORAGE_MODE_KEY)).limit(1);
+  const storedMode = existing?.value && typeof existing.value === "object" ? String(existing.value.mode || "").trim().toLowerCase() : "";
+  if (isVideoStorageMode(storedMode)) {
+    return storedMode;
+  }
+  return ensureVideoStorageModeSetting();
+}
+async function setVideoStorageMode(mode, actorUserId) {
+  await db.insert(appSettings).values({
+    key: VIDEO_STORAGE_MODE_KEY,
+    value: { mode },
+    ...buildInsertAuditFields(actorUserId)
+  }).onConflictDoUpdate({
+    target: appSettings.key,
+    set: {
+      value: { mode },
+      ...buildUpdateAuditFields(actorUserId)
+    }
+  });
+}
+function buildFilesystemVideoPath(filename) {
+  ensureDirectory(uploadsRoot);
+  return path3.join(uploadsRoot, filename);
+}
+function buildFilesystemAvatarPath(filename) {
+  ensureDirectory(avatarUploadsDir);
+  return path3.join(avatarUploadsDir, filename);
+}
+async function storeAvatarBuffer(params) {
+  const mode = await getVideoStorageMode();
+  const extension = path3.extname(String(params.originalName || "")).trim() || ".jpg";
+  const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${extension}`;
+  if (mode === "filesystem") {
+    const targetPath = buildFilesystemAvatarPath(filename);
+    fs3.writeFileSync(targetPath, params.buffer);
+    return `/uploads/avatars/${filename}`;
+  }
+  const key = buildR2Key("avatar", filename);
+  await getR2Client().send(new PutObjectCommand({
+    Bucket: getR2Bucket(),
+    Key: key,
+    Body: params.buffer,
+    ContentType: params.contentType || "application/octet-stream"
+  }));
+  return toR2Reference(key);
+}
+async function storeVideoBuffer(params) {
+  const mode = await getVideoStorageMode();
+  if (mode === "filesystem") {
+    const targetPath = buildFilesystemVideoPath(params.filename);
+    fs3.writeFileSync(targetPath, params.buffer);
+    return targetPath;
+  }
+  const key = buildR2Key("video", params.filename);
+  await getR2Client().send(new PutObjectCommand({
+    Bucket: getR2Bucket(),
+    Key: key,
+    Body: params.buffer,
+    ContentType: params.contentType || "application/octet-stream"
+  }));
+  return toR2Reference(key);
+}
+async function resolveMediaUrl(storedPath) {
+  const raw = String(storedPath || "").trim();
+  if (!raw) return null;
+  if (isHttpUrl(raw)) {
+    return raw;
+  }
+  const r2Key = parseR2Reference(raw);
+  if (r2Key) {
+    return getSignedUrl(
+      getR2Client(),
+      new GetObjectCommand({
+        Bucket: getR2Bucket(),
+        Key: r2Key
+      }),
+      { expiresIn: 60 * 60 }
+    );
+  }
+  return getFilesystemPublicPath(raw) || raw;
+}
+async function withLocalMediaFile(storedPath, fallbackFilename, fn) {
+  const raw = String(storedPath || "").trim();
+  if (!raw) {
+    throw new Error("Media path is empty");
+  }
+  const r2Key = parseR2Reference(raw);
+  if (!r2Key) {
+    const localPath = getFilesystemLocalPath(raw);
+    if (!localPath || !fs3.existsSync(localPath)) {
+      throw new Error("Media file not found");
+    }
+    return fn(localPath);
+  }
+  const extension = path3.extname(String(fallbackFilename || r2Key || "")).trim() || ".bin";
+  const tempPath = path3.join(os.tmpdir(), `swingai-${randomUUID2()}${extension}`);
+  await downloadR2ObjectToFile(r2Key, tempPath);
+  try {
+    return await fn(tempPath);
+  } finally {
+    try {
+      fs3.unlinkSync(tempPath);
+    } catch {
+    }
+  }
+}
+async function deleteStoredMedia(storedPath) {
+  const raw = String(storedPath || "").trim();
+  if (!raw) return;
+  const r2Key = parseR2Reference(raw);
+  if (r2Key) {
+    await getR2Client().send(new DeleteObjectCommand({
+      Bucket: getR2Bucket(),
+      Key: r2Key
+    }));
+    return;
+  }
+  if (isHttpUrl(raw)) {
+    return;
+  }
+  const localPath = getFilesystemLocalPath(raw);
+  if (localPath && fs3.existsSync(localPath)) {
+    fs3.unlinkSync(localPath);
+  }
+}
+function isStoredMediaLocallyAccessible(storedPath) {
+  const localPath = getFilesystemLocalPath(String(storedPath || ""));
+  return Boolean(localPath && fs3.existsSync(localPath));
+}
+
+// server/analysis-engine.ts
 async function resolveLockedMovementForRepeatUpload(analysis) {
   if (!analysis.userId || !analysis.sportId) return null;
   const hashValue = String(analysis.videoContentHash || "").trim();
   if (hashValue) {
     const [priorByHash] = await db.select({ detectedMovement: analyses.detectedMovement }).from(analyses).where(
       and2(
-        eq2(analyses.userId, analysis.userId),
-        eq2(analyses.sportId, analysis.sportId),
-        eq2(analyses.status, "completed"),
+        eq3(analyses.userId, analysis.userId),
+        eq3(analyses.sportId, analysis.sportId),
+        eq3(analyses.status, "completed"),
         ne(analyses.id, analysis.id),
         isNotNull(analyses.detectedMovement),
-        eq2(analyses.videoContentHash, hashValue)
+        eq3(analyses.videoContentHash, hashValue)
       )
     ).orderBy(desc2(analyses.createdAt)).limit(1);
     const movementByHash = String(priorByHash?.detectedMovement || "").trim();
@@ -4315,13 +4650,13 @@ async function resolveLockedMovementForRepeatUpload(analysis) {
   const filenameCandidates = [analysis.sourceFilename, analysis.videoFilename].map((value) => String(value || "").trim()).filter((value) => value.length > 0);
   if (!filenameCandidates.length) return null;
   const filenamePredicates = filenameCandidates.map(
-    (candidate) => or(eq2(analyses.videoFilename, candidate), eq2(analyses.sourceFilename, candidate))
+    (candidate) => or(eq3(analyses.videoFilename, candidate), eq3(analyses.sourceFilename, candidate))
   );
   const [prior] = await db.select({ detectedMovement: analyses.detectedMovement }).from(analyses).where(
     and2(
-      eq2(analyses.userId, analysis.userId),
-      eq2(analyses.sportId, analysis.sportId),
-      eq2(analyses.status, "completed"),
+      eq3(analyses.userId, analysis.userId),
+      eq3(analyses.sportId, analysis.sportId),
+      eq3(analyses.status, "completed"),
       ne(analyses.id, analysis.id),
       isNotNull(analyses.detectedMovement),
       filenamePredicates.length === 1 ? filenamePredicates[0] : or(...filenamePredicates)
@@ -4331,10 +4666,10 @@ async function resolveLockedMovementForRepeatUpload(analysis) {
   return lockedMovement.length > 0 ? lockedMovement : null;
 }
 async function computeVideoContentHash(videoPath) {
-  if (!videoPath || !fs3.existsSync(videoPath)) return null;
+  if (!videoPath || !fs4.existsSync(videoPath)) return null;
   const hash = createHash2("sha256");
   return await new Promise((resolve2, reject) => {
-    const stream = fs3.createReadStream(videoPath);
+    const stream = fs4.createReadStream(videoPath);
     stream.on("data", (chunk) => hash.update(chunk));
     stream.on("error", (error) => reject(error));
     stream.on("end", () => resolve2(hash.digest("hex")));
@@ -4345,11 +4680,11 @@ async function findReusableAnalysisPayload(analysis, activeModelVersion) {
   if (!analysis.userId || !analysis.sportId) return null;
   const filenameCandidates = [analysis.sourceFilename, analysis.videoFilename].map((value) => String(value || "").trim()).filter((value) => value.length > 0);
   const filenamePredicates = filenameCandidates.map(
-    (candidate) => or(eq2(analyses.videoFilename, candidate), eq2(analyses.sourceFilename, candidate))
+    (candidate) => or(eq3(analyses.videoFilename, candidate), eq3(analyses.sourceFilename, candidate))
   );
   const duplicateMatchers = [];
   if (hashValue) {
-    duplicateMatchers.push(eq2(analyses.videoContentHash, hashValue));
+    duplicateMatchers.push(eq3(analyses.videoContentHash, hashValue));
   }
   if (filenamePredicates.length === 1) {
     duplicateMatchers.push(filenamePredicates[0]);
@@ -4358,14 +4693,14 @@ async function findReusableAnalysisPayload(analysis, activeModelVersion) {
   }
   if (!duplicateMatchers.length) return null;
   const conditions = [
-    eq2(analyses.userId, analysis.userId),
-    eq2(analyses.sportId, analysis.sportId),
-    eq2(analyses.status, "completed"),
+    eq3(analyses.userId, analysis.userId),
+    eq3(analyses.sportId, analysis.sportId),
+    eq3(analyses.status, "completed"),
     ne(analyses.id, analysis.id),
     duplicateMatchers.length === 1 ? duplicateMatchers[0] : or(...duplicateMatchers)
   ];
   if (analysis.movementId) {
-    conditions.push(eq2(analyses.movementId, analysis.movementId));
+    conditions.push(eq3(analyses.movementId, analysis.movementId));
   }
   const [row] = await db.select({
     detectedMovement: analyses.detectedMovement,
@@ -4380,7 +4715,7 @@ async function findReusableAnalysisPayload(analysis, activeModelVersion) {
     improvementArea: coachingInsights.improvementArea,
     trainingSuggestion: coachingInsights.trainingSuggestion,
     simpleExplanation: coachingInsights.simpleExplanation
-  }).from(analyses).leftJoin(metrics, eq2(metrics.analysisId, analyses.id)).leftJoin(coachingInsights, eq2(coachingInsights.analysisId, analyses.id)).where(and2(...conditions)).orderBy(desc2(analyses.createdAt)).limit(1);
+  }).from(analyses).leftJoin(metrics, eq3(metrics.analysisId, analyses.id)).leftJoin(coachingInsights, eq3(coachingInsights.analysisId, analyses.id)).where(and2(...conditions)).orderBy(desc2(analyses.createdAt)).limit(1);
   if (!row) return null;
   if (!row.configKey || !row.modelVersion || row.modelVersion !== activeModelVersion) return null;
   if (row.overallScore == null || !row.metricValues) return null;
@@ -4558,15 +4893,15 @@ function hasAllRequiredUploadDiagnosticsMetrics(metricValues) {
 }
 function resolvePythonExecutable() {
   const envExecutable = process.env.PYTHON_EXECUTABLE;
-  if (envExecutable && fs3.existsSync(envExecutable)) {
+  if (envExecutable && fs4.existsSync(envExecutable)) {
     return envExecutable;
   }
   const localCandidates = [
-    path3.resolve(process.cwd(), ".venv", "bin", "python3"),
-    path3.resolve(process.cwd(), ".venv", "bin", "python")
+    path4.resolve(process.cwd(), ".venv", "bin", "python3"),
+    path4.resolve(process.cwd(), ".venv", "bin", "python")
   ];
   for (const candidate of localCandidates) {
-    if (fs3.existsSync(candidate)) {
+    if (fs4.existsSync(candidate)) {
       return candidate;
     }
   }
@@ -4670,229 +5005,236 @@ function runPythonDiagnostics(videoPath, sportName, movementName, dominantProfil
 }
 async function processAnalysis(analysisId) {
   try {
-    await db.update(analyses).set({ status: "processing", rejectionReason: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq2(analyses.id, analysisId));
-    const [analysis] = await db.select().from(analyses).where(eq2(analyses.id, analysisId));
+    await db.update(analyses).set({ status: "processing", rejectionReason: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq3(analyses.id, analysisId));
+    const [analysis] = await db.select().from(analyses).where(eq3(analyses.id, analysisId));
     if (!analysis) {
       throw new Error("Analysis not found");
     }
+    const auditActorUserId = analysis.createdByUserId || analysis.userId || null;
     let sportName = "tennis";
     let movementName = "auto-detect";
     if (analysis.movementId) {
-      const [movement] = await db.select().from(sportMovements).where(eq2(sportMovements.id, analysis.movementId));
+      const [movement] = await db.select().from(sportMovements).where(eq3(sportMovements.id, analysis.movementId));
       if (movement) {
         movementName = movement.name;
       }
     }
     if (analysis.sportId) {
-      const [sport] = await db.select().from(sports).where(eq2(sports.id, analysis.sportId));
+      const [sport] = await db.select().from(sports).where(eq3(sports.id, analysis.sportId));
       if (sport) {
         sportName = sport.name;
       }
     }
-    const videoContentHash = await computeVideoContentHash(analysis.videoPath);
-    if (videoContentHash) {
-      await db.update(analyses).set({ videoContentHash, updatedAt: /* @__PURE__ */ new Date() }).where(eq2(analyses.id, analysis.id));
-      analysis.videoContentHash = videoContentHash;
-    }
     let dominantProfile = null;
     if (analysis.userId) {
-      const [profile] = await db.select({ dominantProfile: users.dominantProfile }).from(users).where(eq2(users.id, analysis.userId)).limit(1);
+      const [profile] = await db.select({ dominantProfile: users.dominantProfile }).from(users).where(eq3(users.id, analysis.userId)).limit(1);
       dominantProfile = profile?.dominantProfile ?? null;
     }
-    const modelRegistryConfig = readModelRegistryConfig();
-    const reusablePayload = await findReusableAnalysisPayload(
-      analysis,
-      modelRegistryConfig.activeModelVersion
-    );
-    if (reusablePayload) {
-      let normalizedReusableMetrics = normalizeMetricValuesForPersistence(
-        reusablePayload.metricValues || {},
-        reusablePayload.aiDiagnostics
+    await withLocalMediaFile(analysis.videoPath, analysis.videoFilename, async (localVideoPath) => {
+      const videoContentHash = await computeVideoContentHash(localVideoPath);
+      if (videoContentHash) {
+        await db.update(analyses).set({ videoContentHash, updatedAt: /* @__PURE__ */ new Date() }).where(eq3(analyses.id, analysis.id));
+        analysis.videoContentHash = videoContentHash;
+      }
+      const modelRegistryConfig = readModelRegistryConfig();
+      const reusablePayload = await findReusableAnalysisPayload(
+        analysis,
+        modelRegistryConfig.activeModelVersion
       );
-      let reusableDiagnosticsPayload = reusablePayload.aiDiagnostics;
-      if (!hasAllRequiredUploadDiagnosticsMetrics(normalizedReusableMetrics)) {
-        try {
-          const diagnosticsMovement = reusablePayload.detectedMovement || movementName;
-          reusableDiagnosticsPayload = await runPythonDiagnostics(
-            analysis.videoPath,
-            sportName,
-            diagnosticsMovement,
-            dominantProfile
+      if (reusablePayload) {
+        let normalizedReusableMetrics = normalizeMetricValuesForPersistence(
+          reusablePayload.metricValues || {},
+          reusablePayload.aiDiagnostics
+        );
+        let reusableDiagnosticsPayload = reusablePayload.aiDiagnostics;
+        if (!hasAllRequiredUploadDiagnosticsMetrics(normalizedReusableMetrics)) {
+          try {
+            const diagnosticsMovement = reusablePayload.detectedMovement || movementName;
+            reusableDiagnosticsPayload = await runPythonDiagnostics(
+              localVideoPath,
+              sportName,
+              diagnosticsMovement,
+              dominantProfile
+            );
+            normalizedReusableMetrics = normalizeMetricValuesForPersistence(
+              normalizedReusableMetrics,
+              reusableDiagnosticsPayload
+            );
+          } catch (diagnosticsError) {
+            console.warn(
+              `Diagnostics backfill failed for reused analysis ${analysisId}: ${diagnosticsError?.message || diagnosticsError}`
+            );
+          }
+        }
+        const sanitizedMetricValues = sanitizePersistedMap(normalizedReusableMetrics);
+        const reusableScoreInputs = buildScoreInputsPayload(
+          reusablePayload.configKey,
+          sanitizedMetricValues
+        );
+        const reusableTacticalComponents = extractStandardizedTacticalScores10(
+          sanitizePersistedMap(
+            reusablePayload.scoreOutputs?.tactical?.components || reusablePayload.scoreOutputs?.tacticalComponents || {}
+          )
+        );
+        const reusableScoreOutputs = buildScoreOutputsPayload({
+          configKey: reusablePayload.configKey,
+          detectedMovement: reusablePayload.detectedMovement,
+          tacticalComponents: reusableTacticalComponents,
+          metricValues: sanitizedMetricValues,
+          overallScore: reusablePayload.overallScore
+        });
+        await db.transaction(async (tx) => {
+          await tx.delete(coachingInsights).where(eq3(coachingInsights.analysisId, analysisId));
+          await tx.delete(metrics).where(eq3(metrics.analysisId, analysisId));
+          await tx.insert(metrics).values({
+            analysisId,
+            configKey: reusablePayload.configKey,
+            modelVersion: reusablePayload.modelVersion,
+            overallScore: reusablePayload.overallScore,
+            metricValues: sanitizedMetricValues,
+            scoreInputs: reusableScoreInputs,
+            scoreOutputs: reusableScoreOutputs,
+            aiDiagnostics: reusableDiagnosticsPayload,
+            ...buildInsertAuditFields(auditActorUserId)
+          });
+          await tx.insert(coachingInsights).values({
+            analysisId,
+            ...reusablePayload.coaching,
+            ...buildInsertAuditFields(auditActorUserId)
+          });
+        });
+        await db.update(analyses).set({
+          status: "completed",
+          detectedMovement: reusablePayload.detectedMovement || movementName,
+          rejectionReason: null,
+          ...buildUpdateAuditFields(auditActorUserId)
+        }).where(eq3(analyses.id, analysisId));
+        console.log(`Analysis ${analysisId} reused scores from prior identical video hash`);
+        return;
+      }
+      if (String(movementName || "").toLowerCase() === "auto-detect") {
+        const lockedMovement = await resolveLockedMovementForRepeatUpload(analysis);
+        if (lockedMovement) {
+          console.log(
+            `Deterministic movement lock for repeated upload: using prior detected movement "${lockedMovement}" instead of auto-detect`
           );
-          normalizedReusableMetrics = normalizeMetricValuesForPersistence(
-            normalizedReusableMetrics,
-            reusableDiagnosticsPayload
-          );
-        } catch (diagnosticsError) {
-          console.warn(
-            `Diagnostics backfill failed for reused analysis ${analysisId}: ${diagnosticsError?.message || diagnosticsError}`
-          );
+          movementName = lockedMovement;
         }
       }
-      const sanitizedMetricValues = sanitizePersistedMap(normalizedReusableMetrics);
-      const reusableScoreInputs = buildScoreInputsPayload(
-        reusablePayload.configKey,
-        sanitizedMetricValues
+      const configKey = getConfigKey(sportName, movementName);
+      console.log(
+        `Starting Python analysis for: ${analysis.videoPath} (${sportName}/${movementName}, config: ${configKey})`
       );
-      const reusableTacticalComponents = extractStandardizedTacticalScores10(
-        sanitizePersistedMap(
-          reusablePayload.scoreOutputs?.tactical?.components || reusablePayload.scoreOutputs?.tacticalComponents || {}
-        )
+      const result = await runPythonAnalysis(
+        localVideoPath,
+        sportName,
+        movementName,
+        dominantProfile
       );
-      const reusableScoreOutputs = buildScoreOutputsPayload({
-        configKey: reusablePayload.configKey,
-        detectedMovement: reusablePayload.detectedMovement,
-        tacticalComponents: reusableTacticalComponents,
-        metricValues: sanitizedMetricValues,
-        overallScore: reusablePayload.overallScore
+      if (result.rejected) {
+        console.log(
+          `Analysis ${analysisId} rejected: ${result.rejectionReason}`
+        );
+        await db.update(analyses).set({
+          status: "rejected",
+          rejectionReason: result.rejectionReason || "Video content does not match the selected sport.",
+          ...buildUpdateAuditFields(auditActorUserId)
+        }).where(eq3(analyses.id, analysisId));
+        return;
+      }
+      const actualMovement = result.detectedMovement || movementName;
+      const wasOverridden = result.movementOverridden || false;
+      if (wasOverridden) {
+        console.log(
+          `Movement override: user selected "${movementName}" but detected "${actualMovement}". Score: ${result.overallScore}`
+        );
+      } else {
+        console.log(
+          `Python analysis complete. Overall score: ${result.overallScore}`
+        );
+      }
+      const runtimeOverallScore100 = normalizeRuntimeScoreToHundred(result.overallScore);
+      if (runtimeOverallScore100 != null && runtimeOverallScore100 < 15) {
+        const sportLabel = sportName.charAt(0).toUpperCase() + sportName.slice(1);
+        console.log(
+          `Analysis ${analysisId} auto-rejected: score ${runtimeOverallScore100} below minimum threshold`
+        );
+        await db.update(analyses).set({
+          status: "rejected",
+          rejectionReason: `The video content could not be reliably analyzed as a ${sportLabel} movement. Please upload a clearer video of your ${sportLabel} technique.`,
+          ...buildUpdateAuditFields(auditActorUserId)
+        }).where(eq3(analyses.id, analysisId));
+        return;
+      }
+      let diagnosticsPayload = null;
+      try {
+        diagnosticsPayload = await runPythonDiagnostics(
+          localVideoPath,
+          sportName,
+          actualMovement,
+          dominantProfile
+        );
+      } catch (diagnosticsError) {
+        console.warn(
+          `Diagnostics generation failed for analysis ${analysisId}: ${diagnosticsError?.message || diagnosticsError}`
+        );
+      }
+      const metricValuesRaw = { ...result.metricValues };
+      if (result.shotCount != null) {
+        metricValuesRaw.shotCount = result.shotCount;
+      }
+      if (result.shotSpeed != null && Number.isFinite(result.shotSpeed)) {
+        metricValuesRaw.shotSpeed = result.shotSpeed;
+      }
+      const normalizedMetricValues = normalizeMetricValuesForPersistence(
+        metricValuesRaw,
+        diagnosticsPayload
+      );
+      const resolvedConfigKey = result.configKey || configKey;
+      const metricValues = sanitizePersistedMap(normalizedMetricValues);
+      const persistedTacticalScores = extractStandardizedTacticalScores10(
+        sanitizePersistedMap(result.subScores || {})
+      );
+      const persistedOverallScore = toPersistedScoreTen(result.overallScore);
+      const scoreInputs = buildScoreInputsPayload(resolvedConfigKey, metricValues);
+      const scoreOutputs = buildScoreOutputsPayload({
+        configKey: resolvedConfigKey,
+        detectedMovement: actualMovement,
+        tacticalComponents: persistedTacticalScores,
+        metricValues,
+        overallScore: persistedOverallScore
       });
       await db.transaction(async (tx) => {
-        await tx.delete(coachingInsights).where(eq2(coachingInsights.analysisId, analysisId));
-        await tx.delete(metrics).where(eq2(metrics.analysisId, analysisId));
+        await tx.delete(coachingInsights).where(eq3(coachingInsights.analysisId, analysisId));
+        await tx.delete(metrics).where(eq3(metrics.analysisId, analysisId));
         await tx.insert(metrics).values({
           analysisId,
-          configKey: reusablePayload.configKey,
-          modelVersion: reusablePayload.modelVersion,
-          overallScore: reusablePayload.overallScore,
-          metricValues: sanitizedMetricValues,
-          scoreInputs: reusableScoreInputs,
-          scoreOutputs: reusableScoreOutputs,
-          aiDiagnostics: reusableDiagnosticsPayload
+          configKey: resolvedConfigKey,
+          modelVersion: modelRegistryConfig.activeModelVersion,
+          overallScore: persistedOverallScore,
+          metricValues,
+          scoreInputs,
+          scoreOutputs,
+          aiDiagnostics: diagnosticsPayload,
+          ...buildInsertAuditFields(auditActorUserId)
         });
         await tx.insert(coachingInsights).values({
           analysisId,
-          ...reusablePayload.coaching
+          ...result.coaching,
+          ...buildInsertAuditFields(auditActorUserId)
         });
       });
       await db.update(analyses).set({
         status: "completed",
-        detectedMovement: reusablePayload.detectedMovement || movementName,
+        detectedMovement: actualMovement,
         rejectionReason: null,
-        updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq2(analyses.id, analysisId));
-      console.log(`Analysis ${analysisId} reused scores from prior identical video hash`);
-      return;
-    }
-    if (String(movementName || "").toLowerCase() === "auto-detect") {
-      const lockedMovement = await resolveLockedMovementForRepeatUpload(analysis);
-      if (lockedMovement) {
-        console.log(
-          `Deterministic movement lock for repeated upload: using prior detected movement "${lockedMovement}" instead of auto-detect`
-        );
-        movementName = lockedMovement;
-      }
-    }
-    const configKey = getConfigKey(sportName, movementName);
-    console.log(
-      `Starting Python analysis for: ${analysis.videoPath} (${sportName}/${movementName}, config: ${configKey})`
-    );
-    const result = await runPythonAnalysis(
-      analysis.videoPath,
-      sportName,
-      movementName,
-      dominantProfile
-    );
-    if (result.rejected) {
-      console.log(
-        `Analysis ${analysisId} rejected: ${result.rejectionReason}`
-      );
-      await db.update(analyses).set({
-        status: "rejected",
-        rejectionReason: result.rejectionReason || "Video content does not match the selected sport.",
-        updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq2(analyses.id, analysisId));
-      return;
-    }
-    const actualMovement = result.detectedMovement || movementName;
-    const wasOverridden = result.movementOverridden || false;
-    if (wasOverridden) {
-      console.log(
-        `Movement override: user selected "${movementName}" but detected "${actualMovement}". Score: ${result.overallScore}`
-      );
-    } else {
-      console.log(
-        `Python analysis complete. Overall score: ${result.overallScore}`
-      );
-    }
-    const runtimeOverallScore100 = normalizeRuntimeScoreToHundred(result.overallScore);
-    if (runtimeOverallScore100 != null && runtimeOverallScore100 < 15) {
-      const sportLabel = sportName.charAt(0).toUpperCase() + sportName.slice(1);
-      console.log(
-        `Analysis ${analysisId} auto-rejected: score ${runtimeOverallScore100} below minimum threshold`
-      );
-      await db.update(analyses).set({
-        status: "rejected",
-        rejectionReason: `The video content could not be reliably analyzed as a ${sportLabel} movement. Please upload a clearer video of your ${sportLabel} technique.`,
-        updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq2(analyses.id, analysisId));
-      return;
-    }
-    let diagnosticsPayload = null;
-    try {
-      diagnosticsPayload = await runPythonDiagnostics(
-        analysis.videoPath,
-        sportName,
-        actualMovement,
-        dominantProfile
-      );
-    } catch (diagnosticsError) {
-      console.warn(
-        `Diagnostics generation failed for analysis ${analysisId}: ${diagnosticsError?.message || diagnosticsError}`
-      );
-    }
-    const metricValuesRaw = { ...result.metricValues };
-    if (result.shotCount != null) {
-      metricValuesRaw.shotCount = result.shotCount;
-    }
-    if (result.shotSpeed != null && Number.isFinite(result.shotSpeed)) {
-      metricValuesRaw.shotSpeed = result.shotSpeed;
-    }
-    const normalizedMetricValues = normalizeMetricValuesForPersistence(
-      metricValuesRaw,
-      diagnosticsPayload
-    );
-    const resolvedConfigKey = result.configKey || configKey;
-    const metricValues = sanitizePersistedMap(normalizedMetricValues);
-    const persistedTacticalScores = extractStandardizedTacticalScores10(
-      sanitizePersistedMap(result.subScores || {})
-    );
-    const persistedOverallScore = toPersistedScoreTen(result.overallScore);
-    const scoreInputs = buildScoreInputsPayload(resolvedConfigKey, metricValues);
-    const scoreOutputs = buildScoreOutputsPayload({
-      configKey: resolvedConfigKey,
-      detectedMovement: actualMovement,
-      tacticalComponents: persistedTacticalScores,
-      metricValues,
-      overallScore: persistedOverallScore
+        ...buildUpdateAuditFields(auditActorUserId)
+      }).where(eq3(analyses.id, analysisId));
+      console.log(`Analysis ${analysisId} completed successfully`);
     });
-    await db.transaction(async (tx) => {
-      await tx.delete(coachingInsights).where(eq2(coachingInsights.analysisId, analysisId));
-      await tx.delete(metrics).where(eq2(metrics.analysisId, analysisId));
-      await tx.insert(metrics).values({
-        analysisId,
-        configKey: resolvedConfigKey,
-        modelVersion: modelRegistryConfig.activeModelVersion,
-        overallScore: persistedOverallScore,
-        metricValues,
-        scoreInputs,
-        scoreOutputs,
-        aiDiagnostics: diagnosticsPayload
-      });
-      await tx.insert(coachingInsights).values({
-        analysisId,
-        ...result.coaching
-      });
-    });
-    await db.update(analyses).set({
-      status: "completed",
-      detectedMovement: actualMovement,
-      rejectionReason: null,
-      updatedAt: /* @__PURE__ */ new Date()
-    }).where(eq2(analyses.id, analysisId));
-    console.log(`Analysis ${analysisId} completed successfully`);
   } catch (error) {
     console.error("Analysis processing error:", error);
-    await db.update(analyses).set({ status: "failed", updatedAt: /* @__PURE__ */ new Date() }).where(eq2(analyses.id, analysisId));
+    await db.update(analyses).set({ status: "failed", ...buildUpdateAuditFields(null) }).where(eq3(analyses.id, analysisId));
   }
 }
 
@@ -4901,17 +5243,15 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import multer from "multer";
-import path4 from "path";
-import fs4 from "fs";
-import { eq as eq3, or as or2, sql as sql3 } from "drizzle-orm";
-function sanitizeUser(user) {
+import { eq as eq4, or as or2, sql as sql3 } from "drizzle-orm";
+async function sanitizeUser(user) {
   const selectedScoreSectionsBySport = user.selectedScoreSectionsBySport && typeof user.selectedScoreSectionsBySport === "object" ? user.selectedScoreSectionsBySport : {};
   const selectedMetricKeysBySport = user.selectedMetricKeysBySport && typeof user.selectedMetricKeysBySport === "object" ? user.selectedMetricKeysBySport : {};
   return {
     id: user.id,
     email: user.email,
     name: user.name,
-    avatarUrl: user.avatarUrl,
+    avatarUrl: await resolveMediaUrl(user.avatarUrl),
     phone: user.phone,
     address: user.address,
     country: user.country,
@@ -4925,18 +5265,8 @@ function sanitizeUser(user) {
     role: user.role
   };
 }
-var avatarDir = path4.resolve(process.cwd(), "uploads", "avatars");
-if (!fs4.existsSync(avatarDir)) {
-  fs4.mkdirSync(avatarDir, { recursive: true });
-}
 var avatarUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, avatarDir),
-    filename: (_req, file, cb) => {
-      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-      cb(null, uniqueSuffix + path4.extname(file.originalname));
-    }
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic"];
@@ -4988,7 +5318,7 @@ async function setupAuth(app2) {
         return res.status(400).json({ error: parsed.error.errors[0].message });
       }
       const { email, name, password } = parsed.data;
-      const [existing] = await db.select().from(users).where(eq3(users.email, email.toLowerCase()));
+      const [existing] = await db.select().from(users).where(eq4(users.email, email.toLowerCase()));
       if (existing) {
         return res.status(409).json({ error: "Email already registered" });
       }
@@ -4996,10 +5326,11 @@ async function setupAuth(app2) {
       const [user] = await db.insert(users).values({
         email: email.toLowerCase(),
         name,
-        passwordHash
+        passwordHash,
+        ...buildInsertAuditFields(null)
       }).returning();
       req.session.userId = user.id;
-      res.json(sanitizeUser(user));
+      res.json(await sanitizeUser(user));
     } catch (error) {
       console.error("Register error:", error);
       res.status(500).json({ error: "Registration failed" });
@@ -5007,7 +5338,7 @@ async function setupAuth(app2) {
   });
   app2.post("/api/admin/players", requireAuth, async (req, res) => {
     try {
-      const [requester] = await db.select().from(users).where(eq3(users.id, req.session.userId));
+      const [requester] = await db.select().from(users).where(eq4(users.id, req.session.userId));
       if (!requester || requester.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
@@ -5016,7 +5347,7 @@ async function setupAuth(app2) {
         return res.status(400).json({ error: parsed.error.errors[0].message });
       }
       const { email, name, password } = parsed.data;
-      const [existing] = await db.select().from(users).where(eq3(users.email, email.toLowerCase()));
+      const [existing] = await db.select().from(users).where(eq4(users.email, email.toLowerCase()));
       if (existing) {
         return res.status(409).json({ error: "Email already registered" });
       }
@@ -5026,9 +5357,10 @@ async function setupAuth(app2) {
         name,
         passwordHash,
         role: "player",
-        country: requester.country || null
+        country: requester.country || null,
+        ...buildInsertAuditFields(requester.id)
       }).returning();
-      res.status(201).json(sanitizeUser(createdPlayer));
+      res.status(201).json(await sanitizeUser(createdPlayer));
     } catch (error) {
       console.error("Create player error:", error);
       res.status(500).json({ error: "Failed to create player" });
@@ -5048,8 +5380,8 @@ async function setupAuth(app2) {
       const normalizedEmail = normalizedIdentifier.toLowerCase();
       const [user] = await db.select().from(users).where(
         or2(
-          eq3(users.id, normalizedIdentifier),
-          eq3(users.email, normalizedEmail)
+          eq4(users.id, normalizedIdentifier),
+          eq4(users.email, normalizedEmail)
         )
       );
       if (!user) {
@@ -5060,7 +5392,7 @@ async function setupAuth(app2) {
         return res.status(401).json({ error: "Invalid email or password" });
       }
       req.session.userId = user.id;
-      res.json(sanitizeUser(user));
+      res.json(await sanitizeUser(user));
     } catch (error) {
       console.error("Login error:", error);
       res.status(500).json({ error: "Login failed" });
@@ -5132,7 +5464,7 @@ async function setupAuth(app2) {
       if (!googleUser || !googleUser.email) {
         return res.status(401).json({ error: "Could not verify Google account" });
       }
-      const [existing] = await db.select().from(users).where(eq3(users.email, googleUser.email.toLowerCase()));
+      const [existing] = await db.select().from(users).where(eq4(users.email, googleUser.email.toLowerCase()));
       if (existing) {
         req.session.userId = existing.id;
         const updates = {};
@@ -5140,10 +5472,13 @@ async function setupAuth(app2) {
           updates.avatarUrl = googleUser.picture;
         }
         if (Object.keys(updates).length > 0) {
-          const [updated] = await db.update(users).set(updates).where(eq3(users.id, existing.id)).returning();
-          return res.json(sanitizeUser(updated));
+          const [updated] = await db.update(users).set({
+            ...updates,
+            ...buildUpdateAuditFields(existing.id)
+          }).where(eq4(users.id, existing.id)).returning();
+          return res.json(await sanitizeUser(updated));
         }
-        return res.json(sanitizeUser(existing));
+        return res.json(await sanitizeUser(existing));
       }
       const randomPassword = Date.now().toString(36) + Math.random().toString(36).slice(2);
       const passwordHash = await bcrypt.hash(randomPassword, 12);
@@ -5152,10 +5487,11 @@ async function setupAuth(app2) {
         name: googleUser.name,
         passwordHash,
         avatarUrl: googleUser.picture || null,
-        country: "Singapore"
+        country: "Singapore",
+        ...buildInsertAuditFields(null)
       }).returning();
       req.session.userId = newUser.id;
-      res.json(sanitizeUser(newUser));
+      res.json(await sanitizeUser(newUser));
     } catch (error) {
       console.error("Google auth error:", error);
       res.status(500).json({ error: "Google authentication failed" });
@@ -5166,22 +5502,22 @@ async function setupAuth(app2) {
       return res.status(401).json({ error: "Not authenticated" });
     }
     try {
-      const [user] = await db.select().from(users).where(eq3(users.id, req.session.userId));
+      const [user] = await db.select().from(users).where(eq4(users.id, req.session.userId));
       if (!user) {
         req.session.destroy(() => {
         });
         return res.status(401).json({ error: "User not found" });
       }
-      res.json(sanitizeUser(user));
+      res.json(await sanitizeUser(user));
     } catch (error) {
       res.status(500).json({ error: "Failed to get user" });
     }
   });
   app2.get("/api/profile", requireAuth, async (req, res) => {
     try {
-      const [user] = await db.select().from(users).where(eq3(users.id, req.session.userId));
+      const [user] = await db.select().from(users).where(eq4(users.id, req.session.userId));
       if (!user) return res.status(404).json({ error: "User not found" });
-      res.json(sanitizeUser(user));
+      res.json(await sanitizeUser(user));
     } catch (error) {
       res.status(500).json({ error: "Failed to get profile" });
     }
@@ -5202,7 +5538,7 @@ async function setupAuth(app2) {
         role
       } = req.body;
       const requesterId = req.session.userId;
-      const [requester] = await db.select().from(users).where(eq3(users.id, requesterId));
+      const [requester] = await db.select().from(users).where(eq4(users.id, requesterId));
       if (!requester) {
         return res.status(401).json({ error: "User not found" });
       }
@@ -5264,8 +5600,11 @@ async function setupAuth(app2) {
         }
         updates.role = role;
       }
-      const [updated] = await db.update(users).set(updates).where(eq3(users.id, requesterId)).returning();
-      res.json(sanitizeUser(updated));
+      const [updated] = await db.update(users).set({
+        ...updates,
+        ...buildUpdateAuditFields(requesterId)
+      }).where(eq4(users.id, requesterId)).returning();
+      res.json(await sanitizeUser(updated));
     } catch (error) {
       res.status(500).json({ error: "Failed to update profile" });
     }
@@ -5289,9 +5628,16 @@ async function setupAuth(app2) {
         if (!req.file) {
           return res.status(400).json({ error: "No image provided" });
         }
-        const avatarUrl = `/uploads/avatars/${req.file.filename}`;
-        const [updated] = await db.update(users).set({ avatarUrl }).where(eq3(users.id, req.session.userId)).returning();
-        res.json(sanitizeUser(updated));
+        const avatarUrl = await storeAvatarBuffer({
+          buffer: req.file.buffer,
+          contentType: req.file.mimetype,
+          originalName: req.file.originalname
+        });
+        const [updated] = await db.update(users).set({
+          avatarUrl,
+          ...buildUpdateAuditFields(req.session.userId)
+        }).where(eq4(users.id, req.session.userId)).returning();
+        res.json(await sanitizeUser(updated));
       } catch (error) {
         res.status(500).json({ error: "Failed to upload avatar" });
       }
@@ -5306,17 +5652,17 @@ function requireAuth(req, res, next) {
 }
 
 // server/routes.ts
-import { eq as eq4, asc, and as and3, desc as desc3, inArray, sql as sql4 } from "drizzle-orm";
+import { eq as eq5, asc, and as and3, desc as desc3, inArray, sql as sql4 } from "drizzle-orm";
 var uploadDir = path5.resolve(process.cwd(), "uploads");
 if (!fs5.existsSync(uploadDir)) {
   fs5.mkdirSync(uploadDir, { recursive: true });
 }
-var upload = multer2({
+var uploadToFilesystem = multer2({
   storage: multer2.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadDir),
     filename: (_req, file, cb) => {
       const ext = path5.extname(file.originalname) || ".mp4";
-      cb(null, `${randomUUID2().toUpperCase()}${ext}`);
+      cb(null, `${randomUUID3().toUpperCase()}${ext}`);
     }
   }),
   limits: { fileSize: 100 * 1024 * 1024 },
@@ -5334,6 +5680,40 @@ var upload = multer2({
     }
   }
 });
+var uploadToMemory = multer2({
+  storage: multer2.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      "video/mp4",
+      "video/quicktime",
+      "video/x-msvideo",
+      "video/webm"
+    ];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only video files are allowed"));
+    }
+  }
+});
+async function runVideoUploadMiddleware(req, res, next) {
+  try {
+    const mode = await getVideoStorageMode();
+    const middleware = mode === "r2" ? uploadToMemory.single("video") : uploadToFilesystem.single("video");
+    middleware(req, res, (err) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ error: "File too large. Maximum 100MB." });
+        }
+        return res.status(400).json({ error: err.message || "Invalid file upload" });
+      }
+      return next();
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
 function resolvePythonExecutable2() {
   const envExecutable = process.env.PYTHON_EXECUTABLE;
   if (envExecutable && fs5.existsSync(envExecutable)) {
@@ -5397,7 +5777,7 @@ function runPythonDiagnostics2(videoPath, sportName, movementName, dominantProfi
 }
 async function resolveUserDominantProfile(userId) {
   if (!userId) return null;
-  const [profile] = await db.select({ dominantProfile: users.dominantProfile }).from(users).where(eq4(users.id, userId)).limit(1);
+  const [profile] = await db.select({ dominantProfile: users.dominantProfile }).from(users).where(eq5(users.id, userId)).limit(1);
   return profile?.dominantProfile ?? null;
 }
 function parseNumberValue(value) {
@@ -5856,6 +6236,176 @@ function getModelEvaluationModeKey(userId) {
   if (!uid) return MODEL_EVALUATION_MODE_KEY;
   return `${MODEL_EVALUATION_MODE_KEY}:${uid}`;
 }
+var SKELETON_CACHE_TTL_MS = 5 * 60 * 1e3;
+var SKELETON_CACHE_MAX_ENTRIES = 200;
+var skeletonCache = /* @__PURE__ */ new Map();
+function clamp01(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+function createSkeletonRecord(video_id, shot_id, frame_number, landmarks, timestamp2 = 0) {
+  const mappedLandmarks = (landmarks || []).slice(0, 33).map((joint, idx) => ({
+    id: Number.isFinite(Number(joint.id)) ? Number(joint.id) : idx,
+    x: clamp01(Number(joint.x)),
+    y: clamp01(Number(joint.y)),
+    z: clamp01(Number(joint.z)),
+    visibility: clamp01(Number(joint.visibility))
+  }));
+  return {
+    frame_number: Number(frame_number),
+    timestamp: Number.isFinite(Number(timestamp2)) ? Number(timestamp2) : 0,
+    landmarks: mappedLandmarks
+  };
+}
+function normalizeSkeletonDataset(raw, fallbackVideoId) {
+  if (!raw || typeof raw !== "object") return null;
+  const source = raw;
+  const video_id = String(source.video_id || fallbackVideoId || "").trim();
+  if (!video_id) return null;
+  const rawShots = Array.isArray(source.shots) ? source.shots : [];
+  const shots = rawShots.map((item, idx) => {
+    const shot = item && typeof item === "object" ? item : {};
+    const shot_id = Number.isFinite(Number(shot.shot_id)) ? Number(shot.shot_id) : idx + 1;
+    const rawFrames = Array.isArray(shot.frames) ? shot.frames : [];
+    const frames = rawFrames.map((frameRaw) => {
+      const frame = frameRaw && typeof frameRaw === "object" ? frameRaw : {};
+      const frame_number = Number.isFinite(Number(frame.frame_number)) ? Number(frame.frame_number) : 0;
+      const timestamp2 = Number.isFinite(Number(frame.timestamp)) ? Number(frame.timestamp) : 0;
+      const landmarks = Array.isArray(frame.landmarks) ? frame.landmarks : [];
+      return createSkeletonRecord(video_id, shot_id, frame_number, landmarks, timestamp2);
+    }).filter((frame) => frame.frame_number > 0);
+    return {
+      shot_id,
+      frames
+    };
+  }).filter((shot) => shot.frames.length > 0);
+  return {
+    video_id,
+    shots
+  };
+}
+function buildSkeletonCacheEntry(dataset) {
+  const shotsById = /* @__PURE__ */ new Map();
+  for (const shot of dataset.shots) {
+    const sortedFrames = [...shot.frames].sort((a, b) => a.frame_number - b.frame_number);
+    const frameNumbers = sortedFrames.map((frame) => frame.frame_number);
+    const framesByNumber = /* @__PURE__ */ new Map();
+    for (const frame of sortedFrames) {
+      framesByNumber.set(frame.frame_number, frame);
+    }
+    shotsById.set(shot.shot_id, {
+      shot: {
+        ...shot,
+        frames: sortedFrames
+      },
+      frameNumbers,
+      framesByNumber
+    });
+  }
+  const now = Date.now();
+  return {
+    dataset,
+    shotsById,
+    cachedAt: now,
+    expiresAt: now + SKELETON_CACHE_TTL_MS
+  };
+}
+function evictOldestSkeletonCacheEntry() {
+  if (skeletonCache.size < SKELETON_CACHE_MAX_ENTRIES) return;
+  let oldestKey = null;
+  let oldestTime = Number.POSITIVE_INFINITY;
+  for (const [key, entry] of skeletonCache.entries()) {
+    if (entry.cachedAt < oldestTime) {
+      oldestTime = entry.cachedAt;
+      oldestKey = key;
+    }
+  }
+  if (oldestKey) skeletonCache.delete(oldestKey);
+}
+function invalidateSkeletonCache(video_id) {
+  skeletonCache.delete(video_id);
+}
+function getCachedSkeletonEntry(video_id) {
+  const hit = skeletonCache.get(video_id);
+  if (!hit) return null;
+  if (Date.now() > hit.expiresAt) {
+    skeletonCache.delete(video_id);
+    return null;
+  }
+  return hit;
+}
+function setCachedSkeletonEntry(video_id, entry) {
+  evictOldestSkeletonCacheEntry();
+  skeletonCache.set(video_id, entry);
+}
+function lowerBoundFrameIndex(values, target) {
+  let lo = 0;
+  let hi = values.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (values[mid] < target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+function upperBoundFrameIndex(values, target) {
+  let lo = 0;
+  let hi = values.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (values[mid] <= target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+function selectShotFramesByRange(shotIndex, startFrame, endFrame) {
+  const hasStart = Number.isFinite(Number(startFrame));
+  const hasEnd = Number.isFinite(Number(endFrame));
+  if (!hasStart && !hasEnd) return shotIndex.shot.frames;
+  const start = hasStart ? Number(startFrame) : Number.NEGATIVE_INFINITY;
+  const end = hasEnd ? Number(endFrame) : Number.POSITIVE_INFINITY;
+  if (start > end) return [];
+  const lo = hasStart ? lowerBoundFrameIndex(shotIndex.frameNumbers, start) : 0;
+  const hi = hasEnd ? upperBoundFrameIndex(shotIndex.frameNumbers, end) : shotIndex.frameNumbers.length;
+  return shotIndex.shot.frames.slice(lo, hi);
+}
+async function getSkeletonCacheEntry(video_id) {
+  const cached = getCachedSkeletonEntry(video_id);
+  if (cached) return cached;
+  const [row] = await db.select({ aiDiagnostics: metrics.aiDiagnostics }).from(metrics).where(eq5(metrics.analysisId, video_id)).limit(1);
+  const diagnostics = row?.aiDiagnostics && typeof row.aiDiagnostics === "object" ? row.aiDiagnostics : null;
+  if (!diagnostics) return null;
+  const dataset = normalizeSkeletonDataset(diagnostics.skeletonData, video_id);
+  if (!dataset) return null;
+  const entry = buildSkeletonCacheEntry(dataset);
+  setCachedSkeletonEntry(video_id, entry);
+  return entry;
+}
+async function getShotSkeleton(video_id, shot_id, startFrame, endFrame) {
+  const cacheEntry = await getSkeletonCacheEntry(video_id);
+  if (!cacheEntry) return null;
+  const shot = cacheEntry.shotsById.get(shot_id);
+  if (!shot) return null;
+  const frames = selectShotFramesByRange(shot, startFrame, endFrame);
+  return {
+    video_id: cacheEntry.dataset.video_id,
+    shot_id,
+    frames
+  };
+}
+async function getFrameSkeleton(video_id, shot_id, frame_number) {
+  const cacheEntry = await getSkeletonCacheEntry(video_id);
+  if (!cacheEntry) return null;
+  const shot = cacheEntry.shotsById.get(shot_id);
+  if (!shot) return null;
+  const frame = shot.framesByNumber.get(frame_number);
+  if (!frame) return null;
+  return {
+    video_id: cacheEntry.dataset.video_id,
+    shot_id,
+    frame
+  };
+}
 function applyDbRangesToConfig(config, rows) {
   const byMetricKey = /* @__PURE__ */ new Map();
   for (const row of rows) {
@@ -5863,11 +6413,7 @@ function applyDbRangesToConfig(config, rows) {
   }
   const metricsByKey = /* @__PURE__ */ new Map();
   for (const metric of config.metrics || []) {
-    const withoutRange = {
-      ...metric,
-      optimalRange: void 0
-    };
-    metricsByKey.set(metric.key, withoutRange);
+    metricsByKey.set(metric.key, { ...metric });
   }
   for (const row of rows) {
     const key = String(row.metricKey || "").trim();
@@ -5911,10 +6457,10 @@ function applyDbRangesToConfig(config, rows) {
 async function fetchMetricRangeRows(filters = {}) {
   const conditions = [];
   if (filters.configKey) {
-    conditions.push(eq4(sportCategoryMetricRanges.configKey, String(filters.configKey).trim()));
+    conditions.push(eq5(sportCategoryMetricRanges.configKey, String(filters.configKey).trim()));
   }
   if (filters.metricKey) {
-    conditions.push(eq4(sportCategoryMetricRanges.metricKey, String(filters.metricKey).trim()));
+    conditions.push(eq5(sportCategoryMetricRanges.metricKey, String(filters.metricKey).trim()));
   }
   if (filters.sportName) {
     conditions.push(
@@ -5927,7 +6473,7 @@ async function fetchMetricRangeRows(filters = {}) {
     );
   }
   if (!filters.includeInactive) {
-    conditions.push(eq4(sportCategoryMetricRanges.isActive, true));
+    conditions.push(eq5(sportCategoryMetricRanges.isActive, true));
   }
   const rows = await db.select().from(sportCategoryMetricRanges).where(conditions.length ? and3(...conditions) : void 0).orderBy(
     asc(sportCategoryMetricRanges.configKey),
@@ -5937,23 +6483,24 @@ async function fetchMetricRangeRows(filters = {}) {
 }
 async function getModelEvaluationMode(userId) {
   const scopedKey = getModelEvaluationModeKey(userId);
-  const [scopedSetting] = await db.select().from(appSettings).where(eq4(appSettings.key, scopedKey)).limit(1);
+  const [scopedSetting] = await db.select().from(appSettings).where(eq5(appSettings.key, scopedKey)).limit(1);
   if (scopedSetting?.value && typeof scopedSetting.value === "object") {
     return Boolean(scopedSetting.value.enabled);
   }
-  const [legacySetting] = await db.select().from(appSettings).where(eq4(appSettings.key, MODEL_EVALUATION_MODE_KEY)).limit(1);
+  const [legacySetting] = await db.select().from(appSettings).where(eq5(appSettings.key, MODEL_EVALUATION_MODE_KEY)).limit(1);
   if (!legacySetting?.value || typeof legacySetting.value !== "object") return false;
   return Boolean(legacySetting.value.enabled);
 }
-async function setModelEvaluationMode(enabled, userId) {
+async function setModelEvaluationMode(enabled, userId, actorUserId) {
   await db.insert(appSettings).values({
     key: getModelEvaluationModeKey(userId),
-    value: { enabled }
+    value: { enabled },
+    ...buildInsertAuditFields(actorUserId || userId)
   }).onConflictDoUpdate({
     target: appSettings.key,
     set: {
       value: { enabled },
-      updatedAt: /* @__PURE__ */ new Date()
+      ...buildUpdateAuditFields(actorUserId || userId)
     }
   });
 }
@@ -5986,13 +6533,13 @@ async function buildScoringModelDashboard(userId, isAdmin, movementFilterRaw, pl
   const discrepancyRows = isAdmin ? await db.select({
     discrepancy: analysisShotDiscrepancies,
     analysis: analyses
-  }).from(analysisShotDiscrepancies).innerJoin(analyses, eq4(analysisShotDiscrepancies.analysisId, analyses.id)).where(eq4(analysisShotDiscrepancies.modelVersion, modelConfig.activeModelVersion)) : await db.select({
+  }).from(analysisShotDiscrepancies).innerJoin(analyses, eq5(analysisShotDiscrepancies.analysisId, analyses.id)).where(eq5(analysisShotDiscrepancies.modelVersion, modelConfig.activeModelVersion)) : await db.select({
     discrepancy: analysisShotDiscrepancies,
     analysis: analyses
-  }).from(analysisShotDiscrepancies).innerJoin(analyses, eq4(analysisShotDiscrepancies.analysisId, analyses.id)).where(
+  }).from(analysisShotDiscrepancies).innerJoin(analyses, eq5(analysisShotDiscrepancies.analysisId, analyses.id)).where(
     and3(
-      eq4(analysisShotDiscrepancies.modelVersion, modelConfig.activeModelVersion),
-      eq4(analysisShotDiscrepancies.userId, userId)
+      eq5(analysisShotDiscrepancies.modelVersion, modelConfig.activeModelVersion),
+      eq5(analysisShotDiscrepancies.userId, userId)
     )
   );
   const filteredRows = discrepancyRows.filter((row) => {
@@ -6094,13 +6641,17 @@ function computeDiscrepancySnapshot(autoLabels, manualLabels) {
 }
 async function resolveAutoLabelsForAnalysis(analysis, sportName, movementName, manualLabels, dominantProfile) {
   let autoLabels = [];
-  if (analysis.videoPath && fs5.existsSync(analysis.videoPath)) {
+  if (analysis.videoPath) {
     try {
-      const diagnostics = await runPythonDiagnostics2(
+      const diagnostics = await withLocalMediaFile(
         analysis.videoPath,
-        sportName,
-        movementName,
-        dominantProfile
+        analysis.videoFilename,
+        (localPath) => runPythonDiagnostics2(
+          localPath,
+          sportName,
+          movementName,
+          dominantProfile
+        )
       );
       autoLabels = (diagnostics?.shotSegments || []).map(
         (segment) => normalizeShotLabel(segment?.label)
@@ -6121,26 +6672,195 @@ async function resolveSportAndMovementNames(analysis) {
   let sportName = "Tennis";
   let movementName = "auto-detect";
   if (analysis.sportId) {
-    const [sport] = await db.select().from(sports).where(eq4(sports.id, analysis.sportId));
+    const [sport] = await db.select().from(sports).where(eq5(sports.id, analysis.sportId));
     if (sport?.name) {
       sportName = sport.name;
     }
   }
   if (analysis.movementId) {
-    const [movement] = await db.select().from(sportMovements).where(eq4(sportMovements.id, analysis.movementId));
+    const [movement] = await db.select().from(sportMovements).where(eq5(sportMovements.id, analysis.movementId));
     if (movement?.name) {
       movementName = movement.name;
     }
   }
   return { sportName, movementName };
 }
+async function attachVideoUrl(row) {
+  return {
+    ...row,
+    videoUrl: await resolveMediaUrl(row.videoPath || null)
+  };
+}
+var AUDIT_METADATA_BACKFILL_KEY = "AUDIT_METADATA_BACKFILL_V1";
+async function ensureAuditMetadataBackfill() {
+  const [existing] = await db.select().from(appSettings).where(eq5(appSettings.key, AUDIT_METADATA_BACKFILL_KEY)).limit(1);
+  if (existing) {
+    return;
+  }
+  await db.execute(sql4`
+    update users
+    set
+      updated_at = coalesce(updated_at, created_at, now()),
+      created_by_user_id = coalesce(created_by_user_id, id),
+      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id, id)
+    where updated_at is null
+       or created_by_user_id is null
+       or updated_by_user_id is null
+  `);
+  await db.execute(sql4`
+    update sports
+    set
+      created_at = coalesce(created_at, updated_at, now()),
+      updated_at = coalesce(updated_at, created_at, now())
+    where created_at is null
+       or updated_at is null
+  `);
+  await db.execute(sql4`
+    update sport_movements
+    set
+      created_at = coalesce(created_at, updated_at, now()),
+      updated_at = coalesce(updated_at, created_at, now())
+    where created_at is null
+       or updated_at is null
+  `);
+  await db.execute(sql4`
+    update analyses
+    set
+      created_by_user_id = coalesce(created_by_user_id, user_id),
+      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id, user_id)
+    where created_by_user_id is null
+       or updated_by_user_id is null
+  `);
+  await db.execute(sql4`
+    update metrics as m
+    set
+      updated_at = coalesce(m.updated_at, m.created_at, now()),
+      created_by_user_id = coalesce(m.created_by_user_id, a.created_by_user_id, a.user_id),
+      updated_by_user_id = coalesce(m.updated_by_user_id, m.created_by_user_id, a.updated_by_user_id, a.created_by_user_id, a.user_id)
+    from analyses as a
+    where m.analysis_id = a.id
+      and (
+        m.updated_at is null
+        or m.created_by_user_id is null
+        or m.updated_by_user_id is null
+      )
+  `);
+  await db.execute(sql4`
+    update coaching_insights as ci
+    set
+      updated_at = coalesce(ci.updated_at, ci.created_at, now()),
+      created_by_user_id = coalesce(ci.created_by_user_id, a.created_by_user_id, a.user_id),
+      updated_by_user_id = coalesce(ci.updated_by_user_id, ci.created_by_user_id, a.updated_by_user_id, a.created_by_user_id, a.user_id)
+    from analyses as a
+    where ci.analysis_id = a.id
+      and (
+        ci.updated_at is null
+        or ci.created_by_user_id is null
+        or ci.updated_by_user_id is null
+      )
+  `);
+  await db.execute(sql4`
+    update analysis_feedback
+    set
+      updated_at = coalesce(updated_at, created_at, now()),
+      created_by_user_id = coalesce(created_by_user_id, user_id),
+      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id, user_id)
+    where updated_at is null
+       or created_by_user_id is null
+       or updated_by_user_id is null
+  `);
+  await db.execute(sql4`
+    update analysis_shot_annotations
+    set
+      created_at = coalesce(created_at, updated_at, now()),
+      updated_at = coalesce(updated_at, created_at, now()),
+      created_by_user_id = coalesce(created_by_user_id, user_id),
+      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id, user_id)
+    where created_at is null
+       or updated_at is null
+       or created_by_user_id is null
+       or updated_by_user_id is null
+  `);
+  await db.execute(sql4`
+    update analysis_shot_discrepancies
+    set
+      created_at = coalesce(created_at, updated_at, now()),
+      updated_at = coalesce(updated_at, created_at, now()),
+      created_by_user_id = coalesce(created_by_user_id, user_id),
+      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id, user_id)
+    where created_at is null
+       or updated_at is null
+       or created_by_user_id is null
+       or updated_by_user_id is null
+  `);
+  await db.execute(sql4`
+    update app_settings
+    set
+      created_at = coalesce(created_at, updated_at, now()),
+      updated_at = coalesce(updated_at, created_at, now())
+    where created_at is null
+       or updated_at is null
+  `);
+  await db.execute(sql4`
+    update scoring_model_registry_entries
+    set
+      updated_at = coalesce(updated_at, created_at, now()),
+      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id)
+    where updated_at is null
+       or updated_by_user_id is null
+  `);
+  await db.execute(sql4`
+    update scoring_model_registry_dataset_metrics as dm
+    set
+      created_at = coalesce(dm.created_at, dm.updated_at, re.created_at, now()),
+      updated_at = coalesce(dm.updated_at, dm.created_at, re.updated_at, re.created_at, now()),
+      created_by_user_id = coalesce(dm.created_by_user_id, re.created_by_user_id),
+      updated_by_user_id = coalesce(dm.updated_by_user_id, dm.created_by_user_id, re.updated_by_user_id, re.created_by_user_id)
+    from scoring_model_registry_entries as re
+    where dm.registry_entry_id = re.id
+      and (
+        dm.created_at is null
+        or dm.updated_at is null
+        or dm.created_by_user_id is null
+        or dm.updated_by_user_id is null
+      )
+  `);
+  await db.execute(sql4`
+    update sport_category_metric_ranges
+    set
+      created_at = coalesce(created_at, updated_at, now()),
+      updated_at = coalesce(updated_at, created_at, now()),
+      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id)
+    where created_at is null
+       or updated_at is null
+       or updated_by_user_id is null
+  `);
+  await db.insert(appSettings).values({
+    key: AUDIT_METADATA_BACKFILL_KEY,
+    value: {
+      version: 1,
+      completedAt: (/* @__PURE__ */ new Date()).toISOString()
+    },
+    ...buildInsertAuditFields(null)
+  }).onConflictDoUpdate({
+    target: appSettings.key,
+    set: {
+      value: {
+        version: 1,
+        completedAt: (/* @__PURE__ */ new Date()).toISOString()
+      },
+      ...buildUpdateAuditFields(null)
+    }
+  });
+  console.log("Applied one-time audit metadata backfill for existing records");
+}
 async function refreshDiscrepancySnapshotsForAnalysis(analysisId) {
   const modelConfig = readModelRegistryConfig();
-  const [analysis] = await db.select().from(analyses).where(eq4(analyses.id, analysisId)).limit(1);
+  const [analysis] = await db.select().from(analyses).where(eq5(analyses.id, analysisId)).limit(1);
   if (!analysis) {
     return { refreshed: 0, skipped: 1 };
   }
-  const annotations = await db.select().from(analysisShotAnnotations).where(eq4(analysisShotAnnotations.analysisId, analysisId));
+  const annotations = await db.select().from(analysisShotAnnotations).where(eq5(analysisShotAnnotations.analysisId, analysisId));
   if (annotations.length === 0) {
     return { refreshed: 0, skipped: 0 };
   }
@@ -6174,7 +6894,8 @@ async function refreshDiscrepancySnapshotsForAnalysis(analysisId) {
         mismatchRatePct: snapshot.mismatchRatePct,
         labelMismatches: snapshot.labelMismatches,
         countMismatch: snapshot.countMismatch,
-        confusionPairs: snapshot.confusionPairs
+        confusionPairs: snapshot.confusionPairs,
+        ...buildInsertAuditFields(annotation.userId)
       }).onConflictDoUpdate({
         target: [analysisShotDiscrepancies.analysisId, analysisShotDiscrepancies.userId],
         set: {
@@ -6188,7 +6909,7 @@ async function refreshDiscrepancySnapshotsForAnalysis(analysisId) {
           labelMismatches: snapshot.labelMismatches,
           countMismatch: snapshot.countMismatch,
           confusionPairs: snapshot.confusionPairs,
-          updatedAt: /* @__PURE__ */ new Date()
+          ...buildUpdateAuditFields(annotation.userId)
         }
       });
       refreshed += 1;
@@ -6201,9 +6922,31 @@ async function refreshDiscrepancySnapshotsForAnalysis(analysisId) {
 }
 async function registerRoutes(app2) {
   await db.execute(sql4`alter table users add column if not exists dominant_profile text`);
+  await db.execute(sql4`alter table users add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql4`alter table users add column if not exists created_by_user_id varchar`);
+  await db.execute(sql4`alter table users add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql4`alter table sports add column if not exists created_at timestamp default now()`);
+  await db.execute(sql4`alter table sports add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql4`alter table sports add column if not exists created_by_user_id varchar`);
+  await db.execute(sql4`alter table sports add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql4`alter table sport_movements add column if not exists created_at timestamp default now()`);
+  await db.execute(sql4`alter table sport_movements add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql4`alter table sport_movements add column if not exists created_by_user_id varchar`);
+  await db.execute(sql4`alter table sport_movements add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql4`alter table analyses add column if not exists created_by_user_id varchar`);
+  await db.execute(sql4`alter table analyses add column if not exists updated_by_user_id varchar`);
   await db.execute(sql4`alter table metrics add column if not exists score_inputs jsonb`);
   await db.execute(sql4`alter table metrics add column if not exists score_outputs jsonb`);
   await db.execute(sql4`alter table metrics add column if not exists ai_diagnostics jsonb`);
+  await db.execute(sql4`alter table metrics add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql4`alter table metrics add column if not exists created_by_user_id varchar`);
+  await db.execute(sql4`alter table metrics add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql4`alter table coaching_insights add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql4`alter table coaching_insights add column if not exists created_by_user_id varchar`);
+  await db.execute(sql4`alter table coaching_insights add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql4`alter table analysis_feedback add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql4`alter table analysis_feedback add column if not exists created_by_user_id varchar`);
+  await db.execute(sql4`alter table analysis_feedback add column if not exists updated_by_user_id varchar`);
   await db.execute(sql4`alter table metrics drop column if exists tactical_scores`);
   await db.execute(sql4`alter table metrics drop column if exists sub_scores`);
   await db.execute(sql4`
@@ -6217,8 +6960,12 @@ async function registerRoutes(app2) {
       notes text,
       created_at timestamp not null default now(),
       updated_at timestamp not null default now()
+      ,created_by_user_id varchar
+      ,updated_by_user_id varchar
     )
   `);
+  await db.execute(sql4`alter table analysis_shot_annotations add column if not exists created_by_user_id varchar`);
+  await db.execute(sql4`alter table analysis_shot_annotations add column if not exists updated_by_user_id varchar`);
   await db.execute(sql4`
     create unique index if not exists analysis_shot_annotations_analysis_user_uq
     on analysis_shot_annotations (analysis_id, user_id)
@@ -6239,9 +6986,13 @@ async function registerRoutes(app2) {
       count_mismatch real not null,
       confusion_pairs jsonb not null default '[]'::jsonb,
       created_at timestamp not null default now(),
-      updated_at timestamp not null default now()
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar,
+      updated_by_user_id varchar
     )
   `);
+  await db.execute(sql4`alter table analysis_shot_discrepancies add column if not exists created_by_user_id varchar`);
+  await db.execute(sql4`alter table analysis_shot_discrepancies add column if not exists updated_by_user_id varchar`);
   await db.execute(sql4`
     create unique index if not exists analysis_shot_discrepancies_analysis_user_uq
     on analysis_shot_discrepancies (analysis_id, user_id)
@@ -6250,9 +7001,16 @@ async function registerRoutes(app2) {
     create table if not exists app_settings (
       key varchar primary key,
       value jsonb not null,
+      created_at timestamp not null default now(),
       updated_at timestamp not null default now()
+      ,created_by_user_id varchar
+      ,updated_by_user_id varchar
     )
   `);
+  await db.execute(sql4`alter table app_settings add column if not exists created_at timestamp default now()`);
+  await db.execute(sql4`alter table app_settings add column if not exists created_by_user_id varchar`);
+  await db.execute(sql4`alter table app_settings add column if not exists updated_by_user_id varchar`);
+  await ensureVideoStorageModeSetting();
   await db.execute(sql4`
     create table if not exists scoring_model_registry_entries (
       id varchar primary key default gen_random_uuid(),
@@ -6265,9 +7023,13 @@ async function registerRoutes(app2) {
       manifest_model_version varchar not null default '0.1',
       manifest_datasets jsonb not null default '[]'::jsonb,
       created_by_user_id varchar references users(id),
-      created_at timestamp not null default now()
+      updated_by_user_id varchar references users(id),
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now()
     )
   `);
+  await db.execute(sql4`alter table scoring_model_registry_entries add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql4`alter table scoring_model_registry_entries add column if not exists updated_at timestamp default now()`);
   await db.execute(sql4`
     create table if not exists scoring_model_registry_dataset_metrics (
       id varchar primary key default gen_random_uuid(),
@@ -6275,9 +7037,17 @@ async function registerRoutes(app2) {
       dataset_name text not null,
       movement_type text not null,
       movement_detection_accuracy_pct real not null,
-      scoring_accuracy_pct real not null
+      scoring_accuracy_pct real not null,
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar,
+      updated_by_user_id varchar
     )
   `);
+  await db.execute(sql4`alter table scoring_model_registry_dataset_metrics add column if not exists created_at timestamp default now()`);
+  await db.execute(sql4`alter table scoring_model_registry_dataset_metrics add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql4`alter table scoring_model_registry_dataset_metrics add column if not exists created_by_user_id varchar`);
+  await db.execute(sql4`alter table scoring_model_registry_dataset_metrics add column if not exists updated_by_user_id varchar`);
   await db.execute(sql4`
     create table if not exists sport_category_metric_ranges (
       id varchar primary key default gen_random_uuid(),
@@ -6292,9 +7062,13 @@ async function registerRoutes(app2) {
       is_active boolean not null default true,
       source text not null default 'config',
       created_at timestamp not null default now(),
-      updated_at timestamp not null default now()
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar,
+      updated_by_user_id varchar
     )
   `);
+  await db.execute(sql4`alter table sport_category_metric_ranges add column if not exists created_by_user_id varchar`);
+  await db.execute(sql4`alter table sport_category_metric_ranges add column if not exists updated_by_user_id varchar`);
   await db.execute(sql4`
     create unique index if not exists sport_category_metric_ranges_config_metric_uq
     on sport_category_metric_ranges (config_key, metric_key)
@@ -6329,6 +7103,7 @@ async function registerRoutes(app2) {
   await db.execute(sql4`alter table analyses add column if not exists gps_accuracy_m real`);
   await db.execute(sql4`alter table analyses add column if not exists gps_timestamp timestamp`);
   await db.execute(sql4`alter table analyses add column if not exists gps_source text`);
+  await ensureAuditMetadataBackfill();
   const parseIntegerList = (value) => {
     if (!Array.isArray(value)) return [];
     const result = [];
@@ -6373,7 +7148,7 @@ async function registerRoutes(app2) {
   app2.get("/api/model-evaluation/settings", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const enabled = await getModelEvaluationMode(userId);
       const modelConfig = readModelRegistryConfig();
@@ -6394,7 +7169,7 @@ async function registerRoutes(app2) {
   app2.get("/api/model-registry/config", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
@@ -6408,7 +7183,7 @@ async function registerRoutes(app2) {
   app2.put("/api/model-registry/config", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
@@ -6435,7 +7210,7 @@ async function registerRoutes(app2) {
   app2.get("/api/model-registry/validate-manifest", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
@@ -6452,13 +7227,47 @@ async function registerRoutes(app2) {
   app2.put("/api/model-evaluation/settings", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
       const enabled = Boolean(req.body?.enabled);
-      await setModelEvaluationMode(enabled, userId);
+      await setModelEvaluationMode(enabled, userId, userId);
       res.json({ enabled });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app2.get("/api/platform/storage-settings", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      res.json({
+        mode: await getVideoStorageMode(),
+        isAdmin
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app2.put("/api/platform/storage-settings", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const mode = String(req.body?.mode || "").trim().toLowerCase();
+      if (mode !== "filesystem" && mode !== "r2") {
+        return res.status(400).json({ error: "mode must be filesystem or r2" });
+      }
+      await setVideoStorageMode(mode, userId);
+      res.json({ mode });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -6466,7 +7275,7 @@ async function registerRoutes(app2) {
   app2.get("/api/scoring-model/dashboard", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const dashboard = await buildScoringModelDashboard(
         userId,
@@ -6485,7 +7294,7 @@ async function registerRoutes(app2) {
   app2.post("/api/scoring-model/registry/save", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       if (!isAdmin) {
         return res.status(403).json({ error: "Admin access required" });
@@ -6514,7 +7323,9 @@ async function registerRoutes(app2) {
         datasetsUsed: dashboard.datasetsUsed,
         manifestModelVersion,
         manifestDatasets: manifestBeforeSave.datasets,
-        createdByUserId: userId
+        createdByUserId: userId,
+        updatedByUserId: userId,
+        ...buildInsertAuditFields(userId)
       }).returning();
       if (dashboard.datasetMetrics.length > 0) {
         await db.insert(scoringModelRegistryDatasetMetrics).values(
@@ -6523,7 +7334,8 @@ async function registerRoutes(app2) {
             datasetName: metric.datasetName,
             movementType: metric.movementType,
             movementDetectionAccuracyPct: metric.movementDetectionAccuracyPct,
-            scoringAccuracyPct: metric.scoringAccuracyPct
+            scoringAccuracyPct: metric.scoringAccuracyPct,
+            ...buildInsertAuditFields(userId)
           }))
         );
       }
@@ -6541,7 +7353,7 @@ async function registerRoutes(app2) {
   app2.get("/api/scoring-model/registry", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       if (!isAdmin) {
         return res.status(403).json({ error: "Admin access required" });
@@ -6658,16 +7470,16 @@ async function registerRoutes(app2) {
   app2.get("/api/scoring-model/registry/:id", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       if (!isAdmin) {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const [entry] = await db.select().from(scoringModelRegistryEntries).where(eq4(scoringModelRegistryEntries.id, req.params.id)).limit(1);
+      const [entry] = await db.select().from(scoringModelRegistryEntries).where(eq5(scoringModelRegistryEntries.id, req.params.id)).limit(1);
       if (!entry) {
         return res.status(404).json({ error: "Registry entry not found" });
       }
-      const datasetMetrics = await db.select().from(scoringModelRegistryDatasetMetrics).where(eq4(scoringModelRegistryDatasetMetrics.registryEntryId, entry.id));
+      const datasetMetrics = await db.select().from(scoringModelRegistryDatasetMetrics).where(eq5(scoringModelRegistryDatasetMetrics.registryEntryId, entry.id));
       const manifestDatasets = Array.isArray(entry.manifestDatasets) ? entry.manifestDatasets : [];
       const manifestVideos = manifestDatasets.flatMap((dataset) => {
         const datasetName = String(dataset?.name || "").trim();
@@ -6682,7 +7494,7 @@ async function registerRoutes(app2) {
       const analysisRows = await db.select({
         analysis: analyses,
         userName: users.name
-      }).from(analyses).leftJoin(users, eq4(analyses.userId, users.id)).orderBy(desc3(analyses.createdAt));
+      }).from(analyses).leftJoin(users, eq5(analyses.userId, users.id)).orderBy(desc3(analyses.createdAt));
       const normalizeFilenameToken = (value) => {
         return path5.basename(String(value || "").trim()).toLowerCase();
       };
@@ -6757,7 +7569,7 @@ async function registerRoutes(app2) {
           discrepancy: analysisShotDiscrepancies,
           analysis: analyses,
           userName: users.name
-        }).from(analysisShotDiscrepancies).innerJoin(analyses, eq4(analysisShotDiscrepancies.analysisId, analyses.id)).leftJoin(users, eq4(analyses.userId, users.id)).where(eq4(analysisShotDiscrepancies.modelVersion, entry.modelVersion)).orderBy(
+        }).from(analysisShotDiscrepancies).innerJoin(analyses, eq5(analysisShotDiscrepancies.analysisId, analyses.id)).leftJoin(users, eq5(analyses.userId, users.id)).where(eq5(analysisShotDiscrepancies.modelVersion, entry.modelVersion)).orderBy(
           desc3(analysisShotDiscrepancies.mismatchRatePct),
           desc3(analysisShotDiscrepancies.mismatches),
           desc3(analysisShotDiscrepancies.updatedAt)
@@ -6849,7 +7661,7 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/sports/:sportId/movements", async (req, res) => {
     try {
-      const movements = await db.select().from(sportMovements).where(eq4(sportMovements.sportId, req.params.sportId)).orderBy(asc(sportMovements.sortOrder));
+      const movements = await db.select().from(sportMovements).where(eq5(sportMovements.sportId, req.params.sportId)).orderBy(asc(sportMovements.sortOrder));
       res.json(movements);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -6910,7 +7722,7 @@ async function registerRoutes(app2) {
   app2.put("/api/metric-optimal-ranges", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
@@ -6944,7 +7756,8 @@ async function registerRoutes(app2) {
         optimalMin,
         optimalMax,
         isActive,
-        source: "admin"
+        source: "admin",
+        ...buildInsertAuditFields(userId)
       }).onConflictDoUpdate({
         target: [sportCategoryMetricRanges.configKey, sportCategoryMetricRanges.metricKey],
         set: {
@@ -6956,7 +7769,7 @@ async function registerRoutes(app2) {
           optimalMax,
           isActive,
           source: "admin",
-          updatedAt: /* @__PURE__ */ new Date()
+          ...buildUpdateAuditFields(userId)
         }
       });
       const rows = await fetchMetricRangeRows({ configKey, metricKey, includeInactive: true });
@@ -6968,7 +7781,7 @@ async function registerRoutes(app2) {
   app2.put("/api/metric-optimal-ranges/bulk", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
@@ -7026,7 +7839,8 @@ async function registerRoutes(app2) {
           optimalMin: item.optimalMin,
           optimalMax: item.optimalMax,
           isActive: item.isActive,
-          source: "admin"
+          source: "admin",
+          ...buildInsertAuditFields(userId)
         }).onConflictDoUpdate({
           target: [sportCategoryMetricRanges.configKey, sportCategoryMetricRanges.metricKey],
           set: {
@@ -7038,7 +7852,7 @@ async function registerRoutes(app2) {
             optimalMax: item.optimalMax,
             isActive: item.isActive,
             source: "admin",
-            updatedAt: /* @__PURE__ */ new Date()
+            ...buildUpdateAuditFields(userId)
           }
         });
       }
@@ -7046,7 +7860,7 @@ async function registerRoutes(app2) {
       const rows = await db.select().from(sportCategoryMetricRanges).where(
         and3(
           inArray(sportCategoryMetricRanges.configKey, uniqueConfigKeys),
-          eq4(sportCategoryMetricRanges.isActive, true)
+          eq5(sportCategoryMetricRanges.isActive, true)
         )
       ).orderBy(
         asc(sportCategoryMetricRanges.configKey),
@@ -7064,19 +7878,20 @@ async function registerRoutes(app2) {
   app2.post(
     "/api/upload",
     requireAuth,
-    upload.single("video"),
+    runVideoUploadMiddleware,
     async (req, res) => {
       try {
         if (!req.file) {
           return res.status(400).json({ error: "No video file provided" });
         }
+        const storageMode = await getVideoStorageMode();
         const requesterUserId = req.session.userId;
         const evaluationModeEnabled = await getModelEvaluationMode(requesterUserId);
         const originalFilename = path5.basename(String(req.file.originalname || "")).trim();
         const targetUserIdRaw = String(req.body?.targetUserId || "").trim();
         let userId = requesterUserId;
         if (targetUserIdRaw) {
-          const [targetUser] = await db.select({ id: users.id }).from(users).where(eq4(users.id, targetUserIdRaw));
+          const [targetUser] = await db.select({ id: users.id }).from(users).where(eq5(users.id, targetUserIdRaw));
           if (!targetUser) {
             return res.status(400).json({ error: "Selected player not found" });
           }
@@ -7089,31 +7904,39 @@ async function registerRoutes(app2) {
         let resolvedSportName = "";
         let resolvedMovementName = "";
         if (sportId) {
-          const [sport] = await db.select().from(sports).where(eq4(sports.id, sportId));
+          const [sport] = await db.select().from(sports).where(eq5(sports.id, sportId));
           if (sport) {
             resolvedSportId = sport.id;
             resolvedSportName = sport.name;
           }
         }
         if (movementId) {
-          const [movement] = await db.select().from(sportMovements).where(eq4(sportMovements.id, movementId));
+          const [movement] = await db.select().from(sportMovements).where(eq5(sportMovements.id, movementId));
           if (movement && (!resolvedSportId || movement.sportId === resolvedSportId)) {
             resolvedMovementId = movement.id;
             resolvedMovementName = movement.name;
             if (!resolvedSportId) {
               resolvedSportId = movement.sportId;
-              const [movementSport] = await db.select().from(sports).where(eq4(sports.id, movement.sportId));
+              const [movementSport] = await db.select().from(sports).where(eq5(sports.id, movement.sportId));
               if (movementSport) {
                 resolvedSportName = movementSport.name;
               }
             }
           }
         }
-        const finalFilename = req.file.filename;
-        const finalPath = req.file.path;
+        const finalFilename = req.file.filename || `${randomUUID3().toUpperCase()}${path5.extname(req.file.originalname || "") || ".mp4"}`;
+        const finalPath = storageMode === "r2" ? await storeVideoBuffer({
+          buffer: req.file.buffer,
+          contentType: req.file.mimetype,
+          filename: finalFilename
+        }) : req.file.path;
         const sourceFilename = evaluationModeEnabled && originalFilename ? originalFilename : null;
         const evaluationVideoId = null;
-        const extractedMetadata = await extractVideoMetadata(finalPath);
+        const extractedMetadata = await withLocalMediaFile(
+          finalPath,
+          finalFilename,
+          async (localPath) => extractVideoMetadata(localPath)
+        );
         const analysis = await storage.createAnalysis(
           finalFilename,
           finalPath,
@@ -7122,7 +7945,8 @@ async function registerRoutes(app2) {
           resolvedMovementId,
           extractedMetadata,
           sourceFilename,
-          evaluationVideoId
+          evaluationVideoId,
+          requesterUserId
         );
         processAnalysis(analysis.id).catch(console.error);
         res.json({
@@ -7140,7 +7964,7 @@ async function registerRoutes(app2) {
     try {
       const userId = req.session.userId;
       const sportId = req.query.sportId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       await markStaleProcessingAsFailed(isAdmin ? void 0 : userId);
       const allAnalyses = isAdmin ? await storage.getAllAnalyses(null, sportId) : await storage.getAllAnalyses(userId, sportId);
@@ -7152,7 +7976,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/summary", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const evaluationModeEnabled = isAdmin ? await getModelEvaluationMode(userId) : false;
       const evaluationVideoMap = evaluationModeEnabled ? getEvaluationDatasetVideoMap(readModelRegistryConfig()) : null;
@@ -7177,8 +8001,8 @@ async function registerRoutes(app2) {
         scoreOutputs: metrics.scoreOutputs,
         configKey: metrics.configKey,
         modelVersion: metrics.modelVersion
-      }).from(analyses).leftJoin(users, eq4(analyses.userId, users.id)).leftJoin(metrics, eq4(analyses.id, metrics.analysisId));
-      const rows = isAdmin ? await query.orderBy(sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`) : await query.where(eq4(analyses.userId, userId)).orderBy(sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`);
+      }).from(analyses).leftJoin(users, eq5(analyses.userId, users.id)).leftJoin(metrics, eq5(analyses.id, metrics.analysisId));
+      const rows = isAdmin ? await query.orderBy(sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`) : await query.where(eq5(analyses.userId, userId)).orderBy(sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`);
       const normalizedRows = rows.map((row) => {
         const normalized = normalizeScoreRow(row);
         return {
@@ -7190,9 +8014,9 @@ async function registerRoutes(app2) {
       });
       if (evaluationVideoMap && isAdmin) {
         const filteredRows = normalizedRows.filter((row) => getEvaluationMatch(row, evaluationVideoMap));
-        return res.json(filteredRows);
+        return res.json(await Promise.all(filteredRows.map((row) => attachVideoUrl(row))));
       }
-      res.json(normalizedRows);
+      res.json(await Promise.all(normalizedRows.map((row) => attachVideoUrl(row))));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -7200,7 +8024,7 @@ async function registerRoutes(app2) {
   app2.post("/api/coach/ask", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const question = String(req.body?.question || "").trim();
       const sportName = String(req.body?.sportName || "").trim();
@@ -7221,7 +8045,7 @@ async function registerRoutes(app2) {
         overallScore: metrics.overallScore,
         scoreOutputs: metrics.scoreOutputs,
         configKey: metrics.configKey
-      }).from(analyses).leftJoin(metrics, eq4(analyses.id, metrics.analysisId)).where(eq4(analyses.userId, targetPlayerId)).orderBy(sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`);
+      }).from(analyses).leftJoin(metrics, eq5(analyses.id, metrics.analysisId)).where(eq5(analyses.userId, targetPlayerId)).orderBy(sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`);
       const sportFilter = normalizeFilterToken(sportName);
       const movementFilter = normalizeFilterToken(movementName);
       const filtered = rows.filter((row) => {
@@ -7316,13 +8140,13 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
-      const [analysisUser] = analysis.userId ? await db.select({ name: users.name }).from(users).where(eq4(users.id, analysis.userId)).limit(1) : [null];
+      const [analysisUser] = analysis.userId ? await db.select({ name: users.name }).from(users).where(eq5(users.id, analysis.userId)).limit(1) : [null];
       if (!isAdmin && analysis.userId !== userId) {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
@@ -7330,7 +8154,7 @@ async function registerRoutes(app2) {
       const insights = await storage.getCoachingInsights(req.params.id);
       let selectedMovementName = null;
       if (analysis.movementId) {
-        const [movement] = await db.select().from(sportMovements).where(eq4(sportMovements.id, analysis.movementId));
+        const [movement] = await db.select().from(sportMovements).where(eq5(sportMovements.id, analysis.movementId));
         if (movement) {
           selectedMovementName = movement.name;
         }
@@ -7340,10 +8164,10 @@ async function registerRoutes(app2) {
         metricValues: normalizeMetricValuesForApi(metricsData.metricValues)
       } : null;
       res.json({
-        analysis: {
+        analysis: await attachVideoUrl({
           ...analysis,
           userName: analysisUser?.name || null
-        },
+        }),
         metrics: normalizedMetricsData,
         coaching: insights || null,
         selectedMovementName
@@ -7355,7 +8179,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/score-inputs", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -7381,7 +8205,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/improved-tennis", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -7392,7 +8216,7 @@ async function registerRoutes(app2) {
       }
       let sportName = "tennis";
       if (analysis.sportId) {
-        const [sport] = await db.select().from(sports).where(eq4(sports.id, analysis.sportId));
+        const [sport] = await db.select().from(sports).where(eq5(sports.id, analysis.sportId));
         if (sport?.name) sportName = String(sport.name).toLowerCase();
       }
       if (sportName !== "tennis") {
@@ -7421,9 +8245,9 @@ async function registerRoutes(app2) {
   app2.get("/api/shot-annotations", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
-      const rows = isAdmin ? await db.select().from(analysisShotAnnotations).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(1e3) : await db.select().from(analysisShotAnnotations).where(eq4(analysisShotAnnotations.userId, userId)).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(300);
+      const rows = isAdmin ? await db.select().from(analysisShotAnnotations).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(1e3) : await db.select().from(analysisShotAnnotations).where(eq5(analysisShotAnnotations.userId, userId)).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(300);
       res.json(rows);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -7432,7 +8256,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/shot-annotation", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -7441,9 +8265,9 @@ async function registerRoutes(app2) {
       if (!isAdmin && analysis.userId !== userId) {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
-      const whereClause = isAdmin ? eq4(analysisShotAnnotations.analysisId, req.params.id) : and3(
-        eq4(analysisShotAnnotations.analysisId, req.params.id),
-        eq4(analysisShotAnnotations.userId, userId)
+      const whereClause = isAdmin ? eq5(analysisShotAnnotations.analysisId, req.params.id) : and3(
+        eq5(analysisShotAnnotations.analysisId, req.params.id),
+        eq5(analysisShotAnnotations.userId, userId)
       );
       const [annotation] = await db.select().from(analysisShotAnnotations).where(whereClause).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(1);
       if (!annotation) {
@@ -7462,7 +8286,7 @@ async function registerRoutes(app2) {
   app2.post("/api/analyses/:id/shot-annotation", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -7486,8 +8310,8 @@ async function registerRoutes(app2) {
       }
       const [existing] = await db.select().from(analysisShotAnnotations).where(
         and3(
-          eq4(analysisShotAnnotations.analysisId, req.params.id),
-          eq4(analysisShotAnnotations.userId, userId)
+          eq5(analysisShotAnnotations.analysisId, req.params.id),
+          eq5(analysisShotAnnotations.userId, userId)
         )
       ).limit(1);
       if (existing) {
@@ -7496,8 +8320,8 @@ async function registerRoutes(app2) {
           orderedShotLabels,
           usedForScoringShotIndexes,
           notes,
-          updatedAt: /* @__PURE__ */ new Date()
-        }).where(eq4(analysisShotAnnotations.id, existing.id));
+          ...buildUpdateAuditFields(userId)
+        }).where(eq5(analysisShotAnnotations.id, existing.id));
       } else {
         await db.insert(analysisShotAnnotations).values({
           analysisId: req.params.id,
@@ -7505,13 +8329,14 @@ async function registerRoutes(app2) {
           totalShots: Math.trunc(totalShotsNum),
           orderedShotLabels,
           usedForScoringShotIndexes,
-          notes
+          notes,
+          ...buildInsertAuditFields(userId)
         });
       }
       const [saved] = await db.select().from(analysisShotAnnotations).where(
         and3(
-          eq4(analysisShotAnnotations.analysisId, req.params.id),
-          eq4(analysisShotAnnotations.userId, userId)
+          eq5(analysisShotAnnotations.analysisId, req.params.id),
+          eq5(analysisShotAnnotations.userId, userId)
         )
       ).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(1);
       const { sportName, movementName } = await resolveSportAndMovementNames(analysis);
@@ -7524,7 +8349,17 @@ async function registerRoutes(app2) {
           analysis.detectedMovement || movementName || "unknown"
         ).trim().toLowerCase();
         try {
-          const syncResult = syncVideoForModelTuning({
+          const syncResult = useForModelTraining ? await withLocalMediaFile(
+            analysis.videoPath,
+            analysis.videoFilename,
+            async (localPath) => syncVideoForModelTuning({
+              sourceVideoPath: localPath,
+              sourceVideoFilename: analysis.videoFilename,
+              movementType: movementForManifest,
+              enabled: useForModelTraining,
+              videoId: analysis.evaluationVideoId || void 0
+            })
+          ) : syncVideoForModelTuning({
             sourceVideoPath: analysis.videoPath,
             sourceVideoFilename: analysis.videoFilename,
             movementType: movementForManifest,
@@ -7534,8 +8369,8 @@ async function registerRoutes(app2) {
           if (useForModelTraining && syncResult.videoId !== analysis.evaluationVideoId) {
             await db.update(analyses).set({
               evaluationVideoId: syncResult.videoId,
-              updatedAt: /* @__PURE__ */ new Date()
-            }).where(eq4(analyses.id, analysis.id));
+              ...buildUpdateAuditFields(userId)
+            }).where(eq5(analyses.id, analysis.id));
           }
         } catch (manifestError) {
           return res.status(500).json({
@@ -7567,7 +8402,8 @@ async function registerRoutes(app2) {
           mismatchRatePct: snapshot.mismatchRatePct,
           labelMismatches: snapshot.labelMismatches,
           countMismatch: snapshot.countMismatch,
-          confusionPairs: snapshot.confusionPairs
+          confusionPairs: snapshot.confusionPairs,
+          ...buildInsertAuditFields(userId)
         }).onConflictDoUpdate({
           target: [analysisShotDiscrepancies.analysisId, analysisShotDiscrepancies.userId],
           set: {
@@ -7582,7 +8418,7 @@ async function registerRoutes(app2) {
             labelMismatches: snapshot.labelMismatches,
             countMismatch: snapshot.countMismatch,
             confusionPairs: snapshot.confusionPairs,
-            updatedAt: /* @__PURE__ */ new Date()
+            ...buildUpdateAuditFields(userId)
           }
         });
         discrepancySnapshotUpdated = true;
@@ -7608,7 +8444,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/shot-report", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -7617,33 +8453,38 @@ async function registerRoutes(app2) {
       if (!isAdmin && analysis.userId !== userId) {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
-      if (!analysis.videoPath || !fs5.existsSync(analysis.videoPath)) {
+      if (!analysis.videoPath) {
         return res.status(404).json({ error: "Video file not found" });
       }
       let sportName = "tennis";
       let movementName = "auto-detect";
       if (analysis.sportId) {
-        const [sport] = await db.select().from(sports).where(eq4(sports.id, analysis.sportId));
+        const [sport] = await db.select().from(sports).where(eq5(sports.id, analysis.sportId));
         if (sport) sportName = sport.name;
       }
       if (analysis.movementId) {
-        const [movement] = await db.select().from(sportMovements).where(eq4(sportMovements.id, analysis.movementId));
+        const [movement] = await db.select().from(sportMovements).where(eq5(sportMovements.id, analysis.movementId));
         if (movement) movementName = movement.name;
       }
-      const diagnostics = await runPythonDiagnostics2(
+      const dominantProfile = await resolveUserDominantProfile(analysis.userId);
+      const diagnostics = await withLocalMediaFile(
         analysis.videoPath,
-        sportName,
-        movementName,
-        await resolveUserDominantProfile(analysis.userId)
+        analysis.videoFilename,
+        (localPath) => runPythonDiagnostics2(
+          localPath,
+          sportName,
+          movementName,
+          dominantProfile
+        )
       );
       const diagnosticsDetected = String(diagnostics?.detectedMovement || "").trim();
       if (diagnosticsDetected && normalizeMovementToken(diagnosticsDetected) !== normalizeMovementToken(analysis.detectedMovement)) {
-        await db.update(analyses).set({ detectedMovement: diagnosticsDetected, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(analyses.id, analysis.id));
+        await db.update(analyses).set({ detectedMovement: diagnosticsDetected, updatedAt: /* @__PURE__ */ new Date() }).where(eq5(analyses.id, analysis.id));
       }
       const [manualAnnotation] = await db.select().from(analysisShotAnnotations).where(
         and3(
-          eq4(analysisShotAnnotations.analysisId, req.params.id),
-          eq4(analysisShotAnnotations.userId, userId)
+          eq5(analysisShotAnnotations.analysisId, req.params.id),
+          eq5(analysisShotAnnotations.userId, userId)
         )
       ).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(1);
       res.json({
@@ -7660,7 +8501,7 @@ async function registerRoutes(app2) {
   app2.get("/api/discrepancy-summary", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const sportFilter = String(req.query.sportName || "").trim().toLowerCase();
       const movementFilter = normalizeMovementToken(req.query.movementName || "");
@@ -7672,12 +8513,12 @@ async function registerRoutes(app2) {
         sportName: sports.name,
         movementName: sportMovements.name,
         metricValues: metrics.metricValues
-      }).from(analyses).leftJoin(sports, eq4(analyses.sportId, sports.id)).leftJoin(sportMovements, eq4(analyses.movementId, sportMovements.id)).leftJoin(metrics, eq4(metrics.analysisId, analyses.id)) : await db.select({
+      }).from(analyses).leftJoin(sports, eq5(analyses.sportId, sports.id)).leftJoin(sportMovements, eq5(analyses.movementId, sportMovements.id)).leftJoin(metrics, eq5(metrics.analysisId, analyses.id)) : await db.select({
         analysis: analyses,
         sportName: sports.name,
         movementName: sportMovements.name,
         metricValues: metrics.metricValues
-      }).from(analyses).leftJoin(sports, eq4(analyses.sportId, sports.id)).leftJoin(sportMovements, eq4(analyses.movementId, sportMovements.id)).leftJoin(metrics, eq4(metrics.analysisId, analyses.id)).where(eq4(analyses.userId, userId));
+      }).from(analyses).leftJoin(sports, eq5(analyses.sportId, sports.id)).leftJoin(sportMovements, eq5(analyses.movementId, sportMovements.id)).leftJoin(metrics, eq5(metrics.analysisId, analyses.id)).where(eq5(analyses.userId, userId));
       const filteredAnalysesForRate = analysisRows.filter((row) => {
         if (row.analysis.status !== "completed") return false;
         if (applyPlayerFilter && row.analysis.userId !== playerFilter) return false;
@@ -7720,7 +8561,7 @@ async function registerRoutes(app2) {
               )`,
         sportName: sports.name,
         movementName: sportMovements.name
-      }).from(analysisShotAnnotations).innerJoin(analyses, eq4(analysisShotAnnotations.analysisId, analyses.id)).leftJoin(sports, eq4(analyses.sportId, sports.id)).leftJoin(sportMovements, eq4(analyses.movementId, sportMovements.id)).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(200) : await db.select({
+      }).from(analysisShotAnnotations).innerJoin(analyses, eq5(analysisShotAnnotations.analysisId, analyses.id)).leftJoin(sports, eq5(analyses.sportId, sports.id)).leftJoin(sportMovements, eq5(analyses.movementId, sportMovements.id)).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(200) : await db.select({
         annotation: analysisShotAnnotations,
         analysis: analyses,
         userName: sql4`(
@@ -7728,7 +8569,7 @@ async function registerRoutes(app2) {
               )`,
         sportName: sports.name,
         movementName: sportMovements.name
-      }).from(analysisShotAnnotations).innerJoin(analyses, eq4(analysisShotAnnotations.analysisId, analyses.id)).leftJoin(sports, eq4(analyses.sportId, sports.id)).leftJoin(sportMovements, eq4(analyses.movementId, sportMovements.id)).where(eq4(analysisShotAnnotations.userId, userId)).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(30);
+      }).from(analysisShotAnnotations).innerJoin(analyses, eq5(analysisShotAnnotations.analysisId, analyses.id)).leftJoin(sports, eq5(analyses.sportId, sports.id)).leftJoin(sportMovements, eq5(analyses.movementId, sportMovements.id)).where(eq5(analysisShotAnnotations.userId, userId)).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(30);
       const filteredRows = rows.filter((row) => {
         if (applyPlayerFilter && row.analysis.userId !== playerFilter) return false;
         if (!sportFilter) return true;
@@ -7742,7 +8583,7 @@ async function registerRoutes(app2) {
         );
         return rowMovement === movementFilter;
       });
-      const existingSnapshots = isAdmin ? await db.select().from(analysisShotDiscrepancies) : await db.select().from(analysisShotDiscrepancies).where(eq4(analysisShotDiscrepancies.userId, userId));
+      const existingSnapshots = isAdmin ? await db.select().from(analysisShotDiscrepancies) : await db.select().from(analysisShotDiscrepancies).where(eq5(analysisShotDiscrepancies.userId, userId));
       const snapshotByAnalysisId = new Map(
         existingSnapshots.map((item) => [`${item.analysisId}:${item.userId}`, item])
       );
@@ -7807,8 +8648,8 @@ async function registerRoutes(app2) {
           });
           const [fresh] = await db.select().from(analysisShotDiscrepancies).where(
             and3(
-              eq4(analysisShotDiscrepancies.analysisId, analysis.id),
-              eq4(analysisShotDiscrepancies.userId, annotationOwnerId)
+              eq5(analysisShotDiscrepancies.analysisId, analysis.id),
+              eq5(analysisShotDiscrepancies.userId, annotationOwnerId)
             )
           ).limit(1);
           snapshot = fresh;
@@ -7906,7 +8747,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/diagnostics", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -7916,44 +8757,50 @@ async function registerRoutes(app2) {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
       const forceRefresh = String(req.query.refresh || "") === "1";
-      const [metricRow] = await db.select({ aiDiagnostics: metrics.aiDiagnostics }).from(metrics).where(eq4(metrics.analysisId, analysis.id)).limit(1);
+      const [metricRow] = await db.select({ aiDiagnostics: metrics.aiDiagnostics }).from(metrics).where(eq5(metrics.analysisId, analysis.id)).limit(1);
       const persistedDiagnostics = metricRow?.aiDiagnostics && typeof metricRow.aiDiagnostics === "object" ? metricRow.aiDiagnostics : null;
       if (persistedDiagnostics && !forceRefresh) {
         return res.json(persistedDiagnostics);
       }
-      if (!analysis.videoPath || !fs5.existsSync(analysis.videoPath)) {
+      if (!analysis.videoPath) {
         return res.status(404).json({ error: "Video file not found" });
       }
       let sportName = "tennis";
       let movementName = "auto-detect";
       if (analysis.sportId) {
-        const [sport] = await db.select().from(sports).where(eq4(sports.id, analysis.sportId));
+        const [sport] = await db.select().from(sports).where(eq5(sports.id, analysis.sportId));
         if (sport) sportName = sport.name;
       }
       if (analysis.movementId) {
-        const [movement] = await db.select().from(sportMovements).where(eq4(sportMovements.id, analysis.movementId));
+        const [movement] = await db.select().from(sportMovements).where(eq5(sportMovements.id, analysis.movementId));
         if (movement) movementName = movement.name;
       }
-      const diagnostics = await runPythonDiagnostics2(
+      const dominantProfile = await resolveUserDominantProfile(analysis.userId);
+      const diagnostics = await withLocalMediaFile(
         analysis.videoPath,
-        sportName,
-        movementName,
-        await resolveUserDominantProfile(analysis.userId)
+        analysis.videoFilename,
+        (localPath) => runPythonDiagnostics2(
+          localPath,
+          sportName,
+          movementName,
+          dominantProfile
+        )
       );
-      await db.update(metrics).set({ aiDiagnostics: diagnostics }).where(eq4(metrics.analysisId, analysis.id));
+      await db.update(metrics).set({ aiDiagnostics: diagnostics }).where(eq5(metrics.analysisId, analysis.id));
+      invalidateSkeletonCache(analysis.id);
       const diagnosticsDetected = String(diagnostics?.detectedMovement || "").trim();
       if (diagnosticsDetected && normalizeMovementToken(diagnosticsDetected) !== normalizeMovementToken(analysis.detectedMovement)) {
-        await db.update(analyses).set({ detectedMovement: diagnosticsDetected, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(analyses.id, analysis.id));
+        await db.update(analyses).set({ detectedMovement: diagnosticsDetected, updatedAt: /* @__PURE__ */ new Date() }).where(eq5(analyses.id, analysis.id));
       }
       res.json(diagnostics);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
-  app2.get("/api/analyses/:id/video-metadata", requireAuth, async (req, res) => {
+  app2.get("/api/analyses/:id/skeleton/shot/:shotId", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -7962,10 +8809,175 @@ async function registerRoutes(app2) {
       if (!isAdmin && analysis.userId !== userId) {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
-      if (!analysis.videoPath || !fs5.existsSync(analysis.videoPath)) {
+      const shotId = Number(req.params.shotId);
+      if (!Number.isInteger(shotId) || shotId <= 0) {
+        return res.status(400).json({ error: "shotId must be a positive integer" });
+      }
+      const startFrame = req.query.startFrame != null ? Number(req.query.startFrame) : void 0;
+      const endFrame = req.query.endFrame != null ? Number(req.query.endFrame) : void 0;
+      const shotSkeleton = await getShotSkeleton(analysis.id, shotId, startFrame, endFrame);
+      if (!shotSkeleton) {
+        return res.status(404).json({ error: "Skeleton data not found for shot" });
+      }
+      return res.json(shotSkeleton);
+    } catch (error) {
+      return res.status(500).json({ error: error.message || "Failed to fetch shot skeleton" });
+    }
+  });
+  app2.get("/api/analyses/:id/skeleton/shot/:shotId/playback", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      const analysis = await storage.getAnalysis(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+      if (!isAdmin && analysis.userId !== userId) {
+        return res.status(403).json({ error: "You can only access your own analyses" });
+      }
+      const shotId = Number(req.params.shotId);
+      if (!Number.isInteger(shotId) || shotId <= 0) {
+        return res.status(400).json({ error: "shotId must be a positive integer" });
+      }
+      const startFrame = req.query.startFrame != null ? Number(req.query.startFrame) : void 0;
+      const endFrame = req.query.endFrame != null ? Number(req.query.endFrame) : void 0;
+      const playbackData = await getShotSkeleton(analysis.id, shotId, startFrame, endFrame);
+      if (!playbackData) {
+        return res.status(404).json({ error: "Skeleton playback data not found" });
+      }
+      return res.json(playbackData);
+    } catch (error) {
+      return res.status(500).json({ error: error.message || "Failed to fetch skeleton playback data" });
+    }
+  });
+  app2.get("/api/analyses/:id/skeleton/shot/:shotId/frame/:frameNumber", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      const analysis = await storage.getAnalysis(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+      if (!isAdmin && analysis.userId !== userId) {
+        return res.status(403).json({ error: "You can only access your own analyses" });
+      }
+      const shotId = Number(req.params.shotId);
+      const frameNumber = Number(req.params.frameNumber);
+      if (!Number.isInteger(shotId) || shotId <= 0) {
+        return res.status(400).json({ error: "shotId must be a positive integer" });
+      }
+      if (!Number.isInteger(frameNumber) || frameNumber <= 0) {
+        return res.status(400).json({ error: "frameNumber must be a positive integer" });
+      }
+      const frameSkeleton = await getFrameSkeleton(analysis.id, shotId, frameNumber);
+      if (!frameSkeleton) {
+        return res.status(404).json({ error: "Skeleton data not found for frame" });
+      }
+      return res.json(frameSkeleton);
+    } catch (error) {
+      return res.status(500).json({ error: error.message || "Failed to fetch frame skeleton" });
+    }
+  });
+  app2.get("/api/analyses/:id/ghost-correction/:shotId", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      const analysis = await storage.getAnalysis(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+      if (!isAdmin && analysis.userId !== userId) {
+        return res.status(403).json({ error: "You can only access your own analyses" });
+      }
+      const shotId = Number(req.params.shotId);
+      if (!Number.isInteger(shotId) || shotId <= 0) {
+        return res.status(400).json({ error: "shotId must be a positive integer" });
+      }
+      const shotSkeleton = await getShotSkeleton(analysis.id, shotId);
+      if (!shotSkeleton || !shotSkeleton.frames.length) {
+        return res.status(404).json({ error: "Skeleton data not found for shot" });
+      }
+      const [metricsRow] = await db.select({
+        metricValues: metrics.metricValues,
+        configKey: metrics.configKey
+      }).from(metrics).where(eq5(metrics.analysisId, analysis.id)).limit(1);
+      if (!metricsRow) {
+        return res.status(404).json({ error: "Metrics not found" });
+      }
+      const configKey = String(metricsRow.configKey || "").trim();
+      const sportConfig = configKey ? getSportConfig(configKey) : void 0;
+      if (!sportConfig) {
+        return res.status(404).json({ error: "Sport config not found" });
+      }
+      const metricValues = metricsRow.metricValues && typeof metricsRow.metricValues === "object" ? metricsRow.metricValues : {};
+      const metricsWithRanges = sportConfig.metrics.filter((m) => m.optimalRange);
+      let bestMetricKey = null;
+      let maxDeviation = 0;
+      for (const def of metricsWithRanges) {
+        const value = Number(metricValues[def.key]);
+        if (!Number.isFinite(value) || !def.optimalRange) continue;
+        const [lo2, hi2] = def.optimalRange;
+        const rangeSpan = Math.max(hi2 - lo2, 1e-6);
+        let deviation = 0;
+        if (value < lo2) deviation = (lo2 - value) / rangeSpan;
+        else if (value > hi2) deviation = (value - hi2) / rangeSpan;
+        if (deviation > maxDeviation) {
+          maxDeviation = deviation;
+          bestMetricKey = def.key;
+        }
+      }
+      if (!bestMetricKey) {
+        return res.json({
+          frames: shotSkeleton.frames,
+          correction: null,
+          metricValues,
+          configKey
+        });
+      }
+      const bestDef = sportConfig.metrics.find((m) => m.key === bestMetricKey);
+      const playerValue = Number(metricValues[bestMetricKey]);
+      const [lo, hi] = bestDef.optimalRange;
+      return res.json({
+        frames: shotSkeleton.frames,
+        correction: {
+          metricKey: bestMetricKey,
+          label: bestDef.label,
+          unit: bestDef.unit,
+          playerValue,
+          optimalRange: [lo, hi],
+          deviation: maxDeviation,
+          direction: playerValue < lo ? "increase" : "decrease"
+        },
+        metricValues,
+        configKey
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message || "Failed to fetch ghost correction data" });
+    }
+  });
+  app2.get("/api/analyses/:id/video-metadata", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      const analysis = await storage.getAnalysis(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+      if (!isAdmin && analysis.userId !== userId) {
+        return res.status(403).json({ error: "You can only access your own analyses" });
+      }
+      if (!analysis.videoPath) {
         return res.status(404).json({ error: "Video file not found" });
       }
-      const extractedMetadata = await extractVideoMetadata(analysis.videoPath);
+      const extractedMetadata = await withLocalMediaFile(
+        analysis.videoPath,
+        analysis.videoFilename,
+        (localPath) => extractVideoMetadata(localPath)
+      );
       return res.json(extractedMetadata || {});
     } catch (error) {
       return res.status(500).json({ error: error.message || "Failed to extract video metadata" });
@@ -7974,7 +8986,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/comparison", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -8011,7 +9023,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/metric-trends", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -8037,13 +9049,13 @@ async function registerRoutes(app2) {
       const periodDays = periodMap[period];
       const baseDate = new Date(analysis.capturedAt || analysis.createdAt);
       const conditions = [
-        eq4(analyses.userId, analysis.userId),
-        eq4(analyses.status, "completed"),
-        eq4(metrics.configKey, metricsData.configKey),
+        eq5(analyses.userId, analysis.userId),
+        eq5(analyses.status, "completed"),
+        eq5(metrics.configKey, metricsData.configKey),
         sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) <= ${baseDate}`
       ];
       if (analysis.sportId) {
-        conditions.push(eq4(analyses.sportId, analysis.sportId));
+        conditions.push(eq5(analyses.sportId, analysis.sportId));
       }
       if (periodDays !== null) {
         const startDate = new Date(baseDate.getTime() - periodDays * 24 * 60 * 60 * 1e3);
@@ -8059,7 +9071,7 @@ async function registerRoutes(app2) {
         overallScore: metrics.overallScore,
         scoreOutputs: metrics.scoreOutputs,
         metricValues: metrics.metricValues
-      }).from(analyses).innerJoin(metrics, eq4(analyses.id, metrics.analysisId)).where(and3(...conditions)).orderBy(sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) asc`);
+      }).from(analyses).innerJoin(metrics, eq5(analyses.id, metrics.analysisId)).where(and3(...conditions)).orderBy(sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) asc`);
       const points = rows.map((row) => {
         const normalized = normalizeScoreRow(row);
         const sectionScores = computeSummarySectionScores({
@@ -8091,10 +9103,11 @@ async function registerRoutes(app2) {
   app2.post("/api/analyses/recalculate", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       await markStaleProcessingAsFailed(isAdmin ? void 0 : userId);
       const rawAnalyses = isAdmin ? await storage.getAllAnalyses(null) : await storage.getAllAnalyses(userId);
+      const storageMode = await getVideoStorageMode();
       const evaluationModeEnabled = await getModelEvaluationMode(userId);
       const videoMap = evaluationModeEnabled && isAdmin ? getEvaluationDatasetVideoMap(readModelRegistryConfig()) : null;
       const userAnalyses = videoMap ? rawAnalyses.filter((analysis) => getEvaluationMatch(analysis, videoMap)) : rawAnalyses;
@@ -8139,7 +9152,7 @@ async function registerRoutes(app2) {
       };
       const uploadFiles = collectUploadVideoFiles(uploadDir);
       const existingPaths = new Set(
-        userAnalyses.filter((analysis) => analysis.videoPath && fs5.existsSync(analysis.videoPath)).map((analysis) => path5.resolve(analysis.videoPath))
+        userAnalyses.filter((analysis) => analysis.videoPath && isStoredMediaLocallyAccessible(analysis.videoPath)).map((analysis) => path5.resolve(analysis.videoPath))
       );
       const unassignedUploadFiles = new Map(
         uploadFiles.filter((file) => !existingPaths.has(path5.resolve(file.fullPath))).map((file) => [path5.resolve(file.fullPath), file])
@@ -8148,8 +9161,16 @@ async function registerRoutes(app2) {
       let autoRelinkedAnalyses = 0;
       const skippedDetails = [];
       for (const analysis of userAnalyses) {
-        if (analysis.videoPath && fs5.existsSync(analysis.videoPath)) {
+        if (analysis.videoPath && (storageMode === "r2" || isStoredMediaLocallyAccessible(analysis.videoPath))) {
           runnableAnalyses.push(analysis);
+          continue;
+        }
+        if (storageMode === "r2") {
+          skippedDetails.push({
+            id: analysis.id,
+            reason: "Video reference is missing from configured storage",
+            filename: path5.basename(analysis.videoFilename || "")
+          });
           continue;
         }
         const currentFilename = path5.basename(analysis.videoFilename || "");
@@ -8159,7 +9180,7 @@ async function registerRoutes(app2) {
             videoFilename: exactNameCandidate.filename,
             videoPath: exactNameCandidate.fullPath,
             updatedAt: /* @__PURE__ */ new Date()
-          }).where(eq4(analyses.id, analysis.id));
+          }).where(eq5(analyses.id, analysis.id));
           runnableAnalyses.push({
             ...analysis,
             videoFilename: exactNameCandidate.filename,
@@ -8202,7 +9223,7 @@ async function registerRoutes(app2) {
           videoFilename: bestCandidate.filename,
           videoPath: bestCandidate.fullPath,
           updatedAt: /* @__PURE__ */ new Date()
-        }).where(eq4(analyses.id, analysis.id));
+        }).where(eq5(analyses.id, analysis.id));
         unassignedUploadFiles.delete(path5.resolve(bestCandidate.fullPath));
         runnableAnalyses.push({
           ...analysis,
@@ -8255,6 +9276,10 @@ async function registerRoutes(app2) {
       const userId = req.session.userId;
       const analysisId = req.params.id;
       const filename = (req.body?.filename || "").toString().trim();
+      const storageMode = await getVideoStorageMode();
+      if (storageMode === "r2") {
+        return res.status(400).json({ error: "Relink is only available when VIDEO_STORAGE_MODE is filesystem" });
+      }
       if (!filename) {
         return res.status(400).json({ error: "filename is required" });
       }
@@ -8262,6 +9287,8 @@ async function registerRoutes(app2) {
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
       const evaluationModeEnabled = await getModelEvaluationMode(userId);
       if (evaluationModeEnabled && isAdmin) {
         const videoMap = getEvaluationDatasetVideoMap(readModelRegistryConfig());
@@ -8271,8 +9298,6 @@ async function registerRoutes(app2) {
           });
         }
       }
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
-      const isAdmin = currentUser?.role === "admin";
       if (!isAdmin && analysis.userId !== userId) {
         return res.status(403).json({ error: "You can only relink your own analyses" });
       }
@@ -8284,12 +9309,12 @@ async function registerRoutes(app2) {
       await db.update(analyses).set({
         videoFilename: safeFilename,
         videoPath: relinkedPath,
-        updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq4(analyses.id, analysisId));
+        ...buildUpdateAuditFields(userId)
+      }).where(eq5(analyses.id, analysisId));
       const relinkAnnotationRows = await db.select({
         analysisId: analysisShotAnnotations.analysisId,
         userId: analysisShotAnnotations.userId
-      }).from(analysisShotAnnotations).where(eq4(analysisShotAnnotations.analysisId, analysisId));
+      }).from(analysisShotAnnotations).where(eq5(analysisShotAnnotations.analysisId, analysisId));
       void (async () => {
         try {
           await processAnalysis(analysisId);
@@ -8318,8 +9343,8 @@ async function registerRoutes(app2) {
     try {
       const [feedback] = await db.select().from(analysisFeedback).where(
         and3(
-          eq4(analysisFeedback.analysisId, req.params.id),
-          eq4(analysisFeedback.userId, req.session.userId)
+          eq5(analysisFeedback.analysisId, req.params.id),
+          eq5(analysisFeedback.userId, req.session.userId)
         )
       ).limit(1);
       res.json(feedback || null);
@@ -8335,24 +9360,29 @@ async function registerRoutes(app2) {
       }
       const existing = await db.select().from(analysisFeedback).where(
         and3(
-          eq4(analysisFeedback.analysisId, req.params.id),
-          eq4(analysisFeedback.userId, req.session.userId)
+          eq5(analysisFeedback.analysisId, req.params.id),
+          eq5(analysisFeedback.userId, req.session.userId)
         )
       ).limit(1);
       if (existing.length > 0) {
-        await db.update(analysisFeedback).set({ rating, comment: comment || null }).where(eq4(analysisFeedback.id, existing[0].id));
+        await db.update(analysisFeedback).set({
+          rating,
+          comment: comment || null,
+          ...buildUpdateAuditFields(req.session.userId)
+        }).where(eq5(analysisFeedback.id, existing[0].id));
       } else {
         await db.insert(analysisFeedback).values({
           analysisId: req.params.id,
           userId: req.session.userId,
           rating,
-          comment: comment || null
+          comment: comment || null,
+          ...buildInsertAuditFields(req.session.userId)
         });
       }
       const [feedback] = await db.select().from(analysisFeedback).where(
         and3(
-          eq4(analysisFeedback.analysisId, req.params.id),
-          eq4(analysisFeedback.userId, req.session.userId)
+          eq5(analysisFeedback.analysisId, req.params.id),
+          eq5(analysisFeedback.userId, req.session.userId)
         )
       ).limit(1);
       res.json(feedback);
@@ -8369,9 +9399,7 @@ async function registerRoutes(app2) {
       if (analysis.userId !== req.session.userId) {
         return res.status(403).json({ error: "You can only delete your own analyses" });
       }
-      if (fs5.existsSync(analysis.videoPath)) {
-        fs5.unlinkSync(analysis.videoPath);
-      }
+      await deleteStoredMedia(analysis.videoPath);
       await storage.deleteAnalysis(req.params.id);
       res.json({ message: "Analysis deleted" });
     } catch (error) {
@@ -8381,15 +9409,13 @@ async function registerRoutes(app2) {
   app2.delete("/api/analyses", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq4(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
       if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Only admins can clear history" });
       }
       const allAnalyses = await storage.getAllAnalyses(null);
       for (const analysis of allAnalyses) {
-        if (analysis.videoPath && fs5.existsSync(analysis.videoPath)) {
-          fs5.unlinkSync(analysis.videoPath);
-        }
+        await deleteStoredMedia(analysis.videoPath);
       }
       await db.transaction(async (tx) => {
         await tx.delete(coachingInsights);
@@ -8507,7 +9533,8 @@ async function seedSports() {
       icon: sportData.icon,
       color: sportData.color,
       description: sportData.description,
-      sortOrder: sportData.sortOrder
+      sortOrder: sportData.sortOrder,
+      ...buildInsertAuditFields()
     }).returning();
     for (const movement of sportData.movements) {
       await db.insert(sportMovements).values({
@@ -8515,7 +9542,8 @@ async function seedSports() {
         name: movement.name,
         description: movement.description,
         icon: movement.icon,
-        sortOrder: movement.sortOrder
+        sortOrder: movement.sortOrder,
+        ...buildInsertAuditFields()
       });
     }
   }

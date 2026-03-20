@@ -27,7 +27,7 @@ import {
   isImprovedTennisEnabled,
   type ImprovedScoreDetail,
 } from "@/lib/improved-tennis";
-import { getApiUrl } from "@/lib/query-client";
+import { resolveClientMediaUrl } from "@/lib/media";
 import type { SportCategoryConfig } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -155,41 +155,10 @@ export default function ImprovedTennisAnalysisScreen() {
   const m = detail?.metrics;
   const inputMetrics = improvedData?.inputMetrics || {};
 
-  const videoUrl = useMemo(() => {
-    if (!detail?.analysis?.videoPath) return null;
-    try {
-      const normalizedPath = detail.analysis.videoPath.replace(/\\/g, "/");
-      const lowerPath = normalizedPath.toLowerCase();
-
-      let relativePath = "";
-      const marker = "/uploads/";
-      const markerIndex = lowerPath.lastIndexOf(marker);
-
-      if (markerIndex >= 0) {
-        relativePath = normalizedPath.slice(markerIndex + marker.length);
-      } else {
-        const looseMarker = "uploads/";
-        const looseIndex = lowerPath.lastIndexOf(looseMarker);
-        if (looseIndex >= 0) {
-          relativePath = normalizedPath.slice(looseIndex + looseMarker.length);
-        } else {
-          relativePath = normalizedPath.split("/").pop() || "";
-        }
-      }
-
-      if (!relativePath) return null;
-
-      const encodedRelativePath = relativePath
-        .split("/")
-        .map((segment) => encodeURIComponent(segment))
-        .join("/");
-
-      const base = getApiUrl();
-      return new URL(`/uploads/${encodedRelativePath}`, base).href;
-    } catch {
-      return null;
-    }
-  }, [detail?.analysis?.videoPath]);
+  const videoUrl = useMemo(
+    () => resolveClientMediaUrl(detail?.analysis?.videoUrl),
+    [detail?.analysis?.videoUrl],
+  );
 
   const player = useVideoPlayer(videoUrl ?? "about:blank", (p) => {
     p.loop = false;

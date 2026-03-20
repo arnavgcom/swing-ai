@@ -8,6 +8,7 @@ export interface AnalysisResponse {
   userName?: string;
   videoFilename: string;
   videoPath: string;
+  videoUrl?: string | null;
   status: string;
   detectedMovement: string | null;
   rejectionReason: string | null;
@@ -83,6 +84,11 @@ export interface ModelEvaluationSettingsResponse {
   modelVersionChangeDescription: string;
   datasetCount: number;
   totalVideos: number;
+}
+
+export interface VideoStorageSettingsResponse {
+  mode: "filesystem" | "r2";
+  isAdmin: boolean;
 }
 
 export interface ScoringModelDashboardResponse {
@@ -795,6 +801,29 @@ export async function updateModelEvaluationSettings(
     body: JSON.stringify({ enabled }),
   });
   if (!res.ok) throw new Error("Failed to update model evaluation settings");
+  return res.json();
+}
+
+export async function fetchVideoStorageSettings(): Promise<VideoStorageSettingsResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/storage-settings`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch video storage settings");
+  return res.json();
+}
+
+export async function updateVideoStorageSettings(
+  mode: "filesystem" | "r2",
+): Promise<{ mode: "filesystem" | "r2" }> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/storage-settings`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
+  if (!res.ok) throw new Error("Failed to update video storage settings");
   return res.json();
 }
 

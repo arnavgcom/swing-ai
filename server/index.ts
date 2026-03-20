@@ -1,3 +1,4 @@
+import { PROJECT_ROOT } from "./env";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
@@ -101,7 +102,7 @@ function setupRequestLogging(app: express.Application) {
 
 function getAppName(): string {
   try {
-    const appJsonPath = path.resolve(process.cwd(), "app.json");
+    const appJsonPath = path.resolve(PROJECT_ROOT, "app.json");
     const appJsonContent = fs.readFileSync(appJsonPath, "utf-8");
     const appJson = JSON.parse(appJsonContent);
     return appJson.expo?.name || "App Landing Page";
@@ -112,7 +113,7 @@ function getAppName(): string {
 
 function serveExpoManifest(platform: string, res: Response) {
   const manifestPath = path.resolve(
-    process.cwd(),
+    PROJECT_ROOT,
     "static-build",
     platform,
     "manifest.json",
@@ -164,7 +165,7 @@ function serveLandingPage({
 
 function configureExpoAndLanding(app: express.Application) {
   const templatePath = path.resolve(
-    process.cwd(),
+    PROJECT_ROOT,
     "server",
     "templates",
     "landing-page.html",
@@ -200,9 +201,9 @@ function configureExpoAndLanding(app: express.Application) {
     next();
   });
 
-  app.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
-  app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
-  app.use(express.static(path.resolve(process.cwd(), "static-build")));
+  app.use("/assets", express.static(path.resolve(PROJECT_ROOT, "assets")));
+  app.use("/uploads", express.static(path.resolve(PROJECT_ROOT, "uploads")));
+  app.use(express.static(path.resolve(PROJECT_ROOT, "static-build")));
 
   log("Expo routing: Checking expo-platform header on / and /manifest");
 }
@@ -235,10 +236,9 @@ function setupErrorHandler(app: express.Application) {
   await setupAuth(app);
 
   configureExpoAndLanding(app);
+  const server = await registerRoutes(app);
 
   await seedSports();
-
-  const server = await registerRoutes(app);
 
   setupErrorHandler(app);
 

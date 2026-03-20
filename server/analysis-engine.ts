@@ -15,6 +15,9 @@ import { extractStandardizedTacticalScores10 } from "./tactical-scores";
 import fs from "fs";
 import path from "path";
 import type { AiDiagnosticsPayload, ScoreInputsPayload, ScoreOutputsPayload } from "@shared/schema";
+import { withLocalMediaFile } from "./media-storage";
+import { buildInsertAuditFields, buildUpdateAuditFields } from "./audit-metadata";
+import { PROJECT_ROOT, resolveProjectPath } from "./env";
 
 interface PythonResult {
   configKey: string;
@@ -405,8 +408,8 @@ function resolvePythonExecutable(): string {
   }
 
   const localCandidates = [
-    path.resolve(process.cwd(), ".venv", "bin", "python3"),
-    path.resolve(process.cwd(), ".venv", "bin", "python"),
+    resolveProjectPath(".venv", "bin", "python3"),
+    resolveProjectPath(".venv", "bin", "python"),
   ];
 
   for (const candidate of localCandidates) {
@@ -446,7 +449,7 @@ function runPythonAnalysis(
       pythonExecutable,
       args,
       {
-        cwd: process.cwd(),
+        cwd: PROJECT_ROOT,
         timeout: 120000,
         maxBuffer: 10 * 1024 * 1024,
       },
@@ -507,7 +510,7 @@ function runPythonDiagnostics(
       pythonExecutable,
       args,
       {
-        cwd: process.cwd(),
+        cwd: PROJECT_ROOT,
         timeout: 120000,
         maxBuffer: 10 * 1024 * 1024,
       },
@@ -550,6 +553,8 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       throw new Error("Analysis not found");
     }
 
+    const auditActorUserId = analysis.createdByUserId || analysis.userId || null;
+
     let sportName = "tennis";
     let movementName = "auto-detect";
 
@@ -573,15 +578,6 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       }
     }
 
-    const videoContentHash = await computeVideoContentHash(analysis.videoPath);
-    if (videoContentHash) {
-      await db
-        .update(analyses)
-        .set({ videoContentHash, updatedAt: new Date() })
-        .where(eq(analyses.id, analysis.id));
-      analysis.videoContentHash = videoContentHash;
-    }
-
     let dominantProfile: string | null = null;
     if (analysis.userId) {
       const [profile] = await db
@@ -592,57 +588,214 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       dominantProfile = profile?.dominantProfile ?? null;
     }
 
-    const modelRegistryConfig = readModelRegistryConfig();
+    await withLocalMediaFile(analysis.videoPath, analysis.videoFilename, async (localVideoPath) => {
+      const videoContentHash = await computeVideoContentHash(localVideoPath);
+      if (videoContentHash) {
+        await db
+          .update(analyses)
+          .set({ videoContentHash, updatedAt: new Date() })
+          .where(eq(analyses.id, analysis.id));
+        analysis.videoContentHash = videoContentHash;
+      }
 
-    const reusablePayload = await findReusableAnalysisPayload(
-      analysis,
-      modelRegistryConfig.activeModelVersion,
-    );
-    if (reusablePayload) {
-      let normalizedReusableMetrics = normalizeMetricValuesForPersistence(
-        reusablePayload.metricValues || {},
-        reusablePayload.aiDiagnostics,
+      const modelRegistryConfig = readModelRegistryConfig();
+
+      const reusablePayload = await findReusableAnalysisPayload(
+        analysis,
+        modelRegistryConfig.activeModelVersion,
       );
-      let reusableDiagnosticsPayload: AiDiagnosticsPayload | null = reusablePayload.aiDiagnostics;
+      if (reusablePayload) {
+        let normalizedReusableMetrics = normalizeMetricValuesForPersistence(
+          reusablePayload.metricValues || {},
+          reusablePayload.aiDiagnostics,
+        );
+        let reusableDiagnosticsPayload: AiDiagnosticsPayload | null = reusablePayload.aiDiagnostics;
 
-      if (!hasAllRequiredUploadDiagnosticsMetrics(normalizedReusableMetrics)) {
-        try {
-          const diagnosticsMovement = reusablePayload.detectedMovement || movementName;
-          reusableDiagnosticsPayload = await runPythonDiagnostics(
-            analysis.videoPath,
-            sportName,
-            diagnosticsMovement,
-            dominantProfile,
+        if (!hasAllRequiredUploadDiagnosticsMetrics(normalizedReusableMetrics)) {
+          try {
+            const diagnosticsMovement = reusablePayload.detectedMovement || movementName;
+            reusableDiagnosticsPayload = await runPythonDiagnostics(
+              localVideoPath,
+              sportName,
+              diagnosticsMovement,
+              dominantProfile,
+            );
+            normalizedReusableMetrics = normalizeMetricValuesForPersistence(
+              normalizedReusableMetrics,
+              reusableDiagnosticsPayload,
+            );
+          } catch (diagnosticsError: any) {
+            console.warn(
+              `Diagnostics backfill failed for reused analysis ${analysisId}: ${diagnosticsError?.message || diagnosticsError}`,
+            );
+          }
+        }
+
+        const sanitizedMetricValues = sanitizePersistedMap(normalizedReusableMetrics);
+        const reusableScoreInputs = buildScoreInputsPayload(
+          reusablePayload.configKey,
+          sanitizedMetricValues,
+        );
+        const reusableTacticalComponents = extractStandardizedTacticalScores10(
+          sanitizePersistedMap(
+            ((reusablePayload.scoreOutputs as any)?.tactical?.components as Record<string, number> | null)
+              || ((reusablePayload.scoreOutputs as any)?.tacticalComponents as Record<string, number> | null)
+              || {},
+          ),
+        );
+        const reusableScoreOutputs = buildScoreOutputsPayload({
+          configKey: reusablePayload.configKey,
+          detectedMovement: reusablePayload.detectedMovement,
+          tacticalComponents: reusableTacticalComponents,
+          metricValues: sanitizedMetricValues,
+          overallScore: reusablePayload.overallScore,
+        });
+
+        await db.transaction(async (tx) => {
+          await tx.delete(coachingInsights).where(eq(coachingInsights.analysisId, analysisId));
+          await tx.delete(metrics).where(eq(metrics.analysisId, analysisId));
+
+          await tx.insert(metrics).values({
+            analysisId,
+            configKey: reusablePayload.configKey,
+            modelVersion: reusablePayload.modelVersion,
+            overallScore: reusablePayload.overallScore,
+            metricValues: sanitizedMetricValues,
+            scoreInputs: reusableScoreInputs,
+            scoreOutputs: reusableScoreOutputs,
+            aiDiagnostics: reusableDiagnosticsPayload,
+            ...buildInsertAuditFields(auditActorUserId),
+          });
+
+          await tx.insert(coachingInsights).values({
+            analysisId,
+            ...reusablePayload.coaching,
+            ...buildInsertAuditFields(auditActorUserId),
+          });
+        });
+
+        await db
+          .update(analyses)
+          .set({
+            status: "completed",
+            detectedMovement: reusablePayload.detectedMovement || movementName,
+            rejectionReason: null,
+            ...buildUpdateAuditFields(auditActorUserId),
+          })
+          .where(eq(analyses.id, analysisId));
+
+        console.log(`Analysis ${analysisId} reused scores from prior identical video hash`);
+        return;
+      }
+
+      if (String(movementName || "").toLowerCase() === "auto-detect") {
+        const lockedMovement = await resolveLockedMovementForRepeatUpload(analysis);
+        if (lockedMovement) {
+          console.log(
+            `Deterministic movement lock for repeated upload: using prior detected movement "${lockedMovement}" instead of auto-detect`,
           );
-          normalizedReusableMetrics = normalizeMetricValuesForPersistence(
-            normalizedReusableMetrics,
-            reusableDiagnosticsPayload,
-          );
-        } catch (diagnosticsError: any) {
-          console.warn(
-            `Diagnostics backfill failed for reused analysis ${analysisId}: ${diagnosticsError?.message || diagnosticsError}`,
-          );
+          movementName = lockedMovement;
         }
       }
 
-      const sanitizedMetricValues = sanitizePersistedMap(normalizedReusableMetrics);
-      const reusableScoreInputs = buildScoreInputsPayload(
-        reusablePayload.configKey,
-        sanitizedMetricValues,
+      const configKey = getConfigKey(sportName, movementName);
+
+      console.log(
+        `Starting Python analysis for: ${analysis.videoPath} (${sportName}/${movementName}, config: ${configKey})`,
       );
-      const reusableTacticalComponents = extractStandardizedTacticalScores10(
-        sanitizePersistedMap(
-          ((reusablePayload.scoreOutputs as any)?.tactical?.components as Record<string, number> | null)
-            || ((reusablePayload.scoreOutputs as any)?.tacticalComponents as Record<string, number> | null)
-            || {},
-        ),
+      const result = await runPythonAnalysis(
+        localVideoPath,
+        sportName,
+        movementName,
+        dominantProfile,
       );
-      const reusableScoreOutputs = buildScoreOutputsPayload({
-        configKey: reusablePayload.configKey,
-        detectedMovement: reusablePayload.detectedMovement,
-        tacticalComponents: reusableTacticalComponents,
-        metricValues: sanitizedMetricValues,
-        overallScore: reusablePayload.overallScore,
+
+      if (result.rejected) {
+        console.log(
+          `Analysis ${analysisId} rejected: ${result.rejectionReason}`,
+        );
+        await db
+          .update(analyses)
+          .set({
+            status: "rejected",
+            rejectionReason: result.rejectionReason || "Video content does not match the selected sport.",
+            ...buildUpdateAuditFields(auditActorUserId),
+          })
+          .where(eq(analyses.id, analysisId));
+        return;
+      }
+
+      const actualMovement = result.detectedMovement || movementName;
+      const wasOverridden = result.movementOverridden || false;
+
+      if (wasOverridden) {
+        console.log(
+          `Movement override: user selected "${movementName}" but detected "${actualMovement}". Score: ${result.overallScore}`,
+        );
+      } else {
+        console.log(
+          `Python analysis complete. Overall score: ${result.overallScore}`,
+        );
+      }
+
+      const runtimeOverallScore100 = normalizeRuntimeScoreToHundred(result.overallScore);
+
+      if (runtimeOverallScore100 != null && runtimeOverallScore100 < 15) {
+        const sportLabel = sportName.charAt(0).toUpperCase() + sportName.slice(1);
+        console.log(
+          `Analysis ${analysisId} auto-rejected: score ${runtimeOverallScore100} below minimum threshold`,
+        );
+        await db
+          .update(analyses)
+          .set({
+            status: "rejected",
+            rejectionReason: `The video content could not be reliably analyzed as a ${sportLabel} movement. Please upload a clearer video of your ${sportLabel} technique.`,
+            ...buildUpdateAuditFields(auditActorUserId),
+          })
+          .where(eq(analyses.id, analysisId));
+        return;
+      }
+
+      let diagnosticsPayload: AiDiagnosticsPayload | null = null;
+      try {
+        diagnosticsPayload = await runPythonDiagnostics(
+          localVideoPath,
+          sportName,
+          actualMovement,
+          dominantProfile,
+        );
+      } catch (diagnosticsError: any) {
+        console.warn(
+          `Diagnostics generation failed for analysis ${analysisId}: ${diagnosticsError?.message || diagnosticsError}`,
+        );
+      }
+
+      const metricValuesRaw: Record<string, unknown> = { ...result.metricValues };
+      if (result.shotCount != null) {
+        metricValuesRaw.shotCount = result.shotCount;
+      }
+      if (result.shotSpeed != null && Number.isFinite(result.shotSpeed)) {
+        metricValuesRaw.shotSpeed = result.shotSpeed;
+      }
+
+      const normalizedMetricValues = normalizeMetricValuesForPersistence(
+        metricValuesRaw,
+        diagnosticsPayload,
+      );
+
+      const resolvedConfigKey = result.configKey || configKey;
+      const metricValues = sanitizePersistedMap(normalizedMetricValues);
+      const persistedTacticalScores = extractStandardizedTacticalScores10(
+        sanitizePersistedMap(result.subScores || {}),
+      );
+      const persistedOverallScore = toPersistedScoreTen(result.overallScore);
+      const scoreInputs = buildScoreInputsPayload(resolvedConfigKey, metricValues);
+      const scoreOutputs = buildScoreOutputsPayload({
+        configKey: resolvedConfigKey,
+        detectedMovement: actualMovement,
+        tacticalComponents: persistedTacticalScores,
+        metricValues,
+        overallScore: persistedOverallScore,
       });
 
       await db.transaction(async (tx) => {
@@ -651,18 +804,20 @@ export async function processAnalysis(analysisId: string): Promise<void> {
 
         await tx.insert(metrics).values({
           analysisId,
-          configKey: reusablePayload.configKey,
-          modelVersion: reusablePayload.modelVersion,
-          overallScore: reusablePayload.overallScore,
-          metricValues: sanitizedMetricValues,
-          scoreInputs: reusableScoreInputs,
-          scoreOutputs: reusableScoreOutputs,
-          aiDiagnostics: reusableDiagnosticsPayload,
+          configKey: resolvedConfigKey,
+          modelVersion: modelRegistryConfig.activeModelVersion,
+          overallScore: persistedOverallScore,
+          metricValues,
+          scoreInputs,
+          scoreOutputs,
+          aiDiagnostics: diagnosticsPayload,
+          ...buildInsertAuditFields(auditActorUserId),
         });
 
         await tx.insert(coachingInsights).values({
           analysisId,
-          ...reusablePayload.coaching,
+          ...result.coaching,
+          ...buildInsertAuditFields(auditActorUserId),
         });
       });
 
@@ -670,163 +825,19 @@ export async function processAnalysis(analysisId: string): Promise<void> {
         .update(analyses)
         .set({
           status: "completed",
-          detectedMovement: reusablePayload.detectedMovement || movementName,
+          detectedMovement: actualMovement,
           rejectionReason: null,
-          updatedAt: new Date(),
+          ...buildUpdateAuditFields(auditActorUserId),
         })
         .where(eq(analyses.id, analysisId));
 
-      console.log(`Analysis ${analysisId} reused scores from prior identical video hash`);
-      return;
-    }
-
-    if (String(movementName || "").toLowerCase() === "auto-detect") {
-      const lockedMovement = await resolveLockedMovementForRepeatUpload(analysis);
-      if (lockedMovement) {
-        console.log(
-          `Deterministic movement lock for repeated upload: using prior detected movement "${lockedMovement}" instead of auto-detect`,
-        );
-        movementName = lockedMovement;
-      }
-    }
-
-    const configKey = getConfigKey(sportName, movementName);
-
-    console.log(
-      `Starting Python analysis for: ${analysis.videoPath} (${sportName}/${movementName}, config: ${configKey})`,
-    );
-    const result = await runPythonAnalysis(
-      analysis.videoPath,
-      sportName,
-      movementName,
-      dominantProfile,
-    );
-
-    if (result.rejected) {
-      console.log(
-        `Analysis ${analysisId} rejected: ${result.rejectionReason}`,
-      );
-      await db
-        .update(analyses)
-        .set({
-          status: "rejected",
-          rejectionReason: result.rejectionReason || "Video content does not match the selected sport.",
-          updatedAt: new Date(),
-        })
-        .where(eq(analyses.id, analysisId));
-      return;
-    }
-
-    const actualMovement = result.detectedMovement || movementName;
-    const wasOverridden = result.movementOverridden || false;
-
-    if (wasOverridden) {
-      console.log(
-        `Movement override: user selected "${movementName}" but detected "${actualMovement}". Score: ${result.overallScore}`,
-      );
-    } else {
-      console.log(
-        `Python analysis complete. Overall score: ${result.overallScore}`,
-      );
-    }
-
-    const runtimeOverallScore100 = normalizeRuntimeScoreToHundred(result.overallScore);
-
-    if (runtimeOverallScore100 != null && runtimeOverallScore100 < 15) {
-      const sportLabel = sportName.charAt(0).toUpperCase() + sportName.slice(1);
-      console.log(
-        `Analysis ${analysisId} auto-rejected: score ${runtimeOverallScore100} below minimum threshold`,
-      );
-      await db
-        .update(analyses)
-        .set({
-          status: "rejected",
-          rejectionReason: `The video content could not be reliably analyzed as a ${sportLabel} movement. Please upload a clearer video of your ${sportLabel} technique.`,
-          updatedAt: new Date(),
-        })
-        .where(eq(analyses.id, analysisId));
-      return;
-    }
-
-    let diagnosticsPayload: AiDiagnosticsPayload | null = null;
-    try {
-      diagnosticsPayload = await runPythonDiagnostics(
-        analysis.videoPath,
-        sportName,
-        actualMovement,
-        dominantProfile,
-      );
-    } catch (diagnosticsError: any) {
-      console.warn(
-        `Diagnostics generation failed for analysis ${analysisId}: ${diagnosticsError?.message || diagnosticsError}`,
-      );
-    }
-
-    const metricValuesRaw: Record<string, unknown> = { ...result.metricValues };
-    if (result.shotCount != null) {
-      metricValuesRaw.shotCount = result.shotCount;
-    }
-    if (result.shotSpeed != null && Number.isFinite(result.shotSpeed)) {
-      metricValuesRaw.shotSpeed = result.shotSpeed;
-    }
-
-    const normalizedMetricValues = normalizeMetricValuesForPersistence(
-      metricValuesRaw,
-      diagnosticsPayload,
-    );
-
-    const resolvedConfigKey = result.configKey || configKey;
-    const metricValues = sanitizePersistedMap(normalizedMetricValues);
-    const persistedTacticalScores = extractStandardizedTacticalScores10(
-      sanitizePersistedMap(result.subScores || {}),
-    );
-    const persistedOverallScore = toPersistedScoreTen(result.overallScore);
-    const scoreInputs = buildScoreInputsPayload(resolvedConfigKey, metricValues);
-    const scoreOutputs = buildScoreOutputsPayload({
-      configKey: resolvedConfigKey,
-      detectedMovement: actualMovement,
-      tacticalComponents: persistedTacticalScores,
-      metricValues,
-      overallScore: persistedOverallScore,
+      console.log(`Analysis ${analysisId} completed successfully`);
     });
-
-    await db.transaction(async (tx) => {
-      await tx.delete(coachingInsights).where(eq(coachingInsights.analysisId, analysisId));
-      await tx.delete(metrics).where(eq(metrics.analysisId, analysisId));
-
-      await tx.insert(metrics).values({
-        analysisId,
-        configKey: resolvedConfigKey,
-        modelVersion: modelRegistryConfig.activeModelVersion,
-        overallScore: persistedOverallScore,
-        metricValues,
-        scoreInputs,
-        scoreOutputs,
-        aiDiagnostics: diagnosticsPayload,
-      });
-
-      await tx.insert(coachingInsights).values({
-        analysisId,
-        ...result.coaching,
-      });
-    });
-
-    await db
-      .update(analyses)
-      .set({
-        status: "completed",
-        detectedMovement: actualMovement,
-        rejectionReason: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(analyses.id, analysisId));
-
-    console.log(`Analysis ${analysisId} completed successfully`);
   } catch (error) {
     console.error("Analysis processing error:", error);
     await db
       .update(analyses)
-      .set({ status: "failed", updatedAt: new Date() })
+      .set({ status: "failed", ...buildUpdateAuditFields(null) })
       .where(eq(analyses.id, analysisId));
   }
 }

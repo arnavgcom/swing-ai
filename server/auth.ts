@@ -8,8 +8,10 @@ import fs from "fs";
 import { db } from "./db";
 import { users, registerSchema, loginSchema, type User } from "@shared/schema";
 import { eq, or, sql } from "drizzle-orm";
+import { resolveMediaUrl, storeAvatarBuffer } from "./media-storage";
+import { buildInsertAuditFields, buildUpdateAuditFields } from "./audit-metadata";
 
-function sanitizeUser(user: User) {
+async function sanitizeUser(user: User) {
   const selectedScoreSectionsBySport =
     user.selectedScoreSectionsBySport
     && typeof user.selectedScoreSectionsBySport === "object"
@@ -25,7 +27,7 @@ function sanitizeUser(user: User) {
     id: user.id,
     email: user.email,
     name: user.name,
-    avatarUrl: user.avatarUrl,
+    avatarUrl: await resolveMediaUrl(user.avatarUrl),
     phone: user.phone,
     address: user.address,
     country: user.country,
@@ -40,19 +42,8 @@ function sanitizeUser(user: User) {
   };
 }
 
-const avatarDir = path.resolve(process.cwd(), "uploads", "avatars");
-if (!fs.existsSync(avatarDir)) {
-  fs.mkdirSync(avatarDir, { recursive: true });
-}
-
 const avatarUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, avatarDir),
-    filename: (_req, file, cb) => {
-      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-      cb(null, uniqueSuffix + path.extname(file.originalname));
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic"];
@@ -134,12 +125,13 @@ export async function setupAuth(app: Express) {
           email: email.toLowerCase(),
           name,
           passwordHash,
+          ...buildInsertAuditFields(null),
         })
         .returning();
 
       req.session.userId = user.id;
 
-      res.json(sanitizeUser(user));
+      res.json(await sanitizeUser(user));
     } catch (error: any) {
       console.error("Register error:", error);
       res.status(500).json({ error: "Registration failed" });
@@ -184,10 +176,11 @@ export async function setupAuth(app: Express) {
           passwordHash,
           role: "player",
           country: requester.country || null,
+          ...buildInsertAuditFields(requester.id),
         })
         .returning();
 
-      res.status(201).json(sanitizeUser(createdPlayer));
+      res.status(201).json(await sanitizeUser(createdPlayer));
     } catch (error: any) {
       console.error("Create player error:", error);
       res.status(500).json({ error: "Failed to create player" });
@@ -231,7 +224,7 @@ export async function setupAuth(app: Express) {
 
       req.session.userId = user.id;
 
-      res.json(sanitizeUser(user));
+      res.json(await sanitizeUser(user));
     } catch (error: any) {
       console.error("Login error:", error);
       res.status(500).json({ error: "Login failed" });
@@ -325,12 +318,15 @@ export async function setupAuth(app: Express) {
         if (Object.keys(updates).length > 0) {
           const [updated] = await db
             .update(users)
-            .set(updates)
+            .set({
+              ...updates,
+              ...buildUpdateAuditFields(existing.id),
+            })
             .where(eq(users.id, existing.id))
             .returning();
-          return res.json(sanitizeUser(updated));
+          return res.json(await sanitizeUser(updated));
         }
-        return res.json(sanitizeUser(existing));
+        return res.json(await sanitizeUser(existing));
       }
 
       const randomPassword = Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -344,11 +340,12 @@ export async function setupAuth(app: Express) {
           passwordHash,
           avatarUrl: googleUser.picture || null,
           country: "Singapore",
+          ...buildInsertAuditFields(null),
         })
         .returning();
 
       req.session.userId = newUser.id;
-      res.json(sanitizeUser(newUser));
+      res.json(await sanitizeUser(newUser));
     } catch (error: any) {
       console.error("Google auth error:", error);
       res.status(500).json({ error: "Google authentication failed" });
@@ -371,7 +368,7 @@ export async function setupAuth(app: Express) {
         return res.status(401).json({ error: "User not found" });
       }
 
-      res.json(sanitizeUser(user));
+      res.json(await sanitizeUser(user));
     } catch (error) {
       res.status(500).json({ error: "Failed to get user" });
     }
@@ -384,7 +381,7 @@ export async function setupAuth(app: Express) {
         .from(users)
         .where(eq(users.id, req.session.userId!));
       if (!user) return res.status(404).json({ error: "User not found" });
-      res.json(sanitizeUser(user));
+      res.json(await sanitizeUser(user));
     } catch (error) {
       res.status(500).json({ error: "Failed to get profile" });
     }
@@ -494,11 +491,14 @@ export async function setupAuth(app: Express) {
 
       const [updated] = await db
         .update(users)
-        .set(updates)
+        .set({
+          ...updates,
+          ...buildUpdateAuditFields(requesterId),
+        })
         .where(eq(users.id, requesterId))
         .returning();
 
-      res.json(sanitizeUser(updated));
+      res.json(await sanitizeUser(updated));
     } catch (error) {
       res.status(500).json({ error: "Failed to update profile" });
     }
@@ -524,15 +524,22 @@ export async function setupAuth(app: Express) {
           return res.status(400).json({ error: "No image provided" });
         }
 
-        const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+        const avatarUrl = await storeAvatarBuffer({
+          buffer: req.file.buffer,
+          contentType: req.file.mimetype,
+          originalName: req.file.originalname,
+        });
 
         const [updated] = await db
           .update(users)
-          .set({ avatarUrl })
+          .set({
+            avatarUrl,
+            ...buildUpdateAuditFields(req.session.userId!),
+          })
           .where(eq(users.id, req.session.userId!))
           .returning();
 
-        res.json(sanitizeUser(updated));
+        res.json(await sanitizeUser(updated));
       } catch (error) {
         res.status(500).json({ error: "Failed to upload avatar" });
       }

@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import type { ScoreInputsPayload } from "@shared/schema";
+import { resolveProjectPath } from "./env";
 
 type ScoreDetailDef = {
   name: string;
@@ -110,7 +111,7 @@ const analyzerDepsCache = new Map<string, AnalyzerDependencyMap>();
 function parseAnalyzerDependencies(configKey: string): AnalyzerDependencyMap | null {
   if (analyzerDepsCache.has(configKey)) return analyzerDepsCache.get(configKey) || null;
 
-  const analyzerPath = path.resolve(process.cwd(), "python_analysis", "sports", `${configKey.replace(/-/g, "_")}.py`);
+  const analyzerPath = resolveProjectPath("python_analysis", "sports", `${configKey.replace(/-/g, "_")}.py`);
   if (!fs.existsSync(analyzerPath)) {
     analyzerDepsCache.set(configKey, null as unknown as AnalyzerDependencyMap);
     return null;

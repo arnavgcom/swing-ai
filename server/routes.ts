@@ -44,13 +44,26 @@ import {
 } from "./model-registry";
 import { persistedScoreToApiHundred } from "./score-scale";
 import { normalizeTacticalScoresToApi100, readTacticalScoreValue } from "./tactical-scores";
+import { buildInsertAuditFields, buildUpdateAuditFields } from "./audit-metadata";
+import {
+  copyStoredMediaToPath,
+  deleteStoredMedia,
+  ensureVideoStorageModeSetting,
+  getVideoStorageMode,
+  isStoredMediaLocallyAccessible,
+  resolveMediaUrl,
+  setVideoStorageMode,
+  storeVideoBuffer,
+  withLocalMediaFile,
+} from "./media-storage";
+import { PROJECT_ROOT, resolveProjectPath } from "./env";
 
-const uploadDir = path.resolve(process.cwd(), "uploads");
+const uploadDir = resolveProjectPath("uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-const upload = multer({
+const uploadToFilesystem = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadDir),
     filename: (_req, file, cb) => {
@@ -74,6 +87,42 @@ const upload = multer({
   },
 });
 
+const uploadToMemory = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      "video/mp4",
+      "video/quicktime",
+      "video/x-msvideo",
+      "video/webm",
+    ];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only video files are allowed"));
+    }
+  },
+});
+
+async function runVideoUploadMiddleware(req: Request, res: Response, next: Express.NextFunction) {
+  try {
+    const mode = await getVideoStorageMode();
+    const middleware = mode === "r2" ? uploadToMemory.single("video") : uploadToFilesystem.single("video");
+    middleware(req, res, (err: any) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ error: "File too large. Maximum 100MB." });
+        }
+        return res.status(400).json({ error: err.message || "Invalid file upload" });
+      }
+      return next();
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 function resolvePythonExecutable(): string {
   const envExecutable = process.env.PYTHON_EXECUTABLE;
   if (envExecutable && fs.existsSync(envExecutable)) {
@@ -81,8 +130,8 @@ function resolvePythonExecutable(): string {
   }
 
   const localCandidates = [
-    path.resolve(process.cwd(), ".venv", "bin", "python3"),
-    path.resolve(process.cwd(), ".venv", "bin", "python"),
+    resolveProjectPath(".venv", "bin", "python3"),
+    resolveProjectPath(".venv", "bin", "python"),
   ];
 
   for (const candidate of localCandidates) {
@@ -122,7 +171,7 @@ function runPythonDiagnostics(
       pythonExecutable,
       args,
       {
-        cwd: process.cwd(),
+        cwd: PROJECT_ROOT,
         timeout: 120000,
         maxBuffer: 10 * 1024 * 1024,
       },
@@ -1229,18 +1278,19 @@ async function getModelEvaluationMode(userId?: string): Promise<boolean> {
   return Boolean((legacySetting.value as Record<string, unknown>).enabled);
 }
 
-async function setModelEvaluationMode(enabled: boolean, userId?: string): Promise<void> {
+async function setModelEvaluationMode(enabled: boolean, userId?: string, actorUserId?: string | null): Promise<void> {
   await db
     .insert(appSettings)
     .values({
       key: getModelEvaluationModeKey(userId),
       value: { enabled },
+      ...buildInsertAuditFields(actorUserId || userId),
     })
     .onConflictDoUpdate({
       target: appSettings.key,
       set: {
         value: { enabled },
-        updatedAt: new Date(),
+        ...buildUpdateAuditFields(actorUserId || userId),
       },
     });
 }
@@ -1457,13 +1507,17 @@ async function resolveAutoLabelsForAnalysis(
 ): Promise<string[]> {
   let autoLabels: string[] = [];
 
-  if (analysis.videoPath && fs.existsSync(analysis.videoPath)) {
+  if (analysis.videoPath) {
     try {
-      const diagnostics = await runPythonDiagnostics(
+      const diagnostics = await withLocalMediaFile(
         analysis.videoPath,
-        sportName,
-        movementName,
-        dominantProfile,
+        analysis.videoFilename,
+        (localPath) => runPythonDiagnostics(
+          localPath,
+          sportName,
+          movementName,
+          dominantProfile,
+        ),
       );
       autoLabels = (diagnostics?.shotSegments || []).map((segment: any) =>
         normalizeShotLabel(segment?.label),
@@ -1507,6 +1561,203 @@ async function resolveSportAndMovementNames(
   }
 
   return { sportName, movementName };
+}
+
+async function attachVideoUrl<T extends { videoPath?: string | null }>(
+  row: T,
+): Promise<T & { videoUrl: string | null }> {
+  return {
+    ...row,
+    videoUrl: await resolveMediaUrl(row.videoPath || null),
+  };
+}
+
+const AUDIT_METADATA_BACKFILL_KEY = "AUDIT_METADATA_BACKFILL_V1";
+
+async function ensureAuditMetadataBackfill(): Promise<void> {
+  const [existing] = await db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.key, AUDIT_METADATA_BACKFILL_KEY))
+    .limit(1);
+
+  if (existing) {
+    return;
+  }
+
+  await db.execute(sql`
+    update users
+    set
+      updated_at = coalesce(updated_at, created_at, now()),
+      created_by_user_id = coalesce(created_by_user_id, id),
+      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id, id)
+    where updated_at is null
+       or created_by_user_id is null
+       or updated_by_user_id is null
+  `);
+
+  await db.execute(sql`
+    update sports
+    set
+      created_at = coalesce(created_at, updated_at, now()),
+      updated_at = coalesce(updated_at, created_at, now())
+    where created_at is null
+       or updated_at is null
+  `);
+
+  await db.execute(sql`
+    update sport_movements
+    set
+      created_at = coalesce(created_at, updated_at, now()),
+      updated_at = coalesce(updated_at, created_at, now())
+    where created_at is null
+       or updated_at is null
+  `);
+
+  await db.execute(sql`
+    update analyses
+    set
+      created_by_user_id = coalesce(created_by_user_id, user_id),
+      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id, user_id)
+    where created_by_user_id is null
+       or updated_by_user_id is null
+  `);
+
+  await db.execute(sql`
+    update metrics as m
+    set
+      updated_at = coalesce(m.updated_at, m.created_at, now()),
+      created_by_user_id = coalesce(m.created_by_user_id, a.created_by_user_id, a.user_id),
+      updated_by_user_id = coalesce(m.updated_by_user_id, m.created_by_user_id, a.updated_by_user_id, a.created_by_user_id, a.user_id)
+    from analyses as a
+    where m.analysis_id = a.id
+      and (
+        m.updated_at is null
+        or m.created_by_user_id is null
+        or m.updated_by_user_id is null
+      )
+  `);
+
+  await db.execute(sql`
+    update coaching_insights as ci
+    set
+      updated_at = coalesce(ci.updated_at, ci.created_at, now()),
+      created_by_user_id = coalesce(ci.created_by_user_id, a.created_by_user_id, a.user_id),
+      updated_by_user_id = coalesce(ci.updated_by_user_id, ci.created_by_user_id, a.updated_by_user_id, a.created_by_user_id, a.user_id)
+    from analyses as a
+    where ci.analysis_id = a.id
+      and (
+        ci.updated_at is null
+        or ci.created_by_user_id is null
+        or ci.updated_by_user_id is null
+      )
+  `);
+
+  await db.execute(sql`
+    update analysis_feedback
+    set
+      updated_at = coalesce(updated_at, created_at, now()),
+      created_by_user_id = coalesce(created_by_user_id, user_id),
+      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id, user_id)
+    where updated_at is null
+       or created_by_user_id is null
+       or updated_by_user_id is null
+  `);
+
+  await db.execute(sql`
+    update analysis_shot_annotations
+    set
+      created_at = coalesce(created_at, updated_at, now()),
+      updated_at = coalesce(updated_at, created_at, now()),
+      created_by_user_id = coalesce(created_by_user_id, user_id),
+      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id, user_id)
+    where created_at is null
+       or updated_at is null
+       or created_by_user_id is null
+       or updated_by_user_id is null
+  `);
+
+  await db.execute(sql`
+    update analysis_shot_discrepancies
+    set
+      created_at = coalesce(created_at, updated_at, now()),
+      updated_at = coalesce(updated_at, created_at, now()),
+      created_by_user_id = coalesce(created_by_user_id, user_id),
+      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id, user_id)
+    where created_at is null
+       or updated_at is null
+       or created_by_user_id is null
+       or updated_by_user_id is null
+  `);
+
+  await db.execute(sql`
+    update app_settings
+    set
+      created_at = coalesce(created_at, updated_at, now()),
+      updated_at = coalesce(updated_at, created_at, now())
+    where created_at is null
+       or updated_at is null
+  `);
+
+  await db.execute(sql`
+    update scoring_model_registry_entries
+    set
+      updated_at = coalesce(updated_at, created_at, now()),
+      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id)
+    where updated_at is null
+       or updated_by_user_id is null
+  `);
+
+  await db.execute(sql`
+    update scoring_model_registry_dataset_metrics as dm
+    set
+      created_at = coalesce(dm.created_at, dm.updated_at, re.created_at, now()),
+      updated_at = coalesce(dm.updated_at, dm.created_at, re.updated_at, re.created_at, now()),
+      created_by_user_id = coalesce(dm.created_by_user_id, re.created_by_user_id),
+      updated_by_user_id = coalesce(dm.updated_by_user_id, dm.created_by_user_id, re.updated_by_user_id, re.created_by_user_id)
+    from scoring_model_registry_entries as re
+    where dm.registry_entry_id = re.id
+      and (
+        dm.created_at is null
+        or dm.updated_at is null
+        or dm.created_by_user_id is null
+        or dm.updated_by_user_id is null
+      )
+  `);
+
+  await db.execute(sql`
+    update sport_category_metric_ranges
+    set
+      created_at = coalesce(created_at, updated_at, now()),
+      updated_at = coalesce(updated_at, created_at, now()),
+      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id)
+    where created_at is null
+       or updated_at is null
+       or updated_by_user_id is null
+  `);
+
+  await db
+    .insert(appSettings)
+    .values({
+      key: AUDIT_METADATA_BACKFILL_KEY,
+      value: {
+        version: 1,
+        completedAt: new Date().toISOString(),
+      },
+      ...buildInsertAuditFields(null),
+    })
+    .onConflictDoUpdate({
+      target: appSettings.key,
+      set: {
+        value: {
+          version: 1,
+          completedAt: new Date().toISOString(),
+        },
+        ...buildUpdateAuditFields(null),
+      },
+    });
+
+  console.log("Applied one-time audit metadata backfill for existing records");
 }
 
 async function refreshDiscrepancySnapshotsForAnalysis(
@@ -1569,6 +1820,7 @@ async function refreshDiscrepancySnapshotsForAnalysis(
           labelMismatches: snapshot.labelMismatches,
           countMismatch: snapshot.countMismatch,
           confusionPairs: snapshot.confusionPairs,
+          ...buildInsertAuditFields(annotation.userId),
         })
         .onConflictDoUpdate({
           target: [analysisShotDiscrepancies.analysisId, analysisShotDiscrepancies.userId],
@@ -1583,7 +1835,7 @@ async function refreshDiscrepancySnapshotsForAnalysis(
             labelMismatches: snapshot.labelMismatches,
             countMismatch: snapshot.countMismatch,
             confusionPairs: snapshot.confusionPairs,
-            updatedAt: new Date(),
+            ...buildUpdateAuditFields(annotation.userId),
           },
         });
 
@@ -1599,9 +1851,37 @@ async function refreshDiscrepancySnapshotsForAnalysis(
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`alter table users add column if not exists dominant_profile text`);
+  await db.execute(sql`alter table users add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql`alter table users add column if not exists created_by_user_id varchar`);
+  await db.execute(sql`alter table users add column if not exists updated_by_user_id varchar`);
+
+  await db.execute(sql`alter table sports add column if not exists created_at timestamp default now()`);
+  await db.execute(sql`alter table sports add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql`alter table sports add column if not exists created_by_user_id varchar`);
+  await db.execute(sql`alter table sports add column if not exists updated_by_user_id varchar`);
+
+  await db.execute(sql`alter table sport_movements add column if not exists created_at timestamp default now()`);
+  await db.execute(sql`alter table sport_movements add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql`alter table sport_movements add column if not exists created_by_user_id varchar`);
+  await db.execute(sql`alter table sport_movements add column if not exists updated_by_user_id varchar`);
+
+  await db.execute(sql`alter table analyses add column if not exists created_by_user_id varchar`);
+  await db.execute(sql`alter table analyses add column if not exists updated_by_user_id varchar`);
+
   await db.execute(sql`alter table metrics add column if not exists score_inputs jsonb`);
   await db.execute(sql`alter table metrics add column if not exists score_outputs jsonb`);
   await db.execute(sql`alter table metrics add column if not exists ai_diagnostics jsonb`);
+  await db.execute(sql`alter table metrics add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql`alter table metrics add column if not exists created_by_user_id varchar`);
+  await db.execute(sql`alter table metrics add column if not exists updated_by_user_id varchar`);
+
+  await db.execute(sql`alter table coaching_insights add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql`alter table coaching_insights add column if not exists created_by_user_id varchar`);
+  await db.execute(sql`alter table coaching_insights add column if not exists updated_by_user_id varchar`);
+
+  await db.execute(sql`alter table analysis_feedback add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql`alter table analysis_feedback add column if not exists created_by_user_id varchar`);
+  await db.execute(sql`alter table analysis_feedback add column if not exists updated_by_user_id varchar`);
   await db.execute(sql`alter table metrics drop column if exists tactical_scores`);
   await db.execute(sql`alter table metrics drop column if exists sub_scores`);
 
@@ -1616,8 +1896,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       notes text,
       created_at timestamp not null default now(),
       updated_at timestamp not null default now()
+      ,created_by_user_id varchar
+      ,updated_by_user_id varchar
     )
   `);
+
+  await db.execute(sql`alter table analysis_shot_annotations add column if not exists created_by_user_id varchar`);
+  await db.execute(sql`alter table analysis_shot_annotations add column if not exists updated_by_user_id varchar`);
 
   await db.execute(sql`
     create unique index if not exists analysis_shot_annotations_analysis_user_uq
@@ -1640,9 +1925,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       count_mismatch real not null,
       confusion_pairs jsonb not null default '[]'::jsonb,
       created_at timestamp not null default now(),
-      updated_at timestamp not null default now()
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar,
+      updated_by_user_id varchar
     )
   `);
+
+  await db.execute(sql`alter table analysis_shot_discrepancies add column if not exists created_by_user_id varchar`);
+  await db.execute(sql`alter table analysis_shot_discrepancies add column if not exists updated_by_user_id varchar`);
 
   await db.execute(sql`
     create unique index if not exists analysis_shot_discrepancies_analysis_user_uq
@@ -1653,9 +1943,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     create table if not exists app_settings (
       key varchar primary key,
       value jsonb not null,
+      created_at timestamp not null default now(),
       updated_at timestamp not null default now()
+      ,created_by_user_id varchar
+      ,updated_by_user_id varchar
     )
   `);
+
+  await db.execute(sql`alter table app_settings add column if not exists created_at timestamp default now()`);
+  await db.execute(sql`alter table app_settings add column if not exists created_by_user_id varchar`);
+  await db.execute(sql`alter table app_settings add column if not exists updated_by_user_id varchar`);
+
+  await ensureVideoStorageModeSetting();
 
   await db.execute(sql`
     create table if not exists scoring_model_registry_entries (
@@ -1669,9 +1968,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       manifest_model_version varchar not null default '0.1',
       manifest_datasets jsonb not null default '[]'::jsonb,
       created_by_user_id varchar references users(id),
-      created_at timestamp not null default now()
+      updated_by_user_id varchar references users(id),
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now()
     )
   `);
+
+  await db.execute(sql`alter table scoring_model_registry_entries add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql`alter table scoring_model_registry_entries add column if not exists updated_at timestamp default now()`);
 
   await db.execute(sql`
     create table if not exists scoring_model_registry_dataset_metrics (
@@ -1680,9 +1984,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       dataset_name text not null,
       movement_type text not null,
       movement_detection_accuracy_pct real not null,
-      scoring_accuracy_pct real not null
+      scoring_accuracy_pct real not null,
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar,
+      updated_by_user_id varchar
     )
   `);
+
+  await db.execute(sql`alter table scoring_model_registry_dataset_metrics add column if not exists created_at timestamp default now()`);
+  await db.execute(sql`alter table scoring_model_registry_dataset_metrics add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql`alter table scoring_model_registry_dataset_metrics add column if not exists created_by_user_id varchar`);
+  await db.execute(sql`alter table scoring_model_registry_dataset_metrics add column if not exists updated_by_user_id varchar`);
 
   await db.execute(sql`
     create table if not exists sport_category_metric_ranges (
@@ -1698,9 +2011,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       is_active boolean not null default true,
       source text not null default 'config',
       created_at timestamp not null default now(),
-      updated_at timestamp not null default now()
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar,
+      updated_by_user_id varchar
     )
   `);
+
+  await db.execute(sql`alter table sport_category_metric_ranges add column if not exists created_by_user_id varchar`);
+  await db.execute(sql`alter table sport_category_metric_ranges add column if not exists updated_by_user_id varchar`);
 
   await db.execute(sql`
     create unique index if not exists sport_category_metric_ranges_config_metric_uq
@@ -1739,6 +2057,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`alter table analyses add column if not exists gps_accuracy_m real`);
   await db.execute(sql`alter table analyses add column if not exists gps_timestamp timestamp`);
   await db.execute(sql`alter table analyses add column if not exists gps_source text`);
+
+  await ensureAuditMetadataBackfill();
 
   const parseIntegerList = (value: unknown): number[] => {
     if (!Array.isArray(value)) return [];
@@ -1887,8 +2207,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const enabled = Boolean(req.body?.enabled);
-      await setModelEvaluationMode(enabled, userId);
+      await setModelEvaluationMode(enabled, userId, userId);
       res.json({ enabled });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/platform/storage-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      res.json({
+        mode: await getVideoStorageMode(),
+        isAdmin,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/platform/storage-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const mode = String(req.body?.mode || "").trim().toLowerCase();
+      if (mode !== "filesystem" && mode !== "r2") {
+        return res.status(400).json({ error: "mode must be filesystem or r2" });
+      }
+
+      await setVideoStorageMode(mode, userId);
+      res.json({ mode });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -1954,6 +2313,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           manifestModelVersion,
           manifestDatasets: manifestBeforeSave.datasets,
           createdByUserId: userId,
+          updatedByUserId: userId,
+          ...buildInsertAuditFields(userId),
         })
         .returning();
 
@@ -1965,6 +2326,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             movementType: metric.movementType,
             movementDetectionAccuracyPct: metric.movementDetectionAccuracyPct,
             scoringAccuracyPct: metric.scoringAccuracyPct,
+            ...buildInsertAuditFields(userId),
           })),
         );
       }
@@ -2551,6 +2913,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           optimalMax,
           isActive,
           source: "admin",
+          ...buildInsertAuditFields(userId),
         })
         .onConflictDoUpdate({
           target: [sportCategoryMetricRanges.configKey, sportCategoryMetricRanges.metricKey],
@@ -2563,7 +2926,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             optimalMax,
             isActive,
             source: "admin",
-            updatedAt: new Date(),
+            ...buildUpdateAuditFields(userId),
           },
         });
 
@@ -2658,6 +3021,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             optimalMax: item.optimalMax,
             isActive: item.isActive,
             source: "admin",
+            ...buildInsertAuditFields(userId),
           })
           .onConflictDoUpdate({
             target: [sportCategoryMetricRanges.configKey, sportCategoryMetricRanges.metricKey],
@@ -2670,7 +3034,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               optimalMax: item.optimalMax,
               isActive: item.isActive,
               source: "admin",
-              updatedAt: new Date(),
+              ...buildUpdateAuditFields(userId),
             },
           });
       }
@@ -2703,12 +3067,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post(
     "/api/upload",
     requireAuth,
-    upload.single("video"),
+    runVideoUploadMiddleware,
     async (req: Request, res: Response) => {
       try {
         if (!req.file) {
           return res.status(400).json({ error: "No video file provided" });
         }
+
+        const storageMode = await getVideoStorageMode();
 
         const requesterUserId = req.session.userId!;
 
@@ -2765,14 +3131,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        const finalFilename = req.file.filename;
-        const finalPath = req.file.path;
+        const finalFilename = req.file.filename
+          || `${randomUUID().toUpperCase()}${path.extname(req.file.originalname || "") || ".mp4"}`;
+        const finalPath = storageMode === "r2"
+          ? await storeVideoBuffer({
+              buffer: req.file.buffer,
+              contentType: req.file.mimetype,
+              filename: finalFilename,
+            })
+          : req.file.path;
         const sourceFilename = evaluationModeEnabled && originalFilename
           ? originalFilename
           : null;
         const evaluationVideoId = null;
 
-        const extractedMetadata = await extractVideoMetadata(finalPath);
+        const extractedMetadata = await withLocalMediaFile(finalPath, finalFilename, async (localPath) =>
+          extractVideoMetadata(localPath)
+        );
 
         const analysis = await storage.createAnalysis(
           finalFilename,
@@ -2783,6 +3158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           extractedMetadata,
           sourceFilename,
           evaluationVideoId,
+          requesterUserId,
         );
 
         processAnalysis(analysis.id).catch(console.error);
@@ -2874,10 +3250,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (evaluationVideoMap && isAdmin) {
         const filteredRows = normalizedRows.filter((row) => getEvaluationMatch(row, evaluationVideoMap));
-        return res.json(filteredRows);
+        return res.json(await Promise.all(filteredRows.map((row) => attachVideoUrl(row))));
       }
 
-      res.json(normalizedRows);
+      res.json(await Promise.all(normalizedRows.map((row) => attachVideoUrl(row))));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -3101,10 +3477,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : null;
 
       res.json({
-        analysis: {
+        analysis: await attachVideoUrl({
           ...analysis,
           userName: analysisUser?.name || null,
-        },
+        }),
         metrics: normalizedMetricsData,
         coaching: insights || null,
         selectedMovementName,
@@ -3316,7 +3692,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             orderedShotLabels,
             usedForScoringShotIndexes,
             notes,
-            updatedAt: new Date(),
+            ...buildUpdateAuditFields(userId),
           })
           .where(eq(analysisShotAnnotations.id, existing.id));
       } else {
@@ -3327,6 +3703,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           orderedShotLabels,
           usedForScoringShotIndexes,
           notes,
+          ...buildInsertAuditFields(userId),
         });
       }
 
@@ -3357,20 +3734,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .toLowerCase();
 
         try {
-          const syncResult = syncVideoForModelTuning({
-            sourceVideoPath: analysis.videoPath,
-            sourceVideoFilename: analysis.videoFilename,
-            movementType: movementForManifest,
-            enabled: useForModelTraining,
-            videoId: analysis.evaluationVideoId || undefined,
-          });
+          const syncResult = useForModelTraining
+            ? await withLocalMediaFile(
+                analysis.videoPath,
+                analysis.videoFilename,
+                async (localPath) =>
+                  syncVideoForModelTuning({
+                    sourceVideoPath: localPath,
+                    sourceVideoFilename: analysis.videoFilename,
+                    movementType: movementForManifest,
+                    enabled: useForModelTraining,
+                    videoId: analysis.evaluationVideoId || undefined,
+                  }),
+              )
+            : syncVideoForModelTuning({
+                sourceVideoPath: analysis.videoPath,
+                sourceVideoFilename: analysis.videoFilename,
+                movementType: movementForManifest,
+                enabled: useForModelTraining,
+                videoId: analysis.evaluationVideoId || undefined,
+              });
 
           if (useForModelTraining && syncResult.videoId !== analysis.evaluationVideoId) {
             await db
               .update(analyses)
               .set({
                 evaluationVideoId: syncResult.videoId,
-                updatedAt: new Date(),
+                ...buildUpdateAuditFields(userId),
               })
               .where(eq(analyses.id, analysis.id));
           }
@@ -3411,6 +3801,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             labelMismatches: snapshot.labelMismatches,
             countMismatch: snapshot.countMismatch,
             confusionPairs: snapshot.confusionPairs,
+            ...buildInsertAuditFields(userId),
           })
           .onConflictDoUpdate({
             target: [analysisShotDiscrepancies.analysisId, analysisShotDiscrepancies.userId],
@@ -3426,7 +3817,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               labelMismatches: snapshot.labelMismatches,
               countMismatch: snapshot.countMismatch,
               confusionPairs: snapshot.confusionPairs,
-              updatedAt: new Date(),
+              ...buildUpdateAuditFields(userId),
             },
           });
         discrepancySnapshotUpdated = true;
@@ -3466,7 +3857,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
 
-      if (!analysis.videoPath || !fs.existsSync(analysis.videoPath)) {
+      if (!analysis.videoPath) {
         return res.status(404).json({ error: "Video file not found" });
       }
 
@@ -3483,11 +3874,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (movement) movementName = movement.name;
       }
 
-      const diagnostics = await runPythonDiagnostics(
+      const dominantProfile = await resolveUserDominantProfile(analysis.userId);
+      const diagnostics = await withLocalMediaFile(
         analysis.videoPath,
-        sportName,
-        movementName,
-        await resolveUserDominantProfile(analysis.userId),
+        analysis.videoFilename,
+        (localPath) => runPythonDiagnostics(
+          localPath,
+          sportName,
+          movementName,
+          dominantProfile,
+        ),
       );
 
       const diagnosticsDetected = String(diagnostics?.detectedMovement || "").trim();
@@ -3897,7 +4293,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(persistedDiagnostics);
       }
 
-      if (!analysis.videoPath || !fs.existsSync(analysis.videoPath)) {
+      if (!analysis.videoPath) {
         return res.status(404).json({ error: "Video file not found" });
       }
 
@@ -3914,11 +4310,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (movement) movementName = movement.name;
       }
 
-      const diagnostics = await runPythonDiagnostics(
+      const dominantProfile = await resolveUserDominantProfile(analysis.userId);
+      const diagnostics = await withLocalMediaFile(
         analysis.videoPath,
-        sportName,
-        movementName,
-        await resolveUserDominantProfile(analysis.userId),
+        analysis.videoFilename,
+        (localPath) => runPythonDiagnostics(
+          localPath,
+          sportName,
+          movementName,
+          dominantProfile,
+        ),
       );
 
       await db
@@ -4165,11 +4566,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
 
-      if (!analysis.videoPath || !fs.existsSync(analysis.videoPath)) {
+      if (!analysis.videoPath) {
         return res.status(404).json({ error: "Video file not found" });
       }
 
-      const extractedMetadata = await extractVideoMetadata(analysis.videoPath);
+      const extractedMetadata = await withLocalMediaFile(
+        analysis.videoPath,
+        analysis.videoFilename,
+        (localPath) => extractVideoMetadata(localPath),
+      );
       return res.json(extractedMetadata || {});
     } catch (error: any) {
       return res.status(500).json({ error: error.message || "Failed to extract video metadata" });
@@ -4335,6 +4740,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const rawAnalyses = isAdmin
         ? await storage.getAllAnalyses(null)
         : await storage.getAllAnalyses(userId);
+      const storageMode = await getVideoStorageMode();
       const evaluationModeEnabled = await getModelEvaluationMode(userId);
       const videoMap = evaluationModeEnabled
         && isAdmin
@@ -4400,7 +4806,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const existingPaths = new Set(
         userAnalyses
-          .filter((analysis) => analysis.videoPath && fs.existsSync(analysis.videoPath))
+          .filter((analysis) => analysis.videoPath && isStoredMediaLocallyAccessible(analysis.videoPath))
           .map((analysis) => path.resolve(analysis.videoPath)),
       );
 
@@ -4415,8 +4821,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const skippedDetails: Array<{ id: string; reason: string; filename: string }> = [];
 
       for (const analysis of userAnalyses) {
-        if (analysis.videoPath && fs.existsSync(analysis.videoPath)) {
+        if (analysis.videoPath && (storageMode === "r2" || isStoredMediaLocallyAccessible(analysis.videoPath))) {
           runnableAnalyses.push(analysis);
+          continue;
+        }
+
+        if (storageMode === "r2") {
+          skippedDetails.push({
+            id: analysis.id,
+            reason: "Video reference is missing from configured storage",
+            filename: path.basename(analysis.videoFilename || ""),
+          });
           continue;
         }
 
@@ -4551,6 +4966,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.session.userId!;
       const analysisId = req.params.id;
       const filename = (req.body?.filename || "").toString().trim();
+      const storageMode = await getVideoStorageMode();
+
+      if (storageMode === "r2") {
+        return res.status(400).json({ error: "Relink is only available when VIDEO_STORAGE_MODE is filesystem" });
+      }
 
       if (!filename) {
         return res.status(400).json({ error: "filename is required" });
@@ -4561,6 +4981,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Analysis not found" });
       }
 
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
       const evaluationModeEnabled = await getModelEvaluationMode(userId);
       if (evaluationModeEnabled && isAdmin) {
         const videoMap = getEvaluationDatasetVideoMap(readModelRegistryConfig());
@@ -4570,9 +4992,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
       }
-
-      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
-      const isAdmin = currentUser?.role === "admin";
       if (!isAdmin && analysis.userId !== userId) {
         return res.status(403).json({ error: "You can only relink your own analyses" });
       }
@@ -4589,7 +5008,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .set({
           videoFilename: safeFilename,
           videoPath: relinkedPath,
-          updatedAt: new Date(),
+          ...buildUpdateAuditFields(userId),
         })
         .where(eq(analyses.id, analysisId));
 
@@ -4666,7 +5085,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (existing.length > 0) {
         await db
           .update(analysisFeedback)
-          .set({ rating, comment: comment || null })
+          .set({
+            rating,
+            comment: comment || null,
+            ...buildUpdateAuditFields(req.session.userId!),
+          })
           .where(eq(analysisFeedback.id, existing[0].id));
       } else {
         await db.insert(analysisFeedback).values({
@@ -4674,6 +5097,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.session.userId!,
           rating,
           comment: comment || null,
+          ...buildInsertAuditFields(req.session.userId!),
         });
       }
 
@@ -4704,9 +5128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "You can only delete your own analyses" });
       }
 
-      if (fs.existsSync(analysis.videoPath)) {
-        fs.unlinkSync(analysis.videoPath);
-      }
+      await deleteStoredMedia(analysis.videoPath);
 
       await storage.deleteAnalysis(req.params.id);
       res.json({ message: "Analysis deleted" });
@@ -4726,9 +5148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allAnalyses = await storage.getAllAnalyses(null);
 
       for (const analysis of allAnalyses) {
-        if (analysis.videoPath && fs.existsSync(analysis.videoPath)) {
-          fs.unlinkSync(analysis.videoPath);
-        }
+        await deleteStoredMedia(analysis.videoPath);
       }
 
       await db.transaction(async (tx) => {

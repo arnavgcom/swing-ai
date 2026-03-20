@@ -41,7 +41,7 @@ import {
   fetchGhostCorrection,
   type GhostCorrectionResponse,
 } from "@/lib/api";
-import { getApiUrl } from "@/lib/query-client";
+import { resolveClientMediaUrl } from "@/lib/media";
 import { ScoreGauge } from "@/components/ScoreGauge";
 import { MetricCard } from "@/components/MetricCard";
 import { CoachingCard } from "@/components/CoachingCard";
@@ -1443,41 +1443,10 @@ export default function AnalysisDetailScreen() {
     technicalBiomecItems,
   ]);
 
-  const videoUrl = useMemo(() => {
-    if (!analysis?.videoPath) return null;
-    try {
-      const normalizedPath = analysis.videoPath.replace(/\\/g, "/");
-      const lowerPath = normalizedPath.toLowerCase();
-
-      let relativePath = "";
-      const marker = "/uploads/";
-      const markerIndex = lowerPath.lastIndexOf(marker);
-
-      if (markerIndex >= 0) {
-        relativePath = normalizedPath.slice(markerIndex + marker.length);
-      } else {
-        const looseMarker = "uploads/";
-        const looseIndex = lowerPath.lastIndexOf(looseMarker);
-        if (looseIndex >= 0) {
-          relativePath = normalizedPath.slice(looseIndex + looseMarker.length);
-        } else {
-          relativePath = normalizedPath.split("/").pop() || "";
-        }
-      }
-
-      if (!relativePath) return null;
-
-      const encodedRelativePath = relativePath
-        .split("/")
-        .map((segment) => encodeURIComponent(segment))
-        .join("/");
-
-      const base = getApiUrl();
-      return new URL(`/uploads/${encodedRelativePath}`, base).href;
-    } catch {
-      return null;
-    }
-  }, [analysis?.videoPath]);
+  const videoUrl = useMemo(
+    () => resolveClientMediaUrl(analysis?.videoUrl),
+    [analysis?.videoUrl],
+  );
 
   const player = useVideoPlayer(videoUrl ?? "about:blank", (p) => {
     p.loop = false;

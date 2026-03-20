@@ -12,6 +12,7 @@ import {
 import { eq, desc, and, sql } from "drizzle-orm";
 import { persistedScoreToApiHundred } from "./score-scale";
 import { normalizeTacticalScoresToApi100 } from "./tactical-scores";
+import { buildInsertAuditFields } from "./audit-metadata";
 
 export type MetricWithCompatSubScores = Metric & {
   subScores: Record<string, number | null>;
@@ -49,6 +50,7 @@ export interface IStorage {
     metadata?: AnalysisMetadataInput,
     sourceFilename?: string | null,
     evaluationVideoId?: string | null,
+    actorUserId?: string | null,
   ): Promise<Analysis>;
   getAnalysis(id: string): Promise<Analysis | undefined>;
   getAllAnalyses(userId: string | null, sportId?: string): Promise<Analysis[]>;
@@ -67,6 +69,7 @@ export class DatabaseStorage implements IStorage {
     metadata?: AnalysisMetadataInput,
     sourceFilename?: string | null,
     evaluationVideoId?: string | null,
+    actorUserId?: string | null,
   ): Promise<Analysis> {
     const [analysis] = await db
       .insert(analyses)
@@ -98,6 +101,7 @@ export class DatabaseStorage implements IStorage {
         gpsAccuracyM: metadata?.gpsAccuracyM ?? null,
         gpsTimestamp: metadata?.gpsTimestamp ?? null,
         gpsSource: metadata?.gpsSource ?? null,
+        ...buildInsertAuditFields(actorUserId),
       })
       .returning();
     return analysis;

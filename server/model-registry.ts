@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { createHash, randomUUID } from "crypto";
+import { resolveProjectPath } from "./env";
 
 export interface ModelRegistryConfig {
   activeModelVersion: string;
@@ -39,8 +40,8 @@ export interface ManifestValidationResult {
   warnings: string[];
 }
 
-const configPath = path.resolve(process.cwd(), "config", "model-registry.config.json");
-const evaluationDatasetFolder = path.resolve(process.cwd(), "model_evaluation_datasets", "dataset");
+const configPath = resolveProjectPath("config", "model-registry.config.json");
+const evaluationDatasetFolder = resolveProjectPath("model_evaluation_datasets", "dataset");
 const evaluationDatasetFolderPrefix = "model_evaluation_datasets/dataset";
 const manualTuningDatasetName = "manual-annotations";
 
@@ -112,7 +113,7 @@ export function writeModelRegistryConfig(nextConfig: ModelRegistryConfig): Model
 
 export function readEvaluationDatasetManifest(config?: ModelRegistryConfig): EvaluationDatasetManifest {
   const cfg = config || readModelRegistryConfig();
-  const manifestPath = path.resolve(process.cwd(), cfg.evaluationDatasetManifestPath);
+  const manifestPath = resolveProjectPath(cfg.evaluationDatasetManifestPath);
   try {
     const raw = fs.readFileSync(manifestPath, "utf-8");
     const parsed = JSON.parse(raw) as Partial<EvaluationDatasetManifest>;
@@ -203,7 +204,7 @@ function ensureEvaluationDatasetDir(): void {
 }
 
 function getManifestPath(config: ModelRegistryConfig): string {
-  return path.resolve(process.cwd(), config.evaluationDatasetManifestPath);
+  return resolveProjectPath(config.evaluationDatasetManifestPath);
 }
 
 function writeEvaluationDatasetManifest(config: ModelRegistryConfig, manifest: EvaluationDatasetManifest): void {

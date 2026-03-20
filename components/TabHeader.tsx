@@ -7,8 +7,8 @@ import * as Haptics from "expo-haptics";
 import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
 import { sportColors } from "@/constants/colors";
-import { getApiUrl } from "@/lib/query-client";
 import { ds } from "@/constants/design-system";
+import { resolveClientMediaUrl } from "@/lib/media";
 
 export function TabHeader() {
   const insets = useSafeAreaInsets();
@@ -16,9 +16,8 @@ export function TabHeader() {
   const { selectedSport } = useSport();
   const sc = sportColors[selectedSport?.name || ""] || { primary: "#6C5CE7", gradient: "#5A4BD1" };
 
-  const avatarSource = user?.avatarUrl
-    ? { uri: `${getApiUrl()}${user.avatarUrl.replace(/^\//, "")}` }
-    : null;
+  const avatarUrl = resolveClientMediaUrl(user?.avatarUrl);
+  const avatarSource = avatarUrl ? { uri: avatarUrl } : null;
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
   return (

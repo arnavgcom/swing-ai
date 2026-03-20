@@ -23,9 +23,12 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "@/lib/auth-context";
 import { getApiUrl, apiRequest, queryClient } from "@/lib/query-client";
+import { resolveClientMediaUrl } from "@/lib/media";
 import {
   fetchModelEvaluationSettings,
+  fetchVideoStorageSettings,
   updateModelEvaluationSettings,
+  updateVideoStorageSettings,
 } from "@/lib/api";
 
 const COUNTRIES = [
@@ -84,6 +87,8 @@ export default function ProfileScreen() {
   const [showDominantProfilePicker, setShowDominantProfilePicker] = useState(false);
   const [modelEvaluationMode, setModelEvaluationMode] = useState(false);
   const [modelEvalLoading, setModelEvalLoading] = useState(false);
+  const [videoStorageMode, setVideoStorageMode] = useState<"filesystem" | "r2">("filesystem");
+  const [videoStorageLoading, setVideoStorageLoading] = useState(false);
   const isPersistedAdmin = normalizeRole(user?.role) === "admin";
   const isSelectedAdmin = normalizeRole(role) === "admin";
   const showAdminControls = isSelectedAdmin;
@@ -101,8 +106,7 @@ export default function ProfileScreen() {
       );
       setRole(normalizeRole(user.role));
       if (user.avatarUrl) {
-        const baseUrl = getApiUrl();
-        setAvatarUri(`${baseUrl}${user.avatarUrl.replace(/^\//, "")}`);
+        setAvatarUri(resolveClientMediaUrl(user.avatarUrl));
       }
     }
   }, [user]);
@@ -110,15 +114,20 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (!canUseAdminApis) {
       setModelEvaluationMode(false);
+      setVideoStorageMode("filesystem");
       return;
     }
 
     let active = true;
     (async () => {
       try {
-        const settings = await fetchModelEvaluationSettings();
+        const [settings, storageSettings] = await Promise.all([
+          fetchModelEvaluationSettings(),
+          fetchVideoStorageSettings(),
+        ]);
         if (!active) return;
         setModelEvaluationMode(Boolean(settings.enabled));
+        setVideoStorageMode(storageSettings.mode);
       } catch {
         if (!active) return;
       }
@@ -157,6 +166,24 @@ export default function ProfileScreen() {
       Alert.alert("Error", "Failed to update Model Evaluation Mode");
     } finally {
       setModelEvalLoading(false);
+    }
+  };
+
+  const handleVideoStorageToggle = async (enabled: boolean) => {
+    if (!canUseAdminApis) {
+      Alert.alert("Save role first", "Please save profile changes after switching to Admin.");
+      return;
+    }
+    setVideoStorageLoading(true);
+    const nextMode = enabled ? "r2" : "filesystem";
+    try {
+      await updateVideoStorageSettings(nextMode);
+      setVideoStorageMode(nextMode);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert("Error", "Failed to update video storage mode");
+    } finally {
+      setVideoStorageLoading(false);
     }
   };
 
@@ -241,7 +268,7 @@ export default function ProfileScreen() {
       if (res.ok) {
         const data = await res.json();
         if (data.avatarUrl) {
-          setAvatarUri(`${baseUrl}${data.avatarUrl.replace(/^\//, "")}`);
+          setAvatarUri(resolveClientMediaUrl(data.avatarUrl));
         }
         await refreshUser();
       } else {
@@ -543,6 +570,35 @@ export default function ProfileScreen() {
               {!canUseAdminApis ? (
                 <Text style={styles.adminHintText}>Save profile to enable admin actions.</Text>
               ) : null}
+            </View>
+          )}
+
+          {showAdminControls && (
+            <View style={styles.fieldWrapper}>
+              <Text style={styles.fieldLabel}>Video Storage Mode</Text>
+              <View style={styles.roleToggleRow}>
+                <View style={styles.roleInfo}>
+                  <Ionicons
+                    name={videoStorageMode === "r2" ? "cloud" : "folder-open"}
+                    size={18}
+                    color={videoStorageMode === "r2" ? "#38BDF8" : "#6C5CE7"}
+                  />
+                  <Text style={styles.roleText}>
+                    {videoStorageMode === "r2" ? "R2 on Cloud" : "Filesystem"}
+                  </Text>
+                </View>
+                <Switch
+                  value={videoStorageMode === "r2"}
+                  disabled={videoStorageLoading || !canUseAdminApis}
+                  onValueChange={(val) => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    handleVideoStorageToggle(val);
+                  }}
+                  trackColor={{ false: "#2A2A50", true: "#38BDF840" }}
+                  thumbColor={videoStorageMode === "r2" ? "#38BDF8" : "#64748B"}
+                  testID="video-storage-toggle"
+                />
+              </View>
             </View>
           )}
 

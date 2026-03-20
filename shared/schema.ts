@@ -91,6 +91,9 @@ export const users = pgTable("users", {
   bio: text("bio"),
   role: text("role").default("player").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id"),
+  updatedByUserId: varchar("updated_by_user_id"),
 });
 
 export const sports = pgTable("sports", {
@@ -103,6 +106,10 @@ export const sports = pgTable("sports", {
   description: text("description").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   sortOrder: real("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
 });
 
 export const sportMovements = pgTable("sport_movements", {
@@ -116,6 +123,10 @@ export const sportMovements = pgTable("sport_movements", {
   description: text("description").notNull(),
   icon: text("icon").notNull(),
   sortOrder: real("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
 });
 
 export const analyses = pgTable("analyses", {
@@ -154,6 +165,8 @@ export const analyses = pgTable("analyses", {
   gpsSource: text("gps_source"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
 });
 
 export const metrics = pgTable("metrics", {
@@ -171,6 +184,9 @@ export const metrics = pgTable("metrics", {
   scoreOutputs: jsonb("score_outputs").$type<ScoreOutputsPayload>(),
   aiDiagnostics: jsonb("ai_diagnostics").$type<AiDiagnosticsPayload>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
 });
 
 export const coachingInsights = pgTable("coaching_insights", {
@@ -185,6 +201,9 @@ export const coachingInsights = pgTable("coaching_insights", {
   trainingSuggestion: text("training_suggestion").notNull(),
   simpleExplanation: text("simple_explanation").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
 });
 
 export const analysisFeedback = pgTable("analysis_feedback", {
@@ -200,6 +219,9 @@ export const analysisFeedback = pgTable("analysis_feedback", {
   rating: text("rating").notNull(),
   comment: text("comment"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
 });
 
 export const analysisShotAnnotations = pgTable("analysis_shot_annotations", {
@@ -218,6 +240,8 @@ export const analysisShotAnnotations = pgTable("analysis_shot_annotations", {
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
 });
 
 export const analysisShotDiscrepancies = pgTable("analysis_shot_discrepancies", {
@@ -245,12 +269,17 @@ export const analysisShotDiscrepancies = pgTable("analysis_shot_discrepancies", 
     .notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
 });
 
 export const appSettings = pgTable("app_settings", {
   key: varchar("key").primaryKey(),
   value: jsonb("value").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
 });
 
 export const scoringModelRegistryEntries = pgTable("scoring_model_registry_entries", {
@@ -269,7 +298,9 @@ export const scoringModelRegistryEntries = pgTable("scoring_model_registry_entri
     .notNull()
     .default(sql`'[]'::jsonb`),
   createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const scoringModelRegistryDatasetMetrics = pgTable("scoring_model_registry_dataset_metrics", {
@@ -283,6 +314,10 @@ export const scoringModelRegistryDatasetMetrics = pgTable("scoring_model_registr
   movementType: text("movement_type").notNull(),
   movementDetectionAccuracyPct: real("movement_detection_accuracy_pct").notNull(),
   scoringAccuracyPct: real("scoring_accuracy_pct").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
 });
 
 export const sportCategoryMetricRanges = pgTable("sport_category_metric_ranges", {
@@ -301,6 +336,8 @@ export const sportCategoryMetricRanges = pgTable("sport_category_metric_ranges",
   source: text("source").notNull().default("config"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({

@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { sports, sportMovements } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { buildInsertAuditFields } from "./audit-metadata";
 
 const SPORTS_DATA = [
   {
@@ -106,6 +107,7 @@ export async function seedSports() {
         color: sportData.color,
         description: sportData.description,
         sortOrder: sportData.sortOrder,
+        ...buildInsertAuditFields(),
       })
       .returning();
 
@@ -116,6 +118,7 @@ export async function seedSports() {
         description: movement.description,
         icon: movement.icon,
         sortOrder: movement.sortOrder,
+        ...buildInsertAuditFields(),
       });
     }
   }
