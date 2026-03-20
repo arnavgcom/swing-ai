@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useSegments, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   useFonts,
@@ -14,7 +14,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { SportProvider, useSport } from "@/lib/sport-context";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { View, ActivityIndicator } from "react-native";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -23,77 +23,113 @@ function RootNavigator() {
   const { selectedSport, isLoading: sportLoading } = useSport();
   const segments = useSegments();
   const router = useRouter();
-  // Track whether the Stack has mounted at least once before we allow navigation.
-  const stackMountedRef = useRef(false);
+  const [navigationReady, setNavigationReady] = useState(false);
 
   const isLoading = authLoading || sportLoading;
 
   useEffect(() => {
-    // Wait until the Stack is guaranteed to have rendered before navigating.
-    if (!stackMountedRef.current) return;
-    if (isLoading) return;
+    if (isLoading) {
+      setNavigationReady(false);
+      return;
+    }
 
     const inAuthGroup = segments[0] === "login";
     const inSportSelect = segments[0] === "sport-select";
 
     if (!user) {
-      if (!inAuthGroup) router.replace("/login");
+      if (!inAuthGroup) {
+        setNavigationReady(false);
+        router.replace("/login");
+        return;
+      }
+
+      setNavigationReady(true);
       return;
     }
 
     if (!selectedSport) {
-      if (!inSportSelect) router.replace("/sport-select");
+      if (!inSportSelect) {
+        setNavigationReady(false);
+        router.replace("/sport-select");
+        return;
+      }
+
+      setNavigationReady(true);
       return;
     }
 
     if (inAuthGroup || inSportSelect) {
+      setNavigationReady(false);
       router.replace("/(tabs)");
+      return;
     }
+
+    setNavigationReady(true);
   }, [isLoading, user, selectedSport, segments, router]);
 
-  // Stack is always rendered so the navigator is always mounted.
-  // The loading overlay sits on top and prevents interaction until ready.
-  return (
-    <View style={stackStyles.root}>
-      <Stack
-        initialRouteName="login"
-        screenOptions={{ headerBackTitle: "Back" }}
-        // Signal that the Stack has mounted — safe to navigate after this.
-        onLayout={() => { stackMountedRef.current = true; }}
+  if (isLoading || !navigationReady) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#0A0A1A",
+        }}
       >
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="sport-select" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="profile" options={{ headerShown: false }} />
-        <Stack.Screen name="analysis/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="analysis/[id]/trends" options={{ headerShown: false }} />
-        <Stack.Screen name="analysis/[id]/diagnostics" options={{ headerShown: false }} />
-        <Stack.Screen name="analysis/[id]/manual-annotation" options={{ headerShown: false }} />
-        <Stack.Screen name="analysis/[id]/improved" options={{ headerShown: false }} />
-        <Stack.Screen name="model-config" options={{ headerShown: false }} />
-        <Stack.Screen name="profile/add-player" options={{ headerShown: false }} />
-        <Stack.Screen name="profile/score-metrics-selection" options={{ headerShown: false }} />
-      </Stack>
+        <ActivityIndicator size="large" color="#6C5CE7" />
+      </View>
+    );
+  }
 
-      {isLoading && (
-        <View style={stackStyles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#6C5CE7" />
-        </View>
-      )}
-    </View>
+  return (
+    <Stack initialRouteName="login" screenOptions={{ headerBackTitle: "Back" }}>
+      <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="sport-select" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="profile"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="analysis/[id]"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="analysis/[id]/trends"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="analysis/[id]/diagnostics"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="analysis/[id]/manual-annotation"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="analysis/[id]/improved"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="model-config"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="model-version/[id]"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="profile/add-player"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="profile/score-metrics-selection"
+        options={{ headerShown: false }}
+      />
+    </Stack>
   );
 }
-
-const stackStyles = StyleSheet.create({
-  root: { flex: 1 },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#0A0A1A",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});
-
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
