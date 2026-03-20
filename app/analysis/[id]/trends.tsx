@@ -21,7 +21,7 @@ import {
   type SportCategoryConfig,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { resolveUserTimeZone } from "@/lib/timezone";
+import { formatMonthDayInTimeZone, resolveUserTimeZone } from "@/lib/timezone";
 import { normalizeMetricSelectionKey } from "@/lib/metrics-catalog";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ds } from "@/constants/design-system";
@@ -77,6 +77,12 @@ const SECTION_COMPONENTS: Record<
   ],
 };
 
+const HISTORICAL_SCORE_SECTIONS: Array<"technical" | "tactical" | "movement"> = [
+  "technical",
+  "tactical",
+  "movement",
+];
+
 function toSportPreferenceKey(sportName?: string | null): string {
   return String(sportName || "")
     .trim()
@@ -114,9 +120,7 @@ function normalizeMetricDisplayScale(key: string, value: number): number {
 }
 
 function formatDateLabel(value: string, timeZone?: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone });
+  return formatMonthDayInTimeZone(value, timeZone);
 }
 
 function computePercentDelta(current: number | null, previous: number | null): number | null {
@@ -334,27 +338,30 @@ export default function AnalysisMetricTrendsScreen() {
 
   const allPoints = trendData?.points || [];
 
+  const points = useMemo(() => {
+    if (sessionFilter === "all") return allPoints;
+    return allPoints.slice(-sessionFilter);
+  }, [allPoints, sessionFilter]);
+
+  const overallTrendPoints = useMemo(
+    () =>
+      points
+        .map((point) => {
+          const value = Number(point.overallScore);
+          if (!Number.isFinite(value)) return null;
+          return {
+            label: formatDateLabel(point.capturedAt, profileTimeZone),
+            value: value / 10,
+          };
+        })
+        .filter((point): point is SeriesPoint => point !== null),
+    [points, profileTimeZone],
+  );
+
   const selectedSportKey = useMemo(
     () => toSportPreferenceKey(sportConfig?.sportName),
     [sportConfig?.sportName],
   );
-
-  const selectedScoreSections = useMemo(() => {
-    const scoreMap =
-      user?.selectedScoreSectionsBySport && typeof user.selectedScoreSectionsBySport === "object"
-        ? user.selectedScoreSectionsBySport
-        : {};
-    const scoped = selectedSportKey ? scoreMap[selectedSportKey] : null;
-    const fallback = Array.isArray(user?.selectedScoreSections) ? user.selectedScoreSections : [];
-    const source = Array.isArray(scoped) && scoped.length > 0 ? scoped : fallback;
-
-    const mapped = source
-      .map((entry) => normalizeScoreSectionSelection(entry))
-      .filter((entry): entry is "technical" | "tactical" | "movement" => Boolean(entry));
-
-    if (mapped.length > 0) return Array.from(new Set(mapped));
-    return ["technical", "tactical", "movement"] as Array<"technical" | "tactical" | "movement">;
-  }, [selectedSportKey, user?.selectedScoreSections, user?.selectedScoreSectionsBySport]);
 
   const selectedMetricKeys = useMemo(() => {
     const metricMap =
@@ -373,6 +380,40 @@ export default function AnalysisMetricTrendsScreen() {
       ),
     );
   }, [selectedSportKey, user?.selectedMetricKeys, user?.selectedMetricKeysBySport]);
+
+  const sectionTrendSeries = useMemo(() => {
+    return HISTORICAL_SCORE_SECTIONS.map((section) => {
+      const pointsForSection = points
+        .map((point) => {
+          const raw = point.sectionScores?.[section];
+          const value = Number(raw);
+          if (!Number.isFinite(value)) return null;
+          return {
+            label: formatDateLabel(point.capturedAt, profileTimeZone),
+            value,
+          };
+        })
+        .filter((point): point is SeriesPoint => point !== null);
+
+      return {
+        key: section,
+        label:
+          section === "technical"
+            ? "Technical Score"
+            : section === "tactical"
+              ? "Tactical Score"
+              : "Movement Score",
+        color:
+          section === "technical"
+            ? "#60A5FA"
+            : section === "tactical"
+              ? "#34D399"
+              : "#F59E0B",
+        unit: "/10",
+        points: pointsForSection,
+      };
+    });
+  }, [points, profileTimeZone]);
 
   const orderedMetrics = useMemo(() => {
     if (!sportConfig) return [] as SportCategoryConfig["metrics"];
@@ -405,127 +446,7 @@ export default function AnalysisMetricTrendsScreen() {
     return sorted.filter((metric) => selected.has(normalizeMetricSelectionKey(metric.key)));
   }, [allPoints, selectedMetricKeys, sportConfig]);
 
-  const points = useMemo(() => {
-    if (sessionFilter === "all") return allPoints;
-    return allPoints.slice(-sessionFilter);
-  }, [allPoints, sessionFilter]);
-
-  const overallTrendPoints = useMemo(
-    () =>
-      points
-        .map((point) => {
-          const value = Number(point.overallScore);
-          if (!Number.isFinite(value)) return null;
-          return {
-            label: formatDateLabel(point.capturedAt, profileTimeZone),
-            value: value / 10,
-          };
-        })
-        .filter((point): point is SeriesPoint => point !== null),
-    [points],
-  );
-
-  const sectionTrendSeries = useMemo(() => {
-    if (!selectedScoreSections.length) return [] as Array<{
-      key: string;
-      label: string;
-      color: string;
-      unit: string;
-      points: SeriesPoint[];
-    }>;
-
-    const sectionLabels: Record<string, string> = {
-      technical: "Technical Score",
-      tactical: "Tactical Score",
-      movement: "Movement Score",
-    };
-    const sectionColors: Record<string, string> = {
-      technical: "#60A5FA",
-      tactical: "#34D399",
-      movement: "#F59E0B",
-    };
-
-    return selectedScoreSections.map((section) => {
-      const pointsForSection = points
-        .map((point) => {
-          const raw = point.sectionScores?.[section];
-          const value = Number(raw);
-          if (!Number.isFinite(value)) return null;
-          return {
-            label: formatDateLabel(point.capturedAt, profileTimeZone),
-            value,
-          };
-        })
-        .filter((point): point is SeriesPoint => point !== null);
-
-      return {
-        key: section,
-        label: sectionLabels[section] || `${section} Score`,
-        color: sectionColors[section] || "#60A5FA",
-        unit: "/10",
-        points: pointsForSection,
-      };
-    });
-  }, [points, selectedScoreSections]);
-
-  const sectionComponentSeries = useMemo(() => {
-    const output: Array<{
-      key: string;
-      section: "technical" | "tactical" | "movement";
-      label: string;
-      color: string;
-      unit: string;
-      points: SeriesPoint[];
-    }> = [];
-
-    const sectionColors: Record<string, string> = {
-      technical: "#60A5FA",
-      tactical: "#34D399",
-      movement: "#F59E0B",
-    };
-
-    for (const section of selectedScoreSections) {
-      for (const component of SECTION_COMPONENTS[section]) {
-        const seriesPoints = points
-          .map((point) => {
-            let raw: unknown = null;
-
-            if (section === "tactical") {
-              raw = point.subScores?.[component.key];
-              const value100 = Number(raw);
-              if (!Number.isFinite(value100)) return null;
-              return {
-                label: formatDateLabel(point.capturedAt, profileTimeZone),
-                value: value100 / 10,
-              };
-            }
-
-            raw = point.scoreOutputs?.[section]?.components?.[component.key];
-            const value = Number(raw);
-            if (!Number.isFinite(value)) return null;
-
-            return {
-              label: formatDateLabel(point.capturedAt, profileTimeZone),
-              value: value > 10 ? value / 10 : value,
-            };
-          })
-          .filter((point): point is SeriesPoint => point !== null);
-
-        output.push({
-          key: `${section}.${component.key}`,
-          section,
-          label: component.label,
-          color: sectionColors[section] || "#60A5FA",
-          unit: "/10",
-          points: seriesPoints,
-        });
-      }
-    }
-
-    return output;
-  }, [points, selectedScoreSections]);
-
-  useEffect(() => {
+    useEffect(() => {
     const targetSection = String(focusSection || "").trim().toLowerCase();
     if (targetSection === "overall" || targetSection === "breakdown") {
       const sectionY = sectionOffsets[targetSection];
@@ -645,7 +566,7 @@ export default function AnalysisMetricTrendsScreen() {
             }}
             style={styles.section}
           >
-            <Text style={styles.sectionTitle}>Selected Score Dimensions</Text>
+            <Text style={styles.sectionTitle}>Score Trends</Text>
             {sectionTrendSeries.map((scoreTrend) => {
               const latestValue = scoreTrend.points.length
                 ? scoreTrend.points[scoreTrend.points.length - 1].value
@@ -669,34 +590,6 @@ export default function AnalysisMetricTrendsScreen() {
                     </View>
                   </View>
                   <MetricTrendChart points={scoreTrend.points} color={scoreTrend.color} />
-                </GlassCard>
-              );
-            })}
-
-            {sectionComponentSeries.map((componentTrend) => {
-              const latestValue = componentTrend.points.length
-                ? componentTrend.points[componentTrend.points.length - 1].value
-                : null;
-              const previousValue = componentTrend.points.length > 1
-                ? componentTrend.points[componentTrend.points.length - 2].value
-                : null;
-              const deltaPct = computePercentDelta(latestValue, previousValue);
-
-              return (
-                <GlassCard key={componentTrend.key} style={styles.metricTrendCard}>
-                  <View style={styles.metricHeaderRow}>
-                    <View style={[styles.metricIconWrap, { backgroundColor: `${componentTrend.color}1F` }]}> 
-                      <Ionicons name="pulse" size={14} color={componentTrend.color} />
-                    </View>
-                    <View style={styles.metricTitleWrap}>
-                      <Text style={styles.metricTitle}>{componentTrend.label}</Text>
-                      <Text style={[styles.metricSubTitle, { color: deltaPct != null ? deltaColor(deltaPct) : "#94A3B8" }]}> 
-                        Latest: {latestValue !== null ? latestValue.toFixed(2) : "-"} {componentTrend.unit}
-                        {formatDeltaPercent(deltaPct)}
-                      </Text>
-                    </View>
-                  </View>
-                  <MetricTrendChart points={componentTrend.points} color={componentTrend.color} />
                 </GlassCard>
               );
             })}

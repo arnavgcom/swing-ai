@@ -22,14 +22,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "@/lib/auth-context";
-import { getApiUrl, apiRequest, queryClient } from "@/lib/query-client";
+import { getApiUrl, apiRequest } from "@/lib/query-client";
 import { resolveClientMediaUrl } from "@/lib/media";
-import {
-  fetchModelEvaluationSettings,
-  fetchVideoStorageSettings,
-  updateModelEvaluationSettings,
-  updateVideoStorageSettings,
-} from "@/lib/api";
 
 const COUNTRIES = [
   "Singapore",
@@ -75,20 +69,9 @@ export default function ProfileScreen() {
   const [role, setRole] = useState<"admin" | "player">(normalizeRole(user?.role));
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [recalculating, setRecalculating] = useState(false);
-  const [recalcToast, setRecalcToast] = useState<{
-    visible: boolean;
-    message: string;
-    tone: "info" | "success" | "error";
-  }>({ visible: false, message: "", tone: "info" });
-  const recalcToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [showDominantProfilePicker, setShowDominantProfilePicker] = useState(false);
-  const [modelEvaluationMode, setModelEvaluationMode] = useState(false);
-  const [modelEvalLoading, setModelEvalLoading] = useState(false);
-  const [videoStorageMode, setVideoStorageMode] = useState<"filesystem" | "r2">("filesystem");
-  const [videoStorageLoading, setVideoStorageLoading] = useState(false);
   const isPersistedAdmin = normalizeRole(user?.role) === "admin";
   const isSelectedAdmin = normalizeRole(role) === "admin";
   const showAdminControls = isSelectedAdmin;
@@ -111,81 +94,6 @@ export default function ProfileScreen() {
     }
   }, [user]);
 
-  useEffect(() => {
-    if (!canUseAdminApis) {
-      setModelEvaluationMode(false);
-      setVideoStorageMode("filesystem");
-      return;
-    }
-
-    let active = true;
-    (async () => {
-      try {
-        const [settings, storageSettings] = await Promise.all([
-          fetchModelEvaluationSettings(),
-          fetchVideoStorageSettings(),
-        ]);
-        if (!active) return;
-        setModelEvaluationMode(Boolean(settings.enabled));
-        setVideoStorageMode(storageSettings.mode);
-      } catch {
-        if (!active) return;
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [canUseAdminApis]);
-
-  useEffect(() => {
-    return () => {
-      if (recalcToastTimerRef.current) {
-        clearTimeout(recalcToastTimerRef.current);
-      }
-    };
-  }, []);
-
-  const handleModelEvaluationToggle = async (enabled: boolean) => {
-    if (!canUseAdminApis) {
-      Alert.alert("Save role first", "Please save profile changes after switching to Admin.");
-      return;
-    }
-    setModelEvalLoading(true);
-    try {
-      await updateModelEvaluationSettings(enabled);
-      setModelEvaluationMode(enabled);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["model-evaluation-settings"] }),
-        queryClient.invalidateQueries({ queryKey: ["scoring-model-dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["discrepancy-summary"] }),
-        queryClient.invalidateQueries({ queryKey: ["scoring-model-registry"] }),
-      ]);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      Alert.alert("Error", "Failed to update Model Evaluation Mode");
-    } finally {
-      setModelEvalLoading(false);
-    }
-  };
-
-  const handleVideoStorageToggle = async (enabled: boolean) => {
-    if (!canUseAdminApis) {
-      Alert.alert("Save role first", "Please save profile changes after switching to Admin.");
-      return;
-    }
-    setVideoStorageLoading(true);
-    const nextMode = enabled ? "r2" : "filesystem";
-    try {
-      await updateVideoStorageSettings(nextMode);
-      setVideoStorageMode(nextMode);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      Alert.alert("Error", "Failed to update video storage mode");
-    } finally {
-      setVideoStorageLoading(false);
-    }
-  };
 
   const pickImage = async () => {
     try {
@@ -282,28 +190,64 @@ export default function ProfileScreen() {
     }
   };
 
-  const saveProfile = async () => {
-    if (!name.trim()) {
+  const persistProfile = async ({
+    nextRole,
+    navigateBack = false,
+  }: {
+    nextRole?: "admin" | "player";
+    navigateBack?: boolean;
+  } = {}) => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       Alert.alert("Required", "Name cannot be empty");
-      return;
+      return false;
     }
+
     setSaving(true);
+
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await apiRequest("PUT", "/api/profile", {
-        name: name.trim(),
+        name: trimmedName,
         phone: phone.trim(),
         country: country.trim(),
         dominantProfile: dominantProfile.trim(),
-        role: normalizeRole(role),
+        role: normalizeRole(nextRole ?? role),
       });
       await refreshUser();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.back();
+
+      if (navigateBack) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        router.back();
+      }
+
+      return true;
     } catch (e) {
       Alert.alert("Error", "Failed to save profile");
+      return false;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveProfile = async () => {
+    await persistProfile({ navigateBack: true });
+  };
+
+  const handleRoleToggle = async (value: boolean) => {
+    const nextRole = value ? "admin" : "player";
+
+    if (saving || nextRole === role) {
+      return;
+    }
+
+    const previousRole = role;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setRole(nextRole);
+
+    const saved = await persistProfile({ nextRole });
+    if (!saved) {
+      setRole(previousRole);
     }
   };
 
@@ -333,39 +277,6 @@ export default function ProfileScreen() {
         },
       ],
     );
-  };
-
-  const handleRecalculateMetrics = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setRecalculating(true);
-    try {
-      const res = await apiRequest("POST", "/api/analyses/recalculate");
-      const data = await res.json();
-      const queued = Number(data?.queuedAnalyses ?? 0);
-
-      if (recalcToastTimerRef.current) {
-        clearTimeout(recalcToastTimerRef.current);
-      }
-
-      setRecalcToast({
-        visible: true,
-        tone: "success",
-        message: `Recalc of ${queued} videos started`,
-      });
-
-      await queryClient.invalidateQueries({ queryKey: ["analyses-summary"] });
-      await queryClient.refetchQueries({ queryKey: ["analyses-summary"] });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      recalcToastTimerRef.current = setTimeout(() => {
-        setRecalcToast((prev) => ({ ...prev, visible: false }));
-      }, 1800);
-    } catch (e) {
-      const reason = e instanceof Error ? e.message : "Failed to recalc";
-      Alert.alert("Error", reason);
-    } finally {
-      setRecalculating(false);
-    }
   };
 
   const handleLogout = async () => {
@@ -529,10 +440,8 @@ export default function ProfileScreen() {
                 </View>
                 <Switch
                   value={role === "admin"}
-                  onValueChange={(val) => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    setRole(val ? "admin" : "player");
-                  }}
+                  onValueChange={handleRoleToggle}
+                  disabled={saving}
                   trackColor={{ false: "#2A2A50", true: "#FBBF2440" }}
                   thumbColor={role === "admin" ? "#FBBF24" : "#64748B"}
                   testID="role-toggle"
@@ -541,128 +450,44 @@ export default function ProfileScreen() {
             </View>
           ) : null}
 
-          {showAdminControls && (
-            <View style={styles.fieldWrapper}>
-              <Text style={styles.fieldLabel}>Model Evaluation Mode</Text>
-              <View style={styles.roleToggleRow}>
-                <View style={styles.roleInfo}>
-                  <Ionicons
-                    name={modelEvaluationMode ? "analytics" : "analytics-outline"}
-                    size={18}
-                    color={modelEvaluationMode ? "#34D399" : "#6C5CE7"}
-                  />
-                  <Text style={styles.roleText}>
-                    {modelEvaluationMode ? "ON - Evaluation Dataset Only" : "OFF - All Videos"}
-                  </Text>
-                </View>
-                <Switch
-                  value={modelEvaluationMode}
-                  disabled={modelEvalLoading || !canUseAdminApis}
-                  onValueChange={(val) => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    handleModelEvaluationToggle(val);
-                  }}
-                  trackColor={{ false: "#2A2A50", true: "#34D39940" }}
-                  thumbColor={modelEvaluationMode ? "#34D399" : "#64748B"}
-                  testID="model-evaluation-toggle"
-                />
-              </View>
-              {!canUseAdminApis ? (
-                <Text style={styles.adminHintText}>Save profile to enable admin actions.</Text>
-              ) : null}
-            </View>
-          )}
-
-          {showAdminControls && (
-            <View style={styles.fieldWrapper}>
-              <Text style={styles.fieldLabel}>Video Storage Mode</Text>
-              <View style={styles.roleToggleRow}>
-                <View style={styles.roleInfo}>
-                  <Ionicons
-                    name={videoStorageMode === "r2" ? "cloud" : "folder-open"}
-                    size={18}
-                    color={videoStorageMode === "r2" ? "#38BDF8" : "#6C5CE7"}
-                  />
-                  <Text style={styles.roleText}>
-                    {videoStorageMode === "r2" ? "R2 on Cloud" : "Filesystem"}
-                  </Text>
-                </View>
-                <Switch
-                  value={videoStorageMode === "r2"}
-                  disabled={videoStorageLoading || !canUseAdminApis}
-                  onValueChange={(val) => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    handleVideoStorageToggle(val);
-                  }}
-                  trackColor={{ false: "#2A2A50", true: "#38BDF840" }}
-                  thumbColor={videoStorageMode === "r2" ? "#38BDF8" : "#64748B"}
-                  testID="video-storage-toggle"
-                />
-              </View>
-            </View>
-          )}
-
         </View>
 
-        <Pressable
-          onPress={() => {
-            router.push("/profile/score-metrics-selection");
-          }}
-          style={({ pressed }) => [
-            styles.recalculateButton,
-            { transform: [{ scale: pressed ? 0.97 : 1 }] },
-          ]}
-          testID="score-metrics-selection"
-        >
-          <Ionicons name="options-outline" size={20} color="#6C5CE7" />
-          <Text style={styles.recalculateText}>Score/Metrics Selection</Text>
-        </Pressable>
-
-        {/* Only show Recalc button for admins */}
         {showAdminControls && (
           <Pressable
-            onPress={handleRecalculateMetrics}
-            disabled={recalculating || !canUseAdminApis}
+            onPress={() => {
+              if (!canUseAdminApis) {
+                Alert.alert("Role update in progress", "Please wait a moment and try again.");
+                return;
+              }
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/profile/configure");
+            }}
             style={({ pressed }) => [
               styles.recalculateButton,
-              (recalculating || !canUseAdminApis) && styles.recalculateButtonDisabled,
               { transform: [{ scale: pressed ? 0.97 : 1 }] },
             ]}
-            testID="recalculate-metrics"
+            testID="profile-configure"
           >
-            {recalculating ? (
-              <ActivityIndicator size="small" color="#6C5CE7" />
-            ) : (
-              <Ionicons name="refresh" size={20} color="#6C5CE7" />
-            )}
-            <Text style={styles.recalculateText}>Recalc. Metrics/Scores</Text>
+            <Ionicons name="settings-outline" size={20} color="#6C5CE7" />
+            <Text style={styles.recalculateText}>Configure</Text>
           </Pressable>
-          )}
+        )}
 
-          {/* Admin-only: Add Player Screen Trigger */}
-          {showAdminControls && (
-            <Pressable
-              onPress={() => {
-                if (!canUseAdminApis) {
-                  Alert.alert("Save role first", "Please save profile changes after switching to Admin.");
-                  return;
-                }
-                router.push("/profile/add-player");
-              }}
-              disabled={!canUseAdminApis}
-              style={({ pressed }) => [
-                styles.saveButton,
-                !canUseAdminApis && styles.recalculateButtonDisabled,
-                { transform: [{ scale: pressed ? 0.97 : 1 }] },
-              ]}
-              testID="create-player-trigger"
-            >
-              <View style={styles.saveContent}>
-                <Ionicons name="person-add" size={20} color="#6C5CE7" />
-                <Text style={styles.saveText}>Add New Player</Text>
-              </View>
-            </Pressable>
-          )}
+        {!showAdminControls && (
+          <Pressable
+            onPress={() => {
+              router.push("/profile/score-metrics-selection");
+            }}
+            style={({ pressed }) => [
+              styles.recalculateButton,
+              { transform: [{ scale: pressed ? 0.97 : 1 }] },
+            ]}
+            testID="score-metrics-selection"
+          >
+            <Ionicons name="options-outline" size={20} color="#6C5CE7" />
+            <Text style={styles.recalculateText}>Select Score/Metrics</Text>
+          </Pressable>
+        )}
 
         {showClearHistory && (
           <Pressable
@@ -706,7 +531,7 @@ export default function ProfileScreen() {
             ) : (
               <>
                 <Ionicons name="checkmark-circle" size={20} color="#6C5CE7" />
-                <Text style={styles.saveText}>Save Changes</Text>
+                <Text style={styles.saveText}>Save</Text>
               </>
             )}
           </View>
@@ -751,37 +576,6 @@ export default function ProfileScreen() {
         }}
         onClose={() => setShowDominantProfilePicker(false)}
       />
-
-      {recalcToast.visible ? (
-        <View style={styles.recalcToastContainer} pointerEvents="none">
-          <View
-            style={[
-              styles.recalcToast,
-              recalcToast.tone === "success" && styles.recalcToastSuccess,
-              recalcToast.tone === "error" && styles.recalcToastError,
-            ]}
-          >
-            <Ionicons
-              name={
-                recalcToast.tone === "success"
-                  ? "checkmark-circle"
-                  : recalcToast.tone === "error"
-                    ? "alert-circle"
-                    : "time-outline"
-              }
-              size={14}
-              color={
-                recalcToast.tone === "success"
-                  ? "#34D399"
-                  : recalcToast.tone === "error"
-                    ? "#F87171"
-                    : "#94A3B8"
-              }
-            />
-            <Text style={styles.recalcToastText}>{recalcToast.message}</Text>
-          </View>
-        </View>
-      ) : null}
 
     </View>
   );
@@ -902,44 +696,6 @@ function ProfileField({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0A0A1A" },
-  recalcToastContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 22,
-    alignItems: "center",
-    zIndex: 30,
-  },
-  recalcToast: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  recalcToastSuccess: {
-    borderColor: "#166534",
-    backgroundColor: "#052E1A",
-  },
-  recalcToastError: {
-    borderColor: "#7F1D1D",
-    backgroundColor: "#3F1114",
-  },
-  recalcToastText: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
-  },
-  adminHintText: {
-    marginTop: 6,
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
-  },
   formContainer: {
     flex: 1,
   },
@@ -1152,23 +908,6 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: "#94A3B8",
     marginTop: 6,
-  },
-  modelConfigButton: {
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#6C5CE740",
-    backgroundColor: "#6C5CE720",
-    paddingVertical: 16,
-  },
-  modelConfigButtonText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: "#6C5CE7",
   },
   recalculateButton: {
     flexDirection: "row",

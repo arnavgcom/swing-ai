@@ -18,7 +18,7 @@ import {
   fetchAnalysisVideoMetadata,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { resolveUserTimeZone } from "@/lib/timezone";
+import { formatDateTimeInTimeZone, resolveUserTimeZone } from "@/lib/timezone";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ds } from "@/constants/design-system";
 
@@ -36,9 +36,7 @@ function formatBytes(bytes: number | null | undefined): string {
 
 function formatDate(value?: string | null, timeZone?: string): string {
   if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString(undefined, { timeZone });
+  return formatDateTimeInTimeZone(value, timeZone);
 }
 
 function toTitle(value: string): string {

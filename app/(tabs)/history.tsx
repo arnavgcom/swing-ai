@@ -1,10 +1,11 @@
 
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import {
   StyleSheet,
   Text,
   View,
   FlatList,
+  Animated,
   RefreshControl,
   ActivityIndicator,
   Alert,
@@ -20,13 +21,30 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fetchAnalysesSummary, deleteAnalysis } from "@/lib/api";
 import type { AnalysisSummary } from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
-import { resolveUserTimeZone } from "@/lib/timezone";
+import {
+  formatDateInTimeZone,
+  formatDateTimeInTimeZone,
+  formatMonthDayInTimeZone,
+  parseApiDate,
+  resolveUserTimeZone,
+} from "@/lib/timezone";
 import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
+
+const LAST_WORKED_ANALYSIS_KEY = "swingai_last_worked_analysis_id";
+const BACKGROUND_NOTICE_KEY = "swingai_background_processing_notice";
+const PENDING_ANALYSIS_SUMMARY_KEY = "swingai_pending_analysis_summary";
+
+type CompletionNotice = {
+  analysisId: string;
+  status: "completed" | "failed" | "rejected";
+  message: string;
+};
 
 function TrendChart({ data, dates }: { data: number[]; dates: string[] }) {
   if (data.length === 0) return null;
@@ -291,19 +309,23 @@ function getVideoDate(item: Pick<AnalysisSummary, "capturedAt" | "createdAt">): 
   return item.capturedAt || item.createdAt;
 }
 
-function formatSessionSearchDate(createdAt: string): string[] {
-  const date = new Date(createdAt);
-  if (Number.isNaN(date.getTime())) return [createdAt];
+function formatSessionSearchDate(createdAt: string, timeZone?: string): string[] {
+  const date = parseApiDate(createdAt);
+  if (!date) return [createdAt];
   return [
     createdAt,
     createdAt.slice(0, 10),
-    date.toLocaleDateString("en-US"),
-    date.toLocaleDateString("en-US", {
+    formatDateInTimeZone(date, timeZone, {
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+    }),
+    formatDateInTimeZone(date, timeZone, {
       month: "short",
       day: "numeric",
       year: "numeric",
     }),
-    date.toLocaleDateString("en-US", {
+    formatDateInTimeZone(date, timeZone, {
       month: "long",
       day: "numeric",
       year: "numeric",
@@ -311,11 +333,11 @@ function formatSessionSearchDate(createdAt: string): string[] {
   ];
 }
 
-function getAnalysisSearchText(item: AnalysisSummary): string {
+function getAnalysisSearchText(item: AnalysisSummary, timeZone?: string): string {
   const movement = item.detectedMovement || "";
   const config = item.configKey || "";
   const configParts = config.split("-").join(" ");
-  const dateTokens = formatSessionSearchDate(getVideoDate(item));
+  const dateTokens = formatSessionSearchDate(getVideoDate(item), timeZone);
 
   return normalizeText(
     [
@@ -331,10 +353,10 @@ function getAnalysisSearchText(item: AnalysisSummary): string {
   );
 }
 
-function matchesAnalysisSearch(item: AnalysisSummary, query: string): boolean {
+function matchesAnalysisSearch(item: AnalysisSummary, query: string, timeZone?: string): boolean {
   const q = normalizeText(query);
   if (!q) return true;
-  return getAnalysisSearchText(item).includes(q);
+  return getAnalysisSearchText(item, timeZone).includes(q);
 }
 
 function SummaryCard({
@@ -347,6 +369,7 @@ function SummaryCard({
   onPress,
   onDelete,
   timeZone,
+  showBackgroundProcessing,
 }: {
   item: AnalysisSummary;
   deltas?: {
@@ -360,15 +383,14 @@ function SummaryCard({
   onPress: () => void;
   onDelete: () => void;
   timeZone?: string;
+  showBackgroundProcessing?: boolean;
 }) {
-  const date = new Date(getVideoDate(item));
-  const timeStr = date.toLocaleDateString("en-US", {
+  const timeStr = formatDateTimeInTimeZone(getVideoDate(item), timeZone, {
     month: "short",
     day: "numeric",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    timeZone,
   });
 
   const score = getSessionOverallScore10(item);
@@ -432,6 +454,12 @@ function SummaryCard({
               <Text style={summaryStyles.movementBadgeText}>
                 {toTitleCase(movement).replace(/-/g, " ")}
               </Text>
+            </View>
+          ) : null}
+          {showBackgroundProcessing ? (
+            <View style={summaryStyles.backgroundProcessingBadge}>
+              <ActivityIndicator size="small" color={status.color} />
+              <Text style={[summaryStyles.backgroundProcessingBadgeText, { color: status.color }]}>Running in background</Text>
             </View>
           ) : null}
         </View>
@@ -580,6 +608,23 @@ const summaryStyles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: "#34D399",
   },
+  backgroundProcessingBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#0A0A1A90",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  backgroundProcessingBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
   scoreText: {
     fontSize: 28,
     fontFamily: "Inter_700Bold",
@@ -681,6 +726,7 @@ const summaryStyles = StyleSheet.create({
 export default function HistoryScreen() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const profileTimeZone = resolveUserTimeZone(user);
   const isAdmin = user?.role === "admin";
   const { selectedSport, selectedMovement } = useSport();
@@ -692,6 +738,13 @@ export default function HistoryScreen() {
   >([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [lastWorkedAnalysisId, setLastWorkedAnalysisId] = useState<string | null>(null);
+  const [backgroundNotice, setBackgroundNotice] = useState<string | null>(null);
+  const [completionNotice, setCompletionNotice] = useState<CompletionNotice | null>(null);
+  const [pendingAnalysisSummary, setPendingAnalysisSummary] = useState<AnalysisSummary | null>(null);
+  const completionNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTrackedStatusRef = useRef<string | null>(null);
+  const toastTranslateY = useRef(new Animated.Value(24)).current;
+  const toastOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!isAdmin) {
@@ -749,16 +802,43 @@ export default function HistoryScreen() {
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      AsyncStorage.getItem("swingai_last_worked_analysis_id")
-        .then((value) => {
-          if (active) setLastWorkedAnalysisId(value);
+      let hideTimer: ReturnType<typeof setTimeout> | null = null;
+
+      Promise.all([
+        AsyncStorage.getItem(LAST_WORKED_ANALYSIS_KEY),
+        AsyncStorage.getItem(BACKGROUND_NOTICE_KEY),
+        AsyncStorage.getItem(PENDING_ANALYSIS_SUMMARY_KEY),
+      ])
+        .then(async ([lastWorkedValue, noticeValue, pendingSummaryValue]) => {
+          if (!active) return;
+          setLastWorkedAnalysisId(lastWorkedValue);
+          setBackgroundNotice(noticeValue);
+          if (pendingSummaryValue) {
+            try {
+              setPendingAnalysisSummary(JSON.parse(pendingSummaryValue) as AnalysisSummary);
+            } catch {
+              setPendingAnalysisSummary(null);
+            }
+          } else {
+            setPendingAnalysisSummary(null);
+          }
+          if (noticeValue) {
+            hideTimer = setTimeout(() => {
+              setBackgroundNotice(null);
+            }, 4500);
+            await AsyncStorage.removeItem(BACKGROUND_NOTICE_KEY).catch(() => {});
+          }
         })
         .catch(() => {
-          if (active) setLastWorkedAnalysisId(null);
+          if (!active) return;
+          setLastWorkedAnalysisId(null);
+          setBackgroundNotice(null);
+          setPendingAnalysisSummary(null);
         });
 
       return () => {
         active = false;
+        if (hideTimer) clearTimeout(hideTimer);
       };
     }, []),
   );
@@ -776,8 +856,36 @@ export default function HistoryScreen() {
     retry: false,
   });
 
+  useEffect(() => {
+    if (!pendingAnalysisSummary || !(allAnalyses || []).length) return;
+
+    const matchingServerItem = (allAnalyses || []).find((item) => item.id === pendingAnalysisSummary.id);
+    if (!matchingServerItem) return;
+
+    if (
+      matchingServerItem.status === "completed"
+      || matchingServerItem.status === "failed"
+      || matchingServerItem.status === "rejected"
+    ) {
+      AsyncStorage.removeItem(PENDING_ANALYSIS_SUMMARY_KEY).catch(() => {});
+      setPendingAnalysisSummary(null);
+    }
+  }, [allAnalyses, pendingAnalysisSummary]);
+
+  const effectiveAnalyses = useMemo(() => {
+    const base = allAnalyses || [];
+    if (!pendingAnalysisSummary) return base;
+
+    const matchingServerItem = base.find((item) => item.id === pendingAnalysisSummary.id);
+    if (matchingServerItem) {
+      return base;
+    }
+
+    return [pendingAnalysisSummary, ...base];
+  }, [allAnalyses, pendingAnalysisSummary]);
+
   const analysesBySport = filterBySport(
-    allAnalyses || [],
+    effectiveAnalyses,
     selectedSport?.name,
     selectedMovement?.name,
   );
@@ -796,11 +904,134 @@ export default function HistoryScreen() {
 
   const filteredAnalyses = useMemo(() => {
     let result = comparisonAnalyses.filter((item) =>
-      matchesAnalysisSearch(item, searchQuery),
+      matchesAnalysisSearch(item, searchQuery, profileTimeZone),
     );
 
     return result;
-  }, [comparisonAnalyses, searchQuery]);
+  }, [comparisonAnalyses, profileTimeZone, searchQuery]);
+
+  const pendingSummaryVisible = useMemo(() => {
+    if (!pendingAnalysisSummary) return null;
+    if (
+      pendingAnalysisSummary.status !== "pending"
+      && pendingAnalysisSummary.status !== "processing"
+    ) {
+      return null;
+    }
+
+    if (filteredAnalyses.some((item) => item.id === pendingAnalysisSummary.id)) {
+      return null;
+    }
+
+    const bySport = filterBySport(
+      [pendingAnalysisSummary],
+      selectedSport?.name,
+      selectedMovement?.name,
+    );
+    if (!bySport.length) return null;
+
+    if (isAdmin && selectedPlayerId !== "all") {
+      if (pendingAnalysisSummary.userId !== selectedPlayerId) return null;
+    } else if (!isAdmin && user?.id) {
+      if (pendingAnalysisSummary.userId !== user.id) return null;
+    }
+
+    if (!matchesAnalysisSearch(pendingAnalysisSummary, searchQuery, profileTimeZone)) {
+      return null;
+    }
+
+    return pendingAnalysisSummary;
+  }, [
+    filteredAnalyses,
+    isAdmin,
+    pendingAnalysisSummary,
+    profileTimeZone,
+    searchQuery,
+    selectedMovement?.name,
+    selectedPlayerId,
+    selectedSport?.name,
+    user?.id,
+  ]);
+
+  const visibleAnalyses = useMemo(() => {
+    if (!pendingSummaryVisible) return filteredAnalyses;
+    return [pendingSummaryVisible, ...filteredAnalyses];
+  }, [filteredAnalyses, pendingSummaryVisible]);
+
+  const lastWorkedAnalysis = useMemo(
+    () => effectiveAnalyses.find((item) => item.id === lastWorkedAnalysisId) ?? null,
+    [effectiveAnalyses, lastWorkedAnalysisId],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (completionNoticeTimerRef.current) {
+        clearTimeout(completionNoticeTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!lastWorkedAnalysisId) {
+      lastTrackedStatusRef.current = null;
+      return;
+    }
+
+    const nextStatus = lastWorkedAnalysis?.status ?? null;
+    if (!nextStatus) return;
+
+    const previousStatus = lastTrackedStatusRef.current;
+    lastTrackedStatusRef.current = nextStatus;
+
+    if (
+      (previousStatus === "pending" || previousStatus === "processing") &&
+      (nextStatus === "completed" || nextStatus === "failed" || nextStatus === "rejected")
+    ) {
+      if (completionNoticeTimerRef.current) {
+        clearTimeout(completionNoticeTimerRef.current);
+      }
+
+      const messageByStatus: Record<CompletionNotice["status"], string> = {
+        completed: "Analysis is ready to review.",
+        failed: "Analysis could not be completed.",
+        rejected: "Analysis was rejected and needs attention.",
+      };
+
+      setBackgroundNotice(null);
+      setCompletionNotice({
+        analysisId: lastWorkedAnalysisId,
+        status: nextStatus,
+        message: messageByStatus[nextStatus],
+      });
+      AsyncStorage.removeItem(PENDING_ANALYSIS_SUMMARY_KEY).catch(() => {});
+      setPendingAnalysisSummary(null);
+      Haptics.notificationAsync(
+        nextStatus === "completed"
+          ? Haptics.NotificationFeedbackType.Success
+          : Haptics.NotificationFeedbackType.Warning,
+      );
+
+      completionNoticeTimerRef.current = setTimeout(() => {
+        setCompletionNotice(null);
+      }, 6000);
+    }
+  }, [lastWorkedAnalysis?.status, lastWorkedAnalysisId]);
+
+  useEffect(() => {
+    const hasToast = Boolean(backgroundNotice || completionNotice);
+    Animated.parallel([
+      Animated.timing(toastOpacity, {
+        toValue: hasToast ? 1 : 0,
+        duration: hasToast ? 180 : 140,
+        useNativeDriver: true,
+      }),
+      Animated.timing(toastTranslateY, {
+        toValue: hasToast ? 0 : 24,
+        duration: hasToast ? 220 : 160,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [backgroundNotice, completionNotice, toastOpacity, toastTranslateY]);
 
   const deleteMutation = useMutation({
     mutationFn: deleteAnalysis,
@@ -824,11 +1055,11 @@ export default function HistoryScreen() {
 
   const isOwner = (item: AnalysisSummary) => item.userId === user?.id;
 
-  const totalAnalyses = filteredAnalyses?.length || 0;
+  const totalAnalyses = visibleAnalyses?.length || 0;
   const completed =
-    filteredAnalyses?.filter((a) => a.status === "completed") || [];
+    visibleAnalyses?.filter((a) => a.status === "completed") || [];
   const processing =
-    filteredAnalyses?.filter(
+    visibleAnalyses?.filter(
       (a) => a.status === "processing" || a.status === "pending",
     ) || [];
 
@@ -841,10 +1072,9 @@ export default function HistoryScreen() {
     .slice(0, trendSliceCount)
     .reverse();
   const trendScores = trendItems.map((a) => getSessionOverallScore10(a) as number);
-  const trendDates = trendItems.map((a) => {
-    const d = new Date(getVideoDate(a));
-    return `${d.getMonth() + 1}/${d.getDate()}`;
-  });
+  const trendDates = trendItems.map((a) =>
+    formatMonthDayInTimeZone(getVideoDate(a), profileTimeZone),
+  );
 
   const historyHighlightColor = selectedSport?.color || "#34D399";
   const historyMovementLabel = selectedMovement?.name
@@ -873,10 +1103,10 @@ export default function HistoryScreen() {
     : user?.name || "Player";
 
   const deltaByAnalysisId = useMemo(() => {
-    const completedByTimeAsc = filteredAnalyses
+    const completedByTimeAsc = visibleAnalyses
       .filter((analysis) => analysis.status === "completed")
       .slice()
-      .sort((a, b) => new Date(getVideoDate(a)).getTime() - new Date(getVideoDate(b)).getTime());
+      .sort((a, b) => (parseApiDate(getVideoDate(a))?.getTime() || 0) - (parseApiDate(getVideoDate(b))?.getTime() || 0));
 
     const map = new Map<string, { overallPct: number | null; sections: Record<string, number | null> }>();
     for (let idx = 0; idx < completedByTimeAsc.length; idx += 1) {
@@ -900,7 +1130,7 @@ export default function HistoryScreen() {
     }
 
     return map;
-  }, [filteredAnalyses]);
+  }, [visibleAnalyses]);
 
   const renderItem = ({ item }: { item: AnalysisSummary }) => (
     <SummaryCard
@@ -911,6 +1141,10 @@ export default function HistoryScreen() {
       isHighlighted={item.id === lastWorkedAnalysisId}
       highlightColor={historyHighlightColor}
       timeZone={profileTimeZone}
+      showBackgroundProcessing={
+        item.id === lastWorkedAnalysisId &&
+        (item.status === "processing" || item.status === "pending")
+      }
       onPress={() =>
         router.push({
           pathname: "/analysis/[id]",
@@ -1162,13 +1396,77 @@ export default function HistoryScreen() {
 
       <TabHeader />
 
+      <Animated.View
+        pointerEvents="box-none"
+        style={[
+          styles.toastLayer,
+          {
+            bottom: insets.bottom + 88,
+            opacity: toastOpacity,
+            transform: [{ translateY: toastTranslateY }],
+          },
+        ]}
+      >
+        {backgroundNotice ? (
+          <View style={styles.backgroundNoticeCard}>
+            <View style={styles.backgroundNoticeIconWrap}>
+              <Ionicons name="time-outline" size={16} color="#60A5FA" />
+            </View>
+            <Text style={styles.backgroundNoticeText}>{backgroundNotice}</Text>
+          </View>
+        ) : null}
+
+        {completionNotice ? (
+          <View style={styles.completionNoticeCard}>
+            <View style={styles.completionNoticeCopy}>
+              <View style={styles.completionNoticeIconWrap}>
+                <Ionicons
+                  name={completionNotice.status === "completed" ? "checkmark-circle" : "alert-circle"}
+                  size={18}
+                  color={completionNotice.status === "completed" ? "#34D399" : "#FBBF24"}
+                />
+              </View>
+              <Text style={styles.completionNoticeText}>{completionNotice.message}</Text>
+            </View>
+            {completionNotice.status === "completed" ? (
+              <Pressable
+                onPress={() => {
+                  setCompletionNotice(null);
+                  router.push({
+                    pathname: "/analysis/[id]",
+                    params: { id: completionNotice.analysisId },
+                  });
+                }}
+                style={({ pressed }) => [
+                  styles.completionNoticeButton,
+                  { opacity: pressed ? 0.8 : 1 },
+                ]}
+              >
+                <Text style={styles.completionNoticeButtonText}>Open</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={() => setCompletionNotice(null)}
+                style={({ pressed }) => [
+                  styles.completionNoticeButton,
+                  styles.completionNoticeDismissButton,
+                  { opacity: pressed ? 0.8 : 1 },
+                ]}
+              >
+                <Text style={styles.completionNoticeButtonText}>Dismiss</Text>
+              </Pressable>
+            )}
+          </View>
+        ) : null}
+      </Animated.View>
+
       {isLoading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color="#6C5CE7" />
         </View>
       ) : (
         <FlatList
-          data={filteredAnalyses}
+          data={visibleAnalyses}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={[styles.list, { paddingBottom: 100 }]}
@@ -1305,6 +1603,100 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     paddingVertical: 0,
+  },
+  toastLayer: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    zIndex: 30,
+    gap: 10,
+    pointerEvents: "box-none" as const,
+  },
+  backgroundNoticeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#60A5FA40",
+    backgroundColor: "#172554EE",
+    shadowColor: "#020617",
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
+  },
+  backgroundNoticeIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0A0A1A80",
+  },
+  backgroundNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_500Medium",
+    color: "#DBEAFE",
+  },
+  completionNoticeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#34D39940",
+    backgroundColor: "#052E2BCC",
+    shadowColor: "#020617",
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
+  },
+  completionNoticeCopy: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  completionNoticeIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0A0A1A80",
+  },
+  completionNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_500Medium",
+    color: "#DCFCE7",
+  },
+  completionNoticeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "#34D39922",
+    borderWidth: 1,
+    borderColor: "#34D39950",
+  },
+  completionNoticeDismissButton: {
+    backgroundColor: "#FBBF2416",
+    borderColor: "#FBBF2440",
+  },
+  completionNoticeButtonText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
   },
   trendCard: {
     backgroundColor: "#15152D",

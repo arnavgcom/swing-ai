@@ -1190,6 +1190,7 @@ export async function uploadVideo(
   sportId?: string | null,
   movementId?: string | null,
   targetUserId?: string | null,
+  recordedAt?: Date | null,
 ): Promise<{ id: string }> {
   const baseUrl = getApiUrl();
   const formData = new FormData();
@@ -1199,6 +1200,7 @@ export async function uploadVideo(
   if (sportId) formData.append("sportId", sportId);
   if (movementId) formData.append("movementId", movementId);
   if (targetUserId) formData.append("targetUserId", targetUserId);
+  if (recordedAt) formData.append("recordedAt", recordedAt.toISOString());
 
   const res = await fetch(`${baseUrl}api/upload`, {
     method: "POST",

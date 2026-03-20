@@ -14,7 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { fetchScoringModelRegistryEntry } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { resolveUserTimeZone } from "@/lib/timezone";
+import { formatDateTimeInTimeZone, resolveUserTimeZone } from "@/lib/timezone";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ds } from "@/constants/design-system";
 
@@ -27,15 +27,12 @@ function formatLabel(label: string): string {
 }
 
 function formatDateTime(value: string, timeZone?: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown date";
-  return date.toLocaleString(undefined, {
+  return formatDateTimeInTimeZone(value, timeZone, {
     year: "numeric",
     month: "short",
     day: "2-digit",
     hour: "numeric",
     minute: "2-digit",
-    timeZone,
   });
 }
 

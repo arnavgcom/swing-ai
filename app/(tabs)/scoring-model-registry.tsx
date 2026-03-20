@@ -12,7 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { TabHeader } from "@/components/TabHeader";
 import { fetchScoringModelRegistry } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { resolveUserTimeZone } from "@/lib/timezone";
+import { formatDateTimeInTimeZone, resolveUserTimeZone } from "@/lib/timezone";
 import { ds } from "@/constants/design-system";
 import { GlassCard } from "@/components/ui/GlassCard";
 
@@ -24,15 +24,12 @@ type VersionTrendPoint = {
 };
 
 function formatDateTime(value: string, timeZone?: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown date";
-  return date.toLocaleString(undefined, {
+  return formatDateTimeInTimeZone(value, timeZone, {
     year: "numeric",
     month: "short",
     day: "2-digit",
     hour: "numeric",
     minute: "2-digit",
-    timeZone,
   });
 }
 

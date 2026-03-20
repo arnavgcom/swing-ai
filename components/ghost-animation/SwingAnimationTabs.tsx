@@ -1,4 +1,5 @@
 import React from "react";
+import { StyleSheet, View } from "react-native";
 import { GhostSwingAnimation } from "./GhostSwingAnimation";
 import type { CorrectionResult, SkeletonFrame } from "@/lib/ghost-correction";
 import type { PlayerMetrics, OptimalRanges } from "@/lib/joint-heatmap";
@@ -20,12 +21,21 @@ export function SwingAnimationTabs({
   optimalRanges,
 }: SwingAnimationTabsProps) {
   return (
-    <GhostSwingAnimation
-      playerFrames={playerFrames}
-      correction={correction}
-      corrections={corrections}
-      playerMetrics={playerMetrics}
-      optimalRanges={optimalRanges}
-    />
+    <View style={styles.container}>
+      <GhostSwingAnimation
+        playerFrames={playerFrames}
+        correction={correction}
+        corrections={corrections}
+        playerMetrics={playerMetrics}
+        optimalRanges={optimalRanges}
+      />
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+});

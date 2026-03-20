@@ -104,6 +104,10 @@ function RootNavigator() {
           name="profile/score-metrics-selection"
           options={{ headerShown: false }}
         />
+        <Stack.Screen
+          name="profile/configure"
+          options={{ headerShown: false }}
+        />
       </Stack>
 
       {(isLoading || isRedirecting) && (

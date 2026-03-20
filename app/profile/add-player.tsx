@@ -160,7 +160,7 @@ export default function AddPlayerScreen() {
             ) : (
               <View style={styles.saveContent}>
                 <Ionicons name="checkmark-circle" size={20} color="#6C5CE7" />
-                <Text style={styles.saveText}>Create Player</Text>
+                <Text style={styles.saveText}>Add Player</Text>
               </View>
             )}
           </Pressable>

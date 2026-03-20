@@ -32,6 +32,13 @@ const SCORE_SECTION_OPTIONS = [
   "Movement",
 ];
 
+const DEFAULT_SELECTED_METRIC_KEYS = [
+  "ballSpeed",
+  "shoulderRotation",
+  "spinRate",
+  "kneeBendAngle",
+].map((key) => normalizeMetricSelectionKey(key));
+
 const LEGACY_SECTION_LABEL_MAP: Record<string, string> = {
   "performance breakdown": "Tactical",
   biomechanics: "Technical (Biomechanics)",
@@ -234,13 +241,15 @@ export default function ScoreMetricsSelectionScreen() {
     const baseMetrics = Array.isArray(scopedMetrics) ? scopedMetrics : fallbackMetrics;
 
     setSelectedMetricKeys(
-      Array.from(
-        new Set(
-          baseMetrics
-            .map((item) => normalizeMetricSelectionKey(item))
-            .filter((item) => item.length > 0),
-        ),
-      ),
+      baseMetrics.length > 0
+        ? Array.from(
+            new Set(
+              baseMetrics
+                .map((item) => normalizeMetricSelectionKey(item))
+                .filter((item) => item.length > 0),
+            ),
+          )
+        : DEFAULT_SELECTED_METRIC_KEYS,
     );
   }, [selectedSportKey, user]);
 
@@ -420,7 +429,7 @@ export default function ScoreMetricsSelectionScreen() {
             ) : (
               <>
                 <Ionicons name="checkmark-circle" size={20} color="#6C5CE7" />
-                <Text style={styles.saveText}>Save Selection</Text>
+                <Text style={styles.saveText}>Save</Text>
               </>
             )}
           </View>

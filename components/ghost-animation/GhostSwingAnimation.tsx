@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import { Dimensions, View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import Svg from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -27,7 +27,8 @@ interface GhostSwingAnimationProps {
   optimalRanges?: OptimalRanges;
 }
 
-const CANVAS_WIDTH = 340;
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const CANVAS_WIDTH = Math.min(380, SCREEN_WIDTH - 42);
 const CANVAS_HEIGHT = 400;
 const TARGET_FPS = 60;
 const TRAIL_STEPS = 8;
@@ -91,17 +92,45 @@ export function GhostSwingAnimation({
   const [currentFrame, setCurrentFrame] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(0.5);
-  const [showPaths, setShowPaths] = useState(true);
+  const [showPaths, setShowPaths] = useState(false);
   const [showCorrectionArrow, setShowCorrectionArrow] = useState(true);
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [viewMode, setViewMode] = useState<"fit" | "zoom">("fit");
   const [selectedCorrectionIndex, setSelectedCorrectionIndex] = useState(0);
   const [frameBlend, setFrameBlend] = useState(0);
   const [showTrail, setShowTrail] = useState(true);
-  const [splitMode, setSplitMode] = useState(false);
+  const [splitMode, setSplitMode] = useState(true);
   const [isWalkthrough, setIsWalkthrough] = useState(false);
   const animationRef = useRef<number | null>(null);
+  const correctionChipsScrollRef = useRef<ScrollView | null>(null);
+  const correctionChipLayoutsRef = useRef<Array<{ x: number; width: number }>>([]);
+  const correctionChipsViewportWidthRef = useRef(0);
+  const correctionChipsContentWidthRef = useRef(0);
   const lastTimeRef = useRef<number>(0);
+
+  const scrollToCorrectionChip = useCallback((index: number) => {
+    const layout = correctionChipLayoutsRef.current[index];
+    if (!layout || !correctionChipsScrollRef.current) return;
+
+    const viewportWidth = correctionChipsViewportWidthRef.current;
+    const contentWidth = correctionChipsContentWidthRef.current;
+
+    if (viewportWidth <= 0) {
+      correctionChipsScrollRef.current.scrollTo({
+        x: Math.max(layout.x - 14, 0),
+        animated: true,
+      });
+      return;
+    }
+
+    const centeredX = layout.x + (layout.width / 2) - (viewportWidth / 2);
+    const maxScrollX = Math.max(contentWidth - viewportWidth, 0);
+
+    correctionChipsScrollRef.current.scrollTo({
+      x: Math.min(Math.max(centeredX, 0), maxScrollX),
+      animated: true,
+    });
+  }, []);
 
   const correctionChips = useMemo(() => {
     if (Array.isArray(corrections) && corrections.length > 0) {
@@ -122,6 +151,10 @@ export function GhostSwingAnimation({
     );
     setSelectedCorrectionIndex(preferredIndex >= 0 ? preferredIndex : 0);
   }, [correction.metricKey, correctionChips]);
+
+  useEffect(() => {
+    scrollToCorrectionChip(selectedCorrectionIndex);
+  }, [selectedCorrectionIndex, scrollToCorrectionChip]);
 
   const correctedFrames = useMemo(
     () => generateCorrectedFrames(playerFrames, activeCorrection),
@@ -267,17 +300,7 @@ export function GhostSwingAnimation({
     return trail;
   }, [playerFrames, currentFrame, effectiveBlend]);
 
-  const correctionLabel = useMemo(() => {
-    if (activeCorrection.correctionType === "rotation") return "Rotate";
-    if (activeCorrection.correctionType === "angle") return "Adjust angle";
-    if (activeCorrection.correctionType === "position") return "Reposition";
-    return "Adjust";
-  }, [activeCorrection.correctionType]);
-
   const canvasScale = viewMode === "zoom" ? 1.35 : 1;
-  const targetMid = (activeCorrection.optimalRange[0] + activeCorrection.optimalRange[1]) / 2;
-  const metricDelta = Math.round((targetMid - activeCorrection.playerValue) * 10) / 10;
-  const metricDeltaText = `${metricDelta >= 0 ? "+" : ""}${metricDelta}`;
 
   return (
     <GlassCard style={styles.card}>
@@ -294,9 +317,18 @@ export function GhostSwingAnimation({
       )}
 
       <ScrollView
+        ref={correctionChipsScrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.correctionChipRow}
+        onLayout={(event) => {
+          correctionChipsViewportWidthRef.current = event.nativeEvent.layout.width;
+          scrollToCorrectionChip(selectedCorrectionIndex);
+        }}
+        onContentSizeChange={(width) => {
+          correctionChipsContentWidthRef.current = width;
+          scrollToCorrectionChip(selectedCorrectionIndex);
+        }}
       >
         {correctionChips.map((item, index) => {
           const isActive = index === selectedCorrectionIndex;
@@ -304,6 +336,12 @@ export function GhostSwingAnimation({
             <Pressable
               key={`${item.metricKey}-${index}`}
               style={[styles.correctionChip, isActive && styles.correctionChipActive]}
+              onLayout={(event) => {
+                correctionChipLayoutsRef.current[index] = event.nativeEvent.layout;
+                if (index === selectedCorrectionIndex) {
+                  scrollToCorrectionChip(index);
+                }
+              }}
               onPress={() => {
                 setSelectedCorrectionIndex(index);
                 setCurrentFrame(0);
@@ -327,20 +365,6 @@ export function GhostSwingAnimation({
           );
         })}
       </ScrollView>
-
-      <View style={styles.insightPanel}>
-        <View style={styles.insightMetricRow}>
-          <Text style={styles.insightMetricValue}>{formatMetricValue(activeCorrection.playerValue, activeCorrection.unit)}</Text>
-          <Text style={styles.insightMetricArrow}>-></Text>
-          <Text style={styles.insightMetricTarget}>{formatRangeValue(activeCorrection.optimalRange, activeCorrection.unit)}</Text>
-          <View style={styles.insightDeltaBadge}>
-            <Text style={styles.insightDeltaText}>{metricDeltaText}</Text>
-          </View>
-        </View>
-        <Text style={styles.insightRecommendation} numberOfLines={2}>
-          {activeCorrection.recommendation}
-        </Text>
-      </View>
 
       <View style={styles.titleRow}>
         <View style={styles.viewModeGroup}>
@@ -555,14 +579,6 @@ export function GhostSwingAnimation({
             </Svg>
           </View>
         )}
-
-        {!splitMode && (
-          <View style={styles.floatingLabelBottom}>
-            <Text style={styles.floatingLabelText}>
-              {correctionLabel}: {activeCorrection.label}
-            </Text>
-          </View>
-        )}
       </View>
 
       {showPaths && (
@@ -616,28 +632,29 @@ export function GhostSwingAnimation({
 
 const styles = StyleSheet.create({
   card: {
-    marginHorizontal: 16,
+    width: "100%",
+    alignSelf: "stretch",
+    marginHorizontal: 0,
     marginVertical: 12,
     overflow: "hidden",
   },
   correctionChipRow: {
     flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 16,
+    gap: 6,
+    paddingHorizontal: 14,
     paddingTop: 12,
-    paddingBottom: 6,
-    paddingRight: 20,
+    paddingBottom: 8,
   },
   correctionChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
     borderRadius: ds.radius.pill,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.24)",
     backgroundColor: "rgba(148,163,184,0.14)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     maxWidth: "100%",
   },
   correctionChipActive: {
@@ -646,63 +663,12 @@ const styles = StyleSheet.create({
   },
   correctionChipText: {
     color: ds.color.textSecondary,
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Inter_500Medium",
   },
   correctionChipTextActive: {
     color: "#FECACA",
     fontFamily: "Inter_600SemiBold",
-  },
-  insightPanel: {
-    marginHorizontal: 16,
-    marginBottom: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(125,211,252,0.35)",
-    backgroundColor: "rgba(15,23,42,0.52)",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 6,
-  },
-  insightMetricRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  insightMetricValue: {
-    color: "#F8FAFC",
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
-  insightMetricArrow: {
-    color: "#7DD3FC",
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-  },
-  insightMetricTarget: {
-    color: "#86EFAC",
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
-  insightDeltaBadge: {
-    marginLeft: "auto",
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(248,113,113,0.45)",
-    backgroundColor: "rgba(248,113,113,0.2)",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  insightDeltaText: {
-    color: "#FECACA",
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-  },
-  insightRecommendation: {
-    color: "#CBD5E1",
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    lineHeight: 17,
   },
   titleRow: {
     flexDirection: "row",
@@ -757,6 +723,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(6, 15, 30, 0.9)",
     marginHorizontal: 12,
+    marginVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(125,211,252,0.25)",
@@ -788,31 +755,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  floatingLabelBottom: {
-    position: "absolute",
-    left: 10,
-    right: 10,
-    bottom: 8,
-    backgroundColor: "rgba(15, 23, 42, 0.82)",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(248,113,113,0.45)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    alignItems: "center",
-  },
-  floatingLabelText: {
-    color: "#F8FAFC",
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-  },
   pathLegend: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 16,
     paddingVertical: 6,
-    marginHorizontal: 12,
+    marginHorizontal: 4,
   },
   pathLegendItem: {
     flexDirection: "row",

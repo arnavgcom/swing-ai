@@ -88,30 +88,30 @@ export function MetricCard({
     ? `${fmtRangeValue(rangeMin)}-${fmtRangeValue(rangeMax)}`
     : null;
 
-  const hasRenderableChange = change !== null && change !== undefined && Math.abs(change) >= 1e-6;
+  const hasChangeValue = typeof change === "number" && Number.isFinite(change);
 
   const changeColor =
-    hasRenderableChange
-      ? Math.abs(change) < 1e-6
+    !hasChangeValue
+      ? "#64748B"
+      : Math.abs(change) < 1e-6
         ? "#94A3B8"
         : change >= 0
-        ? "#34D399"
-        : "#F87171"
-      : null;
+          ? "#34D399"
+          : "#F87171";
 
   const changeIcon =
-    hasRenderableChange
-      ? Math.abs(change) < 1e-6
+    !hasChangeValue
+      ? ("remove" as const)
+      : Math.abs(change) < 1e-6
         ? ("remove" as const)
         : change >= 0
-        ? ("caret-up" as const)
-        : ("caret-down" as const)
-      : null;
+          ? ("caret-up" as const)
+          : ("caret-down" as const);
 
   const changeLabel =
-    hasRenderableChange
-      ? `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`
-      : null;
+    !hasChangeValue
+      ? "--"
+      : `${Math.abs(change).toFixed(1)}%`;
 
   const displayValue =
     typeof value === "number" && Number.isFinite(value)
@@ -128,52 +128,54 @@ export function MetricCard({
         <Text style={styles.value}>{displayValue}</Text>
         {unit && <Text style={styles.unit}>{unit}</Text>}
       </View>
-      {hasOptimalRange && rangeMin !== null && rangeMax !== null && (
-        <View style={styles.rangeBlock}>
-          <View style={styles.rangeMetaRow}>
-            <View style={styles.rangeChip}>
-              <Text style={styles.rangeText}>{rangeLabel}</Text>
-            </View>
-            {rangeStatusLabel && (
-              <View style={[styles.rangeStatusChip, { borderColor: `${rangeStatusColor}66`, backgroundColor: `${rangeStatusColor}22` }]}>
-                <Text style={[styles.rangeStatusText, { color: rangeStatusColor }]}>{rangeStatusLabel}</Text>
+      <View style={styles.footerBlock}>
+        {hasOptimalRange && rangeMin !== null && rangeMax !== null ? (
+          <View style={styles.rangeBlock}>
+            <View style={styles.rangeMetaRow}>
+              <View style={styles.rangeChip}>
+                <Text style={styles.rangeText}>{rangeLabel}</Text>
               </View>
-            )}
-          </View>
-          <View style={styles.rangeTrack}>
-            <View
-              style={[
-                styles.rangeZone,
-                {
-                  left: `${zoneStartPct}%`,
-                  width: `${zoneWidthPct}%`,
-                  backgroundColor: `${accentColor}66`,
-                },
-              ]}
-            />
-            {numericValue !== null && (
+              {rangeStatusLabel && (
+                <View style={[styles.rangeStatusChip, { borderColor: `${rangeStatusColor}66`, backgroundColor: `${rangeStatusColor}22` }]}>
+                  <Text style={[styles.rangeStatusText, { color: rangeStatusColor }]}>{rangeStatusLabel}</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.rangeTrack}>
               <View
                 style={[
-                  styles.rangeMarker,
+                  styles.rangeZone,
                   {
-                    left: `${markerPct}%`,
-                    borderColor: accentColor,
-                    backgroundColor: "#F8FAFC",
+                    left: `${zoneStartPct}%`,
+                    width: `${zoneWidthPct}%`,
+                    backgroundColor: `${accentColor}66`,
                   },
                 ]}
               />
-            )}
+              {numericValue !== null && (
+                <View
+                  style={[
+                    styles.rangeMarker,
+                    {
+                      left: `${markerPct}%`,
+                      borderColor: accentColor,
+                      backgroundColor: "#F8FAFC",
+                    },
+                  ]}
+                />
+              )}
+            </View>
           </View>
-        </View>
-      )}
-      {hasRenderableChange && changeColor && changeIcon && (
+        ) : (
+          <View style={styles.rangeBlockPlaceholder} />
+        )}
         <View style={styles.changeRow}>
           <Ionicons name={changeIcon} size={11} color={changeColor} />
-          <Text style={[styles.changeText, { color: changeColor }]}>
+          <Text style={[styles.changeText, { color: changeColor }]}> 
             {changeLabel}
           </Text>
         </View>
-      )}
+      </View>
     </GlassCard>
   );
 }
@@ -184,7 +186,7 @@ const styles = StyleSheet.create({
     padding: ds.space.lg,
     borderRadius: ds.radius.lg,
     gap: 6,
-    minHeight: 120,
+    height: 186,
   },
   iconContainer: {
     width: 30,
@@ -215,15 +217,23 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
   },
+  footerBlock: {
+    marginTop: "auto",
+    gap: 8,
+  },
   changeRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    marginTop: 2,
+    minHeight: 14,
   },
   rangeBlock: {
     marginTop: 2,
     gap: 6,
+    minHeight: 38,
+  },
+  rangeBlockPlaceholder: {
+    minHeight: 38,
   },
   rangeMetaRow: {
     flexDirection: "row",

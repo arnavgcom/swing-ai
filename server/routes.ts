@@ -220,6 +220,12 @@ function parseDateValue(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function parseUploadRecordedAt(value: unknown): Date | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  return parseDateValue(raw);
+}
+
 function parseFpsValue(value: unknown): number | null {
   const raw = String(value || "").trim();
   if (!raw) return null;
@@ -3095,6 +3101,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         const sportId = req.body?.sportId || null;
         const movementId = req.body?.movementId || null;
+        const recordedAtRaw = String(req.body?.recordedAt || "").trim();
+        const recordedAtOverride = parseUploadRecordedAt(recordedAtRaw);
+
+        if (recordedAtRaw && !recordedAtOverride) {
+          return res.status(400).json({ error: "Invalid session date/time provided" });
+        }
+
+        if (recordedAtOverride && recordedAtOverride.getTime() > Date.now() + 60_000) {
+          return res.status(400).json({ error: "Session date/time cannot be in the future" });
+        }
 
         let resolvedSportId: string | null = null;
         let resolvedMovementId: string | null = null;
@@ -3148,6 +3164,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const extractedMetadata = await withLocalMediaFile(finalPath, finalFilename, async (localPath) =>
           extractVideoMetadata(localPath)
         );
+        const uploadMetadata = recordedAtOverride
+          ? { ...extractedMetadata, capturedAt: recordedAtOverride }
+          : extractedMetadata;
 
         const analysis = await storage.createAnalysis(
           finalFilename,
@@ -3155,7 +3174,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId,
           resolvedSportId,
           resolvedMovementId,
-          extractedMetadata,
+          uploadMetadata,
           sourceFilename,
           evaluationVideoId,
           requesterUserId,

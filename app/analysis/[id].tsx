@@ -48,7 +48,7 @@ import { CoachingCard } from "@/components/CoachingCard";
 import { SwingAnimationTabs } from "@/components/ghost-animation/SwingAnimationTabs";
 import { detectAllCorrections, detectPriorityCorrection } from "@/lib/ghost-correction";
 import { useAuth } from "@/lib/auth-context";
-import { resolveUserTimeZone } from "@/lib/timezone";
+import { formatDateTimeInTimeZone, parseApiDate, resolveUserTimeZone } from "@/lib/timezone";
 import {
   buildMetricOptionsWithCatalog,
   normalizeMetricSelectionKey,
@@ -58,6 +58,9 @@ const MPH_TO_KMPH = 1.60934;
 const TECHNICAL_COMPACT_COUNT = 2;
 type PerformanceSectionKey = "technical" | "tactical" | "movement";
 const PERFORMANCE_SECTION_ORDER: PerformanceSectionKey[] = ["technical", "tactical", "movement"];
+const BACKGROUND_NOTICE_KEY = "swingai_background_processing_notice";
+const BACKGROUND_HANDOFF_MS = 5000;
+const BACKGROUND_REDIRECT_DELAY_MS = 250;
 
 function isMphUnit(unit?: string): boolean {
   return String(unit || "").trim().toLowerCase() === "mph";
@@ -403,30 +406,25 @@ function formatDateWithTimezone(
   timeZone?: string,
 ): string {
   if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  const datePart = date.toLocaleString(undefined, {
+  const date = parseApiDate(value);
+  if (!date) return "-";
+  return formatDateTimeInTimeZone(date, timeZone, {
     year: "numeric",
     month: "short",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-    timeZone,
   });
-  const tzPart = new Intl.DateTimeFormat(undefined, { timeZoneName: "short", timeZone })
-    .formatToParts(date)
-    .find((part) => part.type === "timeZoneName")?.value;
-  return tzPart ? `${datePart} ${tzPart}` : datePart;
 }
 
 function formatHeaderDateTime(value: string | null | undefined, timeZone?: string): string {
   if (!value) return "Unknown date";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown date";
+  const date = parseApiDate(value);
+  if (!date) return "Unknown date";
   const day = date.toLocaleString("en-GB", { day: "2-digit", timeZone });
   const month = date.toLocaleString("en-GB", { month: "short", timeZone });
-  const year = date.toLocaleString("en-GB", { year: "2-digit", timeZone });
+  const year = date.toLocaleString("en-GB", { year: "numeric", timeZone });
   const time = date.toLocaleString("en-US", {
     hour: "numeric",
     minute: "2-digit",
@@ -436,7 +434,7 @@ function formatHeaderDateTime(value: string | null | undefined, timeZone?: strin
 
   const compactTime = time.replace(/\s?(AM|PM)$/i, "$1");
 
-  return `${day} ${month} '${year} ${compactTime}`;
+  return `${day} ${month} ${year} ${compactTime}`;
 }
 
 function derivePlayerNameFromVideoName(filename: string | null | undefined): string | null {
@@ -492,7 +490,7 @@ function toCamelCaseLabel(value: string): string {
 }
 
 export default function AnalysisDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, backgroundOnSlow } = useLocalSearchParams<{ id: string; backgroundOnSlow?: string }>();
   const colors = Colors.dark;
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -513,7 +511,11 @@ export default function AnalysisDetailScreen() {
   const [showAllTechnical, setShowAllTechnical] = useState(false);
   const [showAllTactical, setShowAllTactical] = useState(false);
   const [showAllMovement, setShowAllMovement] = useState(false);
+  const [showBackgroundHandoffToast, setShowBackgroundHandoffToast] = useState(false);
   const scrollRef = useRef<ScrollView | null>(null);
+  const handoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const backgroundRedirectStartedRef = useRef(false);
   const [sectionOffsets, setSectionOffsets] = useState<Partial<Record<PerformanceSectionKey, number>>>({});
   const [activePerformanceSection, setActivePerformanceSection] = useState<PerformanceSectionKey>("technical");
 
@@ -1471,6 +1473,63 @@ export default function AnalysisDetailScreen() {
 
   const isProcessing =
     analysis?.status === "pending" || analysis?.status === "processing";
+  const shouldBackgroundOnSlow = backgroundOnSlow === "1";
+
+  useEffect(() => {
+    return () => {
+      if (handoffTimerRef.current) {
+        clearTimeout(handoffTimerRef.current);
+      }
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!shouldBackgroundOnSlow || !id || backgroundRedirectStartedRef.current) {
+      return;
+    }
+
+    if (!isProcessing) {
+      if (handoffTimerRef.current) {
+        clearTimeout(handoffTimerRef.current);
+        handoffTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (handoffTimerRef.current) {
+      return;
+    }
+
+    handoffTimerRef.current = setTimeout(async () => {
+      handoffTimerRef.current = null;
+
+      if (backgroundRedirectStartedRef.current) {
+        return;
+      }
+
+      backgroundRedirectStartedRef.current = true;
+      setShowBackgroundHandoffToast(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      await AsyncStorage.setItem(
+        BACKGROUND_NOTICE_KEY,
+        "Processing is taking longer than expected. It will keep running in the background.",
+      ).catch(() => {});
+
+      redirectTimerRef.current = setTimeout(() => {
+        router.replace("/(tabs)/history");
+      }, BACKGROUND_REDIRECT_DELAY_MS);
+    }, BACKGROUND_HANDOFF_MS);
+
+    return () => {
+      if (handoffTimerRef.current) {
+        clearTimeout(handoffTimerRef.current);
+        handoffTimerRef.current = null;
+      }
+    };
+  }, [id, isProcessing, shouldBackgroundOnSlow]);
 
   const isTennisAnalysis =
     String(sportConfig?.sportName || "").trim().toLowerCase() === "tennis"
@@ -1690,6 +1749,14 @@ export default function AnalysisDetailScreen() {
               ))}
             </View>
           </View>
+          {showBackgroundHandoffToast ? (
+            <View style={styles.processingToast}>
+              <Ionicons name="time-outline" size={16} color="#DBEAFE" />
+              <Text style={styles.processingToastText}>
+                Processing is taking longer than expected. It will continue in background.
+              </Text>
+            </View>
+          ) : null}
         </View>
       ) : analysis.status === "rejected" ? (
         <View style={[styles.container, styles.center]}>
@@ -2180,7 +2247,7 @@ export default function AnalysisDetailScreen() {
                       <MetricCard
                         icon={metric.icon as any}
                         label={metric.label}
-                        value={displayMetricValue == null ? "null" : displayMetricValue}
+                        value={displayMetricValue == null ? "-" : displayMetricValue}
                         valuePrecision={metricValuePrecision}
                         unit={metricUsesMph ? "kmph" : isScale10Metric ? "/10" : metric.unit}
                         color={metric.color}
@@ -3553,6 +3620,28 @@ const styles = StyleSheet.create({
     gap: 10,
     width: "100%",
     marginTop: 8,
+  },
+  processingToast: {
+    position: "absolute",
+    left: 20,
+    right: 20,
+    bottom: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#60A5FA40",
+    backgroundColor: "#1E3A5FCC",
+  },
+  processingToastText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_500Medium",
+    color: "#DBEAFE",
   },
   stepRow: {
     flexDirection: "row",

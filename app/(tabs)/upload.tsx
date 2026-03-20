@@ -7,22 +7,32 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Linking,
   Platform,
   Modal,
+  TextInput,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
-import { fetchModelEvaluationSettings, uploadVideo } from "@/lib/api";
+import { fetchModelEvaluationSettings, uploadVideo, type AnalysisSummary } from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
+
+const NativeDateTimePicker = Platform.OS === "web"
+  ? null
+  : require("@react-native-community/datetimepicker").default;
+
+const LAST_WORKED_ANALYSIS_KEY = "swingai_last_worked_analysis_id";
+const PENDING_ANALYSIS_SUMMARY_KEY = "swingai_pending_analysis_summary";
 
 function getPlayerDisplayName(u: {
   id: string;
@@ -72,6 +82,55 @@ function getFileExtension(asset: ImagePicker.ImagePickerAsset): string {
   return "mp4";
 }
 
+function formatSessionDateTime(value: Date): string {
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(value);
+}
+
+function toDateInputValue(value: Date): string {
+  const yyyy = value.getFullYear();
+  const mm = String(value.getMonth() + 1).padStart(2, "0");
+  const dd = String(value.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function toTimeInputValue(value: Date): string {
+  const hh = String(value.getHours()).padStart(2, "0");
+  const mm = String(value.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+function buildLocalDateTime(datePart: string, timePart: string): Date | null {
+  const dateMatch = String(datePart || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMatch = String(timePart || "").trim().match(/^(\d{2}):(\d{2})$/);
+  if (!dateMatch || !timeMatch) return null;
+
+  const year = Number(dateMatch[1]);
+  const monthIndex = Number(dateMatch[2]) - 1;
+  const day = Number(dateMatch[3]);
+  const hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2]);
+  const next = new Date(year, monthIndex, day, hour, minute, 0, 0);
+
+  if (Number.isNaN(next.getTime())) return null;
+  if (
+    next.getFullYear() !== year ||
+    next.getMonth() !== monthIndex ||
+    next.getDate() !== day ||
+    next.getHours() !== hour ||
+    next.getMinutes() !== minute
+  ) {
+    return null;
+  }
+
+  return next;
+}
+
 export default function UploadScreen() {
   const colors = Colors.dark;
   const insets = useSafeAreaInsets();
@@ -94,6 +153,11 @@ export default function UploadScreen() {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
   const [modelEvaluationMode, setModelEvaluationMode] = useState(false);
+  const [recordedAtOverride, setRecordedAtOverride] = useState<Date | null>(null);
+  const [showRecordedAtModal, setShowRecordedAtModal] = useState(false);
+  const [recordedAtDraft, setRecordedAtDraft] = useState<Date>(new Date());
+  const [recordedDateInput, setRecordedDateInput] = useState("");
+  const [recordedTimeInput, setRecordedTimeInput] = useState("");
 
   React.useEffect(() => {
     if (!user) {
@@ -192,15 +256,53 @@ export default function UploadScreen() {
         selectedSport?.id,
         selectedMovement?.id,
         selectedPlayerId || user?.id,
+        recordedAtOverride,
       );
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      queryClient.invalidateQueries({ queryKey: ["analyses-summary"] });
+      await AsyncStorage.setItem(LAST_WORKED_ANALYSIS_KEY, data.id).catch(() => {});
+      const nowIso = new Date().toISOString();
+      const effectiveUserId = selectedPlayerId || user?.id || data.userId;
+      const configKey = `${String(selectedSport?.name || "sport").trim().toLowerCase()}-${String(selectedMovement?.name || "auto-detect")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "-")}`;
+      const optimisticAnalysis: AnalysisSummary = {
+        ...data,
+        userId: effectiveUserId,
+        userName: userList.find((item) => item.id === (selectedPlayerId || user?.id))?.name || user?.name || data.userName,
+        videoPath: data.videoPath || selectedVideo?.uri || "",
+        status: data.status || "pending",
+        detectedMovement: data.detectedMovement || selectedMovement?.name || null,
+        capturedAt: data.capturedAt || recordedAtOverride?.toISOString() || data.createdAt || nowIso,
+        createdAt: data.createdAt || nowIso,
+        updatedAt: data.updatedAt || nowIso,
+        overallScore: null,
+        subScores: null,
+        metricValues: null,
+        scoreOutputs: null,
+        sectionScores: null,
+        configKey,
+        modelVersion: null,
+      };
+      queryClient.setQueryData<AnalysisSummary[]>(["analyses-summary"], (current) => {
+        const existing = current || [];
+        const withoutSame = existing.filter((item) => item.id !== optimisticAnalysis.id);
+        return [optimisticAnalysis, ...withoutSame];
+      });
+      await AsyncStorage.setItem(
+        PENDING_ANALYSIS_SUMMARY_KEY,
+        JSON.stringify(optimisticAnalysis),
+      ).catch(() => {});
+      await queryClient.invalidateQueries({ queryKey: ["analyses-summary"] });
+
       setSelectedVideo(null);
+      setRecordedAtOverride(null);
+
       router.push({
         pathname: "/analysis/[id]",
-        params: { id: data.id },
+        params: { id: data.id, backgroundOnSlow: "1" },
       });
     },
     onError: (error: Error) => {
@@ -233,11 +335,70 @@ export default function UploadScreen() {
         duration: asset.duration ? asset.duration / 1000 : null,
         fileSize: asset.fileSize || null,
       });
+      setRecordedAtOverride(null);
     }
+  };
+
+  const openRecordedAtPicker = () => {
+    const base = recordedAtOverride ?? new Date();
+    setRecordedAtDraft(base);
+    setRecordedDateInput(toDateInputValue(base));
+    setRecordedTimeInput(toTimeInputValue(base));
+    setShowRecordedAtModal(true);
+  };
+
+  const closeRecordedAtPicker = () => {
+    setShowRecordedAtModal(false);
+  };
+
+  const saveRecordedAtOverride = () => {
+    const nextValue = Platform.OS === "web"
+      ? buildLocalDateTime(recordedDateInput, recordedTimeInput)
+      : recordedAtDraft;
+
+    if (!nextValue) {
+      Alert.alert("Invalid date", "Enter a valid session date and time.");
+      return;
+    }
+
+    if (nextValue.getTime() > Date.now() + 60_000) {
+      Alert.alert("Invalid date", "Session date and time cannot be in the future.");
+      return;
+    }
+
+    setRecordedAtOverride(nextValue);
+    setShowRecordedAtModal(false);
+  };
+
+  const clearRecordedAtOverride = () => {
+    setRecordedAtOverride(null);
+    setShowRecordedAtModal(false);
   };
 
   const launchVideoLibrary = async () => {
     try {
+      if (Platform.OS !== "web") {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert(
+            "Permission Needed",
+            "Photo Library access is required to choose a video.",
+            permission.canAskAgain
+              ? [{ text: "OK", style: "default" }]
+              : [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Open Settings",
+                    onPress: () => {
+                      Linking.openSettings().catch(() => {});
+                    },
+                  },
+                ],
+          );
+          return;
+        }
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["videos"],
         quality: 0.7,
@@ -465,9 +626,6 @@ export default function UploadScreen() {
               Select Video
             </Text>
             <Text style={[styles.uploadHint, { color: colors.textSecondary }]}>
-              Max 20 seconds recommended
-            </Text>
-            <Text style={[styles.uploadHint, { color: colors.textSecondary }]}>
               MP4, MOV, AVI, WebM
             </Text>
           </Pressable>
@@ -492,11 +650,18 @@ export default function UploadScreen() {
               </View>
               <Pressable
                 onPress={() => {
+                  if (uploadMutation.isPending) return;
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   setSelectedVideo(null);
+                  setRecordedAtOverride(null);
                 }}
+                disabled={uploadMutation.isPending}
               >
-                <Ionicons name="close-circle" size={26} color="#475569" />
+                <Ionicons
+                  name="close-circle"
+                  size={26}
+                  color={uploadMutation.isPending ? "#334155" : "#475569"}
+                />
               </Pressable>
             </View>
 
@@ -533,6 +698,40 @@ export default function UploadScreen() {
                 </View>
               )}
             </View>
+          </View>
+        )}
+
+        {selectedVideo && (
+          <View style={styles.sessionDateCard}>
+            <Pressable
+              onPress={openRecordedAtPicker}
+              style={({ pressed }) => [
+                styles.sessionDatePickerButton,
+                {
+                  borderColor: `${sportColor}50`,
+                  backgroundColor: `${sportColor}10`,
+                  opacity: pressed ? 0.9 : 1,
+                },
+              ]}
+            >
+              <Ionicons name="calendar-outline" size={16} color={sportColor} />
+              <View style={styles.sessionDateValueWrap}>
+                <Text style={styles.sessionDateCaption}>
+                  Optional session date & time
+                </Text>
+                <Text style={[styles.sessionDateValue, { color: colors.text }]}>
+                  {recordedAtOverride ? formatSessionDateTime(recordedAtOverride) : "Use video time or set manually"}
+                </Text>
+              </View>
+              <View style={styles.sessionDateActions}>
+                {recordedAtOverride ? (
+                  <Pressable onPress={clearRecordedAtOverride} hitSlop={8}>
+                    <Text style={[styles.sessionDateClear, { color: sportColor }]}>Reset</Text>
+                  </Pressable>
+                ) : null}
+                <Ionicons name="chevron-forward" size={16} color={sportColor} />
+              </View>
+            </Pressable>
           </View>
         )}
 
@@ -587,6 +786,103 @@ export default function UploadScreen() {
           ))}
         </View>
       </ScrollView>
+
+      <Modal
+        transparent
+        visible={showRecordedAtModal}
+        animationType="fade"
+        onRequestClose={closeRecordedAtPicker}
+      >
+        <Pressable style={styles.recordedAtModalBackdrop} onPress={closeRecordedAtPicker}>
+          <Pressable style={styles.recordedAtModalCard} onPress={() => {}}>
+            <Text style={[styles.recordedAtModalTitle, { color: colors.text }]}>Choose session date & time</Text>
+            <Text style={styles.recordedAtModalHelp}>
+              Use this when the video was recorded earlier than the upload time.
+            </Text>
+
+            {Platform.OS === "web" ? (
+              <View style={styles.recordedAtWebFields}>
+                <View style={styles.recordedAtFieldGroup}>
+                  <Text style={styles.recordedAtFieldLabel}>Date</Text>
+                  <TextInput
+                    value={recordedDateInput}
+                    onChangeText={setRecordedDateInput}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor="#64748B"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={styles.recordedAtInput}
+                  />
+                </View>
+                <View style={styles.recordedAtFieldGroup}>
+                  <Text style={styles.recordedAtFieldLabel}>Time</Text>
+                  <TextInput
+                    value={recordedTimeInput}
+                    onChangeText={setRecordedTimeInput}
+                    placeholder="HH:MM"
+                    placeholderTextColor="#64748B"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={styles.recordedAtInput}
+                  />
+                </View>
+              </View>
+            ) : NativeDateTimePicker ? (
+              <View style={styles.recordedAtNativePickers}>
+                <NativeDateTimePicker
+                  value={recordedAtDraft}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "inline" : "default"}
+                  maximumDate={new Date()}
+                  onChange={(_event: unknown, nextDate?: Date) => {
+                    if (nextDate) {
+                      setRecordedAtDraft((current) => new Date(
+                        nextDate.getFullYear(),
+                        nextDate.getMonth(),
+                        nextDate.getDate(),
+                        current.getHours(),
+                        current.getMinutes(),
+                        0,
+                        0,
+                      ));
+                    }
+                  }}
+                />
+                <NativeDateTimePicker
+                  value={recordedAtDraft}
+                  mode="time"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  onChange={(_event: unknown, nextDate?: Date) => {
+                    if (nextDate) {
+                      setRecordedAtDraft((current) => new Date(
+                        current.getFullYear(),
+                        current.getMonth(),
+                        current.getDate(),
+                        nextDate.getHours(),
+                        nextDate.getMinutes(),
+                        0,
+                        0,
+                      ));
+                    }
+                  }}
+                />
+              </View>
+            ) : null}
+
+            <View style={styles.recordedAtActions}>
+              <Pressable onPress={closeRecordedAtPicker} style={styles.recordedAtSecondaryButton}>
+                <Text style={styles.recordedAtSecondaryText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={saveRecordedAtOverride}
+                style={[styles.recordedAtPrimaryButton, { backgroundColor: sportColor }]}
+              >
+                <Text style={styles.recordedAtPrimaryText}>Apply</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -740,6 +1036,41 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: "#94A3B8",
   },
+  sessionDateCard: {
+    marginBottom: 14,
+  },
+  sessionDateClear: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  sessionDatePickerButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  sessionDateValueWrap: {
+    flex: 1,
+    gap: 1,
+  },
+  sessionDateValue: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  sessionDateCaption: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  sessionDateActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   analyzeButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -777,5 +1108,82 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     flex: 1,
     color: "#94A3B8",
+  },
+  recordedAtModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(2, 6, 23, 0.68)",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  recordedAtModalCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#243041",
+    backgroundColor: "#0F172A",
+    padding: 18,
+    gap: 14,
+  },
+  recordedAtModalTitle: {
+    fontSize: 17,
+    fontFamily: "Inter_700Bold",
+  },
+  recordedAtModalHelp: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  recordedAtWebFields: {
+    gap: 12,
+  },
+  recordedAtFieldGroup: {
+    gap: 6,
+  },
+  recordedAtFieldLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#CBD5E1",
+  },
+  recordedAtInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#334155",
+    backgroundColor: "#111827",
+    color: "#E2E8F0",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+  },
+  recordedAtNativePickers: {
+    gap: 6,
+  },
+  recordedAtActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 4,
+  },
+  recordedAtSecondaryButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#334155",
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+  },
+  recordedAtSecondaryText: {
+    color: "#CBD5E1",
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  recordedAtPrimaryButton: {
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+  },
+  recordedAtPrimaryText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
   },
 });

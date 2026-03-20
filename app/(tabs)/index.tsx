@@ -35,7 +35,7 @@ import {
 import type { AnalysisSummary } from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
-import { resolveUserTimeZone } from "@/lib/timezone";
+import { formatDateTimeInTimeZone, formatMonthDayInTimeZone, parseApiDate, resolveUserTimeZone } from "@/lib/timezone";
 import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
 import { ds } from "@/constants/design-system";
@@ -79,15 +79,12 @@ function toWeekdayInitial(day: string): string {
 }
 
 function formatDateTime(value: string, timeZone?: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown date";
-  return date.toLocaleString(undefined, {
+  return formatDateTimeInTimeZone(value, timeZone, {
     year: "numeric",
     month: "short",
     day: "2-digit",
     hour: "numeric",
     minute: "2-digit",
-    timeZone,
   });
 }
 
@@ -121,14 +118,13 @@ function getGreetingFirstName(name?: string | null): string {
 }
 
 const PLAYER_METRICS = [
-  { key: "power", label: "Power", icon: "flash", color: ds.color.success },
-  { key: "control", label: "Control", icon: "body", color: "#A78BFA" },
-  { key: "timing", label: "Timing", icon: "timer", color: "#38BDF8" },
-  { key: "technique", label: "Technique", icon: "construct", color: "#60A5FA" },
+  { key: "technical", label: "Technical", icon: "construct", color: "#60A5FA" },
+  { key: "tactical", label: "Tactical", icon: "analytics", color: "#A78BFA" },
+  { key: "movement", label: "Movement", icon: "body", color: ds.color.success },
 ] as const;
 
 const PLAYER_TREND_FILTERS = [
-  { key: "overall", label: "Overall Performance", icon: "stats-chart", color: ds.color.accent },
+  { key: "overall", label: "Overall", icon: "stats-chart", color: ds.color.accent },
   ...PLAYER_METRICS,
 ] as const;
 
@@ -147,6 +143,18 @@ function getImprovementDrill(
   sportName?: string,
   movementName?: string,
 ): string {
+  if (metricKey === "technical") {
+    return "3 x 12 technical checkpoints with finish hold";
+  }
+
+  if (metricKey === "tactical") {
+    return "4 x 30s decision-and-recovery pattern reps";
+  }
+
+  if (metricKey === "movement") {
+    return "3 x 20s footwork, balance, and reposition drills";
+  }
+
   const sport = String(sportName || "").toLowerCase();
   const movement = String(movementName || "").toLowerCase();
 
@@ -227,8 +235,13 @@ function stdDeviation(values: number[]): number | null {
   return Math.sqrt(variance);
 }
 
-function getSubScoreValue(item: AnalysisSummary | undefined, metricKey: string): number | null {
+function getPlayerMetricValue(item: AnalysisSummary | undefined, metricKey: string): number | null {
   if (!item) return null;
+  if (metricKey === "technical" || metricKey === "tactical" || metricKey === "movement") {
+    const sectionScore = Number(item.sectionScores?.[metricKey]);
+    return Number.isFinite(sectionScore) ? sectionScore : null;
+  }
+
   const subs = item.subScores;
   if (!subs) return null;
   for (const key of Object.keys(subs)) {
@@ -236,6 +249,7 @@ function getSubScoreValue(item: AnalysisSummary | undefined, metricKey: string):
       return Number(subs[key]);
     }
   }
+
   return null;
 }
 
@@ -249,6 +263,9 @@ function getMovementFromAnalysis(item: AnalysisSummary): string {
 }
 
 function getMovementTarget(metricKey: string): number {
+  if (metricKey === "technical") return 8.2;
+  if (metricKey === "tactical") return 8.0;
+  if (metricKey === "movement") return 8.1;
   if (metricKey === "timing") return 82;
   if (metricKey === "control") return 80;
   if (metricKey === "technique") return 81;
@@ -276,6 +293,12 @@ function scaleDrillForDuration(baseDrill: string, minutes: PlanDuration): string
 }
 
 function getExpectedGain(metricKey: string, minutes: PlanDuration): number {
+  if (metricKey === "technical" || metricKey === "tactical" || metricKey === "movement") {
+    const baseGain = metricKey === "movement" ? 0.5 : 0.4;
+    const multiplier = minutes === 10 ? 0.75 : minutes === 30 ? 1.35 : 1;
+    return Number(Math.max(0.2, baseGain * multiplier).toFixed(1));
+  }
+
   const baseGain =
     metricKey === "timing"
         ? 4
@@ -291,6 +314,16 @@ function formatScoreDelta(delta: number | null): string {
   if (delta === null) return "No prior session";
   const sign = delta >= 0 ? "+" : "";
   return `${sign}${delta.toFixed(1)}%`;
+}
+
+function formatMetricDelta(delta: number | null): string | null {
+  if (delta === null) return null;
+  return `${Math.abs(delta).toFixed(1)}%`;
+}
+
+function metricDeltaIcon(delta: number | null): "caret-up" | "caret-down" | "remove" {
+  if (delta === null || Math.abs(delta) < 1e-6) return "remove";
+  return delta > 0 ? "caret-up" : "caret-down";
 }
 
 function getDeltaColor(delta: number | null): string {
@@ -316,6 +349,7 @@ function PlayerMetricTrendChart({
     label: string;
     color: string;
     values: Array<number | null>;
+    displayValues?: Array<number | null>;
   }>;
   activeKey: string;
 }) {
@@ -358,6 +392,11 @@ function PlayerMetricTrendChart({
   const latestPoint = activePoints[activePoints.length - 1];
   const prevPoint = activePoints.length > 1 ? activePoints[activePoints.length - 2] : null;
   const latestDelta = prevPoint ? computeDisplayDelta(latestPoint.value, prevPoint.value) : null;
+  const latestDisplayValue = activeSeries.displayValues?.[latestPoint.index] ?? latestPoint.value;
+  const formattedLatestValue =
+    activeSeries.key === "overall"
+      ? String(roundScore(Number(latestDisplayValue)))
+      : Number(latestDisplayValue).toFixed(1);
 
   const activePolylinePoints = activePoints.map((point) => `${point.x},${point.y}`).join(" ");
   const areaPath = [
@@ -386,7 +425,7 @@ function PlayerMetricTrendChart({
           <Text style={styles.playerTrendMetricLabel}>{activeSeries.label}</Text>
         </View>
         <Text style={[styles.playerTrendMetricValue, { color: activeSeries.color }]}>
-          {roundScore(Number(latestPoint.value))}
+          {formattedLatestValue}
           {latestDelta !== null ? ` (${latestDelta >= 0 ? "+" : ""}${latestDelta}%)` : ""}
         </Text>
       </View>
@@ -813,7 +852,7 @@ export default function DashboardScreen() {
     const scoredAnalyses = filteredAnalyses
       .map((analysis) => {
         const score = typeof analysis.overallScore === "number" ? analysis.overallScore : null;
-        const timestamp = new Date(analysis.capturedAt || analysis.createdAt).getTime();
+        const timestamp = parseApiDate(analysis.capturedAt || analysis.createdAt)?.getTime() || 0;
         return {
           analysis,
           score,
@@ -830,16 +869,16 @@ export default function DashboardScreen() {
     const overallDelta = computeDisplayDelta(latestScore, previousScore);
 
     const metricCards = PLAYER_METRICS.map((metric) => {
-      const latestMetricScore = getSubScoreValue(scoredAnalyses[0].analysis, metric.key);
+      const latestMetricScore = getPlayerMetricValue(scoredAnalyses[0].analysis, metric.key);
       const previousMetricScore =
         scoredAnalyses.length > 1
-          ? getSubScoreValue(scoredAnalyses[1].analysis, metric.key)
+          ? getPlayerMetricValue(scoredAnalyses[1].analysis, metric.key)
           : null;
       const delta = computeDisplayDelta(latestMetricScore, previousMetricScore);
 
       return {
         ...metric,
-        score: latestMetricScore !== null ? roundScore(latestMetricScore) : null,
+        score: latestMetricScore !== null ? Number(latestMetricScore.toFixed(1)) : null,
         delta,
       };
     });
@@ -852,10 +891,10 @@ export default function DashboardScreen() {
     const trendPoints = trendEntries
       .slice(0, trendSliceCount)
       .map((entry) => {
-        const date = new Date(entry.analysis.capturedAt || entry.analysis.createdAt);
-        const dateLabel = Number.isNaN(date.getTime())
-          ? "-"
-          : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+        const dateLabel = formatMonthDayInTimeZone(
+          entry.analysis.capturedAt || entry.analysis.createdAt,
+          profileTimeZone,
+        );
         return {
           label: dateLabel,
           score: roundScore(Number(entry.score)),
@@ -870,8 +909,15 @@ export default function DashboardScreen() {
         if (metric.key === "overall") {
           return roundScore(Number(entry.score));
         }
-        const value = getSubScoreValue(entry.analysis, metric.key);
-        return value === null ? null : roundScore(value);
+        const value = getPlayerMetricValue(entry.analysis, metric.key);
+        return value === null ? null : Number((value * 10).toFixed(1));
+      }),
+      displayValues: trendEntries.map((entry) => {
+        if (metric.key === "overall") {
+          return roundScore(Number(entry.score));
+        }
+        const value = getPlayerMetricValue(entry.analysis, metric.key);
+        return value === null ? null : Number(value.toFixed(1));
       }),
     }));
 
@@ -1312,21 +1358,25 @@ export default function DashboardScreen() {
                 >
                   <Text style={styles.playerHeroLabel}>Overall performance</Text>
                   <View style={styles.playerHeroTopRow}>
-                    <View style={styles.playerHeroDeltaWrap}>
-                      <Ionicons
-                        name={deltaTrendIcon(playerDashboard.overallDelta)}
-                        size={14}
-                        color={getDeltaColor(playerDashboard.overallDelta)}
-                      />
-                      <Text
-                        style={[
-                          styles.playerHeroDelta,
-                          { color: getDeltaColor(playerDashboard.overallDelta) },
-                        ]}
-                      >
-                        {formatScoreDelta(playerDashboard.overallDelta)}
-                      </Text>
-                    </View>
+                    {playerDashboard.overallDelta !== null ? (
+                      <View style={styles.playerHeroDeltaWrap}>
+                        <Ionicons
+                          name={metricDeltaIcon(playerDashboard.overallDelta)}
+                          size={12}
+                          color={getDeltaColor(playerDashboard.overallDelta)}
+                        />
+                        <Text
+                          style={[
+                            styles.playerHeroDelta,
+                            { color: getDeltaColor(playerDashboard.overallDelta) },
+                          ]}
+                        >
+                          {formatMetricDelta(playerDashboard.overallDelta)}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View />
+                    )}
                     <Text style={styles.playerHeroScore}>{playerDashboard.latestScore}</Text>
                   </View>
                   <View style={styles.playerHeroMetaRow}>
@@ -1350,17 +1400,28 @@ export default function DashboardScreen() {
                         </View>
                         <Text style={styles.playerMetricLabel}>{metric.label}</Text>
                       </View>
-                      <Text style={styles.playerMetricValue}>{metric.score ?? "--"}</Text>
-                      <Text
-                        style={[
-                          styles.playerMetricDelta,
-                          { color: getDeltaColor(metric.delta) },
-                        ]}
-                      >
-                        {metric.delta === null
-                          ? "No prior session"
-                          : `${metric.delta >= 0 ? "+" : ""}${metric.delta.toFixed(1)}% vs last`}
-                      </Text>
+                      <View style={styles.playerMetricScoreRow}>
+                        <Text style={styles.playerMetricValue}>
+                          {metric.score === null ? "--" : metric.score.toFixed(1)}
+                        </Text>
+                        {metric.delta !== null ? (
+                          <View style={styles.playerMetricDeltaWrap}>
+                            <Ionicons
+                              name={metricDeltaIcon(metric.delta)}
+                              size={10}
+                              color={getDeltaColor(metric.delta)}
+                            />
+                            <Text
+                              style={[
+                                styles.playerMetricDelta,
+                                { color: getDeltaColor(metric.delta) },
+                              ]}
+                            >
+                              {formatMetricDelta(metric.delta)}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
                     </View>
                   ))}
                 </View>
@@ -1511,9 +1572,9 @@ export default function DashboardScreen() {
                       <View style={styles.playerPlanContent}>
                         <Text style={styles.playerPlanTitle}>{area.label}</Text>
                         <Text style={styles.playerPlanMeta}>
-                          {area.current} now to target {area.target}
+                          {area.current.toFixed(1)} now to target {area.target.toFixed(1)}
                         </Text>
-                        <Text style={styles.playerPlanGain}>Expected gain: +{area.expectedGain}</Text>
+                        <Text style={styles.playerPlanGain}>Expected gain: +{area.expectedGain.toFixed(1)}</Text>
                         <Text style={styles.playerPlanDrill}>{area.drill}</Text>
                       </View>
                     </View>
@@ -2152,43 +2213,58 @@ const styles = StyleSheet.create({
   },
   playerMetricGrid: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
+    justifyContent: "space-between",
     marginBottom: 14,
   },
   playerMetricCard: {
-    width: "48%",
+    width: "31%",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#2A2A5060",
     backgroundColor: "#131A35",
-    padding: 10,
-    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    gap: 8,
+    minWidth: 0,
   },
   playerMetricHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   playerMetricIconWrap: {
-    width: 20,
-    height: 20,
+    width: 18,
+    height: 18,
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
   },
   playerMetricLabel: {
-    fontSize: 11,
+    flexShrink: 1,
+    minWidth: 0,
+    fontSize: 10,
     fontFamily: "Inter_500Medium",
     color: "#CBD5E1",
   },
+  playerMetricScoreRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 6,
+  },
   playerMetricValue: {
-    fontSize: 24,
+    fontSize: 22,
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
   },
+  playerMetricDeltaWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    flexShrink: 0,
+  },
   playerMetricDelta: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: "Inter_500Medium",
   },
   playerSectionCard: {
