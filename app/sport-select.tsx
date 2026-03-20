@@ -72,7 +72,7 @@ export default function SportSelectScreen() {
       name: movement.name,
       icon: movement.icon,
     });
-    router.replace("/(tabs)");
+    router.replace("/");
   };
 
   const handleAutoDetect = () => {
@@ -85,7 +85,7 @@ export default function SportSelectScreen() {
       color: selectedSport.color,
     });
     setMovement(null);
-    router.replace("/(tabs)");
+    router.replace("/");
   };
 
   const ENABLED_SPORTS = ["Tennis", "Golf", "Pickleball", "Paddle", "Badminton", "Table Tennis"];

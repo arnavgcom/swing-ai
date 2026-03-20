@@ -14,7 +14,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { SportProvider, useSport } from "@/lib/sport-context";
-import { View, ActivityIndicator } from "react-native";
+import { View, ActivityIndicator, StyleSheet } from "react-native";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -23,113 +23,106 @@ function RootNavigator() {
   const { selectedSport, isLoading: sportLoading } = useSport();
   const segments = useSegments();
   const router = useRouter();
-  const [navigationReady, setNavigationReady] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(true);
 
   const isLoading = authLoading || sportLoading;
 
   useEffect(() => {
     if (isLoading) {
-      setNavigationReady(false);
+      setIsRedirecting(true);
       return;
     }
 
     const inAuthGroup = segments[0] === "login";
     const inSportSelect = segments[0] === "sport-select";
+    let nextRoute: "/login" | "/sport-select" | "/" | null = null;
 
     if (!user) {
       if (!inAuthGroup) {
-        setNavigationReady(false);
-        router.replace("/login");
-        return;
+        nextRoute = "/login";
       }
-
-      setNavigationReady(true);
-      return;
-    }
-
-    if (!selectedSport) {
+    } else if (!selectedSport) {
       if (!inSportSelect) {
-        setNavigationReady(false);
-        router.replace("/sport-select");
-        return;
+        nextRoute = "/sport-select";
       }
+    } else if (inAuthGroup || inSportSelect) {
+      nextRoute = "/";
+    }
 
-      setNavigationReady(true);
+    if (nextRoute) {
+      setIsRedirecting(true);
+      router.replace(nextRoute);
       return;
     }
 
-    if (inAuthGroup || inSportSelect) {
-      setNavigationReady(false);
-      router.replace("/(tabs)");
-      return;
-    }
-
-    setNavigationReady(true);
+    setIsRedirecting(false);
   }, [isLoading, user, selectedSport, segments, router]);
 
-  if (isLoading || !navigationReady) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "#0A0A1A",
-        }}
-      >
-        <ActivityIndicator size="large" color="#6C5CE7" />
-      </View>
-    );
-  }
-
   return (
-    <Stack initialRouteName="login" screenOptions={{ headerBackTitle: "Back" }}>
-      <Stack.Screen name="login" options={{ headerShown: false }} />
-      <Stack.Screen name="sport-select" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="profile"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="analysis/[id]"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="analysis/[id]/trends"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="analysis/[id]/diagnostics"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="analysis/[id]/manual-annotation"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="analysis/[id]/improved"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="model-config"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="model-version/[id]"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="profile/add-player"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="profile/score-metrics-selection"
-        options={{ headerShown: false }}
-      />
-    </Stack>
+    <>
+      <Stack initialRouteName="login" screenOptions={{ headerBackTitle: "Back" }}>
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="sport-select" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="profile"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="analysis/[id]"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="analysis/[id]/trends"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="analysis/[id]/diagnostics"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="analysis/[id]/manual-annotation"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="analysis/[id]/improved"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="model-config"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="model-version/[id]"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="profile/add-player"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="profile/score-metrics-selection"
+          options={{ headerShown: false }}
+        />
+      </Stack>
+
+      {(isLoading || isRedirecting) && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#6C5CE7" />
+        </View>
+      )}
+    </>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0A0A1A",
+  },
+});
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
