@@ -368,6 +368,10 @@ function getVideoDate(item: Pick<AnalysisSummary, "capturedAt" | "createdAt">): 
   return item.capturedAt || item.createdAt;
 }
 
+function getProcessingStartDate(item: Pick<AnalysisSummary, "createdAt">): string {
+  return item.createdAt;
+}
+
 function formatElapsedDuration(startedAtIso: string, nowMs: number): string | null {
   const startedAt = parseApiDate(startedAtIso);
   if (!startedAt) return null;
@@ -483,7 +487,7 @@ function SummaryCard({
     }, 1000);
 
     return () => clearInterval(intervalId);
-  }, [item.capturedAt, item.createdAt, showBackgroundProcessing]);
+  }, [item.createdAt, showBackgroundProcessing]);
 
   const timeStr = formatDateTimeInTimeZone(getVideoDate(item), timeZone, {
     month: "short",
@@ -501,7 +505,7 @@ function SummaryCard({
     ? null
     : requestedFocusLabel || (movement ? toTitleCase(movement).replace(/-/g, " ") : null);
   const elapsedTimeLabel = showBackgroundProcessing
-    ? formatElapsedDuration(getVideoDate(item), elapsedNowMs)
+    ? formatElapsedDuration(getProcessingStartDate(item), elapsedNowMs)
     : null;
 
   const sectionEntries = SESSION_SECTION_KEYS.map((key) => {
