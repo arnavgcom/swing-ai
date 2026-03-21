@@ -5,10 +5,42 @@ import traceback
 from typing import Any, Dict, List, Optional
 
 
+DEFAULT_POSE_SAMPLE_COUNT = 24
+
+
+def _build_sample_indices(total_frames: int, sample_count: int) -> List[int]:
+    if total_frames <= 0:
+        return []
+
+    if total_frames <= sample_count:
+        return list(range(total_frames))
+
+    start_index = max(0, int(total_frames * 0.05))
+    end_index = max(start_index, min(total_frames - 1, int(total_frames * 0.95)))
+
+    if sample_count <= 1 or start_index == end_index:
+        return [start_index]
+
+    indices: List[int] = []
+    for sample_number in range(sample_count):
+        position = start_index + ((end_index - start_index) * sample_number / (sample_count - 1))
+        frame_index = int(round(position))
+        if not indices or frame_index != indices[-1]:
+            indices.append(frame_index)
+
+    return indices
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate whether a video matches a requested sport")
     parser.add_argument("video_path", help="Path to the video file")
     parser.add_argument("--sport", required=True, help="Sport name to validate against")
+    parser.add_argument(
+        "--sample-count",
+        type=int,
+        default=DEFAULT_POSE_SAMPLE_COUNT,
+        help="Number of evenly spaced frames to sample for lightweight sport validation",
+    )
     args = parser.parse_args()
 
     try:
@@ -25,19 +57,25 @@ def main() -> None:
             raise ValueError(f"Cannot open video: {args.video_path}")
 
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         cap.release()
 
+        sample_count = max(1, int(args.sample_count or DEFAULT_POSE_SAMPLE_COUNT))
+        sample_indices = _build_sample_indices(total_frames, sample_count)
+        if not sample_indices:
+            raise ValueError(f"Could not determine readable frames for video: {args.video_path}")
+
         detector = PoseDetector()
         cap2 = cv2.VideoCapture(args.video_path)
-        pose_data: List[Optional[Dict[str, Any]]] = []
-        while True:
+        pose_data: List[Optional[Dict[str, Any]]] = [None] * max(total_frames, sample_indices[-1] + 1)
+        for frame_index in sample_indices:
+            cap2.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
             ret, frame = cap2.read()
             if not ret:
-                break
-            landmarks, _ = detector.detect_with_skeleton(frame)
-            pose_data.append(landmarks)
+                continue
+            pose_data[frame_index] = detector.detect(frame)
         cap2.release()
         detector.close()
 
@@ -63,6 +101,8 @@ def main() -> None:
                 "width": frame_width,
                 "height": frame_height,
                 "fps": fps,
+                "totalFrames": total_frames,
+                "sampledFrames": len(sample_indices),
             },
         }))
         sys.exit(0)
