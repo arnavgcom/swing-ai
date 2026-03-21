@@ -256,21 +256,15 @@ def main():
             bg_features=bg_features,
         )
 
-        if not validation["valid"]:
-            _emit_pipeline_timing(
-                "classificationValidation",
-                "completed",
-                started_at=classification_started_at,
-                completed_at=_utc_now_iso(),
-                elapsed_ms=round((time.perf_counter() - classification_started_perf) * 1000),
-                note=validation["reason"],
-            )
-            print(json.dumps({
-                "rejected": True,
-                "rejectionReason": validation["reason"],
-                "confidence": validation["confidence"],
-            }))
-            sys.exit(0)
+        validation_note = None if validation.get("valid") else str(validation.get("reason", "") or "validation_bypassed")
+        _emit_pipeline_timing(
+            "classificationValidation",
+            "completed",
+            started_at=classification_started_at,
+            completed_at=_utc_now_iso(),
+            elapsed_ms=round((time.perf_counter() - classification_started_perf) * 1000),
+            note=validation_note,
+        )
 
         classified, shot_count = classify_movement(
             pose_data,

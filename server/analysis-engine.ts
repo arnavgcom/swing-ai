@@ -16,7 +16,6 @@ import {
 import { normalizeMetricValueToTenScale } from "@shared/metric-scale";
 import { readModelRegistryConfig } from "./model-registry";
 import {
-  normalizeRuntimeScoreToHundred,
   toPersistedScoreTen,
 } from "./score-scale";
 import { buildScoreInputsPayload } from "./score-input-params";
@@ -1334,18 +1333,9 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       );
 
       if (result.rejected) {
-        console.log(
-          `Analysis ${analysisId} rejected: ${result.rejectionReason}`,
+        console.warn(
+          `Analysis ${analysisId} returned a rejected payload, but pipeline rejection is disabled. Continuing analysis result persistence. Reason: ${result.rejectionReason}`,
         );
-        await db
-          .update(analyses)
-          .set({
-            status: "rejected",
-            rejectionReason: result.rejectionReason || "Video content does not match the selected sport.",
-            ...buildUpdateAuditFields(auditActorUserId),
-          })
-          .where(eq(analyses.id, analysisId));
-        return;
       }
 
       const actualMovement = result.detectedMovement || movementName;
@@ -1359,24 +1349,6 @@ export async function processAnalysis(analysisId: string): Promise<void> {
         console.log(
           `Python analysis complete. Overall score: ${result.overallScore}`,
         );
-      }
-
-      const runtimeOverallScore100 = normalizeRuntimeScoreToHundred(result.overallScore);
-
-      if (runtimeOverallScore100 != null && runtimeOverallScore100 < 15) {
-        const sportLabel = sportName.charAt(0).toUpperCase() + sportName.slice(1);
-        console.log(
-          `Analysis ${analysisId} auto-rejected: score ${runtimeOverallScore100} below minimum threshold`,
-        );
-        await db
-          .update(analyses)
-          .set({
-            status: "rejected",
-            rejectionReason: `The video content could not be reliably analyzed as a ${sportLabel} movement. Please upload a clearer video of your ${sportLabel} technique.`,
-            ...buildUpdateAuditFields(auditActorUserId),
-          })
-          .where(eq(analyses.id, analysisId));
-        return;
       }
 
       let diagnosticsPayload: AiDiagnosticsPayload | null = null;
