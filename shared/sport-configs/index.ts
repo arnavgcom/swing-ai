@@ -29,6 +29,7 @@ import { tabletennisBackhandConfig } from "./tabletennis-backhand";
 import { tabletennisServeConfig } from "./tabletennis-serve";
 import { tabletennisLoopConfig } from "./tabletennis-loop";
 import { tabletennisChopConfig } from "./tabletennis-chop";
+import { normalizeMetricRangeToTenScale, normalizeMetricUnit } from "@shared/metric-scale";
 
 export type { SportCategoryConfig, MetricDefinition, ScoreDefinition } from "./types";
 
@@ -104,14 +105,25 @@ function normalizeScoresWithoutConsistency(config: SportCategoryConfig): SportCa
   return { ...config, scores: normalized };
 }
 
+function normalizeMetricPresentation(config: SportCategoryConfig): SportCategoryConfig {
+  return {
+    ...config,
+    metrics: (config.metrics || []).map((metric) => ({
+      ...metric,
+      unit: normalizeMetricUnit(metric.key, metric.unit),
+      optimalRange: normalizeMetricRangeToTenScale(metric.key, metric.optimalRange),
+    })),
+  };
+}
+
 export function getSportConfig(configKey: string): SportCategoryConfig | undefined {
   const config = configRegistry[configKey];
-  return config ? normalizeScoresWithoutConsistency(config) : undefined;
+  return config ? normalizeMetricPresentation(normalizeScoresWithoutConsistency(config)) : undefined;
 }
 
 export function getAllConfigs(): Record<string, SportCategoryConfig> {
   return Object.fromEntries(
-    Object.entries(configRegistry).map(([key, config]) => [key, normalizeScoresWithoutConsistency(config)]),
+    Object.entries(configRegistry).map(([key, config]) => [key, normalizeMetricPresentation(normalizeScoresWithoutConsistency(config))]),
   );
 }
 

@@ -38,7 +38,15 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Swing AI to access your photo library so you can select training videos.",
+          "cameraPermission": "Allow Swing AI to use your camera so you can record training videos.",
+          "microphonePermission": "Allow Swing AI to record audio with your videos."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,9 +1,19 @@
 import { db } from "./db";
 import { analyses, metrics, coachingInsights, sportMovements, sports, users } from "@shared/schema";
 import { and, desc, eq, isNotNull, ne, or } from "drizzle-orm";
-import { execFile } from "child_process";
+import { spawn } from "child_process";
 import { createHash } from "crypto";
-import { getConfigKey } from "@shared/sport-configs";
+import { getConfigKey, getSportConfig } from "@shared/sport-configs";
+import {
+  attachPipelineTiming,
+  extractPipelineTiming,
+  isPipelineStageKey,
+  updatePipelineTiming,
+  type PipelineStageKey,
+  type PipelineStageStatus,
+  type PipelineTiming,
+} from "@shared/pipeline-timing";
+import { normalizeMetricValueToTenScale } from "@shared/metric-scale";
 import { readModelRegistryConfig } from "./model-registry";
 import {
   normalizeRuntimeScoreToHundred,
@@ -18,12 +28,14 @@ import type { AiDiagnosticsPayload, ScoreInputsPayload, ScoreOutputsPayload } fr
 import { withLocalMediaFile } from "./media-storage";
 import { buildInsertAuditFields, buildUpdateAuditFields } from "./audit-metadata";
 import { PROJECT_ROOT, resolveProjectPath } from "./env";
+import { validateTennisVideoUpload } from "./tennis-upload-validation";
 
 interface PythonResult {
   configKey: string;
   overallScore: number;
   subScores: Record<string, number>;
   metricValues: Record<string, number>;
+  analysisArtifactPath?: string;
   shotCount?: number;
   shotSpeed?: number;
   coaching: {
@@ -38,6 +50,159 @@ interface PythonResult {
   rejected?: boolean;
   rejectionReason?: string;
   error?: string;
+}
+
+type CoachingPayload = PythonResult["coaching"];
+
+type PipelineProgressEvent = {
+  type: "pipeline_timing";
+  stageKey: PipelineStageKey;
+  status: PipelineStageStatus;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  elapsedMs?: number | null;
+  note?: string | null;
+};
+
+const DEFAULT_PIPELINE_CONFIG_KEY = "tennis-forehand";
+const DEFAULT_PIPELINE_MODEL_VERSION = "0.1";
+
+function isPipelineStageStatus(value: unknown): value is PipelineStageStatus {
+  return value === "pending" || value === "running" || value === "completed" || value === "failed";
+}
+
+function parsePipelineProgressLine(line: string): PipelineProgressEvent | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("{")) return null;
+
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    if (parsed.type !== "pipeline_timing") return null;
+    if (!isPipelineStageKey(parsed.stageKey) || !isPipelineStageStatus(parsed.status)) return null;
+
+    return {
+      type: "pipeline_timing",
+      stageKey: parsed.stageKey,
+      status: parsed.status,
+      startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : null,
+      completedAt: typeof parsed.completedAt === "string" ? parsed.completedAt : null,
+      elapsedMs: Number.isFinite(Number(parsed.elapsedMs)) ? Number(parsed.elapsedMs) : null,
+      note: typeof parsed.note === "string" ? parsed.note : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function upsertAnalysisDiagnosticsPayload(
+  analysisId: string,
+  aiDiagnostics: AiDiagnosticsPayload,
+  options: {
+    configKey?: string | null;
+    modelVersion?: string | null;
+    auditActorUserId?: string | null;
+  } = {},
+): Promise<void> {
+  const [existingRow] = await db
+    .select({
+      id: metrics.id,
+      configKey: metrics.configKey,
+      modelVersion: metrics.modelVersion,
+    })
+    .from(metrics)
+    .where(eq(metrics.analysisId, analysisId))
+    .orderBy(desc(metrics.createdAt))
+    .limit(1);
+
+  const configKey = options.configKey || existingRow?.configKey || DEFAULT_PIPELINE_CONFIG_KEY;
+  const modelVersion = options.modelVersion || existingRow?.modelVersion || DEFAULT_PIPELINE_MODEL_VERSION;
+
+  if (existingRow) {
+    await db
+      .update(metrics)
+      .set({
+        configKey,
+        modelVersion,
+        aiDiagnostics,
+        ...buildUpdateAuditFields(options.auditActorUserId ?? null),
+      })
+      .where(eq(metrics.id, existingRow.id));
+    return;
+  }
+
+  await db.insert(metrics).values({
+    analysisId,
+    configKey,
+    modelVersion,
+    aiDiagnostics,
+    ...buildInsertAuditFields(options.auditActorUserId ?? null),
+  });
+}
+
+export async function persistPipelineTimingUpdate(
+  analysisId: string,
+  update: {
+    stageKey: PipelineStageKey;
+    status: PipelineStageStatus;
+    startedAt?: string | null;
+    completedAt?: string | null;
+    elapsedMs?: number | null;
+    note?: string | null;
+  },
+  options: {
+    configKey?: string | null;
+    modelVersion?: string | null;
+    auditActorUserId?: string | null;
+    existingTiming?: PipelineTiming | null;
+  } = {},
+): Promise<PipelineTiming> {
+  let basePayload: Record<string, unknown> = {};
+  let baseTiming = options.existingTiming || null;
+
+  if (!baseTiming) {
+    const [existingRow] = await db
+      .select({ aiDiagnostics: metrics.aiDiagnostics })
+      .from(metrics)
+      .where(eq(metrics.analysisId, analysisId))
+      .orderBy(desc(metrics.createdAt))
+      .limit(1);
+
+    if (existingRow?.aiDiagnostics && typeof existingRow.aiDiagnostics === "object") {
+      basePayload = existingRow.aiDiagnostics as Record<string, unknown>;
+      baseTiming = extractPipelineTiming(basePayload);
+    }
+  }
+
+  const nextTiming = updatePipelineTiming(baseTiming, update);
+  const nextPayload = attachPipelineTiming(basePayload, nextTiming) as AiDiagnosticsPayload;
+  await upsertAnalysisDiagnosticsPayload(analysisId, nextPayload, options);
+  return nextTiming;
+}
+
+export async function seedUploadPipelineTiming(
+  analysisId: string,
+  uploadTiming: {
+    startedAt?: string | null;
+    completedAt?: string | null;
+    elapsedMs?: number | null;
+  },
+  options: {
+    configKey?: string | null;
+    modelVersion?: string | null;
+    auditActorUserId?: string | null;
+  } = {},
+): Promise<PipelineTiming> {
+  return persistPipelineTimingUpdate(
+    analysisId,
+    {
+      stageKey: "upload",
+      status: "completed",
+      startedAt: uploadTiming.startedAt,
+      completedAt: uploadTiming.completedAt,
+      elapsedMs: uploadTiming.elapsedMs,
+    },
+    options,
+  );
 }
 
 async function resolveLockedMovementForRepeatUpload(
@@ -308,23 +473,12 @@ function toFiniteNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-const PERCENT_LIKE_METRIC_KEYS = new Set([
-  "balanceScore",
-  "rhythmConsistency",
-  "shotConsistency",
-]);
-
 function round1(value: number): number {
   return Number(value.toFixed(1));
 }
 
 function normalizeMetricScaleForPersistence(metricKey: string, value: number): number {
-  if (!Number.isFinite(value)) return value;
-  if (!PERCENT_LIKE_METRIC_KEYS.has(metricKey)) return round1(value);
-
-  // Legacy analyzers may emit these metrics on a 0-100 scale; persist as 0-10.
-  const scaled = value > 10 ? value / 10 : value;
-  return round1(Math.max(0, Math.min(10, scaled)));
+  return normalizeMetricValueToTenScale(metricKey, value);
 }
 
 function readDiagnosticsComputedMetric(
@@ -392,6 +546,344 @@ function normalizeMetricValuesForPersistence(
   return out;
 }
 
+type UserMetricPreferences = {
+  selectedMetricKeys: string[];
+  selectedMetricKeysBySport: Record<string, string[]>;
+};
+
+type CoachingFactorDefinition = {
+  key: string;
+  label: string;
+  section: "technical" | "tactical" | "movement";
+  inputKey: string;
+};
+
+type CoachingFactor = CoachingFactorDefinition & {
+  score: number;
+  parameters: string[];
+};
+
+type MetricSnapshot = {
+  key: string;
+  label: string;
+  unit: string;
+  value: number;
+  optimalRange?: [number, number];
+  inRange: boolean;
+};
+
+const COACHING_FACTOR_DEFINITIONS: CoachingFactorDefinition[] = [
+  { key: "balance", label: "Balance", section: "technical", inputKey: "Balance" },
+  { key: "inertia", label: "Inertia", section: "technical", inputKey: "Inertia" },
+  { key: "oppositeForce", label: "Opposite Force", section: "technical", inputKey: "Opposite Force" },
+  { key: "momentum", label: "Momentum", section: "technical", inputKey: "Momentum" },
+  { key: "elastic", label: "Elastic Energy", section: "technical", inputKey: "Elastic Energy" },
+  { key: "contact", label: "Contact", section: "technical", inputKey: "Contact" },
+  { key: "power", label: "Power", section: "tactical", inputKey: "power" },
+  { key: "control", label: "Control", section: "tactical", inputKey: "control" },
+  { key: "timing", label: "Timing", section: "tactical", inputKey: "timing" },
+  { key: "technique", label: "Technique", section: "tactical", inputKey: "technique" },
+  { key: "ready", label: "Ready", section: "movement", inputKey: "Ready" },
+  { key: "read", label: "Read", section: "movement", inputKey: "Read" },
+  { key: "react", label: "React", section: "movement", inputKey: "React" },
+  { key: "respond", label: "Respond", section: "movement", inputKey: "Respond" },
+  { key: "recover", label: "Recover", section: "movement", inputKey: "Recover" },
+];
+
+const DRILL_SUGGESTION_BY_METRIC: Array<{ keys: string[]; message: string }> = [
+  {
+    keys: ["reactionTime", "splitStepTime"],
+    message: "Add split-step timing and live-reaction drills so your first move starts earlier.",
+  },
+  {
+    keys: ["balanceScore", "stanceAngle", "recoveryTime"],
+    message: "Use balance and recovery footwork drills to stabilize your base before and after contact.",
+  },
+  {
+    keys: ["hipRotationSpeed", "shoulderRotation", "shoulderRotationSpeed"],
+    message: "Work on hip-to-shoulder sequencing drills to create cleaner rotation through the shot.",
+  },
+  {
+    keys: ["contactDistance", "contactHeight", "contactTiming"],
+    message: "Run spacing and contact-point reps to make your strike window more repeatable.",
+  },
+  {
+    keys: ["racketLagAngle", "swingPathAngle", "spinRate"],
+    message: "Use shadow swings and guided path drills to refine racket delivery and shape at contact.",
+  },
+  {
+    keys: ["ballSpeed", "shotSpeed", "wristSpeed"],
+    message: "Build controlled acceleration with progressive speed reps instead of chasing power too early.",
+  },
+];
+
+function toSportPreferenceKey(configKey: string): string {
+  return String(configKey || "").split("-")[0]?.trim().toLowerCase() || "";
+}
+
+function titleCase(value: string): string {
+  return String(value || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+function formatScore10(value: number | null | undefined): string {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "-";
+  return `${num.toFixed(1)}/10`;
+}
+
+function formatMetricValue(value: number, unit: string): string {
+  if (unit.startsWith("/")) {
+    return `${value.toFixed(1)}${unit}`;
+  }
+  if (unit === "%") {
+    return `${Math.round(value)}%`;
+  }
+  const decimals = Math.abs(value) >= 100 ? 0 : 1;
+  return unit ? `${value.toFixed(decimals)} ${unit}` : value.toFixed(decimals);
+}
+
+function formatRange(range?: [number, number], unit?: string): string | null {
+  if (!range || range.length !== 2) return null;
+  const [min, max] = range;
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  if (unit?.startsWith("/")) {
+    return `${min.toFixed(1)}-${max.toFixed(1)}${unit}`;
+  }
+  if (unit === "%") {
+    return `${Math.round(min)}-${Math.round(max)}%`;
+  }
+  const decimals = Math.max(Math.abs(min), Math.abs(max)) >= 100 ? 0 : 1;
+  return unit
+    ? `${min.toFixed(decimals)}-${max.toFixed(decimals)} ${unit}`
+    : `${min.toFixed(decimals)}-${max.toFixed(decimals)}`;
+}
+
+function resolveSelectedMetricKeysForCoaching(
+  configKey: string,
+  preferences: UserMetricPreferences | null,
+): string[] {
+  if (!preferences) return [];
+
+  const sportKey = toSportPreferenceKey(configKey);
+  const scoped = sportKey ? preferences.selectedMetricKeysBySport?.[sportKey] : null;
+  const fallback = Array.isArray(preferences.selectedMetricKeys) ? preferences.selectedMetricKeys : [];
+  const base = Array.isArray(scoped) && scoped.length > 0 ? scoped : fallback;
+
+  return Array.from(new Set(base.map((key) => String(key || "").trim()).filter(Boolean)));
+}
+
+function buildMetricSnapshotMap(
+  configKey: string,
+  metricValues: Record<string, number>,
+): Map<string, MetricSnapshot> {
+  const config = getSportConfig(configKey);
+  const metricDefs = new Map(
+    (config?.metrics || []).map((metric) => [canonicalKey(metric.key), metric]),
+  );
+
+  const snapshots = new Map<string, MetricSnapshot>();
+  for (const [rawKey, rawValue] of Object.entries(metricValues || {})) {
+    const key = String(rawKey || "").trim();
+    const value = Number(rawValue);
+    if (!key || !Number.isFinite(value)) continue;
+
+    const def = metricDefs.get(canonicalKey(key));
+    const optimalRange = def?.optimalRange;
+    const inRange = !!(
+      optimalRange
+      && Number.isFinite(optimalRange[0])
+      && Number.isFinite(optimalRange[1])
+      && value >= optimalRange[0]
+      && value <= optimalRange[1]
+    );
+
+    snapshots.set(key, {
+      key,
+      label: def?.label || titleCase(key),
+      unit: def?.unit || "",
+      value,
+      optimalRange,
+      inRange,
+    });
+  }
+
+  return snapshots;
+}
+
+function extractCoachingFactors(
+  scoreInputs: ScoreInputsPayload | null,
+  scoreOutputs: ScoreOutputsPayload | null,
+): CoachingFactor[] {
+  if (!scoreInputs || !scoreOutputs) return [];
+
+  return COACHING_FACTOR_DEFINITIONS
+    .map((definition) => {
+      const sectionOutputs = (scoreOutputs as Record<string, unknown>)[definition.section];
+      const components = sectionOutputs && typeof sectionOutputs === "object"
+        ? (sectionOutputs as Record<string, unknown>).components
+        : null;
+      const rawScore = components && typeof components === "object"
+        ? (components as Record<string, unknown>)[definition.key]
+        : null;
+      const score = Number(rawScore);
+      if (!Number.isFinite(score)) return null;
+
+      const sectionInputs = (scoreInputs as Record<string, unknown>)[definition.section];
+      const detail = sectionInputs && typeof sectionInputs === "object"
+        ? (sectionInputs as Record<string, unknown>)[definition.inputKey]
+        : null;
+      const parameters = detail && typeof detail === "object" && Array.isArray((detail as Record<string, unknown>).parameters)
+        ? ((detail as Record<string, unknown>).parameters as unknown[])
+          .map((item) => String(item || "").trim())
+          .filter(Boolean)
+        : [];
+
+      return {
+        ...definition,
+        score,
+        parameters,
+      };
+    })
+    .filter((item): item is CoachingFactor => item !== null)
+    .sort((a, b) => b.score - a.score);
+}
+
+function chooseSignals(
+  factor: CoachingFactor | null,
+  selectedMetricKeys: string[],
+  snapshots: Map<string, MetricSnapshot>,
+  mode: "positive" | "improvement",
+): MetricSnapshot[] {
+  const selectedCanonical = new Set(selectedMetricKeys.map((key) => canonicalKey(key)));
+  const factorParameterCanon = new Set((factor?.parameters || []).map((key) => canonicalKey(key)));
+
+  const all = [...snapshots.values()].filter((snapshot) =>
+    mode === "positive" ? snapshot.inRange : !snapshot.inRange,
+  );
+
+  const prioritized = all
+    .map((snapshot) => ({
+      snapshot,
+      selected: selectedCanonical.has(canonicalKey(snapshot.key)),
+      linked: factorParameterCanon.has(canonicalKey(snapshot.key)),
+    }))
+    .sort((left, right) => {
+      if (left.selected !== right.selected) return left.selected ? -1 : 1;
+      if (left.linked !== right.linked) return left.linked ? -1 : 1;
+      return left.snapshot.label.localeCompare(right.snapshot.label, undefined, { sensitivity: "base" });
+    })
+    .map((item) => item.snapshot);
+
+  return prioritized.slice(0, 2);
+}
+
+function metricSignalText(snapshot: MetricSnapshot, mode: "positive" | "improvement"): string {
+  const valueText = formatMetricValue(snapshot.value, snapshot.unit);
+  const rangeText = formatRange(snapshot.optimalRange, snapshot.unit);
+
+  if (mode === "positive") {
+    return `${snapshot.label} is a real positive at ${valueText}${rangeText ? `, right in the target window of ${rangeText}` : ""}`;
+  }
+
+  if (!snapshot.optimalRange) {
+    return `${snapshot.label} at ${valueText} is the next area to tighten`;
+  }
+
+  const direction = snapshot.value < snapshot.optimalRange[0] ? "below" : "above";
+  return `${snapshot.label} is ${direction} the target window at ${valueText}${rangeText ? `, with the goal set at ${rangeText}` : ""}`;
+}
+
+function buildTrainingSuggestion(parameters: string[], selectedSignals: MetricSnapshot[]): string {
+  const parameterCanon = new Set(parameters.map((key) => canonicalKey(key)));
+  const matched = DRILL_SUGGESTION_BY_METRIC.find((entry) =>
+    entry.keys.some((key) => parameterCanon.has(canonicalKey(key))),
+  );
+
+  const trackedMetrics = selectedSignals.map((snapshot) => snapshot.label);
+  const trackLine = trackedMetrics.length > 0
+    ? ` Keep an eye on ${trackedMetrics.join(trackedMetrics.length > 1 ? " and " : "")} across your next few sessions so the improvement is measurable.`
+    : "";
+
+  return `${matched?.message || "Build the next training block around the weakest score factor, then recheck the supporting metrics after each session."}${trackLine}`;
+}
+
+function buildPersonalizedCoaching(args: {
+  configKey: string;
+  detectedMovement: string | null | undefined;
+  overallScore: number | null;
+  scoreInputs: ScoreInputsPayload | null;
+  scoreOutputs: ScoreOutputsPayload | null;
+  metricValues: Record<string, number>;
+  preferences: UserMetricPreferences | null;
+}): CoachingPayload {
+  const config = getSportConfig(args.configKey);
+  const movementLabel = titleCase(args.detectedMovement || config?.movementName || "session");
+  const selectedMetricKeys = resolveSelectedMetricKeysForCoaching(args.configKey, args.preferences);
+  const metricSnapshots = buildMetricSnapshotMap(args.configKey, args.metricValues);
+  const factors = extractCoachingFactors(args.scoreInputs, args.scoreOutputs);
+
+  const bestFactor = factors[0] || null;
+  const weakestFactor = factors.length > 0 ? [...factors].sort((a, b) => a.score - b.score)[0] : null;
+
+  const sectionScores = [
+    { label: "Technical", score: Number(args.scoreOutputs?.technical?.overall) },
+    { label: "Tactical", score: Number(args.scoreOutputs?.tactical?.overall) },
+    { label: "Movement", score: Number(args.scoreOutputs?.movement?.overall) },
+  ].filter((entry) => Number.isFinite(entry.score));
+
+  const bestSection = sectionScores.slice().sort((a, b) => b.score - a.score)[0] || null;
+  const weakestSection = sectionScores.slice().sort((a, b) => a.score - b.score)[0] || null;
+
+  const positiveSignals = chooseSignals(bestFactor, selectedMetricKeys, metricSnapshots, "positive");
+  const improvementSignals = chooseSignals(weakestFactor, selectedMetricKeys, metricSnapshots, "improvement");
+
+  const intro = args.overallScore != null && args.overallScore >= 8
+    ? "Excellent work. This session shows high-quality patterns you can trust and build on."
+    : args.overallScore != null && args.overallScore >= 6.5
+      ? "There is a strong base here, and several indicators are moving in the right direction."
+      : "There is still work to do, but this session already shows a few encouraging building blocks.";
+
+  const strengthLines = [intro];
+  if (bestSection && bestFactor) {
+    strengthLines.push(
+      `${bestSection.label} leads this session at ${formatScore10(bestSection.score)}, with ${bestFactor.label} setting the tone at ${formatScore10(bestFactor.score)}.`,
+    );
+  }
+  if (positiveSignals.length > 0) {
+    strengthLines.push(`Shout-out: ${positiveSignals.map((signal) => metricSignalText(signal, "positive")).join("; ")}. These are the indicators to keep owning.`);
+  } else if (bestFactor?.parameters?.length) {
+    strengthLines.push(`Shout-out: the indicators feeding ${bestFactor.label} are giving you a strong platform to build from.`);
+  }
+
+  const improvementLines: string[] = [];
+  if (weakestSection && weakestFactor) {
+    improvementLines.push(
+      `${weakestSection.label} is the clearest opportunity right now at ${formatScore10(weakestSection.score)}, especially ${weakestFactor.label} at ${formatScore10(weakestFactor.score)}.`,
+    );
+  } else {
+    improvementLines.push("The next jump will come from tightening the weakest score factor and the metrics underneath it.");
+  }
+  if (improvementSignals.length > 0) {
+    improvementLines.push(`Priority focus: ${improvementSignals.map((signal) => metricSignalText(signal, "improvement")).join("; ")}.`);
+  } else if (weakestFactor?.parameters?.length) {
+    improvementLines.push(`Focus on the indicators behind ${weakestFactor.label}: ${weakestFactor.parameters.map((key) => titleCase(key)).join(", ")}.`);
+  }
+
+  const trainingSuggestion = buildTrainingSuggestion(weakestFactor?.parameters || [], improvementSignals);
+  const simpleExplanation = `${movementLabel} scored ${formatScore10(args.overallScore)} overall. Your best edge today was ${bestFactor ? `${bestFactor.label} at ${formatScore10(bestFactor.score)}` : "your strongest component"}, and the next gain is in ${weakestFactor ? `${weakestFactor.label} at ${formatScore10(weakestFactor.score)}` : "the weakest component"}.`;
+
+  return {
+    keyStrength: strengthLines.join(" "),
+    improvementArea: improvementLines.join(" "),
+    trainingSuggestion,
+    simpleExplanation,
+  };
+}
+
 function hasAllRequiredUploadDiagnosticsMetrics(metricValues: Record<string, unknown>): boolean {
   for (const key of REQUIRED_UPLOAD_DIAGNOSTIC_METRIC_KEYS) {
     if (!Number.isFinite(Number(metricValues[key]))) {
@@ -426,6 +918,7 @@ function runPythonAnalysis(
   sportName: string,
   movementName: string,
   dominantProfile?: string | null,
+  onProgress?: (event: PipelineProgressEvent) => Promise<void> | void,
 ): Promise<PythonResult> {
   return new Promise((resolve, reject) => {
     const pythonExecutable = resolvePythonExecutable();
@@ -445,40 +938,81 @@ function runPythonAnalysis(
       args.push("--dominant-profile", dominant);
     }
 
-    execFile(
-      pythonExecutable,
-      args,
-      {
-        cwd: PROJECT_ROOT,
-        timeout: 120000,
-        maxBuffer: 10 * 1024 * 1024,
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          console.error("Python analysis error:", error.message);
-          if (stderr) console.error("Python stderr:", stderr);
-          reject(new Error(`Python analysis failed: ${error.message}`));
+    const child = spawn(pythonExecutable, args, {
+      cwd: PROJECT_ROOT,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let stderrBuffer = "";
+    let progressChain = Promise.resolve();
+    let settled = false;
+
+    const timeoutHandle = setTimeout(() => {
+      if (settled) return;
+      child.kill("SIGKILL");
+    }, 3600000);
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on("data", (chunk) => {
+      const text = chunk.toString();
+      stderr += text;
+      stderrBuffer += text;
+
+      const lines = stderrBuffer.split(/\r?\n/);
+      stderrBuffer = lines.pop() || "";
+      for (const line of lines) {
+        const event = parsePipelineProgressLine(line);
+        if (!event || !onProgress) continue;
+        progressChain = progressChain
+          .then(() => Promise.resolve(onProgress(event)))
+          .catch((error) => {
+            console.warn("Pipeline progress update failed:", error);
+          });
+      }
+    });
+
+    child.on("error", (error) => {
+      clearTimeout(timeoutHandle);
+      settled = true;
+      reject(new Error(`Python analysis failed: ${error.message}`));
+    });
+
+    child.on("close", async (code, signal) => {
+      clearTimeout(timeoutHandle);
+      await progressChain;
+      if (settled) return;
+      settled = true;
+
+      if (stderrBuffer) {
+        stderr += stderrBuffer;
+      }
+
+      if (code !== 0) {
+        const suffix = signal ? ` (signal: ${signal})` : "";
+        console.error("Python analysis error:", `exit code ${code}${suffix}`);
+        if (stderr) console.error("Python stderr:", stderr);
+        reject(new Error(`Python analysis failed: exit code ${code ?? "unknown"}${suffix}`));
+        return;
+      }
+
+      try {
+        const result = JSON.parse(stdout.trim());
+        if (result.error) {
+          reject(new Error(result.error));
           return;
         }
-
-        try {
-          const result = JSON.parse(stdout.trim());
-          if (result.error) {
-            reject(new Error(result.error));
-            return;
-          }
-          if (result.rejected) {
-            resolve(result as PythonResult);
-            return;
-          }
-          resolve(result as PythonResult);
-        } catch (parseError) {
-          console.error("Failed to parse Python output:", stdout);
-          if (stderr) console.error("Python stderr:", stderr);
-          reject(new Error("Failed to parse analysis results"));
-        }
-      },
-    );
+        resolve(result as PythonResult);
+      } catch {
+        console.error("Failed to parse Python output:", stdout);
+        if (stderr) console.error("Python stderr:", stderr);
+        reject(new Error("Failed to parse analysis results"));
+      }
+    });
   });
 }
 
@@ -487,6 +1021,7 @@ function runPythonDiagnostics(
   sportName: string,
   movementName: string,
   dominantProfile?: string | null,
+  analysisArtifactPath?: string | null,
 ): Promise<AiDiagnosticsPayload> {
   return new Promise((resolve, reject) => {
     const pythonExecutable = resolvePythonExecutable();
@@ -505,39 +1040,67 @@ function runPythonDiagnostics(
     if (dominant === "right" || dominant === "left") {
       args.push("--dominant-profile", dominant);
     }
+    if (analysisArtifactPath) {
+      args.push("--analysis-artifact", analysisArtifactPath);
+    }
 
-    execFile(
-      pythonExecutable,
-      args,
-      {
-        cwd: PROJECT_ROOT,
-        timeout: 120000,
-        maxBuffer: 10 * 1024 * 1024,
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          if (stderr) console.error("Python diagnostics stderr:", stderr);
-          reject(new Error(`Python diagnostics failed: ${error.message}`));
+    const child = spawn(pythonExecutable, args, {
+      cwd: PROJECT_ROOT,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+
+    const timeoutHandle = setTimeout(() => {
+      if (settled) return;
+      child.kill("SIGKILL");
+    }, 3600000);
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", (error) => {
+      clearTimeout(timeoutHandle);
+      settled = true;
+      reject(new Error(`Python diagnostics failed: ${error.message}`));
+    });
+
+    child.on("close", (code, signal) => {
+      clearTimeout(timeoutHandle);
+      if (settled) return;
+      settled = true;
+
+      if (code !== 0) {
+        if (stderr) console.error("Python diagnostics stderr:", stderr);
+        const suffix = signal ? ` (signal: ${signal})` : "";
+        reject(new Error(`Python diagnostics failed: exit code ${code ?? "unknown"}${suffix}`));
+        return;
+      }
+
+      try {
+        const result = JSON.parse(stdout.trim());
+        if (result?.error) {
+          reject(new Error(result.error));
           return;
         }
-
-        try {
-          const result = JSON.parse(stdout.trim());
-          if (result?.error) {
-            reject(new Error(result.error));
-            return;
-          }
-          resolve(result as AiDiagnosticsPayload);
-        } catch {
-          if (stderr) console.error("Python diagnostics stderr:", stderr);
-          reject(new Error("Failed to parse diagnostics results"));
-        }
-      },
-    );
+        resolve(result as AiDiagnosticsPayload);
+      } catch {
+        if (stderr) console.error("Python diagnostics stderr:", stderr);
+        reject(new Error("Failed to parse diagnostics results"));
+      }
+    });
   });
 }
 
 export async function processAnalysis(analysisId: string): Promise<void> {
+  let pipelineTiming: PipelineTiming | null = null;
   try {
     await db
       .update(analyses)
@@ -579,16 +1142,45 @@ export async function processAnalysis(analysisId: string): Promise<void> {
     }
 
     let dominantProfile: string | null = null;
+    let userMetricPreferences: UserMetricPreferences | null = null;
     if (analysis.userId) {
       const [profile] = await db
-        .select({ dominantProfile: users.dominantProfile })
+        .select({
+          dominantProfile: users.dominantProfile,
+          selectedMetricKeys: users.selectedMetricKeys,
+          selectedMetricKeysBySport: users.selectedMetricKeysBySport,
+        })
         .from(users)
         .where(eq(users.id, analysis.userId))
         .limit(1);
       dominantProfile = profile?.dominantProfile ?? null;
+      userMetricPreferences = {
+        selectedMetricKeys: Array.isArray(profile?.selectedMetricKeys) ? profile.selectedMetricKeys : [],
+        selectedMetricKeysBySport:
+          profile?.selectedMetricKeysBySport && typeof profile.selectedMetricKeysBySport === "object"
+            ? (profile.selectedMetricKeysBySport as Record<string, string[]>)
+            : {},
+      };
     }
 
     await withLocalMediaFile(analysis.videoPath, analysis.videoFilename, async (localVideoPath) => {
+      if (String(sportName || "").trim().toLowerCase() === "tennis") {
+        const tennisUploadGuard = await validateTennisVideoUpload(localVideoPath, dominantProfile);
+        if (!tennisUploadGuard.accepted) {
+          await db
+            .update(analyses)
+            .set({
+              status: "rejected",
+              rejectionReason:
+                tennisUploadGuard.reason
+                || "Only tennis videos are allowed. Upload a clear tennis stroke or rally clip.",
+              ...buildUpdateAuditFields(auditActorUserId),
+            })
+            .where(eq(analyses.id, analysisId));
+          return;
+        }
+      }
+
       const videoContentHash = await computeVideoContentHash(localVideoPath);
       if (videoContentHash) {
         await db
@@ -599,6 +1191,25 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       }
 
       const modelRegistryConfig = readModelRegistryConfig();
+      const initialConfigKey = getConfigKey(sportName, movementName);
+
+      const applyPipelineUpdate = async (
+        update: {
+          stageKey: PipelineStageKey;
+          status: PipelineStageStatus;
+          startedAt?: string | null;
+          completedAt?: string | null;
+          elapsedMs?: number | null;
+          note?: string | null;
+        },
+      ) => {
+        pipelineTiming = await persistPipelineTimingUpdate(analysisId, update, {
+          configKey: initialConfigKey,
+          modelVersion: modelRegistryConfig.activeModelVersion,
+          auditActorUserId,
+          existingTiming: pipelineTiming,
+        });
+      };
 
       const reusablePayload = await findReusableAnalysisPayload(
         analysis,
@@ -650,6 +1261,15 @@ export async function processAnalysis(analysisId: string): Promise<void> {
           metricValues: sanitizedMetricValues,
           overallScore: reusablePayload.overallScore,
         });
+        const reusableCoaching = buildPersonalizedCoaching({
+          configKey: reusablePayload.configKey,
+          detectedMovement: reusablePayload.detectedMovement || movementName,
+          overallScore: reusablePayload.overallScore,
+          scoreInputs: reusableScoreInputs,
+          scoreOutputs: reusableScoreOutputs,
+          metricValues: sanitizedMetricValues,
+          preferences: userMetricPreferences,
+        });
 
         await db.transaction(async (tx) => {
           await tx.delete(coachingInsights).where(eq(coachingInsights.analysisId, analysisId));
@@ -669,7 +1289,7 @@ export async function processAnalysis(analysisId: string): Promise<void> {
 
           await tx.insert(coachingInsights).values({
             analysisId,
-            ...reusablePayload.coaching,
+            ...reusableCoaching,
             ...buildInsertAuditFields(auditActorUserId),
           });
         });
@@ -708,6 +1328,9 @@ export async function processAnalysis(analysisId: string): Promise<void> {
         sportName,
         movementName,
         dominantProfile,
+        async (event) => {
+          await applyPipelineUpdate(event);
+        },
       );
 
       if (result.rejected) {
@@ -758,16 +1381,47 @@ export async function processAnalysis(analysisId: string): Promise<void> {
 
       let diagnosticsPayload: AiDiagnosticsPayload | null = null;
       try {
+        await applyPipelineUpdate({ stageKey: "diagnostics", status: "running" });
+        const diagnosticsStartedAt = Date.now();
         diagnosticsPayload = await runPythonDiagnostics(
           localVideoPath,
           sportName,
           actualMovement,
           dominantProfile,
+          result.analysisArtifactPath,
         );
+        pipelineTiming = updatePipelineTiming(pipelineTiming, {
+          stageKey: "diagnostics",
+          status: "completed",
+          elapsedMs: Date.now() - diagnosticsStartedAt,
+        });
       } catch (diagnosticsError: any) {
+        pipelineTiming = updatePipelineTiming(pipelineTiming, {
+          stageKey: "diagnostics",
+          status: "failed",
+          note: diagnosticsError?.message || String(diagnosticsError),
+        });
         console.warn(
           `Diagnostics generation failed for analysis ${analysisId}: ${diagnosticsError?.message || diagnosticsError}`,
         );
+      } finally {
+        const artifactPath = String(result.analysisArtifactPath || "").trim();
+        if (artifactPath) {
+          try {
+            fs.unlinkSync(artifactPath);
+          } catch (cleanupError) {
+            console.warn(
+              `Failed to remove analysis artifact for ${analysisId}: ${String(cleanupError)}`,
+            );
+          }
+        }
+      }
+
+      if (pipelineTiming) {
+        const diagnosticsRecord = diagnosticsPayload && typeof diagnosticsPayload === "object"
+          ? (diagnosticsPayload as Record<string, unknown>)
+          : {};
+        diagnosticsPayload = attachPipelineTiming(diagnosticsRecord, pipelineTiming) as AiDiagnosticsPayload;
       }
 
       const metricValuesRaw: Record<string, unknown> = { ...result.metricValues };
@@ -797,6 +1451,15 @@ export async function processAnalysis(analysisId: string): Promise<void> {
         metricValues,
         overallScore: persistedOverallScore,
       });
+      const coaching = buildPersonalizedCoaching({
+        configKey: resolvedConfigKey,
+        detectedMovement: actualMovement,
+        overallScore: persistedOverallScore,
+        scoreInputs,
+        scoreOutputs,
+        metricValues,
+        preferences: userMetricPreferences,
+      });
 
       await db.transaction(async (tx) => {
         await tx.delete(coachingInsights).where(eq(coachingInsights.analysisId, analysisId));
@@ -816,7 +1479,7 @@ export async function processAnalysis(analysisId: string): Promise<void> {
 
         await tx.insert(coachingInsights).values({
           analysisId,
-          ...result.coaching,
+          ...coaching,
           ...buildInsertAuditFields(auditActorUserId),
         });
       });
@@ -835,9 +1498,33 @@ export async function processAnalysis(analysisId: string): Promise<void> {
     });
   } catch (error) {
     console.error("Analysis processing error:", error);
+    const failureMessage = error instanceof Error && error.message.trim().length > 0
+      ? error.message.trim()
+      : "Processing failed unexpectedly. Please try again.";
+    const currentTiming = pipelineTiming as PipelineTiming | null;
+    const currentStageKey = currentTiming?.currentStageKey ?? null;
+    if (currentStageKey) {
+      try {
+        pipelineTiming = await persistPipelineTimingUpdate(
+          analysisId,
+          {
+            stageKey: currentStageKey,
+            status: "failed",
+            note: failureMessage,
+          },
+          { existingTiming: currentTiming },
+        );
+      } catch (timingError) {
+        console.warn("Failed to persist pipeline timing failure state:", timingError);
+      }
+    }
     await db
       .update(analyses)
-      .set({ status: "failed", ...buildUpdateAuditFields(null) })
+      .set({
+        status: "failed",
+        rejectionReason: failureMessage,
+        ...buildUpdateAuditFields(null),
+      })
       .where(eq(analyses.id, analysisId));
   }
 }

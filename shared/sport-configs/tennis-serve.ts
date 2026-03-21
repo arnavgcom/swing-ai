@@ -96,12 +96,12 @@ export const tennisServeConfig: SportCategoryConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body balance throughout the service motion",
-      optimalRange: [65, 95],
+      optimalRange: [6.5, 9.5],
     },
     {
       key: "backswingDuration",
@@ -136,12 +136,12 @@ export const tennisServeConfig: SportCategoryConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Smoothness and consistency of the service motion",
-      optimalRange: [65, 95],
+      optimalRange: [6.5, 9.5],
     },
   ],
 };

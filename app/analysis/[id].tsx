@@ -24,10 +24,12 @@ import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useVideoPlayer, VideoView } from "expo-video";
+import { extractPipelineTiming } from "@shared/pipeline-timing";
 import Colors, { sportColors } from "@/constants/colors";
 import {
   fetchAnalysisDetail,
   type AnalysisDetail,
+  type AnalysisSummary,
   fetchAnalysisDiagnostics,
   fetchAnalysisVideoMetadata,
   fetchAnalysisShotAnnotation,
@@ -39,12 +41,16 @@ import {
   saveAnalysisShotAnnotation,
   submitFeedback,
   fetchGhostCorrection,
+  retryAnalysis,
   type GhostCorrectionResponse,
+  type MetricsResponse,
 } from "@/lib/api";
 import { resolveClientMediaUrl } from "@/lib/media";
+import { GlassCard } from "@/components/ui/GlassCard";
 import { ScoreGauge } from "@/components/ScoreGauge";
 import { MetricCard } from "@/components/MetricCard";
 import { CoachingCard } from "@/components/CoachingCard";
+import { PipelineTimingPanel } from "@/components/PipelineTimingPanel";
 import { SwingAnimationTabs } from "@/components/ghost-animation/SwingAnimationTabs";
 import { detectAllCorrections, detectPriorityCorrection } from "@/lib/ghost-correction";
 import { useAuth } from "@/lib/auth-context";
@@ -61,6 +67,36 @@ const PERFORMANCE_SECTION_ORDER: PerformanceSectionKey[] = ["technical", "tactic
 const BACKGROUND_NOTICE_KEY = "swingai_background_processing_notice";
 const BACKGROUND_HANDOFF_MS = 5000;
 const BACKGROUND_REDIRECT_DELAY_MS = 250;
+
+function isInFlightAnalysisStatus(status: string | null | undefined): boolean {
+  return status === "pending" || status === "processing";
+}
+
+function buildMetricsFromSummary(summary: AnalysisSummary): MetricsResponse | null {
+  const configKey = String(summary.configKey || "").trim();
+  const metricValues = summary.metricValues && typeof summary.metricValues === "object"
+    ? summary.metricValues
+    : null;
+  const scoreOutputs = summary.scoreOutputs && typeof summary.scoreOutputs === "object"
+    ? summary.scoreOutputs
+    : null;
+
+  if (!configKey || (!metricValues && !scoreOutputs && summary.overallScore == null)) {
+    return null;
+  }
+
+  return {
+    id: `summary-${summary.id}`,
+    analysisId: summary.id,
+    configKey,
+    modelVersion: summary.modelVersion || undefined,
+    overallScore: summary.overallScore,
+    subScores: summary.subScores || {},
+    metricValues: metricValues || {},
+    scoreOutputs: scoreOutputs || undefined,
+    aiDiagnostics: null,
+  };
+}
 
 function isMphUnit(unit?: string): boolean {
   return String(unit || "").trim().toLowerCase() === "mph";
@@ -94,6 +130,34 @@ const SPORT_MOVEMENT_OPTIONS: Record<string, string[]> = {
 
 function normalizeSelection(value: string): string {
   return String(value || "").trim().toLowerCase();
+}
+
+function formatRequestedSessionTypeLabel(value: string | null | undefined): string | null {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "practice") return "Practice";
+  if (normalized === "match-play") return "Match";
+  return null;
+}
+
+function formatRequestedFocusLabel(
+  value: string | null | undefined,
+  sessionType?: string | null,
+): string | null {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/-+/g, "-");
+  if (!normalized) return null;
+  if (normalized === "game") {
+    return String(sessionType || "").trim().toLowerCase() === "match-play" ? null : "Game";
+  }
+  if (normalized === "auto-detect" || normalized === "autodetect") return null;
+  return normalized
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function toSportPreferenceKey(sportName?: string | null): string {
@@ -512,6 +576,7 @@ export default function AnalysisDetailScreen() {
   const [showAllTactical, setShowAllTactical] = useState(false);
   const [showAllMovement, setShowAllMovement] = useState(false);
   const [showBackgroundHandoffToast, setShowBackgroundHandoffToast] = useState(false);
+  const [pipelineTimingModalVisible, setPipelineTimingModalVisible] = useState(false);
   const scrollRef = useRef<ScrollView | null>(null);
   const handoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -535,7 +600,79 @@ export default function AnalysisDetailScreen() {
     },
   });
 
-  const configKey = data?.metrics?.configKey;
+  const retryMutation = useMutation({
+    mutationFn: retryAnalysis,
+    onSuccess: async (result) => {
+      await AsyncStorage.setItem(BACKGROUND_NOTICE_KEY, "Retry started. Processing will continue in the background.").catch(() => {});
+      await AsyncStorage.setItem("swingai_last_worked_analysis_id", result.analysisId).catch(() => {});
+
+      queryClient.setQueryData<AnalysisDetail | undefined>(["analysis", id], (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          analysis: {
+            ...current.analysis,
+            status: "processing",
+            rejectionReason: null,
+            updatedAt: new Date().toISOString(),
+          },
+        };
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["analysis", id] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (error: Error) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Retry Failed", error.message || "Could not restart analysis.");
+    },
+  });
+
+  const cachedSummary = useMemo(() => {
+    if (!id) return null;
+    const summaryRows = queryClient.getQueryData<AnalysisSummary[]>(["analyses-summary"]);
+    if (!Array.isArray(summaryRows)) return null;
+    return summaryRows.find((item) => item.id === id) || null;
+  }, [id, queryClient]);
+
+  const summaryMetrics = useMemo(
+    () => (cachedSummary ? buildMetricsFromSummary(cachedSummary) : null),
+    [cachedSummary],
+  );
+
+  const analysis = useMemo(() => {
+    if (!data?.analysis) return data?.analysis;
+    if (!cachedSummary) return data.analysis;
+    if (!isInFlightAnalysisStatus(data.analysis.status) || isInFlightAnalysisStatus(cachedSummary.status)) {
+      return data.analysis;
+    }
+
+    return {
+      ...data.analysis,
+      status: cachedSummary.status,
+      detectedMovement: cachedSummary.detectedMovement || data.analysis.detectedMovement,
+      rejectionReason: cachedSummary.rejectionReason || data.analysis.rejectionReason,
+      requestedSessionType: cachedSummary.requestedSessionType ?? data.analysis.requestedSessionType,
+      requestedFocusKey: cachedSummary.requestedFocusKey ?? data.analysis.requestedFocusKey,
+      updatedAt: cachedSummary.updatedAt || data.analysis.updatedAt,
+    };
+  }, [cachedSummary, data?.analysis]);
+
+  const m = useMemo(() => {
+    if (data?.metrics) return data.metrics;
+    if (!data?.analysis || !cachedSummary || !summaryMetrics) return data?.metrics;
+    if (!isInFlightAnalysisStatus(data.analysis.status) || isInFlightAnalysisStatus(cachedSummary.status)) {
+      return data.metrics;
+    }
+    return summaryMetrics;
+  }, [cachedSummary, data?.analysis, data?.metrics, summaryMetrics]);
+
+  const coaching = data?.coaching;
+  const configKey = m?.configKey;
+  const pipelineTiming = useMemo(
+    () => extractPipelineTiming(data?.metrics?.aiDiagnostics),
+    [data?.metrics?.aiDiagnostics],
+  );
 
   const { data: sportConfig } = useQuery({
     queryKey: ["sport-config", configKey],
@@ -599,26 +736,35 @@ export default function AnalysisDetailScreen() {
     return primaryShotId != null ? [primaryShotId] : [];
   }, [diagnostics?.shotSegments, primaryShotId]);
 
-  const { data: ghostData } = useQuery({
+  const { data: ghostData, isLoading: ghostDataLoading, isFetching: ghostDataFetching } = useQuery({
     queryKey: ["analysis", id, "ghost-correction", primaryShotId],
     queryFn: () => fetchGhostCorrection(id!, primaryShotId!),
     enabled: !!id && primaryShotId != null && data?.analysis?.status === "completed",
   });
 
-  const { data: scoringShotSkeletons } = useQuery({
+  const {
+    data: scoringShotSkeletons,
+    isLoading: scoringShotSkeletonsLoading,
+    isFetching: scoringShotSkeletonsFetching,
+  } = useQuery({
     queryKey: ["analysis", id, "skeleton-playback-scoring-shots", scoringShotIds.join(",")],
     queryFn: () => Promise.all(scoringShotIds.map((shotId) => fetchSkeletonPlayback(id!, shotId))),
     enabled: !!id && data?.analysis?.status === "completed" && scoringShotIds.length > 0,
     staleTime: 60 * 1000,
   });
 
+  const ghostMetricValues = useMemo(() => {
+    const source = ghostData?.metricValues ?? m?.metricValues;
+    if (!source || typeof source !== "object") return {} as Record<string, number>;
+    return source as Record<string, number>;
+  }, [ghostData?.metricValues, m?.metricValues]);
+
   const ghostCorrection = useMemo(() => {
-    if (!ghostData || !sportConfig?.metrics) return null;
+    if (!sportConfig?.metrics) return null;
 
-    const metricValues = ghostData.metricValues || {};
-    const fallback = detectPriorityCorrection(metricValues, sportConfig.metrics);
+    const fallback = detectPriorityCorrection(ghostMetricValues, sportConfig.metrics);
 
-    if (!ghostData.correction) {
+    if (!ghostData?.correction) {
       return fallback;
     }
 
@@ -663,13 +809,13 @@ export default function AnalysisDetailScreen() {
           ? ghostData.correction.direction
           : synthesized.direction,
     };
-  }, [ghostData, sportConfig?.metrics]);
+  }, [ghostData?.correction, ghostMetricValues, sportConfig?.metrics]);
 
   const ghostCorrections = useMemo(() => {
-    if (!ghostData || !sportConfig?.metrics) return [];
+    if (!sportConfig?.metrics) return [];
 
-    const all = detectAllCorrections(ghostData.metricValues || {}, sportConfig.metrics);
-    if (!ghostData.correction || all.length <= 1) {
+    const all = detectAllCorrections(ghostMetricValues, sportConfig.metrics);
+    if (!ghostData?.correction || all.length <= 1) {
       return all;
     }
 
@@ -710,7 +856,7 @@ export default function AnalysisDetailScreen() {
       patchedServer,
       ...all.filter((_, index) => index !== serverCorrectionIndex),
     ];
-  }, [ghostData, sportConfig?.metrics]);
+  }, [ghostData?.correction, ghostMetricValues, sportConfig?.metrics]);
 
   const ghostPlayerFrames = useMemo(() => {
     const mergedScoringFrames = (scoringShotSkeletons || [])
@@ -726,6 +872,14 @@ export default function AnalysisDetailScreen() {
     if (!ghostData?.frames?.length) return [];
     return ghostData.frames;
   }, [scoringShotSkeletons, ghostData?.frames]);
+
+  const isGhostAnimationLoading =
+    analysis?.status === "completed"
+    && ghostPlayerFrames.length === 0
+    && (
+      diagnosticsLoading
+      || (primaryShotId != null && (ghostDataLoading || ghostDataFetching || scoringShotSkeletonsLoading || scoringShotSkeletonsFetching))
+    );
 
   const feedbackMutation = useMutation({
     mutationFn: (vars: { rating: "up" | "down"; comment?: string }) =>
@@ -1020,10 +1174,6 @@ export default function AnalysisDetailScreen() {
     !hasSectionSelection || selectedScoreSections.has("movement");
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
-  const analysis = data?.analysis;
-  const m = data?.metrics;
-  const coaching = data?.coaching;
-
   const displayVideoName = useMemo(() => {
     if (analysis?.videoPath) {
       const fromPath = analysis.videoPath.split(/[\\/]/).pop();
@@ -1640,6 +1790,11 @@ export default function AnalysisDetailScreen() {
 
   const selectedMovement = data?.selectedMovementName;
   const detectedMovement = analysis.detectedMovement;
+  const requestedSessionLabel = formatRequestedSessionTypeLabel(analysis.requestedSessionType);
+  const requestedFocusLabel = formatRequestedFocusLabel(
+    analysis.requestedFocusKey,
+    analysis.requestedSessionType,
+  );
   const profileTimeZone = resolveUserTimeZone(user);
   const filenamePlayerName = derivePlayerNameFromVideoName(displayVideoName);
   const headerPlayerNameResolved =
@@ -1652,6 +1807,17 @@ export default function AnalysisDetailScreen() {
     profileTimeZone,
   );
   const topHeaderTitle = `${headerPlayerNameResolved} ${headerDateTime}`;
+  const handleRetryAnalysis = () => {
+    if (retryMutation.isPending) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert("Retry Analysis", `Retry processing for "${analysis.videoFilename}"?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Retry",
+        onPress: () => retryMutation.mutate(analysis.id),
+      },
+    ]);
+  };
   const wasOverridden =
     selectedMovement &&
     detectedMovement &&
@@ -1702,6 +1868,20 @@ export default function AnalysisDetailScreen() {
       {isProcessing ? (
         <View style={[styles.container, styles.center]}>
           <View style={styles.processingCard}>
+            <View style={styles.processingCardHeader}>
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setPipelineTimingModalVisible(true);
+                }}
+                style={({ pressed }) => [
+                  styles.processingInfoButton,
+                  { opacity: pressed ? 0.75 : 1 },
+                ]}
+              >
+                <Ionicons name="information-circle-outline" size={18} color="#CBD5E1" />
+              </Pressable>
+            </View>
             <ActivityIndicator size="large" color={sportThemeColor} />
             <Text style={styles.processingTitle}>
               Analyzing Your {movementLabel}
@@ -1757,23 +1937,55 @@ export default function AnalysisDetailScreen() {
               </Text>
             </View>
           ) : null}
+          <Modal
+            visible={pipelineTimingModalVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setPipelineTimingModalVisible(false)}
+          >
+            <View style={styles.pipelineModalBackdrop}>
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={() => setPipelineTimingModalVisible(false)}
+              />
+              <View style={styles.pipelineModalCard}>
+                <View style={styles.pipelineModalHeader}>
+                  <View style={styles.pipelineModalTitleWrap}>
+                    <Text style={styles.pipelineModalTitle}>Pipeline Timing</Text>
+                    <Text style={styles.pipelineModalSubtitle}>Live processing stages for this analysis</Text>
+                  </View>
+                  <Pressable
+                    onPress={() => setPipelineTimingModalVisible(false)}
+                    style={({ pressed }) => [styles.pipelineModalCloseButton, { opacity: pressed ? 0.75 : 1 }]}
+                  >
+                    <Ionicons name="close" size={18} color="#E2E8F0" />
+                  </Pressable>
+                </View>
+                <PipelineTimingPanel
+                  timing={pipelineTiming}
+                  compact
+                  emptyText="Pipeline timing will appear as soon as processing stages start reporting."
+                />
+              </View>
+            </View>
+          </Modal>
         </View>
       ) : analysis.status === "rejected" ? (
-        <View style={[styles.container, styles.center]}>
+        <View style={styles.rejectedStateWrap}>
           <View style={styles.rejectedIconWrap}>
-            <Ionicons name="warning" size={48} color="#FBBF24" />
+            <Ionicons name="close-circle" size={52} color="#EF4444" />
           </View>
           <Text style={[styles.errorText, { color: colors.text }]}>
             Video Rejected
           </Text>
           <Text style={[styles.rejectionReason, { color: "#94A3B8" }]}>
-            {analysis.rejectionReason || "Video content does not match the selected sport."}
+            This video could not be validated for tennis analysis. Please upload a clear tennis video and try again.
           </Text>
           <Pressable
             onPress={() => router.push("/(tabs)/upload")}
             style={({ pressed }) => [
               styles.tryAgainButton,
-              { backgroundColor: sportThemeColor },
+              styles.rejectedTryAgainButton,
               { opacity: pressed ? 0.8 : 1 },
             ]}
           >
@@ -1790,6 +2002,23 @@ export default function AnalysisDetailScreen() {
           <Text style={[styles.errorSub, { color: "#94A3B8" }]}>
             {analysis.rejectionReason || "Please try uploading the video again"}
           </Text>
+          <Pressable
+            onPress={handleRetryAnalysis}
+            disabled={retryMutation.isPending}
+            style={({ pressed }) => [
+              styles.tryAgainButton,
+              { backgroundColor: sportThemeColor },
+              retryMutation.isPending && styles.tryAgainButtonDisabled,
+              { opacity: pressed ? 0.8 : 1 },
+            ]}
+          >
+            {retryMutation.isPending ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <Ionicons name="refresh" size={18} color="#FFF" />
+            )}
+            <Text style={styles.tryAgainText}>{retryMutation.isPending ? "Retrying..." : "Retry Processing"}</Text>
+          </Pressable>
         </View>
       ) : m ? (
         <ScrollView
@@ -1824,22 +2053,18 @@ export default function AnalysisDetailScreen() {
               </Pressable>
             </View>
             <View style={styles.badgesGroup}>
-              {sportConfig?.sportName && (
-                <View
-                  style={[
-                    styles.sportBadge,
-                    {
-                      backgroundColor: `${sportThemeColor}12`,
-                      borderColor: `${sportThemeColor}30`,
-                    },
-                  ]}
-                >
-                  <Ionicons name="fitness-outline" size={12} color={sportThemeColor} />
-                  <Text style={[styles.sportBadgeText, { color: sportThemeColor }]}> 
-                    {sportConfig.sportName}
-                  </Text>
+              {requestedSessionLabel ? (
+                <View style={styles.requestedSessionBadge}>
+                  <Ionicons name="albums-outline" size={12} color="#93C5FD" />
+                  <Text style={styles.requestedSessionBadgeText}>{requestedSessionLabel}</Text>
                 </View>
-              )}
+              ) : null}
+              {requestedFocusLabel ? (
+                <View style={styles.requestedFocusBadge}>
+                  <Ionicons name="locate-outline" size={12} color="#C4B5FD" />
+                  <Text style={styles.requestedFocusBadgeText}>{requestedFocusLabel}</Text>
+                </View>
+              ) : null}
               {(detectedMovement || sportConfig?.movementName) && (
                 <View style={styles.categoryBadge}>
                   <Ionicons name="flash-outline" size={12} color="#34D399" />
@@ -2263,14 +2488,26 @@ export default function AnalysisDetailScreen() {
             </View>
           ) : null}
 
-          {ghostCorrection && ghostPlayerFrames.length > 0 && (
+          {ghostCorrection && ghostPlayerFrames.length > 0 ? (
             <SwingAnimationTabs
               playerFrames={ghostPlayerFrames}
               correction={ghostCorrection}
               corrections={ghostCorrections}
               accentColor={sportThemeColor}
             />
-          )}
+          ) : isGhostAnimationLoading ? (
+            <GlassCard style={styles.ghostLoadingCard}>
+              <View style={styles.ghostLoadingContent}>
+                <ActivityIndicator size="small" color={sportThemeColor} />
+                <View style={styles.ghostLoadingTextWrap}>
+                  <Text style={styles.ghostLoadingTitle}>Loading swing animation</Text>
+                  <Text style={styles.ghostLoadingSubtitle}>
+                    Fetching skeleton frames for the Performance Metrics view.
+                  </Text>
+                </View>
+              </View>
+            </GlassCard>
+          ) : null}
 
           {effectiveCoaching && (
             <View style={styles.coachingSection}>
@@ -2722,6 +2959,38 @@ const styles = StyleSheet.create({
   sportBadgeText: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
+  },
+  requestedSessionBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "#93C5FD12",
+    borderWidth: 1,
+    borderColor: "#93C5FD30",
+  },
+  requestedSessionBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#93C5FD",
+  },
+  requestedFocusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "#C4B5FD12",
+    borderWidth: 1,
+    borderColor: "#C4B5FD30",
+  },
+  requestedFocusBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#C4B5FD",
   },
   categoryBadge: {
     flexDirection: "row",
@@ -3603,6 +3872,52 @@ const styles = StyleSheet.create({
     gap: 14,
     width: "100%",
   },
+  ghostLoadingCard: {
+    width: "100%",
+    alignSelf: "stretch",
+    marginHorizontal: 0,
+    marginVertical: 12,
+  },
+  ghostLoadingContent: {
+    minHeight: 132,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+  },
+  ghostLoadingTextWrap: {
+    flex: 1,
+    gap: 4,
+  },
+  ghostLoadingTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
+  },
+  ghostLoadingSubtitle: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  processingCardHeader: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginBottom: -6,
+  },
+  processingInfoButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#0F172A",
+  },
   processingTitle: {
     fontSize: 20,
     fontFamily: "Inter_700Bold",
@@ -3643,6 +3958,51 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     color: "#DBEAFE",
   },
+  pipelineModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(2, 6, 23, 0.68)",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  pipelineModalCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#111827",
+    padding: 18,
+    gap: 14,
+  },
+  pipelineModalHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  pipelineModalTitleWrap: {
+    flex: 1,
+    gap: 4,
+  },
+  pipelineModalTitle: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+  },
+  pipelineModalSubtitle: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  pipelineModalCloseButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#15152D",
+  },
   stepRow: {
     flexDirection: "row",
     fontSize: 12,
@@ -3672,28 +4032,31 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 4,
   },
-  rejectedIconWrap: {
-    width: 80,
-    lineHeight: 14,
-  },
-  tenMoreText: {
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
-    color: "#60A5FA",
-    letterSpacing: 0.2,
-    borderRadius: 40,
-    backgroundColor: "#FBBF2414",
+  rejectedStateWrap: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
+    paddingHorizontal: 24,
+    paddingBottom: 96,
+  },
+  rejectedIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#EF444418",
+    borderWidth: 1,
+    borderColor: "#EF444438",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
   },
   rejectionReason: {
     fontSize: 15,
     fontFamily: "Inter_400Regular",
     marginTop: 8,
     textAlign: "center",
-    paddingHorizontal: 32,
     lineHeight: 22,
+    maxWidth: 360,
   },
   tryAgainButton: {
     flexDirection: "row",
@@ -3704,6 +4067,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 14,
     marginTop: 24,
+  },
+  rejectedTryAgainButton: {
+    backgroundColor: "#16A34A",
+  },
+  tryAgainButtonDisabled: {
+    backgroundColor: "#4C4A68",
   },
   tryAgainText: {
     color: "#FFF",

@@ -11,7 +11,7 @@ export type MetricDefinition = {
 
 const CANONICAL_25_METRICS: MetricDefinition[] = [
   { key: "backswingDuration", label: "Backswing Duration", unit: "s", icon: "time-outline", category: "technique", color: "#60A5FA", description: "Time spent in backswing phase." },
-  { key: "balanceScore", label: "Balance Score", unit: "/100", icon: "body-outline", category: "biomechanics", color: "#FBBF24", description: "Stability through setup and strike." },
+  { key: "balanceScore", label: "Balance Score", unit: "/10", icon: "body-outline", category: "biomechanics", color: "#FBBF24", description: "Stability through setup and strike." },
   { key: "ballSpeed", label: "Ball Speed", unit: "mph", icon: "speedometer-outline", category: "power", color: "#34D399", description: "Average outgoing ball speed." },
   { key: "contactDistance", label: "Contact Distance", unit: "ratio", icon: "resize-outline", category: "technique", color: "#60A5FA", description: "Contact spacing relative to shoulder width." },
   { key: "contactHeight", label: "Contact Height", unit: "m", icon: "resize-outline", category: "technique", color: "#A78BFA", description: "Average contact point height." },
@@ -23,10 +23,10 @@ const CANONICAL_25_METRICS: MetricDefinition[] = [
   { key: "racketLagAngle", label: "Racket Lag Angle", unit: "deg", icon: "flash-outline", category: "technique", color: "#FBBF24", description: "Lag angle proxy during acceleration." },
   { key: "reactionTime", label: "Reaction Time", unit: "ms", icon: "timer-outline", category: "timing", color: "#F87171", description: "Time-to-react metric from movement onset." },
   { key: "recoveryTime", label: "Recovery Time", unit: "s", icon: "refresh-outline", category: "movement", color: "#34D399", description: "Time to recover after stroke." },
-  { key: "rhythmConsistency", label: "Rhythm Consistency", unit: "%", icon: "musical-notes-outline", category: "timing", color: "#A78BFA", description: "Temporal consistency across reps." },
+  { key: "rhythmConsistency", label: "Rhythm Consistency", unit: "/10", icon: "musical-notes-outline", category: "timing", color: "#A78BFA", description: "Temporal consistency across reps." },
   { key: "shoulderRotation", label: "Shoulder Rotation", unit: "deg", icon: "repeat-outline", category: "biomechanics", color: "#60A5FA", description: "Shoulder turn amount." },
   { key: "shoulderRotationSpeed", label: "Shoulder Rotation Speed", unit: "deg/s", icon: "repeat-outline", category: "biomechanics", color: "#60A5FA", description: "Shoulder angular speed." },
-  { key: "shotConsistency", label: "Shot Consistency", unit: "%", icon: "stats-chart-outline", category: "technique", color: "#34D399", description: "Consistency across detected shots." },
+  { key: "shotConsistency", label: "Shot Consistency", unit: "/10", icon: "stats-chart-outline", category: "technique", color: "#34D399", description: "Consistency across detected shots." },
   { key: "shotCount", label: "Shot Count", unit: "count", icon: "list-outline", category: "movement", color: "#A78BFA", description: "Number of detected shots." },
   { key: "shotSpeed", label: "Shot Speed", unit: "mph", icon: "speedometer-outline", category: "power", color: "#34D399", description: "Average shot speed metric." },
   { key: "spinRate", label: "Spin Rate", unit: "rpm", icon: "disc-outline", category: "technique", color: "#A78BFA", description: "Estimated spin generation." },

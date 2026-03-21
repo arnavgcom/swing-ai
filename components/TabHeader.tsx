@@ -10,7 +10,11 @@ import { sportColors } from "@/constants/colors";
 import { ds } from "@/constants/design-system";
 import { resolveClientMediaUrl } from "@/lib/media";
 
-export function TabHeader() {
+type TabHeaderProps = {
+  rightContent?: React.ReactNode;
+};
+
+export function TabHeader({ rightContent }: TabHeaderProps) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { selectedSport } = useSport();
@@ -41,20 +45,7 @@ export function TabHeader() {
           <Ionicons name="person" size={16} color={sc.primary} />
         )}
       </Pressable>
-
-      <Pressable
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/sport-select");
-        }}
-        style={[styles.iconCircle, { borderColor: sc.primary + "40" }]}
-      >
-        <Ionicons
-          name={(selectedSport?.icon as any) || "fitness-outline"}
-          size={18}
-          color={sc.primary}
-        />
-      </Pressable>
+      {rightContent ? <View style={styles.rightSlot}>{rightContent}</View> : null}
     </View>
   );
 }
@@ -66,6 +57,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: ds.space.xl,
     paddingBottom: ds.space.sm,
+  },
+  rightSlot: {
+    flexShrink: 1,
+    alignItems: "flex-end",
+    marginLeft: ds.space.md,
   },
   iconCircle: {
     width: 40,

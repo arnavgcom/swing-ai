@@ -66,12 +66,12 @@ export const golfIronConfig: SportCategoryConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Weight transfer and stability",
-      optimalRange: [70, 98],
+      optimalRange: [7, 9.8],
     },
     {
       key: "tempoRatio",
@@ -106,12 +106,12 @@ export const golfIronConfig: SportCategoryConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "consistency",
       color: "#6C5CE7",
       description: "Swing rhythm consistency",
-      optimalRange: [65, 95],
+      optimalRange: [6.5, 9.5],
     },
   ],
 };

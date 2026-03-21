@@ -66,12 +66,12 @@ export const golfPuttConfig: SportCategoryConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability — no swaying or weight shift",
-      optimalRange: [80, 98],
+      optimalRange: [8, 9.8],
     },
     {
       key: "tempoRatio",
@@ -86,12 +86,12 @@ export const golfPuttConfig: SportCategoryConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "consistency",
       color: "#6C5CE7",
       description: "Smoothness and consistency of stroke tempo",
-      optimalRange: [75, 98],
+      optimalRange: [7.5, 9.8],
     },
   ],
 };

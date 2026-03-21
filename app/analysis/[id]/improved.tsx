@@ -21,7 +21,7 @@ import {
 import { ScoreGauge } from "@/components/ScoreGauge";
 import { MetricCard } from "@/components/MetricCard";
 import { CoachingCard } from "@/components/CoachingCard";
-import Colors, { sportColors } from "@/constants/colors";
+import Colors from "@/constants/colors";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
   isImprovedTennisEnabled,
@@ -306,8 +306,6 @@ export default function ImprovedTennisAnalysisScreen() {
     );
   }
 
-  const sportThemeColor = sportColors.Tennis.primary;
-
   return (
     <View style={styles.container}>
       <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
@@ -329,10 +327,6 @@ export default function ImprovedTennisAnalysisScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.badgesRow}>
-          <View style={[styles.badge, { borderColor: `${sportThemeColor}44`, backgroundColor: `${sportThemeColor}18` }]}>
-            <Ionicons name="fitness-outline" size={12} color={sportThemeColor} />
-            <Text style={[styles.badgeText, { color: sportThemeColor }]}>Tennis</Text>
-          </View>
           <View style={styles.badgeNeutral}>
             <Ionicons name="flash-outline" size={12} color="#34D399" />
             <Text style={styles.badgeTextNeutral}>{toTitleCase(report?.stroke || "forehand")}</Text>

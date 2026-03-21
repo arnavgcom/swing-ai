@@ -15,12 +15,10 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
-import { useSport } from "@/lib/sport-context";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login, register } = useAuth();
-  const { setSport, setMovement } = useSport();
 
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -52,9 +50,7 @@ export default function LoginScreen() {
         await login(email.trim(), password);
       }
 
-      setSport(null);
-      setMovement(null);
-      router.replace("/sport-select");
+      router.replace("/");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

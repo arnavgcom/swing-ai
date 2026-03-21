@@ -7,6 +7,10 @@ import path from "path";
 import fs from "fs";
 import { db } from "./db";
 import { users, registerSchema, loginSchema, type User } from "@shared/schema";
+import {
+  DEFAULT_SELECTED_METRIC_KEYS,
+  DEFAULT_SELECTED_SCORE_SECTIONS,
+} from "@shared/default-user-preferences";
 import { eq, or, sql } from "drizzle-orm";
 import { resolveMediaUrl, storeAvatarBuffer } from "./media-storage";
 import { buildInsertAuditFields, buildUpdateAuditFields } from "./audit-metadata";
@@ -79,6 +83,9 @@ export async function setupAuth(app: Express) {
   await db.execute(
     sql`alter table users add column if not exists selected_metric_keys_by_sport jsonb default '{}'::jsonb`,
   );
+  await db.execute(
+    sql`alter table users alter column role set default 'admin'`,
+  );
 
   app.use(
     session({
@@ -125,6 +132,9 @@ export async function setupAuth(app: Express) {
           email: email.toLowerCase(),
           name,
           passwordHash,
+          role: "admin",
+          selectedScoreSections: [...DEFAULT_SELECTED_SCORE_SECTIONS],
+          selectedMetricKeys: [...DEFAULT_SELECTED_METRIC_KEYS],
           ...buildInsertAuditFields(null),
         })
         .returning();
@@ -176,6 +186,8 @@ export async function setupAuth(app: Express) {
           passwordHash,
           role: "player",
           country: requester.country || null,
+          selectedScoreSections: [...DEFAULT_SELECTED_SCORE_SECTIONS],
+          selectedMetricKeys: [...DEFAULT_SELECTED_METRIC_KEYS],
           ...buildInsertAuditFields(requester.id),
         })
         .returning();
@@ -340,6 +352,9 @@ export async function setupAuth(app: Express) {
           passwordHash,
           avatarUrl: googleUser.picture || null,
           country: "Singapore",
+          role: "admin",
+          selectedScoreSections: [...DEFAULT_SELECTED_SCORE_SECTIONS],
+          selectedMetricKeys: [...DEFAULT_SELECTED_METRIC_KEYS],
           ...buildInsertAuditFields(null),
         })
         .returning();

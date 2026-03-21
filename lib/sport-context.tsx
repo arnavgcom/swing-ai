@@ -33,8 +33,15 @@ const SportContext = createContext<SportContextType>({
 const SPORT_KEY = "swingai_selected_sport";
 const MOVEMENT_KEY = "swingai_selected_movement";
 
+const TENNIS_SPORT: SelectedSport = {
+  id: "tennis",
+  name: "Tennis",
+  icon: "tennisball-outline",
+  color: "#10B981",
+};
+
 export function SportProvider({ children }: { children: React.ReactNode }) {
-  const [selectedSport, setSelectedSport] = useState<SelectedSport | null>(null);
+  const [selectedSport, setSelectedSport] = useState<SelectedSport | null>(TENNIS_SPORT);
   const [selectedMovement, setSelectedMovement] = useState<SelectedMovement | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -44,10 +51,10 @@ export function SportProvider({ children }: { children: React.ReactNode }) {
 
   const loadSaved = async () => {
     try {
-      const sportJson = await AsyncStorage.getItem(SPORT_KEY);
-      const movementJson = await AsyncStorage.getItem(MOVEMENT_KEY);
-      if (sportJson) setSelectedSport(JSON.parse(sportJson));
-      if (movementJson) setSelectedMovement(JSON.parse(movementJson));
+      await AsyncStorage.setItem(SPORT_KEY, JSON.stringify(TENNIS_SPORT));
+      await AsyncStorage.removeItem(MOVEMENT_KEY);
+      setSelectedSport(TENNIS_SPORT);
+      setSelectedMovement(null);
     } catch (e) {
     } finally {
       setIsLoading(false);
@@ -55,23 +62,16 @@ export function SportProvider({ children }: { children: React.ReactNode }) {
   };
 
   const setSport = useCallback((sport: SelectedSport | null) => {
-    setSelectedSport(sport);
+    const nextSport = sport && sport.name === TENNIS_SPORT.name ? { ...TENNIS_SPORT, ...sport } : TENNIS_SPORT;
+    setSelectedSport(nextSport);
     setSelectedMovement(null);
-    if (sport) {
-      AsyncStorage.setItem(SPORT_KEY, JSON.stringify(sport));
-    } else {
-      AsyncStorage.removeItem(SPORT_KEY);
-    }
+    AsyncStorage.setItem(SPORT_KEY, JSON.stringify(nextSport));
     AsyncStorage.removeItem(MOVEMENT_KEY);
   }, []);
 
-  const setMovement = useCallback((movement: SelectedMovement | null) => {
-    setSelectedMovement(movement);
-    if (movement) {
-      AsyncStorage.setItem(MOVEMENT_KEY, JSON.stringify(movement));
-    } else {
-      AsyncStorage.removeItem(MOVEMENT_KEY);
-    }
+  const setMovement = useCallback((_movement: SelectedMovement | null) => {
+    setSelectedMovement(null);
+    AsyncStorage.removeItem(MOVEMENT_KEY);
   }, []);
 
   return (

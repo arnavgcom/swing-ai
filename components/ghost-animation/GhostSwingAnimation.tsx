@@ -517,6 +517,7 @@ export function GhostSwingAnimation({
                     landmarks={correctedLandmarks}
                     width={CANVAS_WIDTH}
                     height={CANVAS_HEIGHT}
+                    splitMode
                   />
                 )}
               </Svg>

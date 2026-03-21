@@ -66,12 +66,12 @@ export const tabletennisServeConfig: SportCategoryConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#A78BFA",
       description: "Consistency of serve motion tempo and timing",
-      optimalRange: [65, 95],
+      optimalRange: [6.5, 9.5],
     },
   ],
 };

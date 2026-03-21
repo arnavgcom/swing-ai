@@ -59,16 +59,16 @@ Clean, standardized reference for all sport categories.
 |-----|-------|------|----------|---------------|
 | wristSpeed | Wrist Speed | m/s | biomechanics | 25 - 40 |
 | elbowAngle | Elbow Angle | deg | biomechanics | 120 - 160 |
-| shoulderRotation | Torso Rotation | deg/s | biomechanics | 500 - 900 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 500 - 900 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
 | ballSpeed | Ball Speed | mph | ball | 55 - 100 |
 | trajectoryArc | Trajectory Arc | deg | ball | 8 - 25 |
 | spinRate | Spin Rate | rpm | ball | 800 - 2800 |
-| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| shotConsistency | Consistency | /10 | consistency | 7 - 9.8 |
 | backswingDuration | Backswing | s | timing | 0.3 - 0.7 |
 | contactTiming | Contact Timing | s | timing | 0.02 - 0.08 |
 | followThroughDuration | Follow-through | s | timing | 0.4 - 1 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 | contactHeight | Contact Height | m | technique | 0.85 - 1.1 |
 
 ### Scores (Ordered)
@@ -158,16 +158,16 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 |-----|-------|------|----------|---------------|
 | wristSpeed | Wrist Speed | m/s | biomechanics | 20 - 35 |
 | elbowAngle | Elbow Angle | deg | biomechanics | 110 - 155 |
-| shoulderRotation | Torso Rotation | deg/s | biomechanics | 400 - 800 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 400 - 800 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
 | ballSpeed | Ball Speed | mph | ball | 45 - 90 |
 | trajectoryArc | Trajectory Arc | deg | ball | 8 - 22 |
 | spinRate | Spin Rate | rpm | ball | 700 - 2500 |
-| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| shotConsistency | Consistency | /10 | consistency | 7 - 9.8 |
 | backswingDuration | Backswing | s | timing | 0.3 - 0.8 |
 | contactTiming | Contact Timing | s | timing | 0.02 - 0.08 |
 | followThroughDuration | Follow-through | s | timing | 0.4 - 1 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 | contactHeight | Contact Height | m | technique | 0.8 - 1.05 |
 
 ### Scores (Ordered)
@@ -256,18 +256,18 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | Key | Label | Unit | Category | Optimal Range |
 |-----|-------|------|----------|---------------|
 | wristSpeed | Wrist Speed | m/s | biomechanics | 30 - 50 |
-| shoulderRotation | Torso Rotation | deg/s | biomechanics | 600 - 1100 |
+| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 600 - 1100 |
 | tossHeight | Toss Height | m | technique | 0.3 - 0.8 |
 | trophyAngle | Trophy Position | deg | technique | 80 - 110 |
 | pronation | Pronation | deg/s | technique | 400 - 900 |
 | ballSpeed | Serve Speed | mph | ball | 70 - 130 |
 | trajectoryArc | Trajectory Arc | deg | ball | 3 - 15 |
 | spinRate | Spin Rate | rpm | ball | 1000 - 3500 |
-| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
+| balanceScore | Balance | /10 | biomechanics | 6.5 - 9.5 |
 | backswingDuration | Wind-up | s | timing | 0.8 - 1.5 |
 | contactTiming | Contact Timing | s | timing | 0.02 - 0.06 |
 | contactHeight | Contact Height | m | technique | 2.2 - 2.8 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -352,12 +352,12 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | racketPrep | Racket Prep | /100 | technique | 70 - 98 |
 | wristFirmness | Wrist Firmness | /100 | technique | 75 - 98 |
 | splitStepTiming | Split Step | s | timing | 0.1 - 0.4 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
 | contactHeight | Contact Height | m | technique | 0.8 - 1.5 |
 | stepForward | Step Forward | /100 | biomechanics | 60 - 95 |
 | ballSpeed | Ball Speed | mph | ball | 30 - 70 |
-| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| shotConsistency | Consistency | /10 | consistency | 7 - 9.8 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -441,10 +441,10 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | recoverySpeed | Recovery Speed | m/s | biomechanics | 2 - 5 |
 | avgBallSpeed | Avg Ball Speed | mph | ball | 50 - 90 |
 | shotVariety | Shot Variety | /100 | technique | 50 - 90 |
-| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
+| balanceScore | Balance | /10 | biomechanics | 6.5 - 9.5 |
 | rallyLength | Rally Length | shots | consistency | 4 - 12 |
-| shotConsistency | Consistency | /100 | consistency | 65 - 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 60 - 90 |
+| shotConsistency | Consistency | /10 | consistency | 6.5 - 9.5 |
+| rhythmConsistency | Rhythm | /10 | timing | 6 - 9 |
 
 ### Scores (Ordered)
 
@@ -529,13 +529,13 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | shoulderRotation | Shoulder Turn | deg | biomechanics | 75 - 100 |
 | xFactor | X-Factor | deg | biomechanics | 30 - 50 |
 | spineAngle | Spine Angle | deg | technique | 25 - 40 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
 | tempoRatio | Tempo Ratio | :1 | timing | 2.5 - 3.5 |
 | backswingDuration | Backswing | s | timing | 0.7 - 1.2 |
 | downswingDuration | Downswing | s | timing | 0.2 - 0.4 |
 | followThroughDuration | Follow-through | s | timing | 0.5 - 1 |
 | headStability | Head Stability | /100 | technique | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | consistency | 65 - 95 |
+| rhythmConsistency | Rhythm | /10 | consistency | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -621,11 +621,11 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | shoulderRotation | Shoulder Turn | deg | biomechanics | 70 - 95 |
 | spineAngle | Spine Angle | deg | technique | 28 - 42 |
 | divotAngle | Divot Angle | deg | technique | -5 - -1 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
 | tempoRatio | Tempo Ratio | :1 | timing | 2.5 - 3.5 |
 | backswingDuration | Backswing | s | timing | 0.6 - 1.1 |
 | headStability | Head Stability | /100 | technique | 75 - 98 |
-| rhythmConsistency | Rhythm | /100 | consistency | 65 - 95 |
+| rhythmConsistency | Rhythm | /10 | consistency | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -708,12 +708,12 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 |-----|-------|------|----------|---------------|
 | wristHinge | Wrist Hinge | deg | technique | 5 - 20 |
 | armPendulum | Arm Pendulum | /100 | technique | 75 - 98 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
 | headStability | Head Stability | /100 | technique | 80 - 98 |
 | strokeLength | Stroke Length | /100 | technique | 60 - 90 |
 | contactQuality | Contact Quality | /100 | technique | 70 - 98 |
 | followThroughRatio | Follow-through | /100 | timing | 70 - 95 |
-| rhythmConsistency | Rhythm | /100 | consistency | 70 - 95 |
+| rhythmConsistency | Rhythm | /10 | consistency | 7 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -798,9 +798,9 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | eyeLine | Eye Line | /100 | technique | 75 - 98 |
 | strokeLength | Stroke Length | /100 | technique | 70 - 95 |
 | wristStability | Wrist Stability | /100 | technique | 80 - 98 |
-| balanceScore | Balance | /100 | biomechanics | 80 - 98 |
+| balanceScore | Balance | /10 | biomechanics | 8 - 9.8 |
 | tempoRatio | Tempo | :1 | timing | 0.8 - 1.2 |
-| rhythmConsistency | Rhythm | /100 | consistency | 75 - 98 |
+| rhythmConsistency | Rhythm | /10 | consistency | 7.5 - 9.8 |
 
 ### Scores (Ordered)
 
@@ -885,11 +885,11 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | shoulderRotation | Shoulder Turn | deg | biomechanics | 75 - 100 |
 | xFactor | X-Factor | deg | biomechanics | 30 - 50 |
 | spineAngle | Spine Angle | deg | technique | 25 - 40 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
 | tempoRatio | Tempo Ratio | :1 | timing | 2.5 - 3.5 |
 | backswingDuration | Backswing | s | timing | 0.7 - 1.2 |
 | headStability | Head Stability | /100 | technique | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | consistency | 65 - 95 |
+| rhythmConsistency | Rhythm | /10 | consistency | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -973,10 +973,10 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | racketSpeed | Racket Speed | m/s | power | 25 - 45 |
 | shuttleSpeed | Shuttle Speed | mph | ball | 80 - 150 |
 | trajectoryHeight | Trajectory Height | m | ball | 5 - 10 |
-| shoulderRotation | Torso Rotation | deg/s | biomechanics | 500 - 900 |
+| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 500 - 900 |
 | footworkScore | Footwork | /100 | biomechanics | 65 - 95 |
-| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| balanceScore | Balance | /10 | biomechanics | 6.5 - 9.5 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -1063,7 +1063,7 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | contactHeight | Contact Height | m | technique | 2.5 - 3.2 |
 | wristSnap | Wrist Snap | deg/s | technique | 400 - 800 |
 | bodyRotation | Body Rotation | deg/s | biomechanics | 500 - 1000 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -1148,8 +1148,8 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | deceptionScore | Deception | /100 | technique | 65 - 95 |
 | netClearance | Net Clearance | cm | ball | 2 - 15 |
 | racketAngle | Racket Angle | deg | technique | 20 - 45 |
-| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| shotConsistency | Consistency | /10 | consistency | 7 - 9.8 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -1232,10 +1232,10 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 |-----|-------|------|----------|---------------|
 | racketControl | Racket Control | /100 | technique | 70 - 98 |
 | wristFinesse | Wrist Finesse | /100 | technique | 70 - 98 |
-| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
+| balanceScore | Balance | /10 | biomechanics | 6.5 - 9.5 |
 | footworkScore | Footwork | /100 | biomechanics | 65 - 95 |
-| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| shotConsistency | Consistency | /10 | consistency | 7 - 9.8 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -1319,8 +1319,8 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | racketAngle | Racket Angle | deg | technique | 15 - 40 |
 | shuttleSpeed | Shuttle Speed | mph | ball | 30 - 100 |
 | placementScore | Placement | /100 | ball | 70 - 98 |
-| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| shotConsistency | Consistency | /10 | consistency | 7 - 9.8 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -1402,12 +1402,12 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 |-----|-------|------|----------|---------------|
 | wristSpeed | Wrist Speed | m/s | biomechanics | 18 - 32 |
 | elbowAngle | Elbow Angle | deg | biomechanics | 110 - 150 |
-| shoulderRotation | Torso Rotation | deg/s | biomechanics | 400 - 800 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 400 - 800 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
 | ballSpeed | Ball Speed | mph | ball | 40 - 80 |
 | wallPlayScore | Wall Play | /100 | technique | 60 - 95 |
-| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| shotConsistency | Consistency | /10 | consistency | 7 - 9.8 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 | contactHeight | Contact Height | m | technique | 0.7 - 1.1 |
 
 ### Scores (Ordered)
@@ -1491,11 +1491,11 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 |-----|-------|------|----------|---------------|
 | wristSpeed | Wrist Speed | m/s | biomechanics | 15 - 28 |
 | elbowAngle | Elbow Angle | deg | biomechanics | 100 - 145 |
-| shoulderRotation | Torso Rotation | deg/s | biomechanics | 350 - 750 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 350 - 750 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
 | ballSpeed | Ball Speed | mph | ball | 35 - 70 |
-| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| shotConsistency | Consistency | /10 | consistency | 7 - 9.8 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 | contactHeight | Contact Height | m | technique | 0.6 - 1.05 |
 
 ### Scores (Ordered)
@@ -1579,9 +1579,9 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | paddleAngle | Paddle Angle | deg | technique | 15 - 45 |
 | ballSpeed | Ball Speed | mph | ball | 30 - 60 |
 | placementScore | Placement | /100 | technique | 65 - 98 |
-| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| shotConsistency | Consistency | /10 | consistency | 7 - 9.8 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -1662,12 +1662,12 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | Key | Label | Unit | Category | Optimal Range |
 |-----|-------|------|----------|---------------|
 | wristSpeed | Wrist Speed | m/s | biomechanics | 22 - 38 |
-| shoulderRotation | Torso Rotation | deg/s | biomechanics | 500 - 900 |
+| shoulderRotation | Shoulder Rotation | deg/s | biomechanics | 500 - 900 |
 | jumpHeight | Jump Height | m | power | 0.1 - 0.5 |
 | ballSpeed | Ball Speed | mph | ball | 50 - 90 |
 | contactHeight | Contact Height | m | technique | 2 - 3 |
-| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 60 - 92 |
+| balanceScore | Balance | /10 | biomechanics | 6.5 - 9.5 |
+| rhythmConsistency | Rhythm | /10 | timing | 6 - 9.2 |
 
 ### Scores (Ordered)
 
@@ -1752,9 +1752,9 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | ballSpeed | Ball Speed | mph | ball | 25 - 55 |
 | wristControl | Wrist Control | /100 | technique | 70 - 98 |
 | contactHeight | Contact Height | m | technique | 1.8 - 2.8 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
-| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
+| shotConsistency | Consistency | /10 | consistency | 7 - 9.8 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -1838,9 +1838,9 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | softTouch | Soft Touch | /100 | technique | 70 - 98 |
 | wristStability | Wrist Stability | /100 | biomechanics | 75 - 98 |
 | arcHeight | Arc Height | m | ball | 0.05 - 0.3 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
-| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
+| shotConsistency | Consistency | /10 | consistency | 7 - 9.8 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -1925,9 +1925,9 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | bodyRotation | Body Rotation | deg/s | biomechanics | 300 - 700 |
 | ballSpeed | Ball Speed | mph | ball | 35 - 65 |
 | trajectoryAngle | Trajectory | deg | ball | 2 - 12 |
-| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
-| shotConsistency | Consistency | /100 | consistency | 65 - 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 60 - 90 |
+| balanceScore | Balance | /10 | biomechanics | 6.5 - 9.5 |
+| shotConsistency | Consistency | /10 | consistency | 6.5 - 9.5 |
+| rhythmConsistency | Rhythm | /10 | timing | 6 - 9 |
 
 ### Scores (Ordered)
 
@@ -2011,8 +2011,8 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | tossConsistency | Toss Consistency | /100 | technique | 70 - 98 |
 | ballSpeed | Ball Speed | mph | ball | 25 - 50 |
 | placement | Placement | /100 | ball | 65 - 95 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -2096,10 +2096,10 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | reactionSpeed | Reaction Speed | ms | timing | 120 - 300 |
 | paddlePrep | Paddle Prep | /100 | technique | 70 - 98 |
 | wristFirmness | Wrist Firmness | /100 | technique | 75 - 98 |
-| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
+| balanceScore | Balance | /10 | biomechanics | 6.5 - 9.5 |
 | ballSpeed | Ball Speed | mph | ball | 20 - 50 |
-| shotConsistency | Consistency | /100 | consistency | 65 - 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 60 - 90 |
+| shotConsistency | Consistency | /10 | consistency | 6.5 - 9.5 |
+| rhythmConsistency | Rhythm | /10 | timing | 6 - 9 |
 
 ### Scores (Ordered)
 
@@ -2183,9 +2183,9 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | arcHeight | Arc Height | m | ball | 0.1 - 0.4 |
 | softTouch | Soft Touch | /100 | technique | 70 - 98 |
 | paddleAngle | Paddle Angle | deg | technique | 30 - 55 |
-| shotConsistency | Consistency | /100 | consistency | 65 - 95 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| shotConsistency | Consistency | /10 | consistency | 6.5 - 9.5 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -2271,8 +2271,8 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | spinRate | Spin Rate | rpm | ball | 2000 - 5000 |
 | footworkScore | Footwork | /100 | biomechanics | 65 - 95 |
 | bodyRotation | Body Rotation | deg/s | biomechanics | 200 - 500 |
-| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| shotConsistency | Consistency | /10 | consistency | 7 - 9.8 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -2356,9 +2356,9 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | batSpeed | Bat Speed | m/s | power | 6 - 15 |
 | timingScore | Timing | /100 | timing | 70 - 98 |
 | batAngle | Bat Angle | deg | technique | 30 - 70 |
-| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| shotConsistency | Consistency | /10 | consistency | 7 - 9.8 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -2443,7 +2443,7 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | ballSpeed | Ball Speed | mph | ball | 15 - 40 |
 | tossHeight | Toss Height | cm | technique | 16 - 30 |
 | placementScore | Placement | /100 | technique | 65 - 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 
@@ -2528,8 +2528,8 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | bodyRotation | Body Rotation | deg/s | biomechanics | 250 - 600 |
 | spinRate | Spin Rate | rpm | ball | 3000 - 6000 |
 | contactPoint | Contact Point | /100 | technique | 65 - 95 |
-| balanceScore | Balance | /100 | biomechanics | 65 - 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 60 - 92 |
+| balanceScore | Balance | /10 | biomechanics | 6.5 - 9.5 |
+| rhythmConsistency | Rhythm | /10 | timing | 6 - 9.2 |
 
 ### Scores (Ordered)
 
@@ -2610,11 +2610,11 @@ Note: `consistency` is excluded from standardized tactical sub-scores.
 | Key | Label | Unit | Category | Optimal Range |
 |-----|-------|------|----------|---------------|
 | batAngle | Bat Angle | deg | technique | 40 - 75 |
-| shotConsistency | Consistency | /100 | consistency | 70 - 98 |
+| shotConsistency | Consistency | /10 | consistency | 7 - 9.8 |
 | spinRate | Spin Rate | rpm | ball | 1500 - 4000 |
-| balanceScore | Balance | /100 | biomechanics | 70 - 98 |
+| balanceScore | Balance | /10 | biomechanics | 7 - 9.8 |
 | footworkScore | Footwork | /100 | biomechanics | 65 - 95 |
-| rhythmConsistency | Rhythm | /100 | timing | 65 - 95 |
+| rhythmConsistency | Rhythm | /10 | timing | 6.5 - 9.5 |
 
 ### Scores (Ordered)
 

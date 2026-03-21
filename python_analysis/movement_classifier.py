@@ -20,6 +20,72 @@ MIN_SWING_ARC_RACQUET = 0.05
 MIN_WRIST_SPEED_GOLF = 0.04
 MIN_SWING_ARC_GOLF = 0.03
 
+TENNIS_MIN_PROMINENT_FRAME_RATIO = 0.12
+TENNIS_MIN_MEDIAN_BODY_AREA_RATIO = 0.014
+TENNIS_MIN_LARGE_BODY_AREA_RATIO = 0.028
+TENNIS_MIN_DISTANT_MEDIAN_BODY_AREA_RATIO = 0.006
+TENNIS_MIN_DISTANT_P75_BODY_AREA_RATIO = 0.0075
+TENNIS_MIN_DISTANT_MAX_BODY_AREA_RATIO = 0.012
+
+
+def _compute_body_presence_metrics(
+    pose_data: List[Optional[Dict]],
+    frame_width: int,
+    frame_height: int,
+) -> Dict[str, float]:
+    if frame_width <= 0 or frame_height <= 0:
+        return {
+            "median_area_ratio": 0.0,
+            "p75_area_ratio": 0.0,
+            "max_area_ratio": 0.0,
+            "prominent_frame_ratio": 0.0,
+        }
+
+    frame_area = float(frame_width * frame_height)
+    area_ratios: List[float] = []
+    prominent_frames = 0
+    valid_frames = 0
+
+    for pose in pose_data:
+        if pose is None:
+            continue
+
+        visible_points = []
+        for landmark in pose.values():
+            if landmark and landmark.get("visibility", 0) > 0.45:
+                visible_points.append((float(landmark["x"]), float(landmark["y"])))
+
+        if len(visible_points) < 6:
+            continue
+
+        valid_frames += 1
+        xs = [point[0] for point in visible_points]
+        ys = [point[1] for point in visible_points]
+        width = max(xs) - min(xs)
+        height = max(ys) - min(ys)
+        if width <= 0 or height <= 0:
+            continue
+
+        area_ratio = (width * height) / frame_area
+        area_ratios.append(area_ratio)
+        if area_ratio >= TENNIS_MIN_LARGE_BODY_AREA_RATIO:
+            prominent_frames += 1
+
+    if not area_ratios or valid_frames == 0:
+        return {
+            "median_area_ratio": 0.0,
+            "p75_area_ratio": 0.0,
+            "max_area_ratio": 0.0,
+            "prominent_frame_ratio": 0.0,
+        }
+
+    return {
+        "median_area_ratio": float(np.median(area_ratios)),
+        "p75_area_ratio": float(np.percentile(area_ratios, 75)),
+        "max_area_ratio": float(np.max(area_ratios)),
+        "prominent_frame_ratio": float(prominent_frames) / float(valid_frames),
+    }
+
 
 def validate_sport_match(
     pose_data: List[Optional[Dict]],
@@ -73,6 +139,60 @@ def validate_sport_match(
     sport_label = sport
     if sport in ("tabletennis",):
         sport_label = "table tennis"
+
+    if sport == "tennis":
+        body_presence = _compute_body_presence_metrics(pose_data, frame_width, frame_height)
+        if bg_features is None or not bg_features.get("sufficient", False):
+            return {
+                "valid": False,
+                "reason": "A tennis court was not clearly detected. Upload a video where the player is visible on an actual tennis court.",
+                "confidence": 0.0,
+            }
+
+        green = float(bg_features.get("green_ratio", 0.0))
+        brown = float(bg_features.get("brown_ratio", 0.0))
+        blue = float(bg_features.get("blue_ratio", 0.0))
+        white = float(bg_features.get("white_ratio", 0.0))
+        court_lines = bool(bg_features.get("court_lines_detected", False))
+        has_line_supported_palette = green > 0.05 or blue > 0.05 or brown > 0.12
+        has_strong_line_evidence = court_lines and white > 0.008 and has_line_supported_palette
+        has_hard_court_colors = (green > 0.12 or blue > 0.12) and white > 0.008
+        has_clay_court_colors = brown > 0.18 and has_strong_line_evidence
+        has_court_colors = has_hard_court_colors or has_clay_court_colors
+        has_distant_player_presence = (
+            body_presence["median_area_ratio"] >= TENNIS_MIN_DISTANT_MEDIAN_BODY_AREA_RATIO
+            and body_presence["p75_area_ratio"] >= TENNIS_MIN_DISTANT_P75_BODY_AREA_RATIO
+            and body_presence["max_area_ratio"] >= TENNIS_MIN_DISTANT_MAX_BODY_AREA_RATIO
+        )
+        has_close_player_presence = (
+            body_presence["median_area_ratio"] >= TENNIS_MIN_MEDIAN_BODY_AREA_RATIO
+            and body_presence["prominent_frame_ratio"] >= TENNIS_MIN_PROMINENT_FRAME_RATIO
+        )
+
+        if not has_court_colors and not has_strong_line_evidence:
+            return {
+                "valid": False,
+                "reason": "A tennis court was not clearly detected. Upload a video where the player is visible on an actual tennis court.",
+                "confidence": 0.0,
+            }
+
+        if not has_close_player_presence:
+            # Allow genuine full-court tennis clips when court-line evidence is strong
+            # and the player remains consistently detectable, even if they occupy less
+            # of the frame than close-up training videos.
+            if not (has_strong_line_evidence and has_distant_player_presence):
+                return {
+                    "valid": False,
+                    "reason": "A clearly visible player was not detected on court. TV screens, distant players, and tiny figures are not allowed.",
+                    "confidence": 0.0,
+                }
+
+        if body_presence["prominent_frame_ratio"] < 0.2 and not has_strong_line_evidence:
+            return {
+                "valid": False,
+                "reason": "The player appears too small or too far away to confirm an on-court tennis video. Upload a closer tennis-court video.",
+                "confidence": 0.0,
+            }
 
     if sport in RACQUET_SPORTS:
         if features["max_wrist_speed"] < MIN_WRIST_SPEED_RACQUET and features["swing_arc_ratio"] < MIN_SWING_ARC_RACQUET:

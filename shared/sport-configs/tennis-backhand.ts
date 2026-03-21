@@ -46,12 +46,12 @@ export const tennisBackhandConfig: SportCategoryConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Weight transfer stability during the backhand stroke",
-      optimalRange: [70, 98],
+      optimalRange: [7, 9.8],
     },
     {
       key: "ballSpeed",
@@ -86,12 +86,12 @@ export const tennisBackhandConfig: SportCategoryConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Stroke repeatability across frames",
-      optimalRange: [70, 98],
+      optimalRange: [7, 9.8],
     },
     {
       key: "backswingDuration",
@@ -126,12 +126,12 @@ export const tennisBackhandConfig: SportCategoryConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Swing rhythm smoothness",
-      optimalRange: [65, 95],
+      optimalRange: [6.5, 9.5],
     },
     {
       key: "contactHeight",

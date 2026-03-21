@@ -983,7 +983,6 @@ export default function DashboardScreen() {
     selectedTrendSessions,
   ]);
 
-  const isAutoDetectMode = !selectedMovement?.name;
   const selectedPlayerLabel =
     selectedPlayerId === "all"
       ? "All"
@@ -1043,48 +1042,21 @@ export default function DashboardScreen() {
                   color={sc.primary}
                 />
               </Pressable>
-            ) : (
+            ) : null}
+            {selectedMovement?.name ? (
               <View
-                style={[
-                  styles.playerDropdown,
-                  styles.playerDropdownReadonly,
-                  {
-                    borderColor: `${sc.primary}55`,
-                    backgroundColor: `${sc.primary}12`,
-                  },
-                ]}
-              >
-                <Ionicons name="people" size={15} color={sc.primary} />
-                <Text style={[styles.playerDropdownText, { color: sc.primary }]} numberOfLines={1}>
-                  {playerFilterLabel}
-                </Text>
-              </View>
-            )}
-            {selectedSport?.name && (
-              <View
-                style={[
-                  styles.movementBadge,
-                  isAutoDetectMode && {
-                    backgroundColor: `${sc.primary}12`,
-                    borderColor: `${sc.primary}30`,
-                  },
-                ]}
+                style={styles.movementBadge}
               >
                 <Ionicons
                   name="flash-outline"
                   size={11}
-                  color={isAutoDetectMode ? sc.primary : "#34D399"}
+                  color="#34D399"
                 />
-                <Text
-                  style={[
-                    styles.movementBadgeText,
-                    isAutoDetectMode && { color: sc.primary },
-                  ]}
-                >
+                <Text style={styles.movementBadgeText}>
                   {formatMovementBadgeLabel(selectedMovement?.name)}
                 </Text>
               </View>
-            )}
+            ) : null}
           </View>
         </View>
 

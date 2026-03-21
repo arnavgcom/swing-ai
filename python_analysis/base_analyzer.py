@@ -18,6 +18,7 @@ class BaseAnalyzer(ABC):
         self,
         video_path: str,
         include_frame_ranges: Optional[List[Tuple[int, int]]] = None,
+        precomputed_pose_data: Optional[List[Optional[Dict]]] = None,
     ) -> Dict:
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
@@ -32,6 +33,7 @@ class BaseAnalyzer(ABC):
         pose_data: List[Optional[Dict]] = []
         frame_idx = 0
         analyzed_frames = 0
+        self.ball_tracker.reset()
 
         normalized_ranges: Optional[List[Tuple[int, int]]] = None
         if include_frame_ranges:
@@ -61,7 +63,10 @@ class BaseAnalyzer(ABC):
                     frame_idx += 1
                     continue
 
-            landmarks = self.pose_detector.detect(frame)
+            if precomputed_pose_data is not None and 0 <= frame_idx < len(precomputed_pose_data):
+                landmarks = precomputed_pose_data[frame_idx]
+            else:
+                landmarks = self.pose_detector.detect(frame)
             pose_data.append(landmarks)
 
             self.ball_tracker.detect(frame, frame_idx)

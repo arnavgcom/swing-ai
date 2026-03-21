@@ -20,24 +20,18 @@ import { apiRequest } from "@/lib/query-client";
 import { fetchSportConfig } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
+import { DEFAULT_SELECTED_METRIC_KEYS, DEFAULT_SELECTED_SCORE_SECTIONS } from "@shared/default-user-preferences";
 import {
   buildMetricOptionsWithCatalog,
   getCanonical25MetricOptions,
   normalizeMetricSelectionKey,
 } from "@/lib/metrics-catalog";
 
-const SCORE_SECTION_OPTIONS = [
-  "Technical (Biomechanics)",
-  "Tactical",
-  "Movement",
-];
+const SCORE_SECTION_OPTIONS = [...DEFAULT_SELECTED_SCORE_SECTIONS];
 
-const DEFAULT_SELECTED_METRIC_KEYS = [
-  "ballSpeed",
-  "shoulderRotation",
-  "spinRate",
-  "kneeBendAngle",
-].map((key) => normalizeMetricSelectionKey(key));
+const DEFAULT_SELECTED_METRIC_SELECTION_KEYS = DEFAULT_SELECTED_METRIC_KEYS.map((key) =>
+  normalizeMetricSelectionKey(key),
+);
 
 const LEGACY_SECTION_LABEL_MAP: Record<string, string> = {
   "performance breakdown": "Tactical",
@@ -249,7 +243,7 @@ export default function ScoreMetricsSelectionScreen() {
                 .filter((item) => item.length > 0),
             ),
           )
-        : DEFAULT_SELECTED_METRIC_KEYS,
+        : DEFAULT_SELECTED_METRIC_SELECTION_KEYS,
     );
   }, [selectedSportKey, user]);
 

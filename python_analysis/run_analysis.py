@@ -3,7 +3,40 @@ import sys
 import json
 import argparse
 import traceback
-from typing import Dict, List
+import os
+import time
+from datetime import datetime, timezone
+from typing import Any, Dict, List
+
+from python_analysis.analysis_artifact import save_analysis_artifact
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _emit_pipeline_timing(
+    stage_key: str,
+    status: str,
+    started_at: str | None = None,
+    completed_at: str | None = None,
+    elapsed_ms: int | None = None,
+    note: str | None = None,
+) -> None:
+    payload = {
+        "type": "pipeline_timing",
+        "stageKey": stage_key,
+        "status": status,
+    }
+    if started_at:
+        payload["startedAt"] = started_at
+    if completed_at:
+        payload["completedAt"] = completed_at
+    if elapsed_ms is not None:
+        payload["elapsedMs"] = int(elapsed_ms)
+    if note:
+        payload["note"] = note
+    print(json.dumps(payload), file=sys.stderr, flush=True)
 
 
 def _has_strong_backhand_evidence(reasons: List[str]) -> bool:
@@ -156,6 +189,7 @@ def main():
             classify_segment_movement_with_diagnostics,
             validate_sport_match,
             _segment_swings,
+            _extract_features,
         )
         from python_analysis.background_analyzer import analyze_background
         from python_analysis.sports.registry import get_analyzer
@@ -167,7 +201,14 @@ def main():
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         cap.release()
+
+        file_size_bytes = os.path.getsize(args.video_path) if os.path.exists(args.video_path) else 0
+        duration_seconds = (total_frames / fps) if fps > 0 and total_frames > 0 else 0.0
+        sample_step = max(1, total_frames // 30) if total_frames > 0 else 1
+        sampled_brightness: List[float] = []
+        sampled_blur: List[float] = []
 
         detected_movement = movement
         movement_overridden = False
@@ -175,15 +216,39 @@ def main():
         detector = PoseDetector()
         cap2 = cv2.VideoCapture(args.video_path)
         pose_data = []
+        full_pose_landmarks_per_frame: List[List[Dict[str, Any]]] = []
+        frame_index = 0
+        first_pose_started_at = _utc_now_iso()
+        first_pose_started_perf = time.perf_counter()
+        _emit_pipeline_timing("firstPosePass", "running", started_at=first_pose_started_at)
         while True:
             ret, frame = cap2.read()
             if not ret:
                 break
-            landmarks = detector.detect(frame)
+            if frame_index % sample_step == 0:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                sampled_brightness.append(float(gray.mean()))
+                sampled_blur.append(float(cv2.Laplacian(gray, cv2.CV_64F).var()))
+            landmarks, full_landmarks = detector.detect_with_skeleton(frame)
             pose_data.append(landmarks)
+            full_pose_landmarks_per_frame.append(full_landmarks)
+            frame_index += 1
         cap2.release()
         detector.close()
+        _emit_pipeline_timing(
+            "firstPosePass",
+            "completed",
+            started_at=first_pose_started_at,
+            completed_at=_utc_now_iso(),
+            elapsed_ms=round((time.perf_counter() - first_pose_started_perf) * 1000),
+        )
 
+        avg_brightness = float(sum(sampled_brightness) / len(sampled_brightness)) if sampled_brightness else 0.0
+        avg_blur = float(sum(sampled_blur) / len(sampled_blur)) if sampled_blur else 0.0
+
+        classification_started_at = _utc_now_iso()
+        classification_started_perf = time.perf_counter()
+        _emit_pipeline_timing("classificationValidation", "running", started_at=classification_started_at)
         bg_features = analyze_background(args.video_path, pose_data)
 
         validation = validate_sport_match(
@@ -192,6 +257,14 @@ def main():
         )
 
         if not validation["valid"]:
+            _emit_pipeline_timing(
+                "classificationValidation",
+                "completed",
+                started_at=classification_started_at,
+                completed_at=_utc_now_iso(),
+                elapsed_ms=round((time.perf_counter() - classification_started_perf) * 1000),
+                note=validation["reason"],
+            )
             print(json.dumps({
                 "rejected": True,
                 "rejectionReason": validation["reason"],
@@ -228,6 +301,27 @@ def main():
             diag["startFrame"] = start
             diag["endFrame"] = end
             diag["validPoseFrames"] = valid_count
+            segment_features = _extract_features(
+                segment,
+                fps,
+                frame_width,
+                frame_height,
+                preferred_dominant_side,
+            )
+            diag["classificationDebug"] = {
+                "dominantSide": segment_features.get("dominant_side"),
+                "isCrossBody": bool(segment_features.get("is_cross_body", False)),
+                "isServe": bool(segment_features.get("is_serve", False)),
+                "isCompactForward": bool(segment_features.get("is_compact_forward", False)),
+                "isOverhead": bool(segment_features.get("is_overhead", False)),
+                "isDownwardMotion": bool(segment_features.get("is_downward_motion", False)),
+                "maxWristSpeed": round(float(segment_features.get("max_wrist_speed", 0.0)), 4),
+                "rightWristSpeed": round(float(segment_features.get("max_rw_speed", 0.0)), 4),
+                "leftWristSpeed": round(float(segment_features.get("max_lw_speed", 0.0)), 4),
+                "swingArcRatio": round(float(segment_features.get("swing_arc_ratio", 0.0)), 4),
+                "contactHeightRatio": round(float(segment_features.get("contact_height_ratio", 0.0)), 4),
+                "reasons": list(diag.get("reasons", [])),
+            }
             shot_label_diagnostics.append(diag)
 
         target_drill_label = movement if movement in ("forehand", "backhand") else ""
@@ -351,6 +445,14 @@ def main():
         min_scoring_frames = max(5, int(len(pose_data) * 0.05))
         use_shot_window_scoring = scored_frames >= min_scoring_frames and len(scored_shot_ranges) > 0
 
+        _emit_pipeline_timing(
+            "classificationValidation",
+            "completed",
+            started_at=classification_started_at,
+            completed_at=_utc_now_iso(),
+            elapsed_ms=round((time.perf_counter() - classification_started_perf) * 1000),
+        )
+
         if movement_overridden:
             actual_config_key = f"{sport}-{detected_movement}"
         else:
@@ -363,11 +465,22 @@ def main():
             detected_movement = movement
             movement_overridden = False
 
+        second_pose_started_at = _utc_now_iso()
+        second_pose_started_perf = time.perf_counter()
+        _emit_pipeline_timing("secondPosePass", "running", started_at=second_pose_started_at)
         result = analyzer.analyze_video(
             args.video_path,
             include_frame_ranges=scored_shot_ranges if use_shot_window_scoring else None,
+            precomputed_pose_data=pose_data,
         )
         analyzer.close()
+        _emit_pipeline_timing(
+            "secondPosePass",
+            "completed",
+            started_at=second_pose_started_at,
+            completed_at=_utc_now_iso(),
+            elapsed_ms=round((time.perf_counter() - second_pose_started_perf) * 1000),
+        )
 
         metric_values = result.get("metricValues")
         if isinstance(metric_values, dict):
@@ -398,6 +511,57 @@ def main():
         result["frameRangesUsedForScoring"] = scored_shot_ranges if use_shot_window_scoring else []
         result["idleTimeExcluded"] = bool(use_shot_window_scoring)
         result["shotLabelDiagnostics"] = shot_label_diagnostics
+
+        shot_segments = []
+        for idx, (start, end) in enumerate(shot_ranges, 1):
+            diag = next((d for d in shot_label_diagnostics if int(d.get("shotIndex", -1)) == idx), None)
+            segment_label = str(diag.get("label", "unknown")) if diag is not None else "unknown"
+            shot_segments.append(
+                {
+                    "index": idx,
+                    "startFrame": int(start),
+                    "endFrame": int(end),
+                    "label": segment_label,
+                    "rawLabel": diag.get("rawLabel") if diag is not None else None,
+                    "confidence": float(diag.get("confidence", 0.0)) if diag is not None else 0.0,
+                    "frames": int(end - start + 1),
+                    "validPoseFrames": int(diag.get("validPoseFrames", 0)) if diag is not None else 0,
+                    "includedForScoring": any(start == rng_start and end == rng_end for rng_start, rng_end in scored_shot_ranges),
+                    "classificationDebug": (diag.get("classificationDebug") if diag is not None else None) or {
+                        "reasons": list(diag.get("reasons", [])) if diag is not None else [],
+                    },
+                }
+            )
+
+        movement_counts: Dict[str, int] = {}
+        for shot in shot_segments:
+            label = str(shot.get("label", "unknown"))
+            if label == "unknown":
+                continue
+            movement_counts[label] = movement_counts.get(label, 0) + 1
+
+        artifact_path = save_analysis_artifact(
+            {
+                "videoPath": args.video_path,
+                "videoId": os.path.basename(args.video_path),
+                "fps": float(fps),
+                "frameWidth": int(frame_width),
+                "frameHeight": int(frame_height),
+                "totalFrames": int(total_frames if total_frames > 0 else len(pose_data)),
+                "durationSec": float(duration_seconds),
+                "fileSizeBytes": int(file_size_bytes),
+                "avgBrightness": float(avg_brightness),
+                "avgBlur": float(avg_blur),
+                "poseData": pose_data,
+                "fullPoseLandmarksPerFrame": full_pose_landmarks_per_frame,
+                "validation": validation,
+                "shotCount": int(shot_count),
+                "shotSegments": shot_segments,
+                "movementTypeCounts": movement_counts,
+                "detectedMovement": detected_movement,
+            }
+        )
+        result["analysisArtifactPath"] = artifact_path
 
         print(json.dumps(result))
         sys.exit(0)

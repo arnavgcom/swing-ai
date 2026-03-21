@@ -7,6 +7,7 @@ from collections import Counter
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+from python_analysis.analysis_artifact import load_analysis_artifact
 from python_analysis.skeleton_store import build_skeleton_dataset
 
 
@@ -800,6 +801,7 @@ def main():
     parser.add_argument("--sport", default="tennis", help="Sport name")
     parser.add_argument("--movement", default="forehand", help="Movement name")
     parser.add_argument("--dominant-profile", default="", help="Player dominant side: right or left")
+    parser.add_argument("--analysis-artifact", default="", help="Path to shared analysis artifact")
     args = parser.parse_args()
 
     sport = args.sport.lower().replace(" ", "").replace("_", "")
@@ -821,50 +823,220 @@ def main():
 
         if not os.path.exists(args.video_path):
             raise FileNotFoundError(f"Video does not exist: {args.video_path}")
+        artifact = load_analysis_artifact(args.analysis_artifact) if args.analysis_artifact else None
 
-        file_size_bytes = os.path.getsize(args.video_path)
+        if artifact:
+            file_size_bytes = int(artifact.get("fileSizeBytes") or os.path.getsize(args.video_path))
+            fps = float(artifact.get("fps") or 30.0)
+            frame_width = int(artifact.get("frameWidth") or 0)
+            frame_height = int(artifact.get("frameHeight") or 0)
+            total_frames = int(artifact.get("totalFrames") or 0)
+            duration_seconds = float(
+                artifact.get("durationSec")
+                or ((total_frames / fps) if fps > 0 and total_frames > 0 else 0.0)
+            )
+            avg_brightness = float(artifact.get("avgBrightness") or 0.0)
+            avg_blur = float(artifact.get("avgBlur") or 0.0)
+            pose_data = list(artifact.get("poseData") or [])
+            full_pose_landmarks_per_frame = list(artifact.get("fullPoseLandmarksPerFrame") or [])
+            validation = dict(artifact.get("validation") or {})
+            shot_segments = list(artifact.get("shotSegments") or [])
+            shot_count = int(artifact.get("shotCount") or len(shot_segments))
+            dominant_movement = str(artifact.get("detectedMovement") or movement)
+        else:
+            file_size_bytes = os.path.getsize(args.video_path)
 
-        cap = cv2.VideoCapture(args.video_path)
-        if not cap.isOpened():
-            raise ValueError(f"Cannot open video: {args.video_path}")
+            cap = cv2.VideoCapture(args.video_path)
+            if not cap.isOpened():
+                raise ValueError(f"Cannot open video: {args.video_path}")
 
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
-        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-        duration_seconds = (total_frames / fps) if fps > 0 and total_frames > 0 else 0.0
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+            frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+            frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            duration_seconds = (total_frames / fps) if fps > 0 and total_frames > 0 else 0.0
 
-        sampled_brightness: List[float] = []
-        sampled_blur: List[float] = []
-        sample_step = max(1, total_frames // 30) if total_frames > 0 else 1
-        frame_index = 0
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            if frame_index % sample_step == 0:
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                sampled_brightness.append(float(gray.mean()))
-                sampled_blur.append(float(cv2.Laplacian(gray, cv2.CV_64F).var()))
-            frame_index += 1
-        cap.release()
+            sampled_brightness: List[float] = []
+            sampled_blur: List[float] = []
+            sample_step = max(1, total_frames // 30) if total_frames > 0 else 1
+            frame_index = 0
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                if frame_index % sample_step == 0:
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    sampled_brightness.append(float(gray.mean()))
+                    sampled_blur.append(float(cv2.Laplacian(gray, cv2.CV_64F).var()))
+                frame_index += 1
+            cap.release()
 
-        avg_brightness = float(sum(sampled_brightness) / len(sampled_brightness)) if sampled_brightness else 0.0
-        avg_blur = float(sum(sampled_blur) / len(sampled_blur)) if sampled_blur else 0.0
+            avg_brightness = float(sum(sampled_brightness) / len(sampled_brightness)) if sampled_brightness else 0.0
+            avg_blur = float(sum(sampled_blur) / len(sampled_blur)) if sampled_blur else 0.0
 
-        detector = PoseDetector()
-        cap2 = cv2.VideoCapture(args.video_path)
-        pose_data: List[Optional[Dict]] = []
-        full_pose_landmarks_per_frame: List[List[Dict[str, Any]]] = []
-        while True:
-            ret, frame = cap2.read()
-            if not ret:
-                break
-            landmarks, full_landmarks = detector.detect_with_skeleton(frame)
-            pose_data.append(landmarks)
-            full_pose_landmarks_per_frame.append(full_landmarks)
-        cap2.release()
-        detector.close()
+            detector = PoseDetector()
+            cap2 = cv2.VideoCapture(args.video_path)
+            pose_data: List[Optional[Dict]] = []
+            full_pose_landmarks_per_frame: List[List[Dict[str, Any]]] = []
+            while True:
+                ret, frame = cap2.read()
+                if not ret:
+                    break
+                landmarks, full_landmarks = detector.detect_with_skeleton(frame)
+                pose_data.append(landmarks)
+                full_pose_landmarks_per_frame.append(full_landmarks)
+            cap2.release()
+            detector.close()
+
+            validation = validate_sport_match(
+                pose_data,
+                sport,
+                fps,
+                frame_width,
+                frame_height,
+                bg_features=None,
+            )
+
+            dominant_movement, shot_count = classify_movement(
+                pose_data,
+                sport,
+                fps,
+                frame_width,
+                frame_height,
+                preferred_dominant_side,
+            )
+
+            segments = _segment_swings(pose_data, fps, frame_width, frame_height)
+            shot_segments = []
+
+            for seg_idx, (start, end) in enumerate(segments):
+                segment_data = pose_data[start : end + 1]
+                valid_segment = [p for p in segment_data if p is not None]
+                if len(valid_segment) < 3:
+                    shot_segments.append(
+                        {
+                            "index": seg_idx + 1,
+                            "startFrame": int(start),
+                            "endFrame": int(end),
+                            "label": "unknown",
+                            "frames": len(segment_data),
+                            "includedForScoring": False,
+                        }
+                    )
+                    continue
+
+                cls = classify_segment_movement(
+                    segment_data,
+                    sport,
+                    fps,
+                    frame_width,
+                    frame_height,
+                    preferred_dominant_side,
+                )
+                diag = classify_segment_movement_with_diagnostics(
+                    segment_data,
+                    sport,
+                    fps,
+                    frame_width,
+                    frame_height,
+                    preferred_dominant_side,
+                )
+                cls = str(diag.get("label", cls))
+                segment_features = _extract_features(
+                    segment_data,
+                    fps,
+                    frame_width,
+                    frame_height,
+                    preferred_dominant_side,
+                )
+                shot_segments.append(
+                    {
+                        "index": seg_idx + 1,
+                        "startFrame": int(start),
+                        "endFrame": int(end),
+                        "label": cls,
+                        "rawLabel": cls,
+                        "confidence": float(diag.get("confidence", 0.0)),
+                        "frames": len(segment_data),
+                        "includedForScoring": False,
+                        "classificationDebug": {
+                            "dominantSide": segment_features.get("dominant_side"),
+                            "isCrossBody": bool(segment_features.get("is_cross_body", False)),
+                            "isServe": bool(segment_features.get("is_serve", False)),
+                            "isCompactForward": bool(segment_features.get("is_compact_forward", False)),
+                            "isOverhead": bool(segment_features.get("is_overhead", False)),
+                            "isDownwardMotion": bool(segment_features.get("is_downward_motion", False)),
+                            "maxWristSpeed": round(float(segment_features.get("max_wrist_speed", 0.0)), 4),
+                            "rightWristSpeed": round(float(segment_features.get("max_rw_speed", 0.0)), 4),
+                            "leftWristSpeed": round(float(segment_features.get("max_lw_speed", 0.0)), 4),
+                            "swingArcRatio": round(float(segment_features.get("swing_arc_ratio", 0.0)), 4),
+                            "contactHeightRatio": round(float(segment_features.get("contact_height_ratio", 0.0)), 4),
+                            "reasons": list(diag.get("reasons", [])),
+                        },
+                    }
+                )
+
+            target_drill_label = movement if movement in ("forehand", "backhand") else ""
+
+            if sport == "tennis" and target_drill_label in ("forehand", "backhand"):
+                opposite = "backhand" if target_drill_label == "forehand" else "forehand"
+                labeled_strokes = [
+                    str(s.get("label", "unknown"))
+                    for s in shot_segments
+                    if str(s.get("label", "unknown")) in ("forehand", "backhand")
+                ]
+                target_count = sum(1 for label in labeled_strokes if label == target_drill_label)
+                opposite_count = sum(1 for label in labeled_strokes if label == opposite)
+                total_labeled = len(labeled_strokes)
+                target_ratio = (target_count / max(total_labeled, 1)) if total_labeled else 0.0
+                opposite_confident = [
+                    s for s in shot_segments
+                    if str(s.get("label", "unknown")) == opposite and float(s.get("confidence", 0.0)) >= 0.90
+                ]
+
+                should_normalize = (
+                    total_labeled >= 6
+                    and target_ratio >= 0.65
+                    and opposite_count <= 2
+                    and len(opposite_confident) == 0
+                )
+
+                if should_normalize:
+                    for s in shot_segments:
+                        if str(s.get("label", "unknown")) == opposite:
+                            s["label"] = target_drill_label
+                            dbg = s.get("classificationDebug", {})
+                            reasons = list(dbg.get("reasons", []))
+                            reasons.append("drill_prior_normalized")
+                            dbg["reasons"] = reasons
+                            s["classificationDebug"] = dbg
+
+                if total_labeled <= 4:
+                    for i, s in enumerate(shot_segments):
+                        if i not in (0, len(shot_segments) - 1):
+                            continue
+                        label = str(s.get("label", "unknown"))
+                        confidence = float(s.get("confidence", 0.0))
+                        dbg = s.get("classificationDebug", {}) or {}
+                        reasons = [str(r) for r in dbg.get("reasons", [])]
+                        if label != opposite or confidence >= 0.82:
+                            continue
+                        if target_drill_label == "forehand" and _has_strong_backhand_evidence(reasons):
+                            continue
+                        if target_drill_label == "backhand" and _has_strong_forehand_evidence(reasons):
+                            continue
+                        s["label"] = target_drill_label
+                        updated_dbg = s.get("classificationDebug", {}) or {}
+                        updated_reasons = list(updated_dbg.get("reasons", []))
+                        updated_reasons.append("short_drill_confidence_normalized")
+                        updated_dbg["reasons"] = updated_reasons
+                        s["classificationDebug"] = updated_dbg
+
+            if sport == "tennis" and movement == "auto-detect":
+                _apply_tennis_auto_detect_majority_normalization(shot_segments)
+
+            if sport == "tennis":
+                _apply_tennis_temporal_smoothing(shot_segments)
 
         valid_pose_frames = sum(1 for p in pose_data if p is not None)
 
@@ -891,159 +1063,7 @@ def main():
             if shoulder_visible:
                 visible_shoulder_frames += 1
 
-        validation = validate_sport_match(
-            pose_data,
-            sport,
-            fps,
-            frame_width,
-            frame_height,
-            bg_features=None,
-        )
-
-        dominant_movement, shot_count = classify_movement(
-            pose_data,
-            sport,
-            fps,
-            frame_width,
-            frame_height,
-            preferred_dominant_side,
-        )
-
-        segments = _segment_swings(pose_data, fps, frame_width, frame_height)
-        shot_segments: List[Dict[str, Any]] = []
         excluded_shot_reasons: List[str] = []
-
-        for seg_idx, (start, end) in enumerate(segments):
-            segment_data = pose_data[start : end + 1]
-            valid_segment = [p for p in segment_data if p is not None]
-            if len(valid_segment) < 3:
-                excluded_shot_reasons.append(
-                    f"Shot {seg_idx + 1} excluded: insufficient valid pose frames"
-                )
-                shot_segments.append(
-                    {
-                        "index": seg_idx + 1,
-                        "startFrame": int(start),
-                        "endFrame": int(end),
-                        "label": "unknown",
-                        "frames": len(segment_data),
-                        "includedForScoring": False,
-                    }
-                )
-                continue
-
-            cls = classify_segment_movement(
-                segment_data,
-                sport,
-                fps,
-                frame_width,
-                frame_height,
-                preferred_dominant_side,
-            )
-            diag = classify_segment_movement_with_diagnostics(
-                segment_data,
-                sport,
-                fps,
-                frame_width,
-                frame_height,
-                preferred_dominant_side,
-            )
-            cls = str(diag.get("label", cls))
-            segment_features = _extract_features(
-                segment_data,
-                fps,
-                frame_width,
-                frame_height,
-                preferred_dominant_side,
-            )
-            shot_segments.append(
-                {
-                    "index": seg_idx + 1,
-                    "startFrame": int(start),
-                    "endFrame": int(end),
-                    "label": cls,
-                    "rawLabel": cls,
-                    "confidence": float(diag.get("confidence", 0.0)),
-                    "frames": len(segment_data),
-                    "includedForScoring": False,
-                    "classificationDebug": {
-                        "dominantSide": segment_features.get("dominant_side"),
-                        "isCrossBody": bool(segment_features.get("is_cross_body", False)),
-                        "isServe": bool(segment_features.get("is_serve", False)),
-                        "isCompactForward": bool(segment_features.get("is_compact_forward", False)),
-                        "isOverhead": bool(segment_features.get("is_overhead", False)),
-                        "isDownwardMotion": bool(segment_features.get("is_downward_motion", False)),
-                        "maxWristSpeed": round(float(segment_features.get("max_wrist_speed", 0.0)), 4),
-                        "rightWristSpeed": round(float(segment_features.get("max_rw_speed", 0.0)), 4),
-                        "leftWristSpeed": round(float(segment_features.get("max_lw_speed", 0.0)), 4),
-                        "swingArcRatio": round(float(segment_features.get("swing_arc_ratio", 0.0)), 4),
-                        "contactHeightRatio": round(float(segment_features.get("contact_height_ratio", 0.0)), 4),
-                        "reasons": list(diag.get("reasons", [])),
-                    },
-                }
-            )
-
-        target_drill_label = movement if movement in ("forehand", "backhand") else ""
-
-        if sport == "tennis" and target_drill_label in ("forehand", "backhand"):
-            opposite = "backhand" if target_drill_label == "forehand" else "forehand"
-            labeled_strokes = [
-                str(s.get("label", "unknown"))
-                for s in shot_segments
-                if str(s.get("label", "unknown")) in ("forehand", "backhand")
-            ]
-            target_count = sum(1 for label in labeled_strokes if label == target_drill_label)
-            opposite_count = sum(1 for label in labeled_strokes if label == opposite)
-            total_labeled = len(labeled_strokes)
-            target_ratio = (target_count / max(total_labeled, 1)) if total_labeled else 0.0
-            opposite_confident = [
-                s for s in shot_segments
-                if str(s.get("label", "unknown")) == opposite and float(s.get("confidence", 0.0)) >= 0.90
-            ]
-
-            should_normalize = (
-                total_labeled >= 6
-                and target_ratio >= 0.65
-                and opposite_count <= 2
-                and len(opposite_confident) == 0
-            )
-
-            if should_normalize:
-                for s in shot_segments:
-                    if str(s.get("label", "unknown")) == opposite:
-                        s["label"] = target_drill_label
-                        dbg = s.get("classificationDebug", {})
-                        reasons = list(dbg.get("reasons", []))
-                        reasons.append("drill_prior_normalized")
-                        dbg["reasons"] = reasons
-                        s["classificationDebug"] = dbg
-
-            if total_labeled <= 4:
-                for i, s in enumerate(shot_segments):
-                    if i not in (0, len(shot_segments) - 1):
-                        continue
-                    label = str(s.get("label", "unknown"))
-                    confidence = float(s.get("confidence", 0.0))
-                    dbg = s.get("classificationDebug", {}) or {}
-                    reasons = [str(r) for r in dbg.get("reasons", [])]
-                    if label != opposite or confidence >= 0.82:
-                        continue
-                    if target_drill_label == "forehand" and _has_strong_backhand_evidence(reasons):
-                        continue
-                    if target_drill_label == "backhand" and _has_strong_forehand_evidence(reasons):
-                        continue
-                    s["label"] = target_drill_label
-                    updated_dbg = s.get("classificationDebug", {}) or {}
-                    updated_reasons = list(updated_dbg.get("reasons", []))
-                    updated_reasons.append("short_drill_confidence_normalized")
-                    updated_dbg["reasons"] = updated_reasons
-                    s["classificationDebug"] = updated_dbg
-
-        if sport == "tennis" and movement == "auto-detect":
-            _apply_tennis_auto_detect_majority_normalization(shot_segments)
-
-        if sport == "tennis":
-            _apply_tennis_temporal_smoothing(shot_segments)
 
         movement_per_segment: List[str] = [
             str(seg.get("label", "unknown"))

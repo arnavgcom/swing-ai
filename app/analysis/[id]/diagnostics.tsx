@@ -20,6 +20,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { formatDateTimeInTimeZone, resolveUserTimeZone } from "@/lib/timezone";
 import { GlassCard } from "@/components/ui/GlassCard";
+import { PipelineTimingPanel } from "@/components/PipelineTimingPanel";
 import { ds } from "@/constants/design-system";
 
 function formatBytes(bytes: number | null | undefined): string {
@@ -53,6 +54,7 @@ export default function AnalysisDiagnosticsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const profileTimeZone = resolveUserTimeZone(user);
+  const [pipelineTimingExpanded, setPipelineTimingExpanded] = React.useState(false);
   const [videoTechnicalExpanded, setVideoTechnicalExpanded] = React.useState(false);
 
   const { data: detail } = useQuery({
@@ -140,6 +142,26 @@ export default function AnalysisDiagnosticsScreen() {
                 </GlassCard>
               ))
             )}
+          </GlassCard>
+
+          <GlassCard style={styles.card}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setPipelineTimingExpanded((prev) => !prev);
+              }}
+              style={({ pressed }) => [styles.cardHeaderRow, { opacity: pressed ? 0.78 : 1 }]}
+            >
+              <Text style={styles.cardTitle}>Pipeline Timing</Text>
+              <Ionicons
+                name={pipelineTimingExpanded ? "chevron-up" : "chevron-down"}
+                size={16}
+                color={ds.color.textTertiary}
+              />
+            </Pressable>
+            {pipelineTimingExpanded ? (
+              <PipelineTimingPanel timing={diagnostics.pipelineTiming || null} />
+            ) : null}
           </GlassCard>
 
           <GlassCard style={styles.card}>

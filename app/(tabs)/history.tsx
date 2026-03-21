@@ -22,7 +22,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { fetchAnalysesSummary, deleteAnalysis } from "@/lib/api";
+import { fetchAnalysesSummary, deleteAnalysis, retryAnalysis } from "@/lib/api";
 import type { AnalysisSummary } from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
@@ -208,23 +208,60 @@ const TREND_SESSION_FILTERS = [
 ] as const;
 type TrendSessionWindow = (typeof TREND_SESSION_FILTERS)[number]["key"];
 
+function isInFlightAnalysisStatus(status: string | null | undefined): boolean {
+  return status === "pending" || status === "processing";
+}
+
+function normalizeConfigSegment(value: string | null | undefined): string {
+  return normalizeText(value).replace(/[_\s]+/g, "-").replace(/-+/g, "-");
+}
+
 function filterBySport(
   analyses: AnalysisSummary[],
   sportName: string | undefined,
   movementName: string | undefined,
 ): AnalysisSummary[] {
   if (!sportName) return analyses;
-  const sportLower = sportName.toLowerCase();
+  const sportLower = normalizeConfigSegment(sportName);
+  const movementLower = normalizeMovementValue(movementName);
   return analyses.filter((a) => {
-    if (!a.configKey) return false;
-    const keyLower = a.configKey.toLowerCase();
-    if (!keyLower.startsWith(sportLower)) return false;
-    if (movementName) {
-      const movLower = movementName.toLowerCase().replace(/\s+/g, "");
-      if (!keyLower.includes(movLower)) return false;
+    const keyLower = normalizeText(a.configKey);
+    const keyParts = keyLower.split("-").filter(Boolean);
+    const keySport = keyParts[0] || "";
+    const summarySport = normalizeConfigSegment(a.sportName);
+    const summaryMovement = normalizeMovementValue(a.movementName);
+    if (keySport) {
+      if (keySport !== sportLower) return false;
+    } else if (summarySport) {
+      if (summarySport !== sportLower) return false;
+    } else if (!isInFlightAnalysisStatus(a.status)) {
+      return false;
+    }
+    if (movementLower) {
+      const resolvedMovement = summaryMovement || resolveAnalysisMovement(a);
+      if (keyLower) {
+        if (!keyLower.includes(movementLower)) return false;
+      } else if (resolvedMovement !== movementLower) {
+        return false;
+      }
     }
     return true;
   });
+}
+
+function mergePendingAnalysisSummary(
+  serverItem: AnalysisSummary,
+  pendingItem: AnalysisSummary,
+): AnalysisSummary {
+  return {
+    ...pendingItem,
+    ...serverItem,
+    userName: serverItem.userName || pendingItem.userName,
+    videoPath: serverItem.videoPath || pendingItem.videoPath,
+    detectedMovement: serverItem.detectedMovement || pendingItem.detectedMovement,
+    capturedAt: serverItem.capturedAt || pendingItem.capturedAt,
+    configKey: serverItem.configKey || pendingItem.configKey,
+  };
 }
 
 function normalizeText(value: string | null | undefined): string {
@@ -305,8 +342,51 @@ function resolveAnalysisMovement(item: AnalysisSummary): string {
   );
 }
 
+function formatRequestedSessionTypeLabel(value: string | null | undefined): string | null {
+  const normalized = normalizeText(value);
+  if (normalized === "practice") return "Practice";
+  if (normalized === "match-play") return "Match";
+  return null;
+}
+
+function formatRequestedFocusLabel(
+  value: string | null | undefined,
+  sessionType?: string | null,
+): string | null {
+  const normalized = normalizeText(value).replace(/[_\s]+/g, "-").replace(/-+/g, "-");
+  if (!normalized) return null;
+  if (normalized === "game") {
+    return normalizeText(sessionType) === "match-play" ? null : "Game";
+  }
+  if (normalized === "auto-detect" || normalized === "autodetect") {
+    return null;
+  }
+  return toTitleCase(normalized.replace(/-/g, " "));
+}
+
 function getVideoDate(item: Pick<AnalysisSummary, "capturedAt" | "createdAt">): string {
   return item.capturedAt || item.createdAt;
+}
+
+function formatElapsedDuration(startedAtIso: string, nowMs: number): string | null {
+  const startedAt = parseApiDate(startedAtIso);
+  if (!startedAt) return null;
+
+  const elapsedMs = Math.max(nowMs - startedAt.getTime(), 0);
+  const totalSeconds = Math.floor(elapsedMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+  }
+
+  return `${seconds}s`;
 }
 
 function formatSessionSearchDate(createdAt: string, timeZone?: string): string[] {
@@ -344,6 +424,9 @@ function getAnalysisSearchText(item: AnalysisSummary, timeZone?: string): string
       item.videoFilename,
       item.userName,
       item.userId,
+      item.sportName,
+      item.movementName,
+      item.rejectionReason,
       movement,
       movement.replace(/-/g, " "),
       config,
@@ -368,6 +451,8 @@ function SummaryCard({
   highlightColor,
   onPress,
   onDelete,
+  onRetry,
+  retryPending,
   timeZone,
   showBackgroundProcessing,
 }: {
@@ -382,9 +467,24 @@ function SummaryCard({
   highlightColor: string;
   onPress: () => void;
   onDelete: () => void;
+  onRetry: () => void;
+  retryPending?: boolean;
   timeZone?: string;
   showBackgroundProcessing?: boolean;
 }) {
+  const [elapsedNowMs, setElapsedNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!showBackgroundProcessing) return;
+
+    setElapsedNowMs(Date.now());
+    const intervalId = setInterval(() => {
+      setElapsedNowMs(Date.now());
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [item.capturedAt, item.createdAt, showBackgroundProcessing]);
+
   const timeStr = formatDateTimeInTimeZone(getVideoDate(item), timeZone, {
     month: "short",
     day: "numeric",
@@ -395,6 +495,14 @@ function SummaryCard({
 
   const score = getSessionOverallScore10(item);
   const movement = resolveAnalysisMovement(item);
+  const requestedSessionLabel = formatRequestedSessionTypeLabel(item.requestedSessionType);
+  const requestedFocusLabel = formatRequestedFocusLabel(item.requestedFocusKey, item.requestedSessionType);
+  const compactStrokeLabel = isInFlightAnalysisStatus(item.status) || item.status === "rejected"
+    ? null
+    : requestedFocusLabel || (movement ? toTitleCase(movement).replace(/-/g, " ") : null);
+  const elapsedTimeLabel = showBackgroundProcessing
+    ? formatElapsedDuration(getVideoDate(item), elapsedNowMs)
+    : null;
 
   const sectionEntries = SESSION_SECTION_KEYS.map((key) => {
     const value = getSectionScore10(item, key);
@@ -412,10 +520,13 @@ function SummaryCard({
     pending: { color: "#FBBF24", label: "Pending" },
     processing: { color: "#60A5FA", label: "Processing" },
     completed: { color: "#34D399", label: "Completed" },
-    failed: { color: "#F87171", label: "Failed" },
-    rejected: { color: "#FBBF24", label: "Rejected" },
+    failed: { color: "#F87171", label: "Failed Processing" },
+    rejected: { color: "#EF4444", label: "Rejected" },
   };
   const status = statusConfig[item.status] || statusConfig.pending;
+  const failureMessage = item.status === "failed"
+    ? String(item.rejectionReason || "").trim() || "Processing failed unexpectedly."
+    : null;
 
   return (
     <Pressable
@@ -443,23 +554,59 @@ function SummaryCard({
       <View style={summaryStyles.cardTop}>
         <View style={summaryStyles.cardTopLeft}>
           <Text style={summaryStyles.timeText}>{timeStr}</Text>
-          {isAdmin && item.userName ? (
-            <Text style={summaryStyles.playerNameText} numberOfLines={1}>
-              {item.userName}
-            </Text>
-          ) : null}
-          {movement ? (
-            <View style={summaryStyles.movementBadge}>
-              <Ionicons name="flash-outline" size={11} color="#34D399" />
-              <Text style={summaryStyles.movementBadgeText}>
-                {toTitleCase(movement).replace(/-/g, " ")}
-              </Text>
+          {showBackgroundProcessing && item.userName ? (
+            <View style={summaryStyles.playerMetaRow}>
+              {showBackgroundProcessing ? (
+                <View style={[summaryStyles.backgroundProcessingBadge, summaryStyles.inlineProcessingBadge]}>
+                  <ActivityIndicator size="small" color={status.color} />
+                  <Text style={[summaryStyles.backgroundProcessingBadgeText, { color: status.color }]}>
+                    {elapsedTimeLabel
+                      ? `Processing • ${elapsedTimeLabel}`
+                      : "Processing"}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
-          {showBackgroundProcessing ? (
+          {item.userName || requestedSessionLabel || compactStrokeLabel || item.status === "rejected" ? (
+            <View style={summaryStyles.compactMetaRow}>
+              {item.userName ? (
+                <View style={[summaryStyles.compactMetaBadge, summaryStyles.compactPlayerBadge]}>
+                  <Text style={[summaryStyles.compactMetaBadgeText, summaryStyles.compactPlayerBadgeText]} numberOfLines={1}>
+                    {item.userName}
+                  </Text>
+                </View>
+              ) : null}
+              {requestedSessionLabel ? (
+                <View style={[summaryStyles.compactMetaBadge, summaryStyles.compactSessionBadge]}>
+                  <Text style={[summaryStyles.compactMetaBadgeText, summaryStyles.compactSessionBadgeText]}>
+                    {requestedSessionLabel}
+                  </Text>
+                </View>
+              ) : null}
+              {compactStrokeLabel ? (
+                <View style={[summaryStyles.compactMetaBadge, summaryStyles.compactFocusBadge]}>
+                  <Text style={[summaryStyles.compactMetaBadgeText, summaryStyles.compactFocusBadgeText]}>
+                    {compactStrokeLabel}
+                  </Text>
+                </View>
+              ) : null}
+              {item.status === "rejected" ? (
+                <View style={summaryStyles.rejectedBadge}>
+                  <Ionicons name="close-circle-outline" size={11} color="#EF4444" />
+                  <Text style={summaryStyles.rejectedBadgeText}>Rejected</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+          {showBackgroundProcessing && !(isAdmin && item.userName) ? (
             <View style={summaryStyles.backgroundProcessingBadge}>
               <ActivityIndicator size="small" color={status.color} />
-              <Text style={[summaryStyles.backgroundProcessingBadgeText, { color: status.color }]}>Running in background</Text>
+              <Text style={[summaryStyles.backgroundProcessingBadgeText, { color: status.color }]}>
+                {elapsedTimeLabel
+                  ? `Processing • ${elapsedTimeLabel}`
+                  : "Processing"}
+              </Text>
             </View>
           ) : null}
         </View>
@@ -498,6 +645,37 @@ function SummaryCard({
           <Ionicons name="chevron-forward" size={16} color="#475569" />
         </View>
       </View>
+
+      {failureMessage ? (
+        <View style={summaryStyles.failureMessageWrap}>
+          <Ionicons name="alert-circle-outline" size={13} color="#FCA5A5" />
+          <View style={summaryStyles.failureContent}>
+            <Text style={summaryStyles.failureMessageText} numberOfLines={3}>
+              {failureMessage}
+            </Text>
+            <Pressable
+              disabled={retryPending}
+              onPress={(e) => {
+                if (retryPending) return;
+                e.stopPropagation?.();
+                onRetry();
+              }}
+              style={({ pressed }) => [
+                summaryStyles.retryButton,
+                retryPending && summaryStyles.retryButtonDisabled,
+                { opacity: pressed ? 0.72 : 1 },
+              ]}
+            >
+              {retryPending ? (
+                <ActivityIndicator size="small" color="#FEE2E2" />
+              ) : (
+                <Ionicons name="refresh" size={12} color="#FEE2E2" />
+              )}
+              <Text style={summaryStyles.retryButtonText}>{retryPending ? "Retrying..." : "Retry"}</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
       {sectionEntries.length > 0 && (
         <View style={summaryStyles.metricsRow}>
@@ -589,24 +767,70 @@ const summaryStyles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_500Medium",
     color: "#A29BFE",
+    flexShrink: 1,
   },
-  movementBadge: {
+  playerMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  compactMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+    flexWrap: "wrap",
+  },
+  compactMetaBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    maxWidth: "48%",
+  },
+  compactMetaBadgeText: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+  },
+  compactPlayerBadge: {
+    backgroundColor: "#A29BFE12",
+    borderColor: "#A29BFE30",
+  },
+  compactPlayerBadgeText: {
+    color: "#A29BFE",
+  },
+  compactSessionBadge: {
+    backgroundColor: "#93C5FD12",
+    borderColor: "#93C5FD30",
+  },
+  compactSessionBadgeText: {
+    color: "#93C5FD",
+  },
+  compactFocusBadge: {
+    backgroundColor: "#34D39912",
+    borderColor: "#34D39930",
+  },
+  compactFocusBadgeText: {
+    color: "#34D399",
+  },
+  rejectedBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     alignSelf: "flex-start",
-    marginTop: 2,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 9,
-    backgroundColor: "#34D39912",
+    backgroundColor: "#EF444414",
     borderWidth: 1,
-    borderColor: "#34D39930",
+    borderColor: "#EF444430",
   },
-  movementBadgeText: {
+  rejectedBadgeText: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
-    color: "#34D399",
+    color: "#EF4444",
   },
   backgroundProcessingBadge: {
     flexDirection: "row",
@@ -620,6 +844,9 @@ const summaryStyles = StyleSheet.create({
     backgroundColor: "#0A0A1A90",
     borderWidth: 1,
     borderColor: "#334155",
+  },
+  inlineProcessingBadge: {
+    marginTop: 0,
   },
   backgroundProcessingBadgeText: {
     fontSize: 11,
@@ -638,6 +865,49 @@ const summaryStyles = StyleSheet.create({
   statusText: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
+  },
+  failureMessageWrap: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#7F1D1D",
+    backgroundColor: "#450A0A66",
+  },
+  failureContent: {
+    flex: 1,
+    gap: 8,
+  },
+  failureMessageText: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontFamily: "Inter_500Medium",
+    color: "#FECACA",
+  },
+  retryButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#7F1D1D",
+    backgroundColor: "#7F1D1D66",
+  },
+  retryButtonDisabled: {
+    backgroundColor: "#4B556380",
+    borderColor: "#6B7280",
+  },
+  retryButtonText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#FEE2E2",
   },
   metricsRow: {
     flexDirection: "row",
@@ -857,20 +1127,21 @@ export default function HistoryScreen() {
   });
 
   useEffect(() => {
-    if (!pendingAnalysisSummary || !(allAnalyses || []).length) return;
+    if (!pendingAnalysisSummary) return;
+    if (isLoading || !Array.isArray(allAnalyses)) return;
 
-    const matchingServerItem = (allAnalyses || []).find((item) => item.id === pendingAnalysisSummary.id);
-    if (!matchingServerItem) return;
-
-    if (
-      matchingServerItem.status === "completed"
-      || matchingServerItem.status === "failed"
-      || matchingServerItem.status === "rejected"
-    ) {
-      AsyncStorage.removeItem(PENDING_ANALYSIS_SUMMARY_KEY).catch(() => {});
-      setPendingAnalysisSummary(null);
+    const matchingServerItem = allAnalyses.find((item) => item.id === pendingAnalysisSummary.id);
+    if (matchingServerItem && isInFlightAnalysisStatus(matchingServerItem.status)) {
+      return;
     }
-  }, [allAnalyses, pendingAnalysisSummary]);
+
+    AsyncStorage.multiRemove([
+      PENDING_ANALYSIS_SUMMARY_KEY,
+      BACKGROUND_NOTICE_KEY,
+    ]).catch(() => {});
+    setPendingAnalysisSummary(null);
+    setBackgroundNotice(null);
+  }, [allAnalyses, isLoading, pendingAnalysisSummary]);
 
   const effectiveAnalyses = useMemo(() => {
     const base = allAnalyses || [];
@@ -878,7 +1149,11 @@ export default function HistoryScreen() {
 
     const matchingServerItem = base.find((item) => item.id === pendingAnalysisSummary.id);
     if (matchingServerItem) {
-      return base;
+      return base.map((item) => (
+        item.id === pendingAnalysisSummary.id
+          ? mergePendingAnalysisSummary(matchingServerItem, pendingAnalysisSummary)
+          : item
+      ));
     }
 
     return [pendingAnalysisSummary, ...base];
@@ -958,9 +1233,16 @@ export default function HistoryScreen() {
     return [pendingSummaryVisible, ...filteredAnalyses];
   }, [filteredAnalyses, pendingSummaryVisible]);
 
-  const lastWorkedAnalysis = useMemo(
-    () => effectiveAnalyses.find((item) => item.id === lastWorkedAnalysisId) ?? null,
-    [effectiveAnalyses, lastWorkedAnalysisId],
+  const activeBackgroundAnalysisId = useMemo(() => {
+    if (pendingAnalysisSummary && isInFlightAnalysisStatus(pendingAnalysisSummary.status)) {
+      return pendingAnalysisSummary.id;
+    }
+    return lastWorkedAnalysisId;
+  }, [lastWorkedAnalysisId, pendingAnalysisSummary]);
+
+  const activeBackgroundAnalysis = useMemo(
+    () => effectiveAnalyses.find((item) => item.id === activeBackgroundAnalysisId) ?? null,
+    [activeBackgroundAnalysisId, effectiveAnalyses],
   );
 
   useEffect(() => {
@@ -972,12 +1254,12 @@ export default function HistoryScreen() {
   }, []);
 
   useEffect(() => {
-    if (!lastWorkedAnalysisId) {
+    if (!activeBackgroundAnalysisId) {
       lastTrackedStatusRef.current = null;
       return;
     }
 
-    const nextStatus = lastWorkedAnalysis?.status ?? null;
+    const nextStatus = activeBackgroundAnalysis?.status ?? null;
     if (!nextStatus) return;
 
     const previousStatus = lastTrackedStatusRef.current;
@@ -999,10 +1281,12 @@ export default function HistoryScreen() {
 
       setBackgroundNotice(null);
       setCompletionNotice({
-        analysisId: lastWorkedAnalysisId,
+        analysisId: activeBackgroundAnalysisId,
         status: nextStatus,
         message: messageByStatus[nextStatus],
       });
+      AsyncStorage.setItem(LAST_WORKED_ANALYSIS_KEY, activeBackgroundAnalysisId).catch(() => {});
+      setLastWorkedAnalysisId(activeBackgroundAnalysisId);
       AsyncStorage.removeItem(PENDING_ANALYSIS_SUMMARY_KEY).catch(() => {});
       setPendingAnalysisSummary(null);
       Haptics.notificationAsync(
@@ -1015,7 +1299,7 @@ export default function HistoryScreen() {
         setCompletionNotice(null);
       }, 6000);
     }
-  }, [lastWorkedAnalysis?.status, lastWorkedAnalysisId]);
+  }, [activeBackgroundAnalysis?.status, activeBackgroundAnalysisId]);
 
   useEffect(() => {
     const hasToast = Boolean(backgroundNotice || completionNotice);
@@ -1041,6 +1325,34 @@ export default function HistoryScreen() {
     },
   });
 
+  const retryMutation = useMutation({
+    mutationFn: retryAnalysis,
+    onSuccess: async (result) => {
+      await AsyncStorage.setItem(LAST_WORKED_ANALYSIS_KEY, result.analysisId).catch(() => {});
+      await AsyncStorage.setItem(
+        BACKGROUND_NOTICE_KEY,
+        "Retry started. Processing will continue in the background.",
+      ).catch(() => {});
+      setLastWorkedAnalysisId(result.analysisId);
+      setBackgroundNotice("Retry started. Processing will continue in the background.");
+      setPendingAnalysisSummary((current) => {
+        if (!current || current.id !== result.analysisId) return current;
+        return {
+          ...current,
+          status: "processing",
+          rejectionReason: null,
+          updatedAt: new Date().toISOString(),
+        };
+      });
+      queryClient.invalidateQueries({ queryKey: ["analyses-summary"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (error: Error) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Retry Failed", error.message || "Could not restart analysis.");
+    },
+  });
+
   const handleDelete = (id: string, name: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert("Delete Analysis", `Delete "${name}"?`, [
@@ -1049,6 +1361,17 @@ export default function HistoryScreen() {
         text: "Delete",
         style: "destructive",
         onPress: () => deleteMutation.mutate(id),
+      },
+    ]);
+  };
+
+  const handleRetry = (item: AnalysisSummary) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert("Retry Analysis", `Retry processing for "${item.videoFilename}"?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Retry",
+        onPress: () => retryMutation.mutate(item.id),
       },
     ]);
   };
@@ -1079,7 +1402,7 @@ export default function HistoryScreen() {
   const historyHighlightColor = selectedSport?.color || "#34D399";
   const historyMovementLabel = selectedMovement?.name
     ? toTitleCase(selectedMovement.name.replace(/-/g, " "))
-    : "Auto detect";
+    : null;
 
   const getPlayerDisplayName = (u: {
     id: string;
@@ -1138,12 +1461,12 @@ export default function HistoryScreen() {
       deltas={deltaByAnalysisId.get(item.id)}
       isOwner={isOwner(item)}
       isAdmin={isAdmin}
-      isHighlighted={item.id === lastWorkedAnalysisId}
+      isHighlighted={item.id === activeBackgroundAnalysisId}
       highlightColor={historyHighlightColor}
       timeZone={profileTimeZone}
       showBackgroundProcessing={
-        item.id === lastWorkedAnalysisId &&
-        (item.status === "processing" || item.status === "pending")
+        item.id === activeBackgroundAnalysisId &&
+        isInFlightAnalysisStatus(item.status)
       }
       onPress={() =>
         router.push({
@@ -1152,6 +1475,8 @@ export default function HistoryScreen() {
         })
       }
       onDelete={() => handleDelete(item.id, item.videoFilename)}
+      onRetry={() => handleRetry(item)}
+      retryPending={retryMutation.isPending && retryMutation.variables === item.id}
     />
   );
 
@@ -1201,51 +1526,34 @@ export default function HistoryScreen() {
               color={historyHighlightColor}
             />
           </Pressable>
-        ) : (
+        ) : null}
+
+        {historyMovementLabel ? (
           <View
             style={[
-              styles.playerDropdown,
-              styles.playerDropdownReadonly,
+              styles.subcategoryBadge,
               {
-                borderColor: `${historyHighlightColor}55`,
                 backgroundColor: `${historyHighlightColor}12`,
+                borderColor: `${historyHighlightColor}40`,
               },
             ]}
           >
-            <Ionicons name="people" size={15} color={historyHighlightColor} />
+            <Ionicons
+              name="flash-outline"
+              size={11}
+              color={historyHighlightColor}
+            />
             <Text
-              style={[styles.playerDropdownText, { color: historyHighlightColor }]}
+              style={[
+                styles.subcategoryBadgeText,
+                { color: historyHighlightColor },
+              ]}
               numberOfLines={1}
             >
-              {playerFilterLabel}
+              {historyMovementLabel}
             </Text>
           </View>
-        )}
-
-        <View
-          style={[
-            styles.subcategoryBadge,
-            {
-              backgroundColor: `${historyHighlightColor}12`,
-              borderColor: `${historyHighlightColor}40`,
-            },
-          ]}
-        >
-          <Ionicons
-            name="flash-outline"
-            size={11}
-            color={historyHighlightColor}
-          />
-          <Text
-            style={[
-              styles.subcategoryBadgeText,
-              { color: historyHighlightColor },
-            ]}
-            numberOfLines={1}
-          >
-            {historyMovementLabel}
-          </Text>
-        </View>
+        ) : null}
       </View>
 
       {isAdmin && showPlayerDropdown && (

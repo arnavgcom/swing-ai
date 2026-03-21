@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { G, Line, Path, Polygon, Text as SvgText } from "react-native-svg";
+import { G, Line, Path, Polygon, Text as SvgText, TSpan } from "react-native-svg";
 import type { CorrectionResult, Landmark } from "@/lib/ghost-correction";
 
 const ORANGE = "#F59E0B";
@@ -29,6 +29,7 @@ interface CorrectionArrowRendererProps {
   landmarks: Landmark[];
   width: number;
   height: number;
+  splitMode?: boolean;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -296,6 +297,31 @@ function resolveArrowForCorrection(correction: CorrectionResult): ResolvedArrow 
   };
 }
 
+function splitLabelIntoLines(label: string, maxCharsPerLine: number = 26): string[] {
+  const words = String(label || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [""];
+
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    const nextLine = currentLine ? `${currentLine} ${word}` : word;
+    if (nextLine.length <= maxCharsPerLine || currentLine.length === 0) {
+      currentLine = nextLine;
+      continue;
+    }
+
+    lines.push(currentLine);
+    currentLine = word;
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines.slice(0, 3);
+}
+
 /**
  * Render one correction arrow (curved or straight) from correction metadata and
  * joint coordinates.
@@ -326,6 +352,7 @@ export function CorrectionArrowRenderer({
   landmarks,
   width,
   height,
+  splitMode = false,
 }: CorrectionArrowRendererProps) {
   const landmarkMap = useMemo(() => {
     const map = new Map<number, Landmark>();
@@ -353,8 +380,15 @@ export function CorrectionArrowRenderer({
     y: clamp(baseAnchor.y + dy, 18, height - 18),
   };
 
-  const labelX = clamp(anchor.x + 10, 10, width - 110);
-  const labelY = clamp(anchor.y - 18, 16, height - 10);
+  const labelLines = splitLabelIntoLines(resolved.label, splitMode ? 18 : 26);
+  const labelX = width / 2;
+  const labelFontSize = splitMode ? 22 : 12;
+  const labelLineHeight = splitMode ? 24 : 15;
+  const labelY = clamp(
+    Math.max(anchor.y + (splitMode ? 102 : 42), height * (splitMode ? 0.79 : 0.56)),
+    28,
+    height - 22 - ((labelLines.length - 1) * labelLineHeight),
+  );
 
   return (
     <G>
@@ -363,10 +397,20 @@ export function CorrectionArrowRenderer({
         x={labelX}
         y={labelY}
         fill="#FFFFFF"
-        fontSize={12}
+        fontSize={labelFontSize}
         fontFamily="sans-serif"
+        fontWeight={splitMode ? "700" : "500"}
+        textAnchor="middle"
       >
-        {resolved.label}
+        {labelLines.map((line, index) => (
+          <TSpan
+            key={`${line}-${index}`}
+            x={labelX}
+            dy={index === 0 ? 0 : labelLineHeight}
+          >
+            {line}
+          </TSpan>
+        ))}
       </SvgText>
     </G>
   );

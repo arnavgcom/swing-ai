@@ -6,7 +6,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { storage, type AnalysisMetadataInput } from "./storage";
-import { processAnalysis } from "./analysis-engine";
+import { processAnalysis, seedUploadPipelineTiming } from "./analysis-engine";
 import { requireAuth } from "./auth";
 import { db } from "./db";
 import {
@@ -32,6 +32,12 @@ import {
   type SportCategoryConfig,
 } from "@shared/sport-configs";
 import {
+  normalizeMetricRangeToTenScale,
+  normalizeMetricUnit,
+  normalizeMetricValueToTenScale,
+} from "@shared/metric-scale";
+import { attachPipelineTiming, extractPipelineTiming } from "@shared/pipeline-timing";
+import {
   getEvaluationDatasetVideoMap,
   incrementModelVersion,
   isMovementMatch,
@@ -42,6 +48,7 @@ import {
   validateEvaluationDatasetManifest,
   writeModelRegistryConfig,
 } from "./model-registry";
+import { normalizeRuntimeScoreToHundred } from "./score-scale";
 import { persistedScoreToApiHundred } from "./score-scale";
 import { normalizeTacticalScoresToApi100, readTacticalScoreValue } from "./tactical-scores";
 import { buildInsertAuditFields, buildUpdateAuditFields } from "./audit-metadata";
@@ -1173,8 +1180,8 @@ function applyDbRangesToConfig(
       metricsByKey.set(key, {
         ...existing,
         label: row.metricLabel || existing.label,
-        unit: row.unit || existing.unit,
-        optimalRange: [Number(row.optimalMin), Number(row.optimalMax)],
+        unit: normalizeMetricUnit(key, row.unit || existing.unit),
+        optimalRange: normalizeMetricRangeToTenScale(key, [Number(row.optimalMin), Number(row.optimalMax)]),
       });
       continue;
     }
@@ -1182,12 +1189,12 @@ function applyDbRangesToConfig(
     metricsByKey.set(key, {
       key,
       label: row.metricLabel || key,
-      unit: row.unit || "",
+      unit: normalizeMetricUnit(key, row.unit || ""),
       icon: "analytics-outline",
       category: "technique",
       color: "#60A5FA",
       description: "Optimal range configured in database.",
-      optimalRange: [Number(row.optimalMin), Number(row.optimalMax)],
+      optimalRange: normalizeMetricRangeToTenScale(key, [Number(row.optimalMin), Number(row.optimalMax)]),
     });
   }
 
@@ -1197,8 +1204,8 @@ function applyDbRangesToConfig(
     return {
       ...metric,
       label: row.metricLabel || metric.label,
-      unit: row.unit || metric.unit,
-      optimalRange: [Number(row.optimalMin), Number(row.optimalMax)],
+      unit: normalizeMetricUnit(metric.key, row.unit || metric.unit),
+      optimalRange: normalizeMetricRangeToTenScale(metric.key, [Number(row.optimalMin), Number(row.optimalMax)]),
     };
   });
 
@@ -1241,6 +1248,18 @@ async function fetchMetricRangeRows(filters: MetricRangeFilters = {}) {
     );
 
   return rows;
+}
+
+function normalizeMetricRangeRow(
+  row: typeof sportCategoryMetricRanges.$inferSelect,
+): typeof sportCategoryMetricRanges.$inferSelect {
+  const metricKey = String(row.metricKey || "").trim();
+  return {
+    ...row,
+    unit: normalizeMetricUnit(metricKey, row.unit),
+    optimalMin: normalizeMetricValueToTenScale(metricKey, Number(row.optimalMin)),
+    optimalMax: normalizeMetricValueToTenScale(metricKey, Number(row.optimalMax)),
+  };
 }
 
 type ScoringModelDatasetMetric = {
@@ -1860,6 +1879,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`alter table users add column if not exists updated_at timestamp default now()`);
   await db.execute(sql`alter table users add column if not exists created_by_user_id varchar`);
   await db.execute(sql`alter table users add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql`
+    update sport_category_metric_ranges
+    set
+      optimal_min = case
+        when metric_key in ('balanceScore', 'rhythmConsistency', 'shotConsistency') and optimal_min > 10
+          then round((optimal_min / 10.0)::numeric, 1)::real
+        else optimal_min
+      end,
+      optimal_max = case
+        when metric_key in ('balanceScore', 'rhythmConsistency', 'shotConsistency') and optimal_max > 10
+          then round((optimal_max / 10.0)::numeric, 1)::real
+        else optimal_max
+      end,
+      unit = case
+        when metric_key in ('balanceScore', 'rhythmConsistency', 'shotConsistency') then '/10'
+        else unit
+      end,
+      updated_at = now()
+    where metric_key in ('balanceScore', 'rhythmConsistency', 'shotConsistency')
+      and (optimal_min > 10 or optimal_max > 10 or unit <> '/10')
+  `);
 
   await db.execute(sql`alter table sports add column if not exists created_at timestamp default now()`);
   await db.execute(sql`alter table sports add column if not exists updated_at timestamp default now()`);
@@ -2063,6 +2103,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`alter table analyses add column if not exists gps_accuracy_m real`);
   await db.execute(sql`alter table analyses add column if not exists gps_timestamp timestamp`);
   await db.execute(sql`alter table analyses add column if not exists gps_source text`);
+  await db.execute(sql`alter table analyses add column if not exists requested_session_type text`);
+  await db.execute(sql`alter table analyses add column if not exists requested_focus_key text`);
 
   await ensureAuditMetadataBackfill();
 
@@ -2868,7 +2910,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metricKey: metricKey || undefined,
       });
 
-      res.json(rows);
+      res.json(rows.map(normalizeMetricRangeRow));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -2888,8 +2930,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const movementName = String(req.body?.movementName || "").trim();
       const metricLabel = String(req.body?.metricLabel || metricKey).trim();
       const unit = String(req.body?.unit || "").trim();
-      const optimalMin = Number(req.body?.optimalMin);
-      const optimalMax = Number(req.body?.optimalMax);
+      const optimalMinRaw = Number(req.body?.optimalMin);
+      const optimalMaxRaw = Number(req.body?.optimalMax);
       const isActive = req.body?.isActive == null ? true : Boolean(req.body?.isActive);
 
       if (!configKey || !metricKey || !sportName || !movementName || !unit) {
@@ -2898,9 +2940,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      if (!Number.isFinite(optimalMin) || !Number.isFinite(optimalMax)) {
+      if (!Number.isFinite(optimalMinRaw) || !Number.isFinite(optimalMaxRaw)) {
         return res.status(400).json({ error: "optimalMin and optimalMax must be numbers" });
       }
+
+      const optimalMin = normalizeMetricValueToTenScale(metricKey, optimalMinRaw);
+      const optimalMax = normalizeMetricValueToTenScale(metricKey, optimalMaxRaw);
+      const normalizedUnit = normalizeMetricUnit(metricKey, unit);
 
       if (optimalMin > optimalMax) {
         return res.status(400).json({ error: "optimalMin cannot be greater than optimalMax" });
@@ -2914,7 +2960,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           sportName,
           movementName,
           metricLabel,
-          unit,
+          unit: normalizedUnit,
           optimalMin,
           optimalMax,
           isActive,
@@ -2927,7 +2973,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             sportName,
             movementName,
             metricLabel,
-            unit,
+            unit: normalizedUnit,
             optimalMin,
             optimalMax,
             isActive,
@@ -2937,7 +2983,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
       const rows = await fetchMetricRangeRows({ configKey, metricKey, includeInactive: true });
-      res.json(rows[0] || null);
+      res.json(rows[0] ? normalizeMetricRangeRow(rows[0]) : null);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -2978,8 +3024,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const movementName = String(raw.movementName || "").trim();
         const metricLabel = String(raw.metricLabel || metricKey).trim();
         const unit = String(raw.unit || "").trim();
-        const optimalMin = Number(raw.optimalMin);
-        const optimalMax = Number(raw.optimalMax);
+        const optimalMinRaw = Number(raw.optimalMin);
+        const optimalMaxRaw = Number(raw.optimalMax);
         const isActive = raw.isActive == null ? true : Boolean(raw.isActive);
 
         if (!configKey || !metricKey || !sportName || !movementName || !unit) {
@@ -2988,11 +3034,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        if (!Number.isFinite(optimalMin) || !Number.isFinite(optimalMax)) {
+        if (!Number.isFinite(optimalMinRaw) || !Number.isFinite(optimalMaxRaw)) {
           return res.status(400).json({
             error: `Invalid item at index ${idx}: optimalMin and optimalMax must be numbers`,
           });
         }
+
+        const optimalMin = normalizeMetricValueToTenScale(metricKey, optimalMinRaw);
+        const optimalMax = normalizeMetricValueToTenScale(metricKey, optimalMaxRaw);
+        const normalizedUnit = normalizeMetricUnit(metricKey, unit);
 
         if (optimalMin > optimalMax) {
           return res.status(400).json({
@@ -3006,7 +3056,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           sportName,
           movementName,
           metricLabel,
-          unit,
+          unit: normalizedUnit,
           optimalMin,
           optimalMax,
           isActive,
@@ -3073,8 +3123,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post(
     "/api/upload",
     requireAuth,
+    (req, _res, next) => {
+      (req as Request & { uploadStartMs?: number }).uploadStartMs = Date.now();
+      next();
+    },
     runVideoUploadMiddleware,
     async (req: Request, res: Response) => {
+      let finalPathToCleanup: string | null = null;
       try {
         if (!req.file) {
           return res.status(400).json({ error: "No video file provided" });
@@ -3101,8 +3156,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         const sportId = req.body?.sportId || null;
         const movementId = req.body?.movementId || null;
+        const requestedSessionTypeRaw = String(req.body?.requestedSessionType || "").trim().toLowerCase();
+        const requestedFocusKeyRaw = String(req.body?.requestedFocusKey || "").trim().toLowerCase();
         const recordedAtRaw = String(req.body?.recordedAt || "").trim();
         const recordedAtOverride = parseUploadRecordedAt(recordedAtRaw);
+        const requestedSessionType =
+          requestedSessionTypeRaw === "practice" || requestedSessionTypeRaw === "match-play"
+            ? requestedSessionTypeRaw
+            : null;
+        const requestedFocusKey =
+          requestedFocusKeyRaw === "auto-detect"
+            || requestedFocusKeyRaw === "forehand"
+            || requestedFocusKeyRaw === "backhand"
+            || requestedFocusKeyRaw === "serve"
+            || requestedFocusKeyRaw === "volley"
+            || requestedFocusKeyRaw === "game"
+            ? requestedFocusKeyRaw
+            : null;
 
         if (recordedAtRaw && !recordedAtOverride) {
           return res.status(400).json({ error: "Invalid session date/time provided" });
@@ -3156,6 +3226,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               filename: finalFilename,
             })
           : req.file.path;
+        finalPathToCleanup = finalPath;
+        const uploadStartedAtMs = Number((req as Request & { uploadStartMs?: number }).uploadStartMs);
+        const uploadCompletedAtMs = Date.now();
         const sourceFilename = evaluationModeEnabled && originalFilename
           ? originalFilename
           : null;
@@ -3168,17 +3241,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? { ...extractedMetadata, capturedAt: recordedAtOverride }
           : extractedMetadata;
 
+        if (resolvedSportName && String(resolvedSportName).trim().toLowerCase() !== "tennis") {
+          await deleteStoredMedia(finalPathToCleanup);
+          finalPathToCleanup = null;
+          return res.status(400).json({ error: "Only tennis videos are allowed to be uploaded." });
+        }
+
         const analysis = await storage.createAnalysis(
           finalFilename,
           finalPath,
           userId,
           resolvedSportId,
           resolvedMovementId,
+          requestedSessionType,
+          requestedFocusKey,
           uploadMetadata,
           sourceFilename,
           evaluationVideoId,
           requesterUserId,
         );
+        finalPathToCleanup = null;
+
+        try {
+          await seedUploadPipelineTiming(
+            analysis.id,
+            {
+              startedAt: Number.isFinite(uploadStartedAtMs)
+                ? new Date(uploadStartedAtMs).toISOString()
+                : null,
+              completedAt: new Date(uploadCompletedAtMs).toISOString(),
+              elapsedMs: Number.isFinite(uploadStartedAtMs)
+                ? Math.max(uploadCompletedAtMs - uploadStartedAtMs, 0)
+                : null,
+            },
+            {
+              configKey: getConfigKey(resolvedSportName || "tennis", resolvedMovementName || "auto-detect"),
+              modelVersion: readModelRegistryConfig().activeModelVersion,
+              auditActorUserId: requesterUserId,
+            },
+          );
+        } catch (timingError) {
+          console.warn("Failed to seed upload pipeline timing:", timingError);
+        }
 
         processAnalysis(analysis.id).catch(console.error);
 
@@ -3189,6 +3293,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } catch (error: any) {
         console.error("Upload error:", error);
+        if (finalPathToCleanup) {
+          try {
+            await deleteStoredMedia(finalPathToCleanup);
+          } catch (cleanupError) {
+            console.warn("Failed to clean up rejected upload:", cleanupError);
+          }
+        }
         res.status(500).json({ error: error.message || "Upload failed" });
       }
     },
@@ -3231,12 +3342,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: analyses.userId,
           sportId: analyses.sportId,
           movementId: analyses.movementId,
+          requestedSessionType: analyses.requestedSessionType,
+          requestedFocusKey: analyses.requestedFocusKey,
+          sportName: sports.name,
+          movementName: sportMovements.name,
           videoFilename: analyses.videoFilename,
           sourceFilename: analyses.sourceFilename,
           evaluationVideoId: analyses.evaluationVideoId,
           videoPath: analyses.videoPath,
           status: analyses.status,
           detectedMovement: analyses.detectedMovement,
+          rejectionReason: analyses.rejectionReason,
           capturedAt: analyses.capturedAt,
           createdAt: analyses.createdAt,
           updatedAt: analyses.updatedAt,
@@ -3249,6 +3365,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .from(analyses)
         .leftJoin(users, eq(analyses.userId, users.id))
+        .leftJoin(sports, eq(analyses.sportId, sports.id))
+        .leftJoin(sportMovements, eq(analyses.movementId, sportMovements.id))
         .leftJoin(metrics, eq(analyses.id, metrics.analysisId));
 
       const rows = isAdmin
@@ -3608,7 +3726,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .orderBy(desc(analysisShotAnnotations.updatedAt))
             .limit(300);
 
-      res.json(rows);
+      res.json(rows.map(normalizeMetricRangeRow));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -4341,9 +4459,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ),
       );
 
+      const refreshedDiagnostics = (() => {
+        const pipelineTiming = extractPipelineTiming(persistedDiagnostics);
+        if (!pipelineTiming) return diagnostics;
+        const diagnosticsRecord = diagnostics && typeof diagnostics === "object"
+          ? (diagnostics as Record<string, unknown>)
+          : {};
+        return attachPipelineTiming(diagnosticsRecord, pipelineTiming);
+      })();
+
       await db
         .update(metrics)
-        .set({ aiDiagnostics: diagnostics })
+        .set({ aiDiagnostics: refreshedDiagnostics })
         .where(eq(metrics.analysisId, analysis.id));
 
       invalidateSkeletonCache(analysis.id);
@@ -4359,7 +4486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(eq(analyses.id, analysis.id));
       }
 
-      res.json(diagnostics);
+      res.json(refreshedDiagnostics);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -5059,6 +5186,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filename: safeFilename,
         willRefreshDiscrepancies: true,
         queuedDiscrepancySnapshots: relinkAnnotationRows.length,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/analyses/:id/retry", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const analysisId = req.params.id;
+
+      const analysis = await storage.getAnalysis(analysisId);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      const evaluationModeEnabled = await getModelEvaluationMode(userId);
+      if (evaluationModeEnabled && isAdmin) {
+        const videoMap = getEvaluationDatasetVideoMap(readModelRegistryConfig());
+        if (!getEvaluationMatch(analysis, videoMap)) {
+          return res.status(400).json({
+            error: "Model Evaluation Mode is ON. Only evaluation dataset videos can be recalculated.",
+          });
+        }
+      }
+
+      if (!isAdmin && analysis.userId !== userId) {
+        return res.status(403).json({ error: "You can only retry your own analyses" });
+      }
+
+      if (analysis.status === "pending" || analysis.status === "processing") {
+        return res.status(409).json({ error: "Analysis is already processing" });
+      }
+
+      void (async () => {
+        try {
+          await processAnalysis(analysisId);
+          const snapshotResult = await refreshDiscrepancySnapshotsForAnalysis(analysisId);
+          if (snapshotResult.refreshed > 0 || snapshotResult.skipped > 0) {
+            console.log(
+              `Retry discrepancy refresh for ${analysisId}: refreshed=${snapshotResult.refreshed}, skipped=${snapshotResult.skipped}`,
+            );
+          }
+        } catch (err) {
+          console.error(`Retry failed for ${analysisId}:`, err);
+        }
+      })();
+
+      res.json({
+        message: "Retry started",
+        analysisId,
+        status: "processing",
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

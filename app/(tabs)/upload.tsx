@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -16,8 +16,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
@@ -34,6 +33,35 @@ const NativeDateTimePicker = Platform.OS === "web"
 const LAST_WORKED_ANALYSIS_KEY = "swingai_last_worked_analysis_id";
 const PENDING_ANALYSIS_SUMMARY_KEY = "swingai_pending_analysis_summary";
 
+const SESSION_TYPE_OPTIONS = [
+  { key: "practice", label: "Practice" },
+  { key: "match-play", label: "Match" },
+] as const;
+
+const TENNIS_FOCUS_OPTIONS = [
+  { key: "auto-detect", label: "Auto", movementName: null },
+  { key: "forehand", label: "Forehand", movementName: "Forehand" },
+  { key: "backhand", label: "Backhand", movementName: "Backhand" },
+  { key: "serve", label: "Serve", movementName: "Serve" },
+  { key: "volley", label: "Volley", movementName: "Volley" },
+] as const;
+
+type SessionTypeKey = (typeof SESSION_TYPE_OPTIONS)[number]["key"];
+type UploadFocusKey = (typeof TENNIS_FOCUS_OPTIONS)[number]["key"];
+
+type SportOption = {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+};
+
+type MovementOption = {
+  id: string;
+  name: string;
+  icon: string;
+};
+
 function getPlayerDisplayName(u: {
   id: string;
   name: string;
@@ -42,15 +70,6 @@ function getPlayerDisplayName(u: {
 }): string {
   const fullName = String(u.name || "").trim();
   return fullName || String(u.email || "").trim() || "Unknown";
-}
-
-function formatMovementBadgeLabel(movementName?: string | null): string {
-  if (!movementName) return "Auto detect";
-  return movementName
-    .split("-")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function toFileToken(value: string, fallback: string): string {
@@ -74,10 +93,10 @@ function getTimestampParts(now: Date): { date: string; time: string } {
   };
 }
 
-function getFileExtension(asset: ImagePicker.ImagePickerAsset): string {
-  const fileNameExt = asset.fileName?.match(/\.([a-zA-Z0-9]+)$/)?.[1];
+function getFileExtension(fileName?: string | null, uri?: string | null): string {
+  const fileNameExt = fileName?.match(/\.([a-zA-Z0-9]+)$/)?.[1];
   if (fileNameExt) return fileNameExt.toLowerCase();
-  const uriExt = asset.uri?.split("?")[0]?.match(/\.([a-zA-Z0-9]+)$/)?.[1];
+  const uriExt = uri?.split("?")[0]?.match(/\.([a-zA-Z0-9]+)$/)?.[1];
   if (uriExt) return uriExt.toLowerCase();
   return "mp4";
 }
@@ -131,13 +150,30 @@ function buildLocalDateTime(datePart: string, timePart: string): Date | null {
   return next;
 }
 
+function summarizePickerAsset(
+  asset: ImagePicker.ImagePickerAsset | null | undefined,
+) {
+  if (!asset) return null;
+  return {
+    uri: asset.uri,
+    fileName: "fileName" in asset ? (asset.fileName ?? null) : null,
+    name: "name" in asset ? (asset.name ?? null) : null,
+    mimeType: "mimeType" in asset ? (asset.mimeType ?? null) : null,
+    duration: "duration" in asset ? (asset.duration ?? null) : null,
+    fileSize: "fileSize" in asset ? (asset.fileSize ?? null) : null,
+    size: "size" in asset ? (asset.size ?? null) : null,
+    width: "width" in asset ? (asset.width ?? null) : null,
+    height: "height" in asset ? (asset.height ?? null) : null,
+    assetId: "assetId" in asset ? (asset.assetId ?? null) : null,
+  };
+}
+
 export default function UploadScreen() {
   const colors = Colors.dark;
-  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const { selectedSport, selectedMovement } = useSport();
+  const { selectedSport } = useSport();
 
   const sportColor = selectedSport?.color || colors.tint;
 
@@ -158,13 +194,55 @@ export default function UploadScreen() {
   const [recordedAtDraft, setRecordedAtDraft] = useState<Date>(new Date());
   const [recordedDateInput, setRecordedDateInput] = useState("");
   const [recordedTimeInput, setRecordedTimeInput] = useState("");
+  const [sessionType, setSessionType] = useState<SessionTypeKey>("practice");
+  const [selectedFocusKey, setSelectedFocusKey] = useState<UploadFocusKey>("auto-detect");
+  const [uploadUiStage, setUploadUiStage] = useState<"idle" | "uploading" | "starting">("idle");
+
+  const { data: sportsData } = useQuery<SportOption[]>({
+    queryKey: ["/api/sports"],
+    enabled: !!user,
+  });
+
+  const tennisSport = React.useMemo(
+    () => (sportsData || []).find((sport) => String(sport.name || "").toLowerCase() === "tennis") || null,
+    [sportsData],
+  );
+
+  const { data: tennisMovements } = useQuery<MovementOption[]>({
+    queryKey: ["/api/sports", tennisSport?.id || "", "movements"],
+    enabled: !!tennisSport?.id,
+  });
+
+  const selectedFocus = React.useMemo(
+    () => TENNIS_FOCUS_OPTIONS.find((option) => option.key === selectedFocusKey) || TENNIS_FOCUS_OPTIONS[0],
+    [selectedFocusKey],
+  );
+
+  const selectedMovementName = sessionType === "match-play"
+    ? "Game"
+    : selectedFocus.movementName;
+  const requestedFocusKey = sessionType === "match-play"
+    ? "game"
+    : selectedFocusKey;
+
+  const selectedMovement = React.useMemo(() => {
+    if (!selectedMovementName) return null;
+    return (tennisMovements || []).find(
+      (movement) => String(movement.name || "").toLowerCase() === selectedMovementName.toLowerCase(),
+    ) || null;
+  }, [selectedMovementName, tennisMovements]);
 
   React.useEffect(() => {
+    let active = true;
+
     if (!user) {
       setUserList([]);
       setSelectedPlayerId("");
       setShowPlayerDropdown(false);
-      return;
+      setModelEvaluationMode(false);
+      return () => {
+        active = false;
+      };
     }
 
     if (!isAdmin) {
@@ -178,59 +256,45 @@ export default function UploadScreen() {
       ]);
       setSelectedPlayerId(user.id);
       setShowPlayerDropdown(false);
-      return;
-    }
-
-    if (!selectedPlayerId) {
-      setSelectedPlayerId(user.id);
-    }
-
-    let active = true;
-    (async () => {
-      try {
-        const baseUrl = getApiUrl();
-        const res = await fetch(`${baseUrl}api/users`, { credentials: "include" });
-        if (!active) return;
-        if (res.ok) {
-          const users = await res.json();
-          if (Array.isArray(users) && users.length > 0) {
-            setUserList(users);
-            return;
-          }
-        }
-        setUserList([
-          {
-            id: user.id,
-            name: user.name || "",
-            email: user.email || "",
-            role: user.role || "player",
-          },
-        ]);
-      } catch {
-        if (!active) return;
-        setUserList([
-          {
-            id: user.id,
-            name: user.name || "",
-            email: user.email || "",
-            role: user.role || "player",
-          },
-        ]);
+    } else {
+      if (!selectedPlayerId) {
+        setSelectedPlayerId(user.id);
       }
-    })();
 
-    return () => {
-      active = false;
-    };
-  }, [user, isAdmin]);
-
-  React.useEffect(() => {
-    if (!user) {
-      setModelEvaluationMode(false);
-      return;
+      (async () => {
+        try {
+          const baseUrl = getApiUrl();
+          const res = await fetch(`${baseUrl}api/users`, { credentials: "include" });
+          if (!active) return;
+          if (res.ok) {
+            const users = await res.json();
+            if (Array.isArray(users) && users.length > 0) {
+              setUserList(users);
+              return;
+            }
+          }
+          setUserList([
+            {
+              id: user.id,
+              name: user.name || "",
+              email: user.email || "",
+              role: user.role || "player",
+            },
+          ]);
+        } catch {
+          if (!active) return;
+          setUserList([
+            {
+              id: user.id,
+              name: user.name || "",
+              email: user.email || "",
+              role: user.role || "player",
+            },
+          ]);
+        }
+      })();
     }
 
-    let active = true;
     (async () => {
       try {
         const settings = await fetchModelEvaluationSettings();
@@ -245,26 +309,33 @@ export default function UploadScreen() {
     return () => {
       active = false;
     };
-  }, [user]);
+  }, [isAdmin, selectedPlayerId, user]);
 
   const uploadMutation = useMutation({
     mutationFn: () => {
       if (!selectedVideo) throw new Error("No video selected");
+      if (!tennisSport?.id) throw new Error("Tennis is not available yet. Please try again.");
+      if (selectedMovementName && !selectedMovement?.id) {
+        throw new Error("The selected tennis focus is still loading. Please try again.");
+      }
       return uploadVideo(
         selectedVideo.uri,
         selectedVideo.fileName,
-        selectedSport?.id,
+        tennisSport.id,
         selectedMovement?.id,
         selectedPlayerId || user?.id,
         recordedAtOverride,
+        sessionType,
+        requestedFocusKey,
       );
     },
     onSuccess: async (data) => {
+      setUploadUiStage("starting");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await AsyncStorage.setItem(LAST_WORKED_ANALYSIS_KEY, data.id).catch(() => {});
       const nowIso = new Date().toISOString();
       const effectiveUserId = selectedPlayerId || user?.id || data.userId;
-      const configKey = `${String(selectedSport?.name || "sport").trim().toLowerCase()}-${String(selectedMovement?.name || "auto-detect")
+      const configKey = `${String(tennisSport?.name || selectedSport?.name || "tennis").trim().toLowerCase()}-${String(selectedMovementName || "auto-detect")
         .trim()
         .toLowerCase()
         .replace(/\s+/g, "-")}`;
@@ -274,7 +345,7 @@ export default function UploadScreen() {
         userName: userList.find((item) => item.id === (selectedPlayerId || user?.id))?.name || user?.name || data.userName,
         videoPath: data.videoPath || selectedVideo?.uri || "",
         status: data.status || "pending",
-        detectedMovement: data.detectedMovement || selectedMovement?.name || null,
+        detectedMovement: data.detectedMovement || selectedMovementName || null,
         capturedAt: data.capturedAt || recordedAtOverride?.toISOString() || data.createdAt || nowIso,
         createdAt: data.createdAt || nowIso,
         updatedAt: data.updatedAt || nowIso,
@@ -299,6 +370,8 @@ export default function UploadScreen() {
 
       setSelectedVideo(null);
       setRecordedAtOverride(null);
+      setSessionType("practice");
+      setSelectedFocusKey("auto-detect");
 
       router.push({
         pathname: "/analysis/[id]",
@@ -306,36 +379,67 @@ export default function UploadScreen() {
       });
     },
     onError: (error: Error) => {
+      setUploadUiStage("idle");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Upload Failed", error.message);
+      const message = String(error.message || "").trim() || "Upload failed";
+      const title = /tennis|stroke|rally/i.test(message) ? "Invalid Video" : "Upload Failed";
+      Alert.alert(title, message);
     },
   });
 
-  const handleVideoResult = (result: ImagePicker.ImagePickerResult) => {
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      const targetUser = userList.find((u) => u.id === (selectedPlayerId || user?.id));
-      const fullNameToken = toFileToken(
-        targetUser?.name || user?.name || targetUser?.email || user?.email || "Player",
-        "Player",
-      );
-      const sportToken = toFileToken(selectedSport?.name || "Sport", "Sport");
-      const categoryToken = toFileToken(selectedMovement?.name || "AutoDetect", "AutoDetect");
-      const { date, time } = getTimestampParts(new Date());
-      const extension = getFileExtension(asset);
-      const generatedFileName = `${fullNameToken}-${sportToken}-${categoryToken}-${date}-${time}.${extension}`;
-      const evaluationFilename = (asset.fileName || "").trim();
-      const finalFileName = modelEvaluationMode && evaluationFilename
-        ? evaluationFilename
-        : generatedFileName;
+  const isUploadBusy = uploadMutation.isPending || uploadUiStage === "starting";
+  const analyzeButtonLabel = uploadUiStage === "starting"
+    ? "Starting analysis..."
+    : uploadMutation.isPending
+      ? "Uploading video..."
+      : "Start Analysis";
+  const uploadStatusMessage = uploadUiStage === "starting"
+    ? "Upload complete. Opening your analysis screen now."
+    : uploadMutation.isPending
+      ? "Uploading and validating your clip. Analysis starts automatically after this step."
+      : null;
 
-      setSelectedVideo({
-        uri: asset.uri,
-        fileName: finalFileName,
-        duration: asset.duration ? asset.duration / 1000 : null,
-        fileSize: asset.fileSize || null,
-      });
-      setRecordedAtOverride(null);
+  const setSelectedVideoFromAsset = useCallback((asset: {
+    uri: string;
+    fileName?: string | null;
+    name?: string | null;
+    duration?: number | null;
+    fileSize?: number | null;
+    size?: number;
+  }) => {
+    const targetUser = userList.find((u) => u.id === (selectedPlayerId || user?.id));
+    const fullNameToken = toFileToken(
+      targetUser?.name || user?.name || targetUser?.email || user?.email || "Player",
+      "Player",
+    );
+    const sportToken = toFileToken(tennisSport?.name || selectedSport?.name || "Tennis", "Tennis");
+    const categoryToken = toFileToken(selectedMovementName || "AutoDetect", "AutoDetect");
+    const { date, time } = getTimestampParts(new Date());
+    const originalName = (asset.fileName || asset.name || "").trim();
+    const extension = getFileExtension(originalName, asset.uri);
+    const generatedFileName = `${fullNameToken}-${sportToken}-${categoryToken}-${date}-${time}.${extension}`;
+    const finalFileName = modelEvaluationMode && originalName
+      ? originalName
+      : generatedFileName;
+
+    setSelectedVideo({
+      uri: asset.uri,
+      fileName: finalFileName,
+      duration: typeof asset.duration === "number" ? asset.duration / 1000 : null,
+      fileSize: asset.fileSize ?? asset.size ?? null,
+    });
+    setRecordedAtOverride(null);
+  }, [modelEvaluationMode, selectedMovementName, selectedPlayerId, selectedSport?.name, tennisSport?.name, user?.email, user?.id, user?.name, userList]);
+
+  const handleVideoResult = (result: ImagePicker.ImagePickerResult) => {
+    console.warn("launchVideoLibrary result", {
+      canceled: result.canceled,
+      assetCount: result.assets?.length ?? 0,
+      firstAsset: summarizePickerAsset(result.assets?.[0]),
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setSelectedVideoFromAsset(result.assets[0]);
     }
   };
 
@@ -379,6 +483,14 @@ export default function UploadScreen() {
     try {
       if (Platform.OS !== "web") {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        console.warn("launchVideoLibrary permission", {
+          granted: permission.granted,
+          canAskAgain: permission.canAskAgain,
+          status: permission.status,
+          accessPrivileges:
+            "accessPrivileges" in permission ? permission.accessPrivileges : undefined,
+          expires: permission.expires,
+        });
         if (!permission.granted) {
           Alert.alert(
             "Permission Needed",
@@ -403,17 +515,32 @@ export default function UploadScreen() {
         mediaTypes: ["videos"],
         quality: 0.7,
         videoMaxDuration: 30,
-        legacy: true,
         videoExportPreset: ImagePicker.VideoExportPreset.MediumQuality,
+        ...(Platform.OS === "android" ? { legacy: true } : {}),
       });
       handleVideoResult(result);
     } catch (error: any) {
-      const msg = error?.message || "";
-      if (error?.code === "ERR_CANCELED" || msg.includes("cancel")) return;
-      if (msg.includes("PHPhotosErrorDomain") || msg.includes("3164") || msg.includes("Could not load")) {
+      console.warn("launchVideoLibrary failed", {
+        platform: Platform.OS,
+        code: error?.code,
+        message: error?.message,
+        exception: error?.exception,
+        stack: error?.stack,
+      });
+
+      const msg = String(error?.message || "");
+      const lowerMsg = msg.toLowerCase();
+      if (error?.code === "ERR_CANCELED" || lowerMsg.includes("cancel")) return;
+      if (
+        msg.includes("PHPhotosErrorDomain")
+        || msg.includes("3164")
+        || msg.includes("Could not load")
+        || msg.includes("Cannot load representation")
+        || msg.includes("Cannot Open")
+      ) {
         Alert.alert(
           "Video Access Error",
-          "iOS could not process this video. Please try recording a new video using the camera option, or pick a shorter/smaller video.",
+          "iOS Photos still could not hand this video to the app. Try recording a new video, or reinstall the latest app build if Photos keeps failing.",
           [
             { text: "Record Video", onPress: launchVideoCamera },
             { text: "OK", style: "cancel" },
@@ -455,14 +582,17 @@ export default function UploadScreen() {
 
     Alert.alert("Select Video", "Choose how to add your video", [
       { text: "Record Video", onPress: launchVideoCamera },
-      { text: "Choose from Gallery", onPress: launchVideoLibrary },
+      { text: Platform.OS === "ios" ? "Choose from Photos" : "Choose from Gallery", onPress: launchVideoLibrary },
       { text: "Cancel", style: "cancel" },
     ]);
   };
 
-  const webTopInset = Platform.OS === "web" ? 67 : 0;
-  const movementLabel = selectedMovement?.name || selectedSport?.name || "Performance";
-  const isAutoDetectMode = !selectedMovement?.name;
+  const movementLabel = sessionType === "match-play"
+    ? "Match"
+    : selectedFocus.movementName || tennisSport?.name || selectedSport?.name || "Tennis";
+  const sessionDateValue = recordedAtOverride
+    ? formatSessionDateTime(recordedAtOverride)
+    : "Optional";
   const selectedPlayerLabel =
     (() => {
       const selected = userList.find((u) => u.id === selectedPlayerId);
@@ -495,16 +625,18 @@ export default function UploadScreen() {
             Analyze {movementLabel}
           </Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Upload a video for AI-powered {selectedSport?.name || "sports"} analysis
+            Upload a video for AI-powered tennis analysis
           </Text>
         </View>
 
-        <View style={styles.topControlsRow}>
-          {isAdmin ? (
+        {isAdmin ? (
+          <View style={styles.adminPlayerSection}>
+            <Text style={[styles.focusSectionLabel, { color: colors.textSecondary }]}>Player</Text>
             <Pressable
               onPress={() => setShowPlayerDropdown((prev) => !prev)}
               style={[
                 styles.playerDropdown,
+                styles.inlinePlayerDropdown,
                 {
                   borderColor: `${sportColor}55`,
                   backgroundColor: `${sportColor}12`,
@@ -524,40 +656,78 @@ export default function UploadScreen() {
                 color={sportColor}
               />
             </Pressable>
-          ) : (
-            <View
-              style={[
-                styles.playerDropdown,
-                styles.playerDropdownReadonly,
-                {
-                  borderColor: `${sportColor}55`,
-                  backgroundColor: `${sportColor}12`,
-                },
-              ]}
-            >
-              <Ionicons name="people" size={15} color={sportColor} />
-              <Text
-                style={[styles.playerDropdownText, { color: sportColor }]}
-                numberOfLines={1}
-              >
-                {selectedPlayerLabel}
-              </Text>
-            </View>
-          )}
+          </View>
+        ) : null}
 
-          {selectedSport && (
-            <View style={[styles.contextBadge, { backgroundColor: sportColor + "10", borderColor: sportColor + "25" }]}>
-              <Ionicons
-                name="flash-outline"
-                size={11}
-                color={isAutoDetectMode ? sportColor : "#34D399"}
-              />
-              <Text style={[styles.contextText, { color: sportColor }]}> 
-                {formatMovementBadgeLabel(selectedMovement?.name)}
-              </Text>
-            </View>
-          )}
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.focusSectionLabel, { color: colors.textSecondary }]}>Session Type</Text>
+          <View style={styles.sessionTypeRow}>
+            {SESSION_TYPE_OPTIONS.map((option) => {
+              const selected = option.key === sessionType;
+              return (
+                <Pressable
+                  key={option.key}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setSessionType(option.key);
+                  }}
+                  style={[
+                    styles.sessionTypeOption,
+                    {
+                      borderColor: selected ? sportColor : "#2A2A5060",
+                      backgroundColor: selected ? `${sportColor}18` : "#15152D",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.sessionTypeOptionText,
+                      { color: selected ? sportColor : colors.text },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
+
+        {sessionType === "practice" ? (
+          <View style={styles.sectionBlock}>
+            <Text style={[styles.focusSectionLabel, { color: colors.textSecondary }]}>Focus</Text>
+            <View style={styles.focusOptionsRow}>
+              {TENNIS_FOCUS_OPTIONS.map((option) => {
+                const selected = option.key === selectedFocusKey;
+                return (
+                  <Pressable
+                    key={option.key}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setSelectedFocusKey(option.key);
+                    }}
+                    style={[
+                      styles.focusOption,
+                      {
+                        borderColor: selected ? sportColor : "#2A2A5060",
+                        backgroundColor: selected ? `${sportColor}18` : "#15152D",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.focusOptionText,
+                        { color: selected ? sportColor : colors.text },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
 
         {isAdmin && showPlayerDropdown && (
           <Modal
@@ -650,17 +820,17 @@ export default function UploadScreen() {
               </View>
               <Pressable
                 onPress={() => {
-                  if (uploadMutation.isPending) return;
+                  if (isUploadBusy) return;
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   setSelectedVideo(null);
                   setRecordedAtOverride(null);
                 }}
-                disabled={uploadMutation.isPending}
+                disabled={isUploadBusy}
               >
                 <Ionicons
                   name="close-circle"
                   size={26}
-                  color={uploadMutation.isPending ? "#334155" : "#475569"}
+                  color={isUploadBusy ? "#334155" : "#475569"}
                 />
               </Pressable>
             </View>
@@ -716,11 +886,11 @@ export default function UploadScreen() {
             >
               <Ionicons name="calendar-outline" size={16} color={sportColor} />
               <View style={styles.sessionDateValueWrap}>
-                <Text style={styles.sessionDateCaption}>
-                  Optional session date & time
-                </Text>
                 <Text style={[styles.sessionDateValue, { color: colors.text }]}>
-                  {recordedAtOverride ? formatSessionDateTime(recordedAtOverride) : "Use video time or set manually"}
+                  Video Date
+                </Text>
+                <Text style={styles.sessionDateCaption}>
+                  {sessionDateValue}
                 </Text>
               </View>
               <View style={styles.sessionDateActions}>
@@ -729,6 +899,7 @@ export default function UploadScreen() {
                     <Text style={[styles.sessionDateClear, { color: sportColor }]}>Reset</Text>
                   </Pressable>
                 ) : null}
+                <Text style={[styles.sessionDateClear, { color: sportColor }]}>Update</Text>
                 <Ionicons name="chevron-forward" size={16} color={sportColor} />
               </View>
             </Pressable>
@@ -736,31 +907,36 @@ export default function UploadScreen() {
         )}
 
         {selectedVideo && (
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              uploadMutation.mutate();
-            }}
-            disabled={uploadMutation.isPending}
-            style={({ pressed }) => [
-              styles.analyzeButton,
-              {
-                backgroundColor: uploadMutation.isPending
-                  ? sportColor + "80"
-                  : sportColor,
-                transform: [{ scale: pressed ? 0.96 : 1 }],
-              },
-            ]}
-          >
-            {uploadMutation.isPending ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Ionicons name="flash" size={20} color="#fff" />
-            )}
-            <Text style={styles.analyzeText}>
-              {uploadMutation.isPending ? "Uploading..." : "Start Analysis"}
-            </Text>
-          </Pressable>
+          <View style={styles.analyzeSection}>
+            <Pressable
+              onPress={() => {
+                if (isUploadBusy) return;
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setUploadUiStage("uploading");
+                uploadMutation.mutate();
+              }}
+              disabled={isUploadBusy}
+              style={({ pressed }) => [
+                styles.analyzeButton,
+                {
+                  backgroundColor: isUploadBusy
+                    ? sportColor + "80"
+                    : sportColor,
+                  transform: [{ scale: pressed ? 0.96 : 1 }],
+                },
+              ]}
+            >
+              {isUploadBusy ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Ionicons name="flash" size={20} color="#fff" />
+              )}
+              <Text style={styles.analyzeText}>{analyzeButtonLabel}</Text>
+            </Pressable>
+            {uploadStatusMessage ? (
+              <Text style={styles.analyzeStatusText}>{uploadStatusMessage}</Text>
+            ) : null}
+          </View>
         )}
 
         <View style={styles.tipsSection}>
@@ -907,26 +1083,57 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: "#94A3B8",
   },
-  topControlsRow: {
+  adminPlayerSection: {
+    gap: 8,
+    marginBottom: 14,
+  },
+  inlinePlayerDropdown: {
+    maxWidth: "72%",
+  },
+  sectionBlock: {
+    gap: 8,
+    marginBottom: 14,
+  },
+  focusSectionLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+  },
+  sessionTypeRow: {
+    flexDirection: "row",
+    alignSelf: "flex-start",
+    gap: 6,
+  },
+  sessionTypeOption: {
+    minHeight: 34,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  sessionTypeOptionText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  focusOptionsRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 20,
-    gap: 10,
-  },
-  contextBadge: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    maxWidth: "58%",
   },
-  contextText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
+  focusOption: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    minWidth: 0,
+  },
+  focusOptionText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
   },
   playerDropdown: {
     flexDirection: "row",
@@ -934,7 +1141,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     gap: 6,
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 7,
     maxWidth: "55%",
@@ -978,9 +1185,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderStyle: "dashed",
     borderRadius: 20,
-    padding: 36,
+    paddingHorizontal: 28,
+    paddingTop: 24,
+    paddingBottom: 30,
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     marginBottom: 20,
   },
   uploadIcon: {
@@ -989,7 +1198,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   uploadTitle: {
     fontSize: 17,
@@ -1037,7 +1246,7 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
   },
   sessionDateCard: {
-    marginBottom: 14,
+    marginBottom: 12,
   },
   sessionDateClear: {
     fontSize: 12,
@@ -1046,8 +1255,8 @@ const styles = StyleSheet.create({
   sessionDatePickerButton: {
     borderRadius: 12,
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1055,20 +1264,23 @@ const styles = StyleSheet.create({
   },
   sessionDateValueWrap: {
     flex: 1,
-    gap: 1,
+    gap: 0,
   },
   sessionDateValue: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
   sessionDateCaption: {
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: "Inter_400Regular",
     color: "#94A3B8",
   },
   sessionDateActions: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 8,
+  },
+  analyzeSection: {
     gap: 8,
   },
   analyzeButton: {
@@ -1084,6 +1296,13 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
+  },
+  analyzeStatusText: {
+    color: "#94A3B8",
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 18,
+    marginBottom: 16,
   },
   tipsSection: { gap: 4, marginTop: 12 },
   tipsTitle: {

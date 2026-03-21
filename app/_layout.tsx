@@ -20,7 +20,7 @@ SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {
   const { user, isLoading: authLoading } = useAuth();
-  const { selectedSport, isLoading: sportLoading } = useSport();
+  const { isLoading: sportLoading } = useSport();
   const segments = useSegments();
   const router = useRouter();
   const [isRedirecting, setIsRedirecting] = useState(true);
@@ -34,18 +34,13 @@ function RootNavigator() {
     }
 
     const inAuthGroup = segments[0] === "login";
-    const inSportSelect = segments[0] === "sport-select";
-    let nextRoute: "/login" | "/sport-select" | "/" | null = null;
+    let nextRoute: "/login" | "/" | null = null;
 
     if (!user) {
       if (!inAuthGroup) {
         nextRoute = "/login";
       }
-    } else if (!selectedSport) {
-      if (!inSportSelect) {
-        nextRoute = "/sport-select";
-      }
-    } else if (inAuthGroup || inSportSelect) {
+    } else if (inAuthGroup) {
       nextRoute = "/";
     }
 
@@ -56,13 +51,12 @@ function RootNavigator() {
     }
 
     setIsRedirecting(false);
-  }, [isLoading, user, selectedSport, segments, router]);
+  }, [isLoading, user, segments, router]);
 
   return (
     <>
       <Stack initialRouteName="login" screenOptions={{ headerBackTitle: "Back" }}>
         <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="sport-select" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="profile"

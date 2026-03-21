@@ -26,12 +26,12 @@ export const tabletennisChopConfig: SportCategoryConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#FBBF24",
       description: "Repeatability of chop depth and backspin across strokes",
-      optimalRange: [70, 98],
+      optimalRange: [7, 9.8],
     },
     {
       key: "spinRate",
@@ -46,12 +46,12 @@ export const tabletennisChopConfig: SportCategoryConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Stability during the defensive chopping stance",
-      optimalRange: [70, 98],
+      optimalRange: [7, 9.8],
     },
     {
       key: "footworkScore",
@@ -66,12 +66,12 @@ export const tabletennisChopConfig: SportCategoryConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#A78BFA",
       description: "Tempo consistency of the defensive chop cycle",
-      optimalRange: [65, 95],
+      optimalRange: [6.5, 9.5],
     },
   ],
 };

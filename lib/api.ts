@@ -1,11 +1,14 @@
 import { fetch } from "expo/fetch";
 import { File } from "expo-file-system";
 import { getApiUrl } from "./query-client";
+import type { PipelineTiming } from "@shared/pipeline-timing";
 
 export interface AnalysisResponse {
   id: string;
   userId: string | null;
   userName?: string;
+  requestedSessionType?: string | null;
+  requestedFocusKey?: string | null;
   videoFilename: string;
   videoPath: string;
   videoUrl?: string | null;
@@ -303,6 +306,7 @@ export interface AnalysisDiagnosticsResponse {
   aiConfidencePct: number;
   detectedMovement: string;
   classificationRationale: string;
+  pipelineTiming?: PipelineTiming | null;
   validation: {
     valid: boolean;
     confidence: number;
@@ -521,6 +525,8 @@ export async function fetchAnalyses(): Promise<AnalysisResponse[]> {
 export interface AnalysisSummary extends AnalysisResponse {
   overallScore: number | null;
   subScores: Record<string, number | null> | null;
+  sportName?: string | null;
+  movementName?: string | null;
   metricValues?: Record<string, number> | null;
   scoreOutputs?: {
     technical?: {
@@ -1184,6 +1190,21 @@ export async function deleteAnalysis(id: string): Promise<void> {
   if (!res.ok) throw new Error("Failed to delete analysis");
 }
 
+export async function retryAnalysis(id: string): Promise<{ message: string; analysisId: string; status: string }> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/analyses/${id}/retry`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error || "Failed to retry analysis");
+  }
+
+  return res.json();
+}
+
 export async function uploadVideo(
   uri: string,
   filename: string,
@@ -1191,6 +1212,8 @@ export async function uploadVideo(
   movementId?: string | null,
   targetUserId?: string | null,
   recordedAt?: Date | null,
+  requestedSessionType?: string | null,
+  requestedFocusKey?: string | null,
 ): Promise<{ id: string }> {
   const baseUrl = getApiUrl();
   const formData = new FormData();
@@ -1201,6 +1224,8 @@ export async function uploadVideo(
   if (movementId) formData.append("movementId", movementId);
   if (targetUserId) formData.append("targetUserId", targetUserId);
   if (recordedAt) formData.append("recordedAt", recordedAt.toISOString());
+  if (requestedSessionType) formData.append("requestedSessionType", requestedSessionType);
+  if (requestedFocusKey) formData.append("requestedFocusKey", requestedFocusKey);
 
   const res = await fetch(`${baseUrl}api/upload`, {
     method: "POST",

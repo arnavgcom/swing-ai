@@ -76,12 +76,12 @@ export const badmintonSmashConfig: SportCategoryConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Smoothness and timing of the smash motion",
-      optimalRange: [65, 95],
+      optimalRange: [6.5, 9.5],
     },
   ],
 };
