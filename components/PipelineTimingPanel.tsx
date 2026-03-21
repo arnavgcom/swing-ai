@@ -3,7 +3,6 @@ import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
   formatDurationMs,
-  getPipelineTotalElapsedMs,
   type PipelineTiming,
   type PipelineTimingStage,
 } from "@shared/pipeline-timing";
@@ -58,20 +57,31 @@ export function PipelineTimingPanel({
   emptyText = "Pipeline timing is not available yet.",
 }: PipelineTimingPanelProps) {
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const visibleStages = useMemo(
+    () => (timing?.stages || []).filter((stage) => stage.key !== "upload"),
+    [timing],
+  );
 
   useEffect(() => {
-    if (!timing?.stages?.some((stage) => stage.status === "running")) return;
+    if (!visibleStages.some((stage) => stage.status === "running")) return;
 
     const intervalId = setInterval(() => {
       setNowMs(Date.now());
     }, 1000);
 
     return () => clearInterval(intervalId);
-  }, [timing]);
+  }, [visibleStages]);
 
-  const totalElapsed = useMemo(() => getPipelineTotalElapsedMs(timing, nowMs), [timing, nowMs]);
+  const totalElapsed = useMemo(() => {
+    const values = visibleStages
+      .map((stage) => computeStageElapsed(stage, nowMs))
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
 
-  if (!timing?.stages?.length) {
+    if (!values.length) return 0;
+    return values.reduce((sum, value) => sum + value, 0);
+  }, [visibleStages, nowMs]);
+
+  if (!visibleStages.length) {
     return <Text style={styles.emptyText}>{emptyText}</Text>;
   }
 
@@ -83,7 +93,7 @@ export function PipelineTimingPanel({
       </View>
 
       <View style={styles.stageList}>
-        {timing.stages.map((stage) => {
+        {visibleStages.map((stage) => {
           const statusMeta = getStageStatusMeta(stage.status);
           const elapsed = computeStageElapsed(stage, nowMs);
 

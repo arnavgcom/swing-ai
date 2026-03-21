@@ -94,6 +94,13 @@ export interface VideoStorageSettingsResponse {
   isAdmin: boolean;
 }
 
+export type VideoValidationMode = "disabled" | "light" | "medium" | "full";
+
+export interface VideoValidationSettingsResponse {
+  mode: VideoValidationMode;
+  isAdmin: boolean;
+}
+
 export interface ScoringModelDashboardResponse {
   modelVersion: string;
   modelVersionDescription: string;
@@ -830,6 +837,29 @@ export async function updateVideoStorageSettings(
     body: JSON.stringify({ mode }),
   });
   if (!res.ok) throw new Error("Failed to update video storage settings");
+  return res.json();
+}
+
+export async function fetchVideoValidationSettings(): Promise<VideoValidationSettingsResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/validation-settings`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch video validation settings");
+  return res.json();
+}
+
+export async function updateVideoValidationSettings(
+  mode: VideoValidationMode,
+): Promise<{ mode: VideoValidationMode }> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/validation-settings`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
+  if (!res.ok) throw new Error("Failed to update video validation settings");
   return res.json();
 }
 

@@ -4,11 +4,18 @@ import json
 import argparse
 import traceback
 import os
+import random
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from python_analysis.analysis_artifact import save_analysis_artifact
+
+
+VALIDATION_MODE_RANGES = {
+    "light": (8, 16),
+    "medium": (24, 48),
+}
 
 
 def _utc_now_iso() -> str:
@@ -159,12 +166,47 @@ def _apply_tennis_auto_detect_majority_normalization(shot_label_diagnostics: Lis
         d["reasons"] = reasons
 
 
+def _build_validation_pose_subset(
+    pose_data: List[Optional[Dict[str, Any]]],
+    mode: str,
+    video_path: str,
+) -> List[Optional[Dict[str, Any]]]:
+    normalized_mode = str(mode or "disabled").strip().lower()
+    if normalized_mode == "full":
+        return pose_data
+
+    if normalized_mode not in VALIDATION_MODE_RANGES:
+        return []
+
+    valid_indices = [index for index, pose in enumerate(pose_data) if pose is not None]
+    if not valid_indices:
+        return []
+
+    min_count, max_count = VALIDATION_MODE_RANGES[normalized_mode]
+    max_allowed = min(max_count, len(valid_indices))
+    min_allowed = min(min_count, max_allowed)
+    if max_allowed <= 0:
+        return []
+
+    seed = f"{os.path.basename(video_path)}:{normalized_mode}:{len(valid_indices)}"
+    picker = random.Random(seed)
+    sample_count = picker.randint(min_allowed, max_allowed)
+    sampled_indices = sorted(picker.sample(valid_indices, sample_count))
+    return [pose_data[index] for index in sampled_indices]
+
+
 def main():
     parser = argparse.ArgumentParser(description="Swing AI Sport Analysis")
     parser.add_argument("video_path", help="Path to the video file")
     parser.add_argument("--sport", default="tennis", help="Sport name (e.g., tennis, golf)")
     parser.add_argument("--movement", default="forehand", help="Movement name (e.g., forehand, drive)")
     parser.add_argument("--dominant-profile", default="", help="Player dominant side: right or left")
+    parser.add_argument(
+        "--validation-mode",
+        default="disabled",
+        choices=["disabled", "light", "medium", "full"],
+        help="Validation mode for pipeline rejection behavior",
+    )
 
     args = parser.parse_args()
 
@@ -176,6 +218,7 @@ def main():
     movement = args.movement.lower().replace(' ', '-').replace('_', '-')
     dominant_profile = args.dominant_profile.lower().strip()
     preferred_dominant_side = dominant_profile if dominant_profile in ("right", "left") else None
+    validation_mode = str(args.validation_mode or "disabled").strip().lower()
     movement = movement_aliases.get(movement, movement)
     user_config_key = f"{sport}-{movement}"
 
@@ -250,13 +293,24 @@ def main():
         classification_started_perf = time.perf_counter()
         _emit_pipeline_timing("classificationValidation", "running", started_at=classification_started_at)
         bg_features = analyze_background(args.video_path, pose_data)
+        validation: Dict[str, Any] = {
+            "valid": True,
+            "reason": "validation_disabled",
+            "confidence": 1.0,
+        }
 
-        validation = validate_sport_match(
-            pose_data, sport, fps, frame_width, frame_height,
-            bg_features=bg_features,
-        )
+        if validation_mode != "disabled":
+            validation_pose_data = _build_validation_pose_subset(pose_data, validation_mode, args.video_path)
+            validation = validate_sport_match(
+                validation_pose_data,
+                sport,
+                fps,
+                frame_width,
+                frame_height,
+                bg_features=bg_features,
+            )
 
-        validation_note = None if validation.get("valid") else str(validation.get("reason", "") or "validation_bypassed")
+        validation_note = None if validation.get("valid") else str(validation.get("reason", "") or "validation_failed")
         _emit_pipeline_timing(
             "classificationValidation",
             "completed",
@@ -265,6 +319,14 @@ def main():
             elapsed_ms=round((time.perf_counter() - classification_started_perf) * 1000),
             note=validation_note,
         )
+
+        if validation_mode != "disabled" and not validation.get("valid"):
+            print(json.dumps({
+                "rejected": True,
+                "rejectionReason": validation["reason"],
+                "confidence": validation.get("confidence", 0.0),
+            }))
+            sys.exit(0)
 
         classified, shot_count = classify_movement(
             pose_data,

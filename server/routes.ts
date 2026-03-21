@@ -867,6 +867,13 @@ function computeSummarySectionScores(
 }
 
 const MODEL_EVALUATION_MODE_KEY = "modelEvaluationMode";
+const VIDEO_VALIDATION_MODE_KEY = "videoValidationMode";
+
+type VideoValidationMode = "disabled" | "light" | "medium" | "full";
+
+function isVideoValidationMode(value: unknown): value is VideoValidationMode {
+  return value === "disabled" || value === "light" || value === "medium" || value === "full";
+}
 
 function getModelEvaluationModeKey(userId?: string): string {
   const uid = String(userId || "").trim();
@@ -1318,6 +1325,61 @@ async function setModelEvaluationMode(enabled: boolean, userId?: string, actorUs
         ...buildUpdateAuditFields(actorUserId || userId),
       },
     });
+}
+
+async function getVideoValidationMode(actorUserId?: string | null): Promise<VideoValidationMode> {
+  const [setting] = await db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.key, VIDEO_VALIDATION_MODE_KEY))
+    .limit(1);
+
+  const rawMode = setting?.value && typeof setting.value === "object"
+    ? (setting.value as Record<string, unknown>).mode
+    : null;
+  if (isVideoValidationMode(rawMode)) {
+    return rawMode;
+  }
+
+  const defaultMode: VideoValidationMode = "disabled";
+  await db
+    .insert(appSettings)
+    .values({
+      key: VIDEO_VALIDATION_MODE_KEY,
+      value: { mode: defaultMode },
+      ...buildInsertAuditFields(actorUserId || null),
+    })
+    .onConflictDoNothing();
+
+  return defaultMode;
+}
+
+async function setVideoValidationMode(mode: VideoValidationMode, actorUserId?: string | null): Promise<void> {
+  await db
+    .insert(appSettings)
+    .values({
+      key: VIDEO_VALIDATION_MODE_KEY,
+      value: { mode },
+      ...buildInsertAuditFields(actorUserId || null),
+    })
+    .onConflictDoUpdate({
+      target: appSettings.key,
+      set: {
+        value: { mode },
+        ...buildUpdateAuditFields(actorUserId || null),
+      },
+    });
+}
+
+async function ensureVideoValidationModeSetting(): Promise<void> {
+  await db
+    .insert(appSettings)
+    .values({
+      key: VIDEO_VALIDATION_MODE_KEY,
+      value: { mode: "disabled" satisfies VideoValidationMode },
+      ...buildInsertAuditFields(null),
+    })
+    .onConflictDoNothing();
 }
 
 type EvaluationLinkedAnalysis = {
@@ -2000,6 +2062,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`alter table app_settings add column if not exists created_by_user_id varchar`);
   await db.execute(sql`alter table app_settings add column if not exists updated_by_user_id varchar`);
 
+  await ensureVideoValidationModeSetting();
   await ensureVideoStorageModeSetting();
 
   await db.execute(sql`
@@ -2275,6 +2338,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mode: await getVideoStorageMode(),
         isAdmin,
       });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/platform/validation-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      res.json({
+        mode: await getVideoValidationMode(userId),
+        isAdmin,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/platform/validation-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const mode = String(req.body?.mode || "").trim().toLowerCase();
+      if (!isVideoValidationMode(mode)) {
+        return res.status(400).json({ error: "mode must be one of disabled, light, medium, or full" });
+      }
+
+      await setVideoValidationMode(mode, userId);
+      res.json({ mode });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

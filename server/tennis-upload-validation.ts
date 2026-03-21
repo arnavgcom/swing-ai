@@ -2,7 +2,7 @@ import { execFile } from "child_process";
 import fs from "fs";
 import { PROJECT_ROOT, resolveProjectPath } from "./env";
 
-const PYTHON_VALIDATION_TIMEOUT_MS = Number(process.env.PYTHON_VALIDATION_TIMEOUT_MS || 300000);
+const PYTHON_VALIDATION_TIMEOUT_MS = Number(process.env.PYTHON_VALIDATION_TIMEOUT_MS || 3600000);
 const PYTHON_VALIDATION_MAX_BUFFER = 10 * 1024 * 1024;
 
 export type TennisUploadGuardResult = {

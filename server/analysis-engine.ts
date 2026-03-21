@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { analyses, metrics, coachingInsights, sportMovements, sports, users } from "@shared/schema";
+import { analyses, appSettings, metrics, coachingInsights, sportMovements, sports, users } from "@shared/schema";
 import { and, desc, eq, isNotNull, ne, or } from "drizzle-orm";
 import { spawn } from "child_process";
 import { createHash } from "crypto";
@@ -49,6 +49,14 @@ interface PythonResult {
   rejected?: boolean;
   rejectionReason?: string;
   error?: string;
+}
+
+type VideoValidationMode = "disabled" | "light" | "medium" | "full";
+
+const VIDEO_VALIDATION_MODE_KEY = "videoValidationMode";
+
+function isVideoValidationMode(value: unknown): value is VideoValidationMode {
+  return value === "disabled" || value === "light" || value === "medium" || value === "full";
 }
 
 type CoachingPayload = PythonResult["coaching"];
@@ -916,6 +924,7 @@ function runPythonAnalysis(
   videoPath: string,
   sportName: string,
   movementName: string,
+  validationMode: VideoValidationMode,
   dominantProfile?: string | null,
   onProgress?: (event: PipelineProgressEvent) => Promise<void> | void,
 ): Promise<PythonResult> {
@@ -930,6 +939,8 @@ function runPythonAnalysis(
       sportName.toLowerCase(),
       "--movement",
       movementName.toLowerCase().replace(/\s+/g, "-"),
+      "--validation-mode",
+      validationMode,
     ];
 
     const dominant = String(dominantProfile || "").trim().toLowerCase();
@@ -1013,6 +1024,20 @@ function runPythonAnalysis(
       }
     });
   });
+}
+
+async function getVideoValidationMode(): Promise<VideoValidationMode> {
+  const [setting] = await db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.key, VIDEO_VALIDATION_MODE_KEY))
+    .limit(1);
+
+  const rawMode = setting?.value && typeof setting.value === "object"
+    ? (setting.value as Record<string, unknown>).mode
+    : null;
+
+  return isVideoValidationMode(rawMode) ? rawMode : "disabled";
 }
 
 function runPythonDiagnostics(
@@ -1142,6 +1167,7 @@ export async function processAnalysis(analysisId: string): Promise<void> {
 
     let dominantProfile: string | null = null;
     let userMetricPreferences: UserMetricPreferences | null = null;
+    const videoValidationMode = await getVideoValidationMode();
     if (analysis.userId) {
       const [profile] = await db
         .select({
@@ -1326,6 +1352,7 @@ export async function processAnalysis(analysisId: string): Promise<void> {
         localVideoPath,
         sportName,
         movementName,
+        videoValidationMode,
         dominantProfile,
         async (event) => {
           await applyPipelineUpdate(event);
@@ -1334,8 +1361,17 @@ export async function processAnalysis(analysisId: string): Promise<void> {
 
       if (result.rejected) {
         console.warn(
-          `Analysis ${analysisId} returned a rejected payload, but pipeline rejection is disabled. Continuing analysis result persistence. Reason: ${result.rejectionReason}`,
+          `Analysis ${analysisId} rejected by pipeline validation mode ${videoValidationMode}: ${result.rejectionReason}`,
         );
+        await db
+          .update(analyses)
+          .set({
+            status: "rejected",
+            rejectionReason: result.rejectionReason || "Video content does not match the selected validation mode.",
+            ...buildUpdateAuditFields(auditActorUserId),
+          })
+          .where(eq(analyses.id, analysisId));
+        return;
       }
 
       const actualMovement = result.detectedMovement || movementName;

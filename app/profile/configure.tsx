@@ -18,10 +18,40 @@ import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/query-client";
 import {
   fetchModelEvaluationSettings,
+  fetchVideoValidationSettings,
   fetchVideoStorageSettings,
+  type VideoValidationMode,
   updateModelEvaluationSettings,
+  updateVideoValidationSettings,
   updateVideoStorageSettings,
 } from "@/lib/api";
+
+const VIDEO_VALIDATION_OPTIONS: Array<{
+  mode: VideoValidationMode;
+  label: string;
+  description: string;
+}> = [
+  {
+    mode: "disabled",
+    label: "Disabled",
+    description: "No validation is performed",
+  },
+  {
+    mode: "light",
+    label: "Light",
+    description: "8-16 random frames",
+  },
+  {
+    mode: "medium",
+    label: "Medium",
+    description: "24-48 random frames",
+  },
+  {
+    mode: "full",
+    label: "Full",
+    description: "Full validation pipeline",
+  },
+];
 
 const normalizeRole = (value?: string | null): "admin" | "player" => {
   return value?.trim().toLowerCase() === "admin" ? "admin" : "player";
@@ -32,6 +62,8 @@ export default function ConfigureScreen() {
   const { user } = useAuth();
   const [modelEvaluationMode, setModelEvaluationMode] = useState(false);
   const [modelEvalLoading, setModelEvalLoading] = useState(false);
+  const [videoValidationMode, setVideoValidationMode] = useState<VideoValidationMode>("disabled");
+  const [videoValidationLoading, setVideoValidationLoading] = useState(false);
   const [videoStorageMode, setVideoStorageMode] = useState<"filesystem" | "r2">("filesystem");
   const [videoStorageLoading, setVideoStorageLoading] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
@@ -52,13 +84,15 @@ export default function ConfigureScreen() {
     let active = true;
     (async () => {
       try {
-        const [settings, storageSettings] = await Promise.all([
+        const [settings, storageSettings, validationSettings] = await Promise.all([
           fetchModelEvaluationSettings(),
           fetchVideoStorageSettings(),
+          fetchVideoValidationSettings(),
         ]);
         if (!active) return;
         setModelEvaluationMode(Boolean(settings.enabled));
         setVideoStorageMode(storageSettings.mode);
+        setVideoValidationMode(validationSettings.mode);
       } catch {
         if (!active) return;
       }
@@ -109,6 +143,20 @@ export default function ConfigureScreen() {
       Alert.alert("Error", "Failed to update video storage mode");
     } finally {
       setVideoStorageLoading(false);
+    }
+  };
+
+  const handleVideoValidationChange = async (mode: VideoValidationMode) => {
+    if (!canUseAdminApis || videoValidationLoading || mode === videoValidationMode) return;
+    setVideoValidationLoading(true);
+    try {
+      await updateVideoValidationSettings(mode);
+      setVideoValidationMode(mode);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert("Error", "Failed to update validation mode");
+    } finally {
+      setVideoValidationLoading(false);
     }
   };
 
@@ -221,6 +269,47 @@ export default function ConfigureScreen() {
           </View>
         </View>
 
+        <View style={styles.fieldWrapper}>
+          <Text style={styles.fieldLabel}>Validation</Text>
+          <View style={styles.validationCard}>
+            <Text style={styles.validationHeadline}>Upload/Pipeline Validation Mode</Text>
+            <Text style={styles.validationSubtext}>
+              Disabled is the persisted default, so no validation is currently performed.
+            </Text>
+            <View style={styles.validationOptionsList}>
+              {VIDEO_VALIDATION_OPTIONS.map((option) => {
+                const selected = videoValidationMode === option.mode;
+                return (
+                  <Pressable
+                    key={option.mode}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      handleVideoValidationChange(option.mode);
+                    }}
+                    disabled={videoValidationLoading}
+                    style={({ pressed }) => [
+                      styles.validationOption,
+                      selected && styles.validationOptionSelected,
+                      videoValidationLoading && styles.validationOptionDisabled,
+                      { transform: [{ scale: pressed ? 0.99 : 1 }] },
+                    ]}
+                  >
+                    <View style={styles.validationOptionTextWrap}>
+                      <Text style={[styles.validationOptionLabel, selected && styles.validationOptionLabelSelected]}>
+                        {option.label}
+                      </Text>
+                      <Text style={styles.validationOptionDescription}>{option.description}</Text>
+                    </View>
+                    {selected ? (
+                      <Ionicons name="checkmark-circle" size={18} color="#34D399" />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
         <Pressable
           onPress={() => router.push("/profile/score-metrics-selection")}
           style={({ pressed }) => [styles.actionButton, { transform: [{ scale: pressed ? 0.97 : 1 }] }]}
@@ -330,6 +419,65 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_500Medium",
     color: "#F8FAFC",
+  },
+  validationCard: {
+    gap: 10,
+    backgroundColor: "#131328",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  validationHeadline: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
+  },
+  validationSubtext: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  validationOptionsList: {
+    gap: 8,
+  },
+  validationOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+    backgroundColor: "#0E1022",
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  validationOptionSelected: {
+    borderColor: "#34D39966",
+    backgroundColor: "#0A1F1A",
+  },
+  validationOptionDisabled: {
+    opacity: 0.7,
+  },
+  validationOptionTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  validationOptionLabel: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#E2E8F0",
+  },
+  validationOptionLabelSelected: {
+    color: "#DCFCE7",
+  },
+  validationOptionDescription: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
   },
   actionButton: {
     flexDirection: "row",
