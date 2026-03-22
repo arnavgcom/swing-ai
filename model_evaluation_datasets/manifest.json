@@ -1,6 +1,4 @@
 {
-  "activeModelVersion": "0.1",
-  "versionHistory": [],
   "datasets": [
     {
       "name": "0.1",
@@ -9,6 +7,36 @@
     {
       "name": "manual-annotations",
       "videos": [
+        {
+          "videoId": "da34706d-8795-434e-a6e1-a26eed2741e0",
+          "filename": "model_evaluation_datasets/dataset/B5E3F5A8-C14E-4E6D-9DD3-FDE50D82075A.mp4",
+          "movementType": "forehand"
+        },
+        {
+          "videoId": "01cd610c-f2b2-4637-8961-fa25a4022b03",
+          "filename": "model_evaluation_datasets/dataset/4BBCCA4C-1890-43F2-80DD-9B20960690A7.mp4",
+          "movementType": "backhand"
+        },
+        {
+          "videoId": "81965ca1-2275-4167-b6d6-a97cafd9d10b",
+          "filename": "model_evaluation_datasets/dataset/3EE87487-7FA0-409E-9780-703644EA5A12.mp4",
+          "movementType": "forehand"
+        },
+        {
+          "videoId": "97bfbe90-e654-441e-8f81-0effeb0407cb",
+          "filename": "model_evaluation_datasets/dataset/7F664147-B124-4152-9DEA-DA28207C2E23.mp4",
+          "movementType": "forehand"
+        },
+        {
+          "videoId": "c0a87d02-dd1a-4f83-8d2a-a88203a4fa6e",
+          "filename": "model_evaluation_datasets/dataset/5510F422-36E3-4646-B69C-8F81B974EF8B.mp4",
+          "movementType": "forehand"
+        },
+        {
+          "videoId": "66ee89c9-f443-40de-9c28-9615bb28e883",
+          "filename": "model_evaluation_datasets/dataset/6A03E89E-ECC5-47B2-989C-00AF09F89E4F.mp4",
+          "movementType": "forehand"
+        }
       ]
     }
   ]

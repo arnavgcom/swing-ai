@@ -14,6 +14,11 @@ import {
   type PipelineTiming,
 } from "@shared/pipeline-timing";
 import { normalizeMetricValueToTenScale } from "@shared/metric-scale";
+import {
+  isVideoValidationMode,
+  type ValidationScreeningSnapshot,
+  type VideoValidationMode,
+} from "@shared/video-validation";
 import { readModelRegistryConfig } from "./model-registry";
 import {
   toPersistedScoreTen,
@@ -27,7 +32,11 @@ import type { AiDiagnosticsPayload, ScoreInputsPayload, ScoreOutputsPayload } fr
 import { withLocalMediaFile } from "./media-storage";
 import { buildInsertAuditFields, buildUpdateAuditFields } from "./audit-metadata";
 import { PROJECT_ROOT, resolveProjectPath } from "./env";
-import { validateTennisVideoUpload } from "./tennis-upload-validation";
+import {
+  getTennisUploadValidationSampleCount,
+  validateTennisVideoUpload,
+} from "./tennis-upload-validation";
+import { getEnabledPrimarySport, getSportById, isSportEnabledRecord } from "./sport-availability";
 
 interface PythonResult {
   configKey: string;
@@ -51,12 +60,110 @@ interface PythonResult {
   error?: string;
 }
 
-type VideoValidationMode = "disabled" | "light" | "medium" | "full";
+interface PythonMetricEnrichmentResult {
+  configKey?: string;
+  metricValues: Record<string, number>;
+  error?: string;
+}
+
+type AnalysisFpsMode = "3fps" | "6fps" | "12fps" | "15fps" | "24fps" | "30fps" | "full";
+type AnalysisFpsStep = "step1" | "step2" | "step3";
 
 const VIDEO_VALIDATION_MODE_KEY = "videoValidationMode";
+const ANALYSIS_FPS_MODE_KEY = "analysisFpsMode";
+const ASYNC_METRIC_ENRICHMENT_KEYS_BY_CONFIG: Record<string, string[]> = {
+  "tennis-forehand": ["elbowAngle"],
+  "tennis-backhand": ["elbowAngle"],
+  "tennis-volley": ["rhythmConsistency"],
+  "tennis-game": ["rallyLength"],
+};
 
-function isVideoValidationMode(value: unknown): value is VideoValidationMode {
-  return value === "disabled" || value === "light" || value === "medium" || value === "full";
+function isAnalysisFpsMode(value: unknown): value is AnalysisFpsMode {
+  return value === "3fps"
+    || value === "6fps"
+    || value === "12fps"
+    || value === "15fps"
+    || value === "24fps"
+    || value === "30fps"
+    || value === "full";
+}
+
+function isAnalysisFpsStep(value: unknown): value is AnalysisFpsStep {
+  return value === "step1" || value === "step2" || value === "step3";
+}
+
+function shouldUseCoreMetricComputation(configKey: string): boolean {
+  return String(configKey || "").trim().toLowerCase().startsWith("tennis-");
+}
+
+function hasPendingAsyncMetricEnrichment(configKey: string, metricValues: Record<string, unknown> | null | undefined): boolean {
+  const requiredKeys = ASYNC_METRIC_ENRICHMENT_KEYS_BY_CONFIG[configKey] || [];
+  if (!requiredKeys.length) return false;
+  return requiredKeys.some((key) => !Number.isFinite(Number(metricValues?.[key])));
+}
+
+function buildValidationScreeningSnapshot(validationMode: VideoValidationMode): ValidationScreeningSnapshot {
+  const uploadGuardSampleCount = getTennisUploadValidationSampleCount(validationMode);
+  return {
+    uploadGuardMode: validationMode,
+    uploadGuardApplied: uploadGuardSampleCount != null,
+    uploadGuardSampleCount,
+    pipelineValidationMode: validationMode,
+    pipelineValidationApplied: validationMode !== "disabled",
+  };
+}
+
+function mergeValidationScreeningSnapshot(
+  diagnosticsPayload: Record<string, unknown>,
+  validationScreening: ValidationScreeningSnapshot | null | undefined,
+): Record<string, unknown> {
+  if (!validationScreening) return diagnosticsPayload;
+  return {
+    ...diagnosticsPayload,
+    validationScreening,
+  };
+}
+
+type AnalysisFpsSettings = {
+  lowImpactStep: AnalysisFpsStep;
+  highImpactStep: AnalysisFpsStep;
+  tennisAutoDetectUsesHighImpact: boolean;
+  tennisMatchPlayUsesHighImpact: boolean;
+};
+
+type AnalysisFpsRoutingReason =
+  | "serve-selected"
+  | "tennis-auto-detect-override"
+  | "tennis-match-play-override"
+  | "default-low-impact";
+
+type AnalysisFpsRuntimeSnapshot = {
+  effectiveStep: AnalysisFpsStep;
+  lowImpactStep: AnalysisFpsStep;
+  highImpactStep: AnalysisFpsStep;
+  tennisAutoDetectUsesHighImpact: boolean;
+  tennisMatchPlayUsesHighImpact: boolean;
+  routingReason: AnalysisFpsRoutingReason;
+};
+
+function coerceLowImpactStep(value: unknown): AnalysisFpsStep {
+  if (isAnalysisFpsStep(value)) return value;
+  if (isAnalysisFpsMode(value)) {
+    if (value === "15fps") return "step2";
+    if (value === "12fps" || value === "6fps" || value === "3fps") return "step3";
+    return "step1";
+  }
+  return "step2";
+}
+
+function coerceHighImpactStep(value: unknown): AnalysisFpsStep {
+  if (isAnalysisFpsStep(value)) return value;
+  if (isAnalysisFpsMode(value)) {
+    if (value === "15fps") return "step2";
+    if (value === "12fps" || value === "6fps" || value === "3fps") return "step3";
+    return "step1";
+  }
+  return "step1";
 }
 
 type CoachingPayload = PythonResult["coaching"];
@@ -558,6 +665,38 @@ type UserMetricPreferences = {
   selectedMetricKeysBySport: Record<string, string[]>;
 };
 
+async function loadUserAnalysisPreferences(
+  userId: string | null | undefined,
+): Promise<{ dominantProfile: string | null; userMetricPreferences: UserMetricPreferences | null }> {
+  if (!userId) {
+    return {
+      dominantProfile: null,
+      userMetricPreferences: null,
+    };
+  }
+
+  const [profile] = await db
+    .select({
+      dominantProfile: users.dominantProfile,
+      selectedMetricKeys: users.selectedMetricKeys,
+      selectedMetricKeysBySport: users.selectedMetricKeysBySport,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  return {
+    dominantProfile: profile?.dominantProfile ?? null,
+    userMetricPreferences: {
+      selectedMetricKeys: Array.isArray(profile?.selectedMetricKeys) ? profile.selectedMetricKeys : [],
+      selectedMetricKeysBySport:
+        profile?.selectedMetricKeysBySport && typeof profile.selectedMetricKeysBySport === "object"
+          ? (profile.selectedMetricKeysBySport as Record<string, string[]>)
+          : {},
+    },
+  };
+}
+
 type CoachingFactorDefinition = {
   key: string;
   label: string;
@@ -925,6 +1064,8 @@ function runPythonAnalysis(
   sportName: string,
   movementName: string,
   validationMode: VideoValidationMode,
+  analysisFpsSnapshot: AnalysisFpsRuntimeSnapshot,
+  metricComputationMode: "core" | "full",
   dominantProfile?: string | null,
   onProgress?: (event: PipelineProgressEvent) => Promise<void> | void,
 ): Promise<PythonResult> {
@@ -941,6 +1082,20 @@ function runPythonAnalysis(
       movementName.toLowerCase().replace(/\s+/g, "-"),
       "--validation-mode",
       validationMode,
+      "--analysis-fps-mode",
+      analysisFpsSnapshot.effectiveStep,
+      "--low-impact-fps-step",
+      analysisFpsSnapshot.lowImpactStep,
+      "--high-impact-fps-step",
+      analysisFpsSnapshot.highImpactStep,
+      "--tennis-auto-detect-uses-high-impact",
+      String(analysisFpsSnapshot.tennisAutoDetectUsesHighImpact),
+      "--tennis-match-play-uses-high-impact",
+      String(analysisFpsSnapshot.tennisMatchPlayUsesHighImpact),
+      "--analysis-fps-routing-reason",
+      analysisFpsSnapshot.routingReason,
+      "--metric-computation-mode",
+      metricComputationMode,
     ];
 
     const dominant = String(dominantProfile || "").trim().toLowerCase();
@@ -1026,6 +1181,328 @@ function runPythonAnalysis(
   });
 }
 
+function runPythonMetricEnrichment(
+  videoPath: string,
+  configKey: string,
+  analysisArtifactPath: string,
+): Promise<PythonMetricEnrichmentResult> {
+  return new Promise((resolve, reject) => {
+    const pythonExecutable = resolvePythonExecutable();
+    const args = [
+      "-m",
+      "python_analysis.run_metric_enrichment",
+      videoPath,
+      "--analysis-artifact",
+      analysisArtifactPath,
+      "--config-key",
+      configKey,
+    ];
+
+    const child = spawn(pythonExecutable, args, {
+      cwd: PROJECT_ROOT,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+
+    const timeoutHandle = setTimeout(() => {
+      if (settled) return;
+      child.kill("SIGKILL");
+    }, 3600000);
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", (error) => {
+      clearTimeout(timeoutHandle);
+      settled = true;
+      reject(new Error(`Python metric enrichment failed: ${error.message}`));
+    });
+
+    child.on("close", (code, signal) => {
+      clearTimeout(timeoutHandle);
+      if (settled) return;
+      settled = true;
+
+      if (code !== 0) {
+        if (stderr) console.error("Python metric enrichment stderr:", stderr);
+        const suffix = signal ? ` (signal: ${signal})` : "";
+        reject(new Error(`Python metric enrichment failed: exit code ${code ?? "unknown"}${suffix}`));
+        return;
+      }
+
+      try {
+        const result = JSON.parse(stdout.trim());
+        if (result?.error) {
+          reject(new Error(result.error));
+          return;
+        }
+        resolve(result as PythonMetricEnrichmentResult);
+      } catch {
+        if (stderr) console.error("Python metric enrichment stderr:", stderr);
+        reject(new Error("Failed to parse metric enrichment results"));
+      }
+    });
+  });
+}
+
+async function backfillAnalysisEnrichment(args: {
+  analysisId: string;
+  videoPath: string;
+  sportName: string;
+  movementName: string;
+  dominantProfile?: string | null;
+  analysisArtifactPath?: string | null;
+  configKey?: string | null;
+  modelVersion?: string | null;
+  auditActorUserId?: string | null;
+}): Promise<void> {
+  let pipelineTiming: PipelineTiming | null = null;
+
+  try {
+    pipelineTiming = await persistPipelineTimingUpdate(
+      args.analysisId,
+      {
+        stageKey: "diagnostics",
+        status: "running",
+        startedAt: new Date().toISOString(),
+      },
+      {
+        configKey: args.configKey,
+        modelVersion: args.modelVersion,
+        auditActorUserId: args.auditActorUserId,
+      },
+    );
+
+    const enrichmentStartedAt = Date.now();
+    let diagnosticsPayload: AiDiagnosticsPayload | null = null;
+    let metricEnrichmentPayload: PythonMetricEnrichmentResult | null = null;
+    let diagnosticsError: Error | null = null;
+    let metricEnrichmentError: Error | null = null;
+    const shouldRunMetricEnrichment = Boolean(
+      args.analysisArtifactPath
+      && args.configKey
+      && (ASYNC_METRIC_ENRICHMENT_KEYS_BY_CONFIG[args.configKey] || []).length > 0,
+    );
+
+    await Promise.all([
+      runPythonDiagnostics(
+        args.videoPath,
+        args.sportName,
+        args.movementName,
+        args.dominantProfile,
+        args.analysisArtifactPath,
+      )
+        .then((payload) => {
+          diagnosticsPayload = payload;
+        })
+        .catch((error) => {
+          diagnosticsError = error instanceof Error ? error : new Error(String(error));
+        }),
+      shouldRunMetricEnrichment
+        ? runPythonMetricEnrichment(
+          args.videoPath,
+          args.configKey as string,
+          args.analysisArtifactPath as string,
+        )
+          .then((payload) => {
+            metricEnrichmentPayload = payload;
+          })
+          .catch((error) => {
+            metricEnrichmentError = error instanceof Error ? error : new Error(String(error));
+          })
+        : Promise.resolve(),
+    ]);
+
+    const [analysisRow] = await db
+      .select({
+        id: analyses.id,
+        userId: analyses.userId,
+        detectedMovement: analyses.detectedMovement,
+      })
+      .from(analyses)
+      .where(eq(analyses.id, args.analysisId))
+      .limit(1);
+
+    const [metricRow] = await db
+      .select({
+        id: metrics.id,
+        configKey: metrics.configKey,
+        modelVersion: metrics.modelVersion,
+        overallScore: metrics.overallScore,
+        metricValues: metrics.metricValues,
+        scoreOutputs: metrics.scoreOutputs,
+        aiDiagnostics: metrics.aiDiagnostics,
+      })
+      .from(metrics)
+      .where(eq(metrics.analysisId, args.analysisId))
+      .orderBy(desc(metrics.createdAt))
+      .limit(1);
+    const existingDiagnosticsRecord = metricRow?.aiDiagnostics && typeof metricRow.aiDiagnostics === "object"
+      ? (metricRow.aiDiagnostics as Record<string, unknown>)
+      : {};
+    const existingValidationScreening = existingDiagnosticsRecord.validationScreening as ValidationScreeningSnapshot | undefined;
+
+    const diagnosticsFailureMessage = diagnosticsError ? String((diagnosticsError as Error).message || diagnosticsError) : null;
+    const metricEnrichmentFailureMessage = metricEnrichmentError
+      ? String((metricEnrichmentError as Error).message || metricEnrichmentError)
+      : null;
+    const finalStatus = diagnosticsFailureMessage && metricEnrichmentFailureMessage ? "failed" : "completed";
+    const noteParts = [
+      diagnosticsFailureMessage ? `diagnostics: ${diagnosticsFailureMessage}` : null,
+      metricEnrichmentFailureMessage ? `metric enrichment: ${metricEnrichmentFailureMessage}` : null,
+    ].filter((value): value is string => Boolean(value));
+
+    pipelineTiming = await persistPipelineTimingUpdate(
+      args.analysisId,
+      {
+        stageKey: "diagnostics",
+        status: finalStatus,
+        completedAt: new Date().toISOString(),
+        elapsedMs: Date.now() - enrichmentStartedAt,
+        note: noteParts.length ? noteParts.join(" | ") : null,
+      },
+      {
+        configKey: args.configKey,
+        modelVersion: args.modelVersion,
+        auditActorUserId: args.auditActorUserId,
+        existingTiming: pipelineTiming,
+      },
+    );
+
+    const diagnosticsBaseRecord = diagnosticsPayload && typeof diagnosticsPayload === "object"
+      ? mergeValidationScreeningSnapshot(
+        diagnosticsPayload as Record<string, unknown>,
+        existingValidationScreening,
+      )
+      : mergeValidationScreeningSnapshot(existingDiagnosticsRecord, existingValidationScreening);
+    const diagnosticsWithTiming = attachPipelineTiming(
+      diagnosticsBaseRecord,
+      pipelineTiming,
+    ) as AiDiagnosticsPayload;
+
+    if (!metricRow || !analysisRow) {
+      await upsertAnalysisDiagnosticsPayload(args.analysisId, diagnosticsWithTiming, {
+        configKey: args.configKey,
+        modelVersion: args.modelVersion,
+        auditActorUserId: args.auditActorUserId,
+      });
+      if (diagnosticsError && metricEnrichmentError) {
+        throw diagnosticsError;
+      }
+      return;
+    }
+
+    const configKey = metricRow.configKey || args.configKey || DEFAULT_PIPELINE_CONFIG_KEY;
+    const metricEnrichmentResult = metricEnrichmentPayload as PythonMetricEnrichmentResult | null;
+    const enrichedMetricValues = (metricEnrichmentResult?.metricValues || {}) as Record<string, unknown>;
+    const mergedMetricValuesRaw: Record<string, unknown> = {
+      ...(((metricRow.metricValues as Record<string, unknown> | null) || {})),
+      ...enrichedMetricValues,
+    };
+    const normalizedMetricValues = normalizeMetricValuesForPersistence(
+      mergedMetricValuesRaw,
+      diagnosticsWithTiming,
+    );
+    const metricValues = sanitizePersistedMap(normalizedMetricValues);
+    const scoreInputs = buildScoreInputsPayload(configKey, metricValues);
+    const tacticalComponents = extractStandardizedTacticalScores10(
+      sanitizePersistedMap(
+        ((metricRow.scoreOutputs as any)?.tactical?.components as Record<string, number> | null)
+          || ((metricRow.scoreOutputs as any)?.tacticalComponents as Record<string, number> | null)
+          || {},
+      ),
+    );
+    const scoreOutputs = buildScoreOutputsPayload({
+      configKey,
+      detectedMovement: analysisRow.detectedMovement || args.movementName,
+      tacticalComponents,
+      metricValues,
+      overallScore: metricRow.overallScore == null ? null : Number(metricRow.overallScore),
+    });
+    const { userMetricPreferences } = await loadUserAnalysisPreferences(analysisRow.userId);
+    const coaching = buildPersonalizedCoaching({
+      configKey,
+      detectedMovement: analysisRow.detectedMovement || args.movementName,
+      overallScore: metricRow.overallScore == null ? null : Number(metricRow.overallScore),
+      scoreInputs,
+      scoreOutputs,
+      metricValues,
+      preferences: userMetricPreferences,
+    });
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(metrics)
+        .set({
+          configKey,
+          modelVersion: metricRow.modelVersion || args.modelVersion || DEFAULT_PIPELINE_MODEL_VERSION,
+          metricValues,
+          scoreInputs,
+          scoreOutputs,
+          aiDiagnostics: diagnosticsWithTiming,
+          ...buildUpdateAuditFields(args.auditActorUserId ?? null),
+        })
+        .where(eq(metrics.id, metricRow.id));
+
+      await tx.delete(coachingInsights).where(eq(coachingInsights.analysisId, args.analysisId));
+      await tx.insert(coachingInsights).values({
+        analysisId: args.analysisId,
+        ...coaching,
+        ...buildInsertAuditFields(args.auditActorUserId ?? null),
+      });
+    });
+
+    if (diagnosticsFailureMessage) {
+      console.warn(
+        `Diagnostics generation failed for analysis ${args.analysisId}: ${diagnosticsFailureMessage}`,
+      );
+    }
+    if (metricEnrichmentFailureMessage) {
+      console.warn(
+        `Metric enrichment failed for analysis ${args.analysisId}: ${metricEnrichmentFailureMessage}`,
+      );
+    }
+  } catch (diagnosticsError: any) {
+    await persistPipelineTimingUpdate(
+      args.analysisId,
+      {
+        stageKey: "diagnostics",
+        status: "failed",
+        completedAt: new Date().toISOString(),
+        note: diagnosticsError?.message || String(diagnosticsError),
+      },
+      {
+        configKey: args.configKey,
+        modelVersion: args.modelVersion,
+        auditActorUserId: args.auditActorUserId,
+        existingTiming: pipelineTiming,
+      },
+    );
+    console.warn(
+      `Diagnostics generation failed for analysis ${args.analysisId}: ${diagnosticsError?.message || diagnosticsError}`,
+    );
+  } finally {
+    const artifactPath = String(args.analysisArtifactPath || "").trim();
+    if (artifactPath) {
+      try {
+        fs.unlinkSync(artifactPath);
+      } catch (cleanupError) {
+        console.warn(
+          `Failed to remove analysis artifact for ${args.analysisId}: ${String(cleanupError)}`,
+        );
+      }
+    }
+  }
+}
+
 async function getVideoValidationMode(): Promise<VideoValidationMode> {
   const [setting] = await db
     .select()
@@ -1038,6 +1515,74 @@ async function getVideoValidationMode(): Promise<VideoValidationMode> {
     : null;
 
   return isVideoValidationMode(rawMode) ? rawMode : "disabled";
+}
+
+async function getAnalysisFpsSettings(): Promise<AnalysisFpsSettings> {
+  const [setting] = await db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.key, ANALYSIS_FPS_MODE_KEY))
+    .limit(1);
+
+  const rawValue = setting?.value && typeof setting.value === "object"
+    ? (setting.value as Record<string, unknown>)
+    : null;
+
+  return {
+    lowImpactStep: coerceLowImpactStep(rawValue?.lowImpactStep ?? rawValue?.lowImpactMode),
+    highImpactStep: coerceHighImpactStep(rawValue?.highImpactStep ?? rawValue?.highImpactMode),
+    tennisAutoDetectUsesHighImpact: Boolean(rawValue?.tennisAutoDetectUsesHighImpact),
+    tennisMatchPlayUsesHighImpact: Boolean(rawValue?.tennisMatchPlayUsesHighImpact),
+  };
+}
+
+function resolveAnalysisFpsModeForMovement(
+  sportName: string | null | undefined,
+  movementName: string | null | undefined,
+  requestedSessionType: string | null | undefined,
+  settings: AnalysisFpsSettings,
+): AnalysisFpsRuntimeSnapshot {
+  const normalizedSport = String(sportName || "").trim().toLowerCase();
+  const normalized = String(movementName || "").trim().toLowerCase();
+  const normalizedSessionType = String(requestedSessionType || "").trim().toLowerCase();
+  if (normalized === "serve") {
+    return {
+      effectiveStep: settings.highImpactStep,
+      lowImpactStep: settings.lowImpactStep,
+      highImpactStep: settings.highImpactStep,
+      tennisAutoDetectUsesHighImpact: settings.tennisAutoDetectUsesHighImpact,
+      tennisMatchPlayUsesHighImpact: settings.tennisMatchPlayUsesHighImpact,
+      routingReason: "serve-selected",
+    };
+  }
+  if (normalizedSport === "tennis" && normalized === "auto-detect" && settings.tennisAutoDetectUsesHighImpact) {
+    return {
+      effectiveStep: settings.highImpactStep,
+      lowImpactStep: settings.lowImpactStep,
+      highImpactStep: settings.highImpactStep,
+      tennisAutoDetectUsesHighImpact: settings.tennisAutoDetectUsesHighImpact,
+      tennisMatchPlayUsesHighImpact: settings.tennisMatchPlayUsesHighImpact,
+      routingReason: "tennis-auto-detect-override",
+    };
+  }
+  if (normalizedSport === "tennis" && normalizedSessionType === "match-play" && settings.tennisMatchPlayUsesHighImpact) {
+    return {
+      effectiveStep: settings.highImpactStep,
+      lowImpactStep: settings.lowImpactStep,
+      highImpactStep: settings.highImpactStep,
+      tennisAutoDetectUsesHighImpact: settings.tennisAutoDetectUsesHighImpact,
+      tennisMatchPlayUsesHighImpact: settings.tennisMatchPlayUsesHighImpact,
+      routingReason: "tennis-match-play-override",
+    };
+  }
+  return {
+    effectiveStep: settings.lowImpactStep,
+    lowImpactStep: settings.lowImpactStep,
+    highImpactStep: settings.highImpactStep,
+    tennisAutoDetectUsesHighImpact: settings.tennisAutoDetectUsesHighImpact,
+    tennisMatchPlayUsesHighImpact: settings.tennisMatchPlayUsesHighImpact,
+    routingReason: "default-low-impact",
+  };
 }
 
 function runPythonDiagnostics(
@@ -1156,41 +1701,55 @@ export async function processAnalysis(analysisId: string): Promise<void> {
     }
 
     if (analysis.sportId) {
-      const [sport] = await db
-        .select()
-        .from(sports)
-        .where(eq(sports.id, analysis.sportId));
+      const sport = await getSportById(analysis.sportId);
       if (sport) {
+        if (!isSportEnabledRecord(sport)) {
+          await db
+            .update(analyses)
+            .set({
+              status: "failed",
+              rejectionReason: `${sport.name} is currently disabled and was not executed.`,
+              ...buildUpdateAuditFields(auditActorUserId),
+            })
+            .where(eq(analyses.id, analysisId));
+          return;
+        }
         sportName = sport.name;
       }
+    } else {
+      const enabledPrimarySport = await getEnabledPrimarySport();
+      if (!enabledPrimarySport) {
+        await db
+          .update(analyses)
+          .set({
+            status: "failed",
+            rejectionReason: "No enabled sport is available for execution.",
+            ...buildUpdateAuditFields(auditActorUserId),
+          })
+          .where(eq(analyses.id, analysisId));
+        return;
+      }
+      sportName = enabledPrimarySport.name;
     }
 
     let dominantProfile: string | null = null;
     let userMetricPreferences: UserMetricPreferences | null = null;
-    const videoValidationMode = await getVideoValidationMode();
-    if (analysis.userId) {
-      const [profile] = await db
-        .select({
-          dominantProfile: users.dominantProfile,
-          selectedMetricKeys: users.selectedMetricKeys,
-          selectedMetricKeysBySport: users.selectedMetricKeysBySport,
-        })
-        .from(users)
-        .where(eq(users.id, analysis.userId))
-        .limit(1);
-      dominantProfile = profile?.dominantProfile ?? null;
-      userMetricPreferences = {
-        selectedMetricKeys: Array.isArray(profile?.selectedMetricKeys) ? profile.selectedMetricKeys : [],
-        selectedMetricKeysBySport:
-          profile?.selectedMetricKeysBySport && typeof profile.selectedMetricKeysBySport === "object"
-            ? (profile.selectedMetricKeysBySport as Record<string, string[]>)
-            : {},
-      };
-    }
+    const [videoValidationMode, analysisFpsSettings] = await Promise.all([
+      getVideoValidationMode(),
+      getAnalysisFpsSettings(),
+    ]);
+    const validationScreening = buildValidationScreeningSnapshot(videoValidationMode);
+    const profileContext = await loadUserAnalysisPreferences(analysis.userId);
+    dominantProfile = profileContext.dominantProfile;
+    userMetricPreferences = profileContext.userMetricPreferences;
 
     await withLocalMediaFile(analysis.videoPath, analysis.videoFilename, async (localVideoPath) => {
       if (String(sportName || "").trim().toLowerCase() === "tennis") {
-        const tennisUploadGuard = await validateTennisVideoUpload(localVideoPath, dominantProfile);
+        const tennisUploadGuard = await validateTennisVideoUpload(
+          localVideoPath,
+          videoValidationMode,
+          dominantProfile,
+        );
         if (!tennisUploadGuard.accepted) {
           await db
             .update(analyses)
@@ -1206,14 +1765,22 @@ export async function processAnalysis(analysisId: string): Promise<void> {
         }
       }
 
-      const videoContentHash = await computeVideoContentHash(localVideoPath);
-      if (videoContentHash) {
-        await db
-          .update(analyses)
-          .set({ videoContentHash, updatedAt: new Date() })
-          .where(eq(analyses.id, analysis.id));
-        analysis.videoContentHash = videoContentHash;
-      }
+      const videoContentHashPromise = computeVideoContentHash(localVideoPath)
+        .then(async (videoContentHash) => {
+          if (!videoContentHash) return null;
+          await db
+            .update(analyses)
+            .set({ videoContentHash, updatedAt: new Date() })
+            .where(eq(analyses.id, analysis.id));
+          analysis.videoContentHash = videoContentHash;
+          return videoContentHash;
+        })
+        .catch((hashError) => {
+          console.warn(
+            `Video hash computation failed for analysis ${analysisId}: ${String(hashError)}`,
+          );
+          return null;
+        });
 
       const modelRegistryConfig = readModelRegistryConfig();
       const initialConfigKey = getConfigKey(sportName, movementName);
@@ -1241,30 +1808,34 @@ export async function processAnalysis(analysisId: string): Promise<void> {
         modelRegistryConfig.activeModelVersion,
       );
       if (reusablePayload) {
+        const needsDiagnosticsBackfill = !hasAllRequiredUploadDiagnosticsMetrics(
+          normalizeMetricValuesForPersistence(
+            reusablePayload.metricValues || {},
+            reusablePayload.aiDiagnostics,
+          ),
+        );
+        const needsAsyncMetricEnrichment = hasPendingAsyncMetricEnrichment(
+          reusablePayload.configKey,
+          reusablePayload.metricValues,
+        );
         let normalizedReusableMetrics = normalizeMetricValuesForPersistence(
           reusablePayload.metricValues || {},
           reusablePayload.aiDiagnostics,
         );
         let reusableDiagnosticsPayload: AiDiagnosticsPayload | null = reusablePayload.aiDiagnostics;
 
-        if (!hasAllRequiredUploadDiagnosticsMetrics(normalizedReusableMetrics)) {
-          try {
-            const diagnosticsMovement = reusablePayload.detectedMovement || movementName;
-            reusableDiagnosticsPayload = await runPythonDiagnostics(
-              localVideoPath,
-              sportName,
-              diagnosticsMovement,
-              dominantProfile,
-            );
-            normalizedReusableMetrics = normalizeMetricValuesForPersistence(
-              normalizedReusableMetrics,
-              reusableDiagnosticsPayload,
-            );
-          } catch (diagnosticsError: any) {
-            console.warn(
-              `Diagnostics backfill failed for reused analysis ${analysisId}: ${diagnosticsError?.message || diagnosticsError}`,
-            );
-          }
+        if (needsDiagnosticsBackfill || needsAsyncMetricEnrichment) {
+          pipelineTiming = updatePipelineTiming(pipelineTiming, {
+            stageKey: "diagnostics",
+            status: "pending",
+          });
+          const queuedDiagnostics = reusableDiagnosticsPayload && typeof reusableDiagnosticsPayload === "object"
+            ? (reusableDiagnosticsPayload as Record<string, unknown>)
+            : {};
+          reusableDiagnosticsPayload = attachPipelineTiming(
+            mergeValidationScreeningSnapshot(queuedDiagnostics, validationScreening),
+            pipelineTiming,
+          ) as AiDiagnosticsPayload;
         }
 
         const sanitizedMetricValues = sanitizePersistedMap(normalizedReusableMetrics);
@@ -1329,6 +1900,21 @@ export async function processAnalysis(analysisId: string): Promise<void> {
           })
           .where(eq(analyses.id, analysisId));
 
+        if (needsDiagnosticsBackfill || needsAsyncMetricEnrichment) {
+          void backfillAnalysisEnrichment({
+            analysisId,
+            videoPath: localVideoPath,
+            sportName,
+            movementName: reusablePayload.detectedMovement || movementName,
+            dominantProfile,
+            configKey: reusablePayload.configKey,
+            modelVersion: modelRegistryConfig.activeModelVersion,
+            auditActorUserId,
+          });
+        }
+
+        void videoContentHashPromise;
+
         console.log(`Analysis ${analysisId} reused scores from prior identical video hash`);
         return;
       }
@@ -1344,6 +1930,12 @@ export async function processAnalysis(analysisId: string): Promise<void> {
       }
 
       const configKey = getConfigKey(sportName, movementName);
+      const analysisFpsSnapshot = resolveAnalysisFpsModeForMovement(
+        sportName,
+        movementName,
+        analysis.requestedSessionType,
+        analysisFpsSettings,
+      );
 
       console.log(
         `Starting Python analysis for: ${analysis.videoPath} (${sportName}/${movementName}, config: ${configKey})`,
@@ -1353,6 +1945,8 @@ export async function processAnalysis(analysisId: string): Promise<void> {
         sportName,
         movementName,
         videoValidationMode,
+        analysisFpsSnapshot,
+        shouldUseCoreMetricComputation(configKey) ? "core" : "full",
         dominantProfile,
         async (event) => {
           await applyPipelineUpdate(event);
@@ -1387,50 +1981,16 @@ export async function processAnalysis(analysisId: string): Promise<void> {
         );
       }
 
-      let diagnosticsPayload: AiDiagnosticsPayload | null = null;
-      try {
-        await applyPipelineUpdate({ stageKey: "diagnostics", status: "running" });
-        const diagnosticsStartedAt = Date.now();
-        diagnosticsPayload = await runPythonDiagnostics(
-          localVideoPath,
-          sportName,
-          actualMovement,
-          dominantProfile,
-          result.analysisArtifactPath,
-        );
-        pipelineTiming = updatePipelineTiming(pipelineTiming, {
-          stageKey: "diagnostics",
-          status: "completed",
-          elapsedMs: Date.now() - diagnosticsStartedAt,
-        });
-      } catch (diagnosticsError: any) {
-        pipelineTiming = updatePipelineTiming(pipelineTiming, {
-          stageKey: "diagnostics",
-          status: "failed",
-          note: diagnosticsError?.message || String(diagnosticsError),
-        });
-        console.warn(
-          `Diagnostics generation failed for analysis ${analysisId}: ${diagnosticsError?.message || diagnosticsError}`,
-        );
-      } finally {
-        const artifactPath = String(result.analysisArtifactPath || "").trim();
-        if (artifactPath) {
-          try {
-            fs.unlinkSync(artifactPath);
-          } catch (cleanupError) {
-            console.warn(
-              `Failed to remove analysis artifact for ${analysisId}: ${String(cleanupError)}`,
-            );
-          }
-        }
-      }
-
-      if (pipelineTiming) {
-        const diagnosticsRecord = diagnosticsPayload && typeof diagnosticsPayload === "object"
-          ? (diagnosticsPayload as Record<string, unknown>)
-          : {};
-        diagnosticsPayload = attachPipelineTiming(diagnosticsRecord, pipelineTiming) as AiDiagnosticsPayload;
-      }
+      pipelineTiming = updatePipelineTiming(pipelineTiming, {
+        stageKey: "diagnostics",
+        status: "pending",
+      });
+      const diagnosticsPayload = pipelineTiming
+        ? attachPipelineTiming(
+          mergeValidationScreeningSnapshot({}, validationScreening),
+          pipelineTiming,
+        ) as AiDiagnosticsPayload
+        : null;
 
       const metricValuesRaw: Record<string, unknown> = { ...result.metricValues };
       if (result.shotCount != null) {
@@ -1501,6 +2061,20 @@ export async function processAnalysis(analysisId: string): Promise<void> {
           ...buildUpdateAuditFields(auditActorUserId),
         })
         .where(eq(analyses.id, analysisId));
+
+      void backfillAnalysisEnrichment({
+        analysisId,
+        videoPath: localVideoPath,
+        sportName,
+        movementName: actualMovement,
+        dominantProfile,
+        analysisArtifactPath: result.analysisArtifactPath,
+        configKey: resolvedConfigKey,
+        modelVersion: modelRegistryConfig.activeModelVersion,
+        auditActorUserId,
+      });
+
+      void videoContentHashPromise;
 
       console.log(`Analysis ${analysisId} completed successfully`);
     });

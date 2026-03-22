@@ -33,31 +33,21 @@ import {
   saveScoringModelRegistrySnapshot,
 } from "@/lib/api";
 import type { AnalysisSummary } from "@/lib/api";
+import {
+  DEFAULT_SESSION_TYPE_FILTERS,
+  filterAnalysesBySessionAndStroke,
+  filterAnalysesBySport,
+  SESSION_TYPE_FILTER_OPTIONS,
+  STROKE_FILTER_OPTIONS,
+  type SessionTypeFilter,
+  type StrokeTypeFilter,
+} from "@/lib/analysis-filters";
 import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
 import { formatDateTimeInTimeZone, formatMonthDayInTimeZone, parseApiDate, resolveUserTimeZone } from "@/lib/timezone";
 import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
 import { ds } from "@/constants/design-system";
-
-function filterBySport(
-  analyses: AnalysisSummary[],
-  sportName: string | undefined,
-  movementName: string | undefined,
-): AnalysisSummary[] {
-  if (!sportName) return analyses;
-  const sportLower = sportName.toLowerCase();
-  return analyses.filter((a) => {
-    if (!a.configKey) return false;
-    const keyLower = a.configKey.toLowerCase();
-    if (!keyLower.startsWith(sportLower)) return false;
-    if (movementName) {
-      const movLower = movementName.toLowerCase().replace(/\s+/g, "");
-      if (!keyLower.includes(movLower)) return false;
-    }
-    return true;
-  });
-}
 
 function formatLabel(label: string): string {
   return label
@@ -644,6 +634,10 @@ export default function DashboardScreen() {
   const [userList, setUserList] = React.useState<Array<{id:string,name:string,email:string,role:string}>>([]);
   const [selectedPlayerId, setSelectedPlayerId] = React.useState<string>("all");
   const [showPlayerDropdown, setShowPlayerDropdown] = React.useState(false);
+  const [selectedSessionTypes, setSelectedSessionTypes] = React.useState<SessionTypeFilter[]>(
+    DEFAULT_SESSION_TYPE_FILTERS,
+  );
+  const [selectedStroke, setSelectedStroke] = React.useState<StrokeTypeFilter | null>(null);
   const [registrySaveToast, setRegistrySaveToast] = React.useState<{
     visible: boolean;
     message: string;
@@ -709,6 +703,31 @@ export default function DashboardScreen() {
     primary: "#6C5CE7",
     gradient: "#5A4BD1",
   };
+  const areAllSessionTypesSelected = selectedSessionTypes.length === DEFAULT_SESSION_TYPE_FILTERS.length;
+  const hasDashboardFilters = !areAllSessionTypesSelected || selectedStroke !== null;
+  const isUserScopedDashboard = !isAdmin || selectedPlayerId !== "all";
+
+  const toggleSessionType = React.useCallback((sessionType: SessionTypeFilter) => {
+    setSelectedSessionTypes((current) => {
+      if (current.includes(sessionType)) {
+        if (current.length === 1) return current;
+        const next = current.filter((value) => value !== sessionType);
+        return DEFAULT_SESSION_TYPE_FILTERS.filter((value) => next.includes(value));
+      }
+
+      const next = [...current, sessionType];
+      return DEFAULT_SESSION_TYPE_FILTERS.filter((value) => next.includes(value));
+    });
+  }, []);
+
+  const toggleStroke = React.useCallback((strokeType: StrokeTypeFilter) => {
+    setSelectedStroke((current) => (current === strokeType ? null : strokeType));
+  }, []);
+
+  const clearDashboardFilters = React.useCallback(() => {
+    setSelectedSessionTypes(DEFAULT_SESSION_TYPE_FILTERS);
+    setSelectedStroke(null);
+  }, []);
 
   const {
     data: allAnalyses,
@@ -837,16 +856,30 @@ export default function DashboardScreen() {
     },
   });
 
-  let filteredAnalyses = filterBySport(
-    allAnalyses || [],
-    selectedSport?.name,
+  const filteredAnalyses = React.useMemo(() => {
+    let result = filterAnalysesBySport(
+      allAnalyses || [],
+      selectedSport?.name,
+      selectedMovement?.name,
+    );
+
+    if (isAdmin && selectedPlayerId !== "all") {
+      result = result.filter((analysis) => analysis.userId === selectedPlayerId);
+    } else if (!isAdmin && user?.id) {
+      result = result.filter((analysis) => analysis.userId === user.id);
+    }
+
+    return filterAnalysesBySessionAndStroke(result, selectedSessionTypes, selectedStroke);
+  }, [
+    allAnalyses,
+    isAdmin,
     selectedMovement?.name,
-  );
-  if (isAdmin && selectedPlayerId !== "all") {
-    filteredAnalyses = filteredAnalyses.filter(a => a.userId === selectedPlayerId);
-  } else if (!isAdmin && user?.id) {
-    filteredAnalyses = filteredAnalyses.filter(a => a.userId === user.id);
-  }
+    selectedPlayerId,
+    selectedSessionTypes,
+    selectedSport?.name,
+    selectedStroke,
+    user?.id,
+  ]);
 
   const playerDashboard = React.useMemo(() => {
     const scoredAnalyses = filteredAnalyses
@@ -1059,6 +1092,86 @@ export default function DashboardScreen() {
             ) : null}
           </View>
         </View>
+
+        {isUserScopedDashboard ? (
+          <View style={styles.filterSection}>
+            <View style={styles.filterGroup}>
+              <View style={styles.filterHeaderRow}>
+                <Text style={styles.filterLabel}>Session Type</Text>
+                {hasDashboardFilters ? (
+                  <Pressable
+                    onPress={clearDashboardFilters}
+                    style={({ pressed }) => [
+                      styles.filterResetButton,
+                      { opacity: pressed ? 0.75 : 1 },
+                    ]}
+                  >
+                    <Text style={[styles.filterResetText, { color: sc.primary }]}>Clear filters</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              <View style={styles.filterChipRow}>
+                {SESSION_TYPE_FILTER_OPTIONS.map((option) => {
+                  const selected = selectedSessionTypes.includes(option.key);
+                  return (
+                    <Pressable
+                      key={option.key}
+                      onPress={() => toggleSessionType(option.key)}
+                      style={({ pressed }) => [
+                        styles.filterChip,
+                        {
+                          borderColor: selected ? `${sc.primary}75` : "#2A2A5060",
+                          backgroundColor: selected ? `${sc.primary}1C` : "#0A0A1A80",
+                          opacity: pressed ? 0.82 : 1,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          { color: selected ? sc.primary : "#94A3B8" },
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+            <View style={styles.filterGroup}>
+              <Text style={styles.filterLabel}>Stroke Type</Text>
+              <View style={styles.filterChipRow}>
+                {STROKE_FILTER_OPTIONS.map((option) => {
+                  const selected = selectedStroke === option.key;
+                  return (
+                    <Pressable
+                      key={option.key}
+                      onPress={() => toggleStroke(option.key)}
+                      style={({ pressed }) => [
+                        styles.filterChip,
+                        {
+                          borderColor: selected ? "#34D39966" : "#2A2A5060",
+                          backgroundColor: selected ? "#34D39918" : "#0A0A1A80",
+                          opacity: pressed ? 0.82 : 1,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          { color: selected ? "#34D399" : "#94A3B8" },
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+        ) : null}
 
         {isAdmin && showPlayerDropdown && (
           <Modal
@@ -1320,7 +1433,7 @@ export default function DashboardScreen() {
               </View>
             )}
 
-            {!isAdmin && playerDashboard && (
+            {isUserScopedDashboard && playerDashboard && (
               <>
                 <LinearGradient
                   colors={["#121B3A", "#14243B", "#121A34"]}
@@ -1557,7 +1670,7 @@ export default function DashboardScreen() {
             )}
 
 
-            {!isAdmin && filteredAnalyses.length > 0 && !playerDashboard && (
+            {isUserScopedDashboard && filteredAnalyses.length > 0 && !playerDashboard && (
               <View style={styles.playerPendingCard}>
                 <Text style={styles.playerPendingTitle}>Analysis in progress</Text>
                 <Text style={styles.playerPendingText}>
@@ -1577,8 +1690,9 @@ export default function DashboardScreen() {
                 </View>
                 <Text style={styles.emptyTitle}>No analyses yet</Text>
                 <Text style={styles.emptyText}>
-                  Upload a {selectedSport?.name?.toLowerCase() || "sport"} video
-                  to get started
+                  {hasDashboardFilters
+                    ? "No videos match the selected session and stroke filters"
+                    : `Upload a ${selectedSport?.name?.toLowerCase() || "sport"} video to get started`}
                 </Text>
               </View>
             )}
@@ -1693,6 +1807,47 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     color: "#34D399",
+  },
+  filterSection: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  filterGroup: {
+    gap: 8,
+  },
+  filterHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  filterLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: ds.color.textSecondary,
+  },
+  filterChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  filterChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  filterChipText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  filterResetButton: {
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+  },
+  filterResetText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
   },
   playerDropdown: {
     flexDirection: "row",

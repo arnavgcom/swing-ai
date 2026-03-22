@@ -48,6 +48,20 @@ const COUNTRIES = [
 
 const DOMINANT_PROFILES = ["Right", "Left"];
 
+type SportSelectionOption = {
+  id: string;
+  name: string;
+  enabled: boolean;
+};
+
+type PickerItem = {
+  key: string;
+  label: string;
+  disabled?: boolean;
+  hint?: string;
+  badge?: string;
+};
+
 const normalizeRole = (value?: string | null): "admin" | "player" => {
   return value?.trim().toLowerCase() === "admin" ? "admin" : "player";
 };
@@ -67,11 +81,14 @@ export default function ProfileScreen() {
   );
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [role, setRole] = useState<"admin" | "player">(normalizeRole(user?.role));
+  const [sportsInterests, setSportsInterests] = useState(user?.sportsInterests || "");
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [showDominantProfilePicker, setShowDominantProfilePicker] = useState(false);
+  const [showSportsPicker, setShowSportsPicker] = useState(false);
+  const [sportOptions, setSportOptions] = useState<SportSelectionOption[]>([]);
   const isPersistedAdmin = normalizeRole(user?.role) === "admin";
   const isSelectedAdmin = normalizeRole(role) === "admin";
   const showAdminControls = isSelectedAdmin;
@@ -88,11 +105,55 @@ export default function ProfileScreen() {
           : "",
       );
       setRole(normalizeRole(user.role));
+      setSportsInterests(user.sportsInterests || "");
       if (user.avatarUrl) {
         setAvatarUri(resolveClientMediaUrl(user.avatarUrl));
       }
     }
   }, [user]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSports = async () => {
+      try {
+        const res = await apiRequest("GET", "/api/sports?includeDisabled=true");
+        const list = await res.json();
+        if (cancelled || !Array.isArray(list)) return;
+
+        const nextOptions = list
+          .map((item) => ({
+            id: String(item.id || ""),
+            name: String(item.name || "").trim(),
+            enabled: Boolean(item.enabled),
+          }))
+          .filter((item) => item.id && item.name)
+          .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+
+        setSportOptions(nextOptions);
+
+        const enabledDefault = nextOptions.find((item) => item.enabled)?.name || "";
+        if (!user?.sportsInterests && !sportsInterests) {
+          setSportsInterests(enabledDefault);
+        }
+      } catch {
+      }
+    };
+
+    loadSports();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.sportsInterests]);
+
+  const sportPickerItems: PickerItem[] = sportOptions.map((sport) => ({
+    key: sport.name,
+    label: sport.name,
+    disabled: !sport.enabled,
+    hint: sport.enabled ? undefined : "Coming soon",
+    badge: sport.enabled ? "Enabled" : "Disabled",
+  }));
 
 
   const pickImage = async () => {
@@ -212,6 +273,7 @@ export default function ProfileScreen() {
         phone: phone.trim(),
         country: country.trim(),
         dominantProfile: dominantProfile.trim(),
+        sportsInterests: sportsInterests.trim(),
         role: normalizeRole(nextRole ?? role),
       });
       await refreshUser();
@@ -419,6 +481,25 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
 
+          <View style={styles.fieldWrapper}>
+            <Text style={styles.fieldLabel}>Sport</Text>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setShowSportsPicker(true);
+              }}
+              style={styles.fieldInput}
+              testID="field-sport"
+            >
+              <Ionicons name="tennisball-outline" size={18} color="#6C5CE7" />
+              <Text style={[styles.dropdownText, !sportsInterests && styles.dropdownPlaceholder]}>
+                {sportsInterests || "Select sport"}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color="#64748B" />
+            </Pressable>
+            <Text style={styles.fieldHint}>All sports are visible. Only enabled sports can be selected.</Text>
+          </View>
+
           {user ? (
             <View style={styles.fieldWrapper}>
               <Text style={styles.fieldLabel}>Role</Text>
@@ -554,7 +635,7 @@ export default function ProfileScreen() {
       <PickerModal
         visible={showCountryPicker}
         title="Select Country"
-        items={COUNTRIES}
+        items={COUNTRIES.map((item) => ({ key: item, label: item }))}
         selectedItems={country ? [country] : []}
         multiSelect={false}
         onSelect={(item) => {
@@ -567,7 +648,7 @@ export default function ProfileScreen() {
       <PickerModal
         visible={showDominantProfilePicker}
         title="Select Dominant Profile"
-        items={DOMINANT_PROFILES}
+        items={DOMINANT_PROFILES.map((item) => ({ key: item, label: item }))}
         selectedItems={dominantProfile ? [dominantProfile] : []}
         multiSelect={false}
         onSelect={(item) => {
@@ -575,6 +656,24 @@ export default function ProfileScreen() {
           setShowDominantProfilePicker(false);
         }}
         onClose={() => setShowDominantProfilePicker(false)}
+      />
+
+      <PickerModal
+        visible={showSportsPicker}
+        title="Select Sport"
+        items={sportPickerItems}
+        selectedItems={sportsInterests ? [sportsInterests] : []}
+        multiSelect={false}
+        onSelect={(item) => {
+          const selectedOption = sportOptions.find((sport) => sport.name === item);
+          if (!selectedOption?.enabled) {
+            Alert.alert("Coming soon", `${item} is not enabled yet.`);
+            return;
+          }
+          setSportsInterests(item);
+          setShowSportsPicker(false);
+        }}
+        onClose={() => setShowSportsPicker(false)}
       />
 
     </View>
@@ -592,7 +691,7 @@ function PickerModal({
 }: {
   visible: boolean;
   title: string;
-  items: string[];
+  items: PickerItem[];
   selectedItems: string[];
   multiSelect: boolean;
   onSelect: (item: string) => void;
@@ -623,22 +722,34 @@ function PickerModal({
           </View>
           <FlatList
             data={items}
-            keyExtractor={(item) => item}
+            keyExtractor={(item) => item.key}
             scrollEnabled={items.length > 6}
             style={styles.modalList}
             renderItem={({ item }) => {
-              const isSelected = selectedItems.includes(item);
+              const isSelected = selectedItems.includes(item.key);
               return (
                 <Pressable
-                  onPress={() => onSelect(item)}
-                  style={[styles.modalItem, isSelected && styles.modalItemSelected]}
+                  onPress={() => onSelect(item.key)}
+                  style={[styles.modalItem, isSelected && styles.modalItemSelected, item.disabled && styles.modalItemDisabled]}
                 >
-                  <Text style={[styles.modalItemText, isSelected && styles.modalItemTextSelected]}>
-                    {item}
-                  </Text>
-                  {isSelected && (
-                    <Ionicons name="checkmark-circle" size={22} color="#6C5CE7" />
-                  )}
+                  <View style={styles.modalItemMeta}>
+                    <Text style={[styles.modalItemText, isSelected && styles.modalItemTextSelected, item.disabled && styles.modalItemTextDisabled]}>
+                      {item.label}
+                    </Text>
+                    {item.hint ? <Text style={styles.modalItemHint}>{item.hint}</Text> : null}
+                  </View>
+                  <View style={styles.modalItemTrailing}>
+                    {item.badge ? (
+                      <View style={[styles.modalBadge, item.disabled ? styles.modalBadgeDisabled : styles.modalBadgeEnabled]}>
+                        <Text style={[styles.modalBadgeText, item.disabled ? styles.modalBadgeTextDisabled : styles.modalBadgeTextEnabled]}>
+                          {item.badge}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {isSelected && (
+                      <Ionicons name="checkmark-circle" size={22} color="#6C5CE7" />
+                    )}
+                  </View>
                 </Pressable>
               );
             }}
@@ -799,6 +910,11 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
+  },
+  fieldHint: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "#64748B",
   },
   fieldInput: {
     flexDirection: "row",
@@ -1072,6 +1188,18 @@ const styles = StyleSheet.create({
   modalItemSelected: {
     backgroundColor: "#6C5CE715",
   },
+  modalItemDisabled: {
+    opacity: 0.72,
+  },
+  modalItemMeta: {
+    flex: 1,
+    gap: 4,
+  },
+  modalItemTrailing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   modalItemText: {
     fontSize: 16,
     fontFamily: "Inter_400Regular",
@@ -1080,5 +1208,39 @@ const styles = StyleSheet.create({
   modalItemTextSelected: {
     color: "#F8FAFC",
     fontFamily: "Inter_600SemiBold",
+  },
+  modalItemTextDisabled: {
+    color: "#64748B",
+  },
+  modalItemHint: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "#64748B",
+  },
+  modalBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  modalBadgeEnabled: {
+    backgroundColor: "#10B98120",
+    borderColor: "#10B98140",
+  },
+  modalBadgeDisabled: {
+    backgroundColor: "#33415520",
+    borderColor: "#33415540",
+  },
+  modalBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  modalBadgeTextEnabled: {
+    color: "#34D399",
+  },
+  modalBadgeTextDisabled: {
+    color: "#94A3B8",
   },
 });

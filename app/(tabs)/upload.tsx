@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
 import { fetchModelEvaluationSettings, uploadVideo, type AnalysisSummary } from "@/lib/api";
@@ -34,8 +35,8 @@ const LAST_WORKED_ANALYSIS_KEY = "swingai_last_worked_analysis_id";
 const PENDING_ANALYSIS_SUMMARY_KEY = "swingai_pending_analysis_summary";
 
 const SESSION_TYPE_OPTIONS = [
-  { key: "practice", label: "Practice" },
-  { key: "match-play", label: "Match" },
+  { key: "practice", label: "Practise / Drill" },
+  { key: "match-play", label: "Match Play" },
 ] as const;
 
 const TENNIS_FOCUS_OPTIONS = [
@@ -174,6 +175,7 @@ export default function UploadScreen() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const { selectedSport } = useSport();
+  const isFocused = useIsFocused();
 
   const sportColor = selectedSport?.color || colors.tint;
 
@@ -196,7 +198,10 @@ export default function UploadScreen() {
   const [recordedTimeInput, setRecordedTimeInput] = useState("");
   const [sessionType, setSessionType] = useState<SessionTypeKey>("practice");
   const [selectedFocusKey, setSelectedFocusKey] = useState<UploadFocusKey>("auto-detect");
-  const [uploadUiStage, setUploadUiStage] = useState<"idle" | "uploading" | "starting">("idle");
+  const [videoSelectionStage, setVideoSelectionStage] = useState<"idle" | "library" | "camera">("idle");
+  const [uploadUiStage, setUploadUiStage] = useState<"idle" | "uploading">("idle");
+  const [uploadProgressPct, setUploadProgressPct] = useState<number | null>(null);
+  const wasFocusedRef = React.useRef(false);
 
   const { data: sportsData } = useQuery<SportOption[]>({
     queryKey: ["/api/sports"],
@@ -311,6 +316,11 @@ export default function UploadScreen() {
     };
   }, [isAdmin, selectedPlayerId, user]);
 
+  const resetUploadFlowState = useCallback(() => {
+    setUploadUiStage("idle");
+    setUploadProgressPct(null);
+  }, []);
+
   const uploadMutation = useMutation({
     mutationFn: () => {
       if (!selectedVideo) throw new Error("No video selected");
@@ -327,10 +337,16 @@ export default function UploadScreen() {
         recordedAtOverride,
         sessionType,
         requestedFocusKey,
+        {
+          onProgress: (progress) => {
+            if (typeof progress.percent === "number" && Number.isFinite(progress.percent)) {
+              setUploadProgressPct(progress.percent);
+            }
+          },
+        },
       );
     },
     onSuccess: async (data) => {
-      setUploadUiStage("starting");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await AsyncStorage.setItem(LAST_WORKED_ANALYSIS_KEY, data.id).catch(() => {});
       const nowIso = new Date().toISOString();
@@ -368,18 +384,19 @@ export default function UploadScreen() {
       ).catch(() => {});
       await queryClient.invalidateQueries({ queryKey: ["analyses-summary"] });
 
+      resetUploadFlowState();
+      uploadMutation.reset();
       setSelectedVideo(null);
       setRecordedAtOverride(null);
       setSessionType("practice");
       setSelectedFocusKey("auto-detect");
-
       router.push({
         pathname: "/analysis/[id]",
         params: { id: data.id, backgroundOnSlow: "1" },
       });
     },
     onError: (error: Error) => {
-      setUploadUiStage("idle");
+      resetUploadFlowState();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const message = String(error.message || "").trim() || "Upload failed";
       const title = /tennis|stroke|rally/i.test(message) ? "Invalid Video" : "Upload Failed";
@@ -387,16 +404,29 @@ export default function UploadScreen() {
     },
   });
 
-  const isUploadBusy = uploadMutation.isPending || uploadUiStage === "starting";
-  const analyzeButtonLabel = uploadUiStage === "starting"
-    ? "Starting analysis..."
-    : uploadMutation.isPending
-      ? "Uploading video..."
+  React.useEffect(() => {
+    if (isFocused && !wasFocusedRef.current && !uploadMutation.isPending) {
+      resetUploadFlowState();
+      uploadMutation.reset();
+    }
+
+    wasFocusedRef.current = isFocused;
+  }, [isFocused, resetUploadFlowState, uploadMutation]);
+
+  const isSelectingVideo = videoSelectionStage !== "idle";
+  const isUploadBusy = uploadMutation.isPending || uploadUiStage === "uploading";
+  const uploadProgressLabel = typeof uploadProgressPct === "number"
+    ? `${Math.max(0, Math.min(100, uploadProgressPct))}%`
+    : null;
+  const analyzeButtonLabel = uploadMutation.isPending || uploadUiStage === "uploading"
+      ? uploadProgressLabel
+        ? `Uploading ${uploadProgressLabel}`
+        : "Uploading video..."
       : "Start Analysis";
-  const uploadStatusMessage = uploadUiStage === "starting"
-    ? "Upload complete. Opening your analysis screen now."
-    : uploadMutation.isPending
-      ? "Uploading and validating your clip. Analysis starts automatically after this step."
+  const uploadStatusMessage = uploadMutation.isPending || uploadUiStage === "uploading"
+      ? uploadProgressLabel
+        ? `Uploading your clip to the server: ${uploadProgressLabel}. Analysis starts automatically after this step.`
+        : "Uploading and validating your clip. Analysis starts automatically after this step."
       : null;
 
   const setSelectedVideoFromAsset = useCallback((asset: {
@@ -428,6 +458,7 @@ export default function UploadScreen() {
       duration: typeof asset.duration === "number" ? asset.duration / 1000 : null,
       fileSize: asset.fileSize ?? asset.size ?? null,
     });
+    setUploadProgressPct(null);
     setRecordedAtOverride(null);
   }, [modelEvaluationMode, selectedMovementName, selectedPlayerId, selectedSport?.name, tennisSport?.name, user?.email, user?.id, user?.name, userList]);
 
@@ -480,6 +511,7 @@ export default function UploadScreen() {
   };
 
   const launchVideoLibrary = async () => {
+    setVideoSelectionStage("library");
     try {
       if (Platform.OS !== "web") {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -549,10 +581,13 @@ export default function UploadScreen() {
       } else {
         Alert.alert("Error", "Could not access your video library. Please try again.");
       }
+    } finally {
+      setVideoSelectionStage("idle");
     }
   };
 
   const launchVideoCamera = async () => {
+    setVideoSelectionStage("camera");
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
@@ -569,10 +604,13 @@ export default function UploadScreen() {
     } catch (error: any) {
       if (error?.code === "ERR_CANCELED") return;
       Alert.alert("Error", "Could not record video. Please try again.");
+    } finally {
+      setVideoSelectionStage("idle");
     }
   };
 
   const pickVideo = async () => {
+    if (isSelectingVideo || isUploadBusy) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     if (Platform.OS === "web") {
@@ -588,7 +626,7 @@ export default function UploadScreen() {
   };
 
   const movementLabel = sessionType === "match-play"
-    ? "Match"
+    ? "Match Play"
     : selectedFocus.movementName || tennisSport?.name || selectedSport?.name || "Tennis";
   const sessionDateValue = recordedAtOverride
     ? formatSessionDateTime(recordedAtOverride)
@@ -775,12 +813,14 @@ export default function UploadScreen() {
         {!selectedVideo ? (
           <Pressable
             onPress={pickVideo}
+            disabled={isSelectingVideo}
             style={({ pressed }) => [
               styles.uploadZone,
               {
                 borderColor: sportColor + "60",
                 backgroundColor: sportColor + "06",
-                transform: [{ scale: pressed ? 0.98 : 1 }],
+                opacity: isSelectingVideo ? 0.92 : 1,
+                transform: [{ scale: pressed && !isSelectingVideo ? 0.98 : 1 }],
               },
             ]}
           >
@@ -790,14 +830,22 @@ export default function UploadScreen() {
                 { backgroundColor: sportColor + "14" },
               ]}
             >
-              <Ionicons name="cloud-upload" size={32} color={sportColor} />
+              {isSelectingVideo ? (
+                <ActivityIndicator color={sportColor} size="large" />
+              ) : (
+                <Ionicons name="cloud-upload" size={32} color={sportColor} />
+              )}
             </View>
             <Text style={[styles.uploadTitle, { color: colors.text }]}>
-              Select Video
+              {isSelectingVideo ? "Preparing Video" : "Select Video"}
             </Text>
-            <Text style={[styles.uploadHint, { color: colors.textSecondary }]}>
-              MP4, MOV, AVI, WebM
-            </Text>
+            {isSelectingVideo ? (
+              <Text style={[styles.uploadHint, { color: colors.textSecondary }]}> 
+                {videoSelectionStage === "camera"
+                  ? "Saving your recording and loading it into the app..."
+                  : "Importing the selected video from your library. Large files can take a few seconds."}
+              </Text>
+            ) : null}
           </Pressable>
         ) : (
           <View
@@ -823,6 +871,7 @@ export default function UploadScreen() {
                   if (isUploadBusy) return;
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   setSelectedVideo(null);
+                  setUploadProgressPct(null);
                   setRecordedAtOverride(null);
                 }}
                 disabled={isUploadBusy}
@@ -837,7 +886,8 @@ export default function UploadScreen() {
 
             <Text
               style={[styles.fileName, { color: colors.text }]}
-              numberOfLines={2}
+              numberOfLines={1}
+              ellipsizeMode="tail"
             >
               {selectedVideo.fileName}
             </Text>
@@ -1230,6 +1280,7 @@ const styles = StyleSheet.create({
   fileName: {
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
+    flexShrink: 1,
   },
   metaRow: {
     flexDirection: "row",

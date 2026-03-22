@@ -46,11 +46,14 @@ const mapLegacySectionLabel = (value: string): string => {
 type SelectionOption = {
   key: string;
   label: string;
+  disabled?: boolean;
+  hint?: string;
 };
 
 type SportOption = {
   id: string;
   name: string;
+  enabled: boolean;
 };
 
 const formatMetricLabelFromKey = (metricKey: string): string => {
@@ -147,18 +150,22 @@ export default function ScoreMetricsSelectionScreen() {
 
     const loadSports = async () => {
       try {
-        const res = await apiRequest("GET", "/api/sports");
+        const res = await apiRequest("GET", "/api/sports?includeDisabled=true");
         const list = await res.json();
         if (cancelled || !Array.isArray(list)) return;
 
         const options = list
-          .map((item) => ({ id: String(item.id || ""), name: String(item.name || "").trim() }))
+          .map((item) => ({
+            id: String(item.id || ""),
+            name: String(item.name || "").trim(),
+            enabled: Boolean(item.enabled),
+          }))
           .filter((item) => item.id && item.name)
           .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
         setSports(options);
 
         if (!selectedSportName && options.length > 0) {
-          setSelectedSportName(selectedSport?.name || options[0].name);
+          setSelectedSportName(selectedSport?.name || options.find((sport) => sport.enabled)?.name || options[0].name);
         }
       } catch {
         if (!cancelled && !selectedSportName && selectedSport?.name) {
@@ -433,10 +440,20 @@ export default function ScoreMetricsSelectionScreen() {
       <PickerModal
         visible={showSportPicker}
         title="Select Sport"
-        items={sports.map((sport) => ({ key: sport.name, label: sport.name }))}
+        items={sports.map((sport) => ({
+          key: sport.name,
+          label: sport.name,
+          disabled: !sport.enabled,
+          hint: sport.enabled ? undefined : "Coming soon",
+        }))}
         selectedItems={selectedSportName ? [selectedSportName] : []}
         multiSelect={false}
         onSelect={(sportName) => {
+          const nextSport = sports.find((sport) => sport.name === sportName);
+          if (!nextSport?.enabled) {
+            Alert.alert("Coming soon", `${sportName} is not enabled yet.`);
+            return;
+          }
           setSelectedSportName(sportName);
           setShowSportPicker(false);
         }}
@@ -516,11 +533,14 @@ function PickerModal({
               return (
                 <Pressable
                   onPress={() => onSelect(item.key)}
-                  style={[styles.modalItem, isSelected && styles.modalItemSelected]}
+                  style={[styles.modalItem, isSelected && styles.modalItemSelected, item.disabled && styles.modalItemDisabled]}
                 >
-                  <Text style={[styles.modalItemText, isSelected && styles.modalItemTextSelected]}>
-                    {item.label}
-                  </Text>
+                  <View style={styles.modalItemMeta}>
+                    <Text style={[styles.modalItemText, isSelected && styles.modalItemTextSelected, item.disabled && styles.modalItemTextDisabled]}>
+                      {item.label}
+                    </Text>
+                    {item.hint ? <Text style={styles.modalItemHint}>{item.hint}</Text> : null}
+                  </View>
                   {isSelected && (
                     <Ionicons name="checkmark-circle" size={22} color="#6C5CE7" />
                   )}
@@ -706,6 +726,13 @@ const styles = StyleSheet.create({
   modalItemSelected: {
     backgroundColor: "#6C5CE715",
   },
+  modalItemDisabled: {
+    opacity: 0.72,
+  },
+  modalItemMeta: {
+    flex: 1,
+    gap: 4,
+  },
   modalItemText: {
     fontSize: 16,
     fontFamily: "Inter_400Regular",
@@ -714,5 +741,13 @@ const styles = StyleSheet.create({
   modalItemTextSelected: {
     color: "#F8FAFC",
     fontFamily: "Inter_600SemiBold",
+  },
+  modalItemTextDisabled: {
+    color: "#64748B",
+  },
+  modalItemHint: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "#64748B",
   },
 });

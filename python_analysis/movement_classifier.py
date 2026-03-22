@@ -561,6 +561,15 @@ def classify_movement(
 
     from collections import Counter
     counts = Counter(classifications)
+    if sport == "tennis" and counts.get("serve", 0) > 0:
+        serve_votes = counts["serve"]
+        strongest_non_serve = max(
+            (count for label, count in counts.items() if label != "serve"),
+            default=0,
+        )
+        if serve_votes >= strongest_non_serve:
+            return "serve", shot_count
+
     dominant = counts.most_common(1)[0][0]
 
     return dominant, shot_count
@@ -757,7 +766,7 @@ def _classify_forehand_backhand(features: Dict, sport: str) -> str:
             return "chop"
 
     if sport == "tennis":
-        if features["is_compact_forward"] and features["swing_arc_ratio"] < 0.2:
+        if features["is_compact_forward"]:
             return "volley"
         label, _, _ = _classify_tennis_forehand_backhand(features)
         return label
@@ -784,6 +793,8 @@ def _classify_tennis_forehand_backhand(features: Dict) -> Tuple[str, float, List
     dominant_wrist_opposite_ratio = float(features.get("dominant_wrist_opposite_ratio", 0.0))
     dominant_wrist_same_ratio = float(features.get("dominant_wrist_same_ratio", 0.0))
     shoulder_rotation_delta_deg = float(features.get("shoulder_rotation_delta_deg", 0.0))
+    contact_height_ratio = float(features.get("contact_height_ratio", 0.5))
+    is_overhead = bool(features.get("is_overhead", False))
 
     speed_ratio_rw_lw = max_rw / max(max_lw, 1e-6)
     speed_ratio_lw_rw = max_lw / max(max_rw, 1e-6)
@@ -881,6 +892,10 @@ def _classify_tennis_forehand_backhand(features: Dict) -> Tuple[str, float, List
         forehand_score += 0.08
         reasons.append("compact_forward_pattern")
 
+    if is_overhead and contact_height_ratio >= 0.58 and swing_arc >= 0.24:
+        backhand_score += 0.08
+        reasons.append("high_contact_backhand_support")
+
     gap = abs(forehand_score - backhand_score)
     total = max(forehand_score + backhand_score, 1e-6)
     confidence = 0.5 + min(0.45, gap / total)
@@ -897,10 +912,23 @@ def _classify_tennis_forehand_backhand(features: Dict) -> Tuple[str, float, List
         return "forehand", float(confidence), reasons
 
     if gap < 0.16:
-        # Bias ambiguous tennis strokes to forehand to avoid over-calling backhand
-        # when a forehand follow-through crosses the torso.
-        reasons.append("ambiguous_bias_forehand")
-        return "forehand", float(confidence), reasons
+        reasons.append("ambiguous_tennis_stroke")
+        confidence = min(confidence, 0.6)
+
+        if (
+            is_cross_body
+            and (
+                dominant_wrist_opposite_ratio >= 0.46
+                or dominant_wrist_median_offset <= -0.12
+                or "wrist_speed_parity_backhand_hint" in reasons
+            )
+        ):
+            reasons.append("ambiguous_structure_backhand")
+            return "backhand", float(confidence), reasons
+
+        if not is_cross_body and dominant_wrist_same_ratio >= 0.72:
+            reasons.append("ambiguous_structure_forehand")
+            return "forehand", float(confidence), reasons
 
     label = "forehand" if forehand_score >= backhand_score else "backhand"
     return label, float(confidence), reasons
@@ -1223,20 +1251,22 @@ def _detect_serve(
     pose_data: List[Optional[Dict]],
     frame_height: int,
 ) -> bool:
-    if not wrist_heights or len(wrist_heights) < 10:
+    if not wrist_heights or len(wrist_heights) < 8:
         return False
 
     high_frames = sum(1 for h in wrist_heights if h > 0.25)
     high_ratio = high_frames / len(wrist_heights)
 
-    if high_ratio < 0.15:
+    if high_ratio < 0.12:
         return False
 
     peak_height = max(wrist_heights)
-    if peak_height < 0.3:
+    if peak_height < 0.28:
         return False
 
-    trophy_detected = False
+    visible_pose_frames = 0
+    strong_raise_votes = 0
+    serve_pose_votes = 0
     for p in pose_data:
         if p is None:
             continue
@@ -1245,15 +1275,39 @@ def _detect_serve(
         rs = p.get("right_shoulder")
         ls = p.get("left_shoulder")
 
+        right_raise = None
+        left_raise = None
         if rw and rs and rw.get("visibility", 0) > 0.4 and rs.get("visibility", 0) > 0.4:
-            if (rs["y"] - rw["y"]) / frame_height > 0.2:
-                if lw and lw.get("visibility", 0) > 0.4 and ls and ls.get("visibility", 0) > 0.4:
-                    left_raised = (ls["y"] - lw["y"]) / frame_height > 0.05
-                    if left_raised:
-                        trophy_detected = True
-                        break
+            right_raise = (rs["y"] - rw["y"]) / frame_height
+        if lw and ls and lw.get("visibility", 0) > 0.4 and ls.get("visibility", 0) > 0.4:
+            left_raise = (ls["y"] - lw["y"]) / frame_height
 
-    return trophy_detected and high_ratio > 0.2
+        if right_raise is None and left_raise is None:
+            continue
+
+        visible_pose_frames += 1
+        max_raise = max(right_raise or 0.0, left_raise or 0.0)
+        min_raise = min(
+            value for value in (right_raise, left_raise)
+            if value is not None
+        ) if right_raise is not None and left_raise is not None else 0.0
+
+        if max_raise >= 0.18:
+            strong_raise_votes += 1
+
+        if (max_raise >= 0.2 and min_raise >= 0.02) or (max_raise >= 0.24 and min_raise >= -0.02):
+            serve_pose_votes += 1
+
+    if visible_pose_frames == 0:
+        return peak_height >= 0.4 and high_ratio >= 0.22
+
+    strong_raise_ratio = strong_raise_votes / visible_pose_frames
+    serve_pose_ratio = serve_pose_votes / visible_pose_frames
+
+    return (
+        (serve_pose_votes >= 2 and serve_pose_ratio >= 0.12 and high_ratio >= 0.16)
+        or (strong_raise_ratio >= 0.22 and peak_height >= 0.4 and high_ratio >= 0.22)
+    )
 
 
 def _determine_dominant_side(

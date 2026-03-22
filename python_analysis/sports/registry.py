@@ -1,79 +1,59 @@
+from importlib import import_module
+
 from python_analysis.base_analyzer import BaseAnalyzer
 
 _REGISTRY = {}
+_ANALYZER_SPECS = {
+    "tennis-forehand": ("tennis_forehand", "TennisForehandAnalyzer"),
+    "tennis-backhand": ("tennis_backhand", "TennisBackhandAnalyzer"),
+    "tennis-serve": ("tennis_serve", "TennisServeAnalyzer"),
+    "tennis-volley": ("tennis_volley", "TennisVolleyAnalyzer"),
+    "tennis-game": ("tennis_game", "TennisGameAnalyzer"),
+    "golf-drive": ("golf_drive", "GolfDriveAnalyzer"),
+    "golf-iron": ("golf_iron", "GolfIronAnalyzer"),
+    "golf-chip": ("golf_chip", "GolfChipAnalyzer"),
+    "golf-putt": ("golf_putt", "GolfPuttAnalyzer"),
+    "golf-full-swing": ("golf_full_swing", "GolfFullSwingAnalyzer"),
+    "pickleball-dink": ("pickleball_dink", "PickleballDinkAnalyzer"),
+    "pickleball-drive": ("pickleball_drive", "PickleballDriveAnalyzer"),
+    "pickleball-serve": ("pickleball_serve", "PickleballServeAnalyzer"),
+    "pickleball-volley": ("pickleball_volley", "PickleballVolleyAnalyzer"),
+    "pickleball-third-shot-drop": ("pickleball_third_shot_drop", "PickleballThirdShotDropAnalyzer"),
+    "paddle-forehand": ("paddle_forehand", "PaddleForehandAnalyzer"),
+    "paddle-backhand": ("paddle_backhand", "PaddleBackhandAnalyzer"),
+    "paddle-serve": ("paddle_serve", "PaddleServeAnalyzer"),
+    "paddle-smash": ("paddle_smash", "PaddleSmashAnalyzer"),
+    "paddle-bandeja": ("paddle_bandeja", "PaddleBandejaAnalyzer"),
+    "badminton-clear": ("badminton_clear", "BadmintonClearAnalyzer"),
+    "badminton-smash": ("badminton_smash", "BadmintonSmashAnalyzer"),
+    "badminton-drop": ("badminton_drop", "BadmintonDropAnalyzer"),
+    "badminton-net-shot": ("badminton_net_shot", "BadmintonNetShotAnalyzer"),
+    "badminton-serve": ("badminton_serve", "BadmintonServeAnalyzer"),
+    "tabletennis-forehand": ("tabletennis_forehand", "TableTennisForehandAnalyzer"),
+    "tabletennis-backhand": ("tabletennis_backhand", "TableTennisBackhandAnalyzer"),
+    "tabletennis-serve": ("tabletennis_serve", "TableTennisServeAnalyzer"),
+    "tabletennis-loop": ("tabletennis_loop", "TableTennisLoopAnalyzer"),
+    "tabletennis-chop": ("tabletennis_chop", "TableTennisChopAnalyzer"),
+}
 
 
-def _lazy_load():
-    if _REGISTRY:
-        return
+def _load_analyzer_class(config_key: str):
+    cls = _REGISTRY.get(config_key)
+    if cls is not None:
+        return cls
 
-    from .tennis_forehand import TennisForehandAnalyzer
-    from .tennis_backhand import TennisBackhandAnalyzer
-    from .tennis_serve import TennisServeAnalyzer
-    from .tennis_volley import TennisVolleyAnalyzer
-    from .tennis_game import TennisGameAnalyzer
-    from .golf_drive import GolfDriveAnalyzer
-    from .golf_iron import GolfIronAnalyzer
-    from .golf_chip import GolfChipAnalyzer
-    from .golf_putt import GolfPuttAnalyzer
-    from .golf_full_swing import GolfFullSwingAnalyzer
-    from .pickleball_dink import PickleballDinkAnalyzer
-    from .pickleball_drive import PickleballDriveAnalyzer
-    from .pickleball_serve import PickleballServeAnalyzer
-    from .pickleball_volley import PickleballVolleyAnalyzer
-    from .pickleball_third_shot_drop import PickleballThirdShotDropAnalyzer
-    from .paddle_forehand import PaddleForehandAnalyzer
-    from .paddle_backhand import PaddleBackhandAnalyzer
-    from .paddle_serve import PaddleServeAnalyzer
-    from .paddle_smash import PaddleSmashAnalyzer
-    from .paddle_bandeja import PaddleBandejaAnalyzer
-    from .badminton_clear import BadmintonClearAnalyzer
-    from .badminton_smash import BadmintonSmashAnalyzer
-    from .badminton_drop import BadmintonDropAnalyzer
-    from .badminton_net_shot import BadmintonNetShotAnalyzer
-    from .badminton_serve import BadmintonServeAnalyzer
-    from .tabletennis_forehand import TableTennisForehandAnalyzer
-    from .tabletennis_backhand import TableTennisBackhandAnalyzer
-    from .tabletennis_serve import TableTennisServeAnalyzer
-    from .tabletennis_loop import TableTennisLoopAnalyzer
-    from .tabletennis_chop import TableTennisChopAnalyzer
+    spec = _ANALYZER_SPECS.get(config_key)
+    if spec is None:
+        available = ", ".join(sorted(_ANALYZER_SPECS.keys()))
+        raise ValueError(f"Unknown config key '{config_key}'. Available: {available}")
 
-    _REGISTRY["tennis-forehand"] = TennisForehandAnalyzer
-    _REGISTRY["tennis-backhand"] = TennisBackhandAnalyzer
-    _REGISTRY["tennis-serve"] = TennisServeAnalyzer
-    _REGISTRY["tennis-volley"] = TennisVolleyAnalyzer
-    _REGISTRY["tennis-game"] = TennisGameAnalyzer
-    _REGISTRY["golf-drive"] = GolfDriveAnalyzer
-    _REGISTRY["golf-iron"] = GolfIronAnalyzer
-    _REGISTRY["golf-chip"] = GolfChipAnalyzer
-    _REGISTRY["golf-putt"] = GolfPuttAnalyzer
-    _REGISTRY["golf-full-swing"] = GolfFullSwingAnalyzer
-    _REGISTRY["pickleball-dink"] = PickleballDinkAnalyzer
-    _REGISTRY["pickleball-drive"] = PickleballDriveAnalyzer
-    _REGISTRY["pickleball-serve"] = PickleballServeAnalyzer
-    _REGISTRY["pickleball-volley"] = PickleballVolleyAnalyzer
-    _REGISTRY["pickleball-third-shot-drop"] = PickleballThirdShotDropAnalyzer
-    _REGISTRY["paddle-forehand"] = PaddleForehandAnalyzer
-    _REGISTRY["paddle-backhand"] = PaddleBackhandAnalyzer
-    _REGISTRY["paddle-serve"] = PaddleServeAnalyzer
-    _REGISTRY["paddle-smash"] = PaddleSmashAnalyzer
-    _REGISTRY["paddle-bandeja"] = PaddleBandejaAnalyzer
-    _REGISTRY["badminton-clear"] = BadmintonClearAnalyzer
-    _REGISTRY["badminton-smash"] = BadmintonSmashAnalyzer
-    _REGISTRY["badminton-drop"] = BadmintonDropAnalyzer
-    _REGISTRY["badminton-net-shot"] = BadmintonNetShotAnalyzer
-    _REGISTRY["badminton-serve"] = BadmintonServeAnalyzer
-    _REGISTRY["tabletennis-forehand"] = TableTennisForehandAnalyzer
-    _REGISTRY["tabletennis-backhand"] = TableTennisBackhandAnalyzer
-    _REGISTRY["tabletennis-serve"] = TableTennisServeAnalyzer
-    _REGISTRY["tabletennis-loop"] = TableTennisLoopAnalyzer
-    _REGISTRY["tabletennis-chop"] = TableTennisChopAnalyzer
+    module_name, class_name = spec
+    module = import_module(f"{__package__}.{module_name}")
+    cls = getattr(module, class_name)
+    _REGISTRY[config_key] = cls
+    return cls
 
 
 def get_analyzer(config_key: str) -> BaseAnalyzer:
-    _lazy_load()
-    cls = _REGISTRY.get(config_key)
-    if cls is None:
-        available = ", ".join(sorted(_REGISTRY.keys()))
-        raise ValueError(f"Unknown config key '{config_key}'. Available: {available}")
+    cls = _load_analyzer_class(config_key)
     return cls()

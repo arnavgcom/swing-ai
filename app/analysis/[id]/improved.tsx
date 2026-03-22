@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -9,10 +9,14 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import {
+  getAnalysisRefreshIntervalMs,
+  getCompletedAnalysisEnrichmentMessage,
+} from "@/lib/analysis-refresh";
 import {
   fetchAnalysisDetail,
   fetchImprovedTennisAnalysis,
@@ -47,6 +51,13 @@ function toTitleCase(value: string): string {
     .split("-")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function strokeColor(stroke: string): string {
+  if (stroke === "serve") return "#60A5FA";
+  if (stroke === "backhand") return "#FBBF24";
+  if (stroke === "volley") return "#A78BFA";
+  return "#34D399";
 }
 
 function scoreColor(score: number): string {
@@ -113,11 +124,17 @@ export default function ImprovedTennisAnalysisScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = Colors.dark;
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const enrichmentPendingRef = useRef(false);
 
   const { data: detail, isLoading } = useQuery({
     queryKey: ["analysis", id],
     queryFn: () => fetchAnalysisDetail(id!),
     enabled: !!id,
+    refetchInterval: (query) => getAnalysisRefreshIntervalMs(
+      query.state.data?.analysis?.status,
+      query.state.data?.metrics?.aiDiagnostics,
+    ),
   });
 
   const configKey = detail?.metrics?.configKey;
@@ -131,7 +148,27 @@ export default function ImprovedTennisAnalysisScreen() {
     queryKey: ["analysis", id, "improved-tennis"],
     queryFn: () => fetchImprovedTennisAnalysis(id!),
     enabled: !!id && detail?.analysis?.status === "completed",
+    refetchInterval: getAnalysisRefreshIntervalMs(detail?.analysis?.status, detail?.metrics?.aiDiagnostics),
   });
+
+  const enrichmentMessage = useMemo(
+    () => getCompletedAnalysisEnrichmentMessage(detail?.analysis?.status, detail?.metrics?.aiDiagnostics),
+    [detail?.analysis?.status, detail?.metrics?.aiDiagnostics],
+  );
+
+  useEffect(() => {
+    const enrichmentPending = Boolean(enrichmentMessage);
+    const shouldRefetch = enrichmentPendingRef.current && !enrichmentPending && !!id;
+
+    if (shouldRefetch) {
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["analysis", id] }),
+        queryClient.invalidateQueries({ queryKey: ["analysis", id, "improved-tennis"] }),
+      ]);
+    }
+
+    enrichmentPendingRef.current = enrichmentPending;
+  }, [enrichmentMessage, id, queryClient]);
 
   const isTennis = String(sportConfig?.sportName || "").toLowerCase() === "tennis";
   const report = useMemo(() => {
@@ -269,6 +306,9 @@ export default function ImprovedTennisAnalysisScreen() {
       ),
     [report?.biomechanics],
   );
+  const tacticalItems = useMemo(() => report?.tactical || [], [report?.tactical]);
+  const strokeMixItems = useMemo(() => report?.strokeMix || [], [report?.strokeMix]);
+  const isMatchPlayReport = report?.sessionType === "match-play";
 
   if (isLoading || improvedLoading) {
     return (
@@ -326,11 +366,28 @@ export default function ImprovedTennisAnalysisScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {enrichmentMessage ? (
+          <View style={styles.enrichmentNotice}>
+            <ActivityIndicator size="small" color="#93C5FD" />
+            <Text style={styles.enrichmentNoticeText}>{enrichmentMessage}</Text>
+          </View>
+        ) : null}
+
         <View style={styles.badgesRow}>
           <View style={styles.badgeNeutral}>
             <Ionicons name="flash-outline" size={12} color="#34D399" />
-            <Text style={styles.badgeTextNeutral}>{toTitleCase(report?.stroke || "forehand")}</Text>
+            <Text style={styles.badgeTextNeutral}>
+              {isMatchPlayReport ? "Match Play" : toTitleCase(report?.stroke || "forehand")}
+            </Text>
           </View>
+          {isMatchPlayReport && strokeMixItems.length > 0 ? (
+            <View style={styles.badgeNeutral}>
+              <Ionicons name="tennisball-outline" size={12} color="#60A5FA" />
+              <Text style={styles.badgeTextNeutral}>
+                Primary: {toTitleCase(strokeMixItems[0].stroke)}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.scoreSection}>
@@ -389,11 +446,19 @@ export default function ImprovedTennisAnalysisScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Performance Metrics</Text>
             <View style={styles.metricGroup}>
-              <Text style={styles.metricGroupTitle}>Technical (BIOMEC)</Text>
+              <Text style={styles.metricGroupTitle}>{isMatchPlayReport ? "Technical" : "Technical (BIOMEC)"}</Text>
               {technicalBiomecItems.map((item) => (
                 <TenPointBar key={`bio-${item.key}`} item={item} />
               ))}
             </View>
+            {isMatchPlayReport && tacticalItems.length > 0 ? (
+              <View style={styles.metricGroup}>
+                <Text style={styles.metricGroupTitle}>Tactical</Text>
+                {tacticalItems.map((item) => (
+                  <TenPointBar key={`tac-${item.key}`} item={item} />
+                ))}
+              </View>
+            ) : null}
             <View style={styles.metricGroup}>
               <Text style={styles.metricGroupTitle}>Movement</Text>
               {report.movement.map((item) => (
@@ -402,6 +467,42 @@ export default function ImprovedTennisAnalysisScreen() {
             </View>
           </View>
         )}
+
+        {isMatchPlayReport && strokeMixItems.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Stroke Mix</Text>
+            <View style={styles.strokeMixList}>
+              {strokeMixItems.map((item) => (
+                <View key={item.stroke} style={styles.strokeMixRow}>
+                  <View style={styles.strokeMixHeader}>
+                    <View style={styles.strokeMixTitleRow}>
+                      <View
+                        style={[
+                          styles.strokeMixDot,
+                          { backgroundColor: strokeColor(item.stroke) },
+                        ]}
+                      />
+                      <Text style={styles.strokeMixLabel}>{toTitleCase(item.stroke)}</Text>
+                    </View>
+                    <Text style={styles.strokeMixMeta}>{item.count} shots</Text>
+                  </View>
+                  <View style={styles.strokeMixTrack}>
+                    <View
+                      style={[
+                        styles.strokeMixFill,
+                        {
+                          width: `${Math.max(6, Math.min(100, item.sharePct))}%`,
+                          backgroundColor: strokeColor(item.stroke),
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.strokeMixPercent}>{item.sharePct.toFixed(1)}%</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
 
 
         <View style={styles.section}>
@@ -469,6 +570,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
     gap: 18,
+  },
+  enrichmentNotice: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#1E3A5F",
+    backgroundColor: "#0B1B30",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  enrichmentNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_500Medium",
+    color: "#BFDBFE",
   },
   badgesRow: {
     flexDirection: "row",
@@ -590,6 +709,55 @@ const styles = StyleSheet.create({
   },
   insightsList: {
     gap: 8,
+  },
+  strokeMixList: {
+    gap: 10,
+  },
+  strokeMixRow: {
+    gap: 6,
+    paddingVertical: 4,
+  },
+  strokeMixHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  strokeMixTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  strokeMixDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
+  strokeMixLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#D7E2F0",
+  },
+  strokeMixMeta: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#8EA0BA",
+  },
+  strokeMixTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#0B1020",
+    overflow: "hidden",
+  },
+  strokeMixFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+  strokeMixPercent: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#AFC4E0",
+    textAlign: "right",
   },
   videoSection: {
     gap: 10,

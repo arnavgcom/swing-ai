@@ -104,6 +104,7 @@ export const sports = pgTable("sports", {
   icon: text("icon").notNull(),
   color: text("color").notNull(),
   description: text("description").notNull(),
+  enabled: boolean("enabled").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   sortOrder: real("sort_order").default(0).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

@@ -12,19 +12,41 @@ import {
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/query-client";
 import {
+  fetchAnalysisFpsSettings,
   fetchModelEvaluationSettings,
   fetchVideoValidationSettings,
   fetchVideoStorageSettings,
+  type AnalysisFpsStep,
   type VideoValidationMode,
   updateModelEvaluationSettings,
-  updateVideoValidationSettings,
   updateVideoStorageSettings,
 } from "@/lib/api";
+
+const LOW_IMPACT_FPS_OPTIONS: Array<{
+  step: AnalysisFpsStep;
+  label: string;
+  description: string;
+}> = [
+  { step: "step1", label: "Step 1", description: "Use every frame" },
+  { step: "step2", label: "Step 2", description: "Use 1 out of 2 frames" },
+  { step: "step3", label: "Step 3", description: "Use 1 out of 3 frames" },
+];
+
+const HIGH_IMPACT_FPS_OPTIONS: Array<{
+  step: AnalysisFpsStep;
+  label: string;
+  description: string;
+}> = [
+  { step: "step1", label: "Step 1", description: "Use every frame" },
+  { step: "step2", label: "Step 2", description: "Use 1 out of 2 frames" },
+  { step: "step3", label: "Step 3", description: "Use 1 out of 3 frames" },
+];
 
 const VIDEO_VALIDATION_OPTIONS: Array<{
   mode: VideoValidationMode;
@@ -63,7 +85,8 @@ export default function ConfigureScreen() {
   const [modelEvaluationMode, setModelEvaluationMode] = useState(false);
   const [modelEvalLoading, setModelEvalLoading] = useState(false);
   const [videoValidationMode, setVideoValidationMode] = useState<VideoValidationMode>("disabled");
-  const [videoValidationLoading, setVideoValidationLoading] = useState(false);
+  const [lowImpactFpsStep, setLowImpactFpsStep] = useState<AnalysisFpsStep>("step2");
+  const [highImpactFpsStep, setHighImpactFpsStep] = useState<AnalysisFpsStep>("step1");
   const [videoStorageMode, setVideoStorageMode] = useState<"filesystem" | "r2">("filesystem");
   const [videoStorageLoading, setVideoStorageLoading] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
@@ -75,6 +98,20 @@ export default function ConfigureScreen() {
   const recalcToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const canUseAdminApis = normalizeRole(user?.role) === "admin";
 
+  const refreshAdminSettings = React.useCallback(async () => {
+    const [settings, storageSettings, validationSettings, fpsSettings] = await Promise.all([
+      fetchModelEvaluationSettings(),
+      fetchVideoStorageSettings(),
+      fetchVideoValidationSettings(),
+      fetchAnalysisFpsSettings(),
+    ]);
+    setModelEvaluationMode(Boolean(settings.enabled));
+    setVideoStorageMode(storageSettings.mode);
+    setVideoValidationMode(validationSettings.mode);
+    setLowImpactFpsStep(fpsSettings.lowImpactStep);
+    setHighImpactFpsStep(fpsSettings.highImpactStep);
+  }, []);
+
   useEffect(() => {
     if (!canUseAdminApis) {
       router.replace("/profile");
@@ -84,15 +121,8 @@ export default function ConfigureScreen() {
     let active = true;
     (async () => {
       try {
-        const [settings, storageSettings, validationSettings] = await Promise.all([
-          fetchModelEvaluationSettings(),
-          fetchVideoStorageSettings(),
-          fetchVideoValidationSettings(),
-        ]);
+        await refreshAdminSettings();
         if (!active) return;
-        setModelEvaluationMode(Boolean(settings.enabled));
-        setVideoStorageMode(storageSettings.mode);
-        setVideoValidationMode(validationSettings.mode);
       } catch {
         if (!active) return;
       }
@@ -102,6 +132,14 @@ export default function ConfigureScreen() {
       active = false;
     };
   }, [canUseAdminApis]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!canUseAdminApis) return undefined;
+      void refreshAdminSettings().catch(() => undefined);
+      return undefined;
+    }, [canUseAdminApis, refreshAdminSettings]),
+  );
 
   useEffect(() => {
     return () => {
@@ -143,20 +181,6 @@ export default function ConfigureScreen() {
       Alert.alert("Error", "Failed to update video storage mode");
     } finally {
       setVideoStorageLoading(false);
-    }
-  };
-
-  const handleVideoValidationChange = async (mode: VideoValidationMode) => {
-    if (!canUseAdminApis || videoValidationLoading || mode === videoValidationMode) return;
-    setVideoValidationLoading(true);
-    try {
-      await updateVideoValidationSettings(mode);
-      setVideoValidationMode(mode);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      Alert.alert("Error", "Failed to update validation mode");
-    } finally {
-      setVideoValidationLoading(false);
     }
   };
 
@@ -271,43 +295,68 @@ export default function ConfigureScreen() {
 
         <View style={styles.fieldWrapper}>
           <Text style={styles.fieldLabel}>Validation</Text>
-          <View style={styles.validationCard}>
-            <Text style={styles.validationHeadline}>Upload/Pipeline Validation Mode</Text>
-            <Text style={styles.validationSubtext}>
-              Disabled is the persisted default, so no validation is currently performed.
-            </Text>
-            <View style={styles.validationOptionsList}>
-              {VIDEO_VALIDATION_OPTIONS.map((option) => {
-                const selected = videoValidationMode === option.mode;
-                return (
-                  <Pressable
-                    key={option.mode}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      handleVideoValidationChange(option.mode);
-                    }}
-                    disabled={videoValidationLoading}
-                    style={({ pressed }) => [
-                      styles.validationOption,
-                      selected && styles.validationOptionSelected,
-                      videoValidationLoading && styles.validationOptionDisabled,
-                      { transform: [{ scale: pressed ? 0.99 : 1 }] },
-                    ]}
-                  >
-                    <View style={styles.validationOptionTextWrap}>
-                      <Text style={[styles.validationOptionLabel, selected && styles.validationOptionLabelSelected]}>
-                        {option.label}
-                      </Text>
-                      <Text style={styles.validationOptionDescription}>{option.description}</Text>
-                    </View>
-                    {selected ? (
-                      <Ionicons name="checkmark-circle" size={18} color="#34D399" />
-                    ) : null}
-                  </Pressable>
-                );
-              })}
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/profile/validation-settings");
+            }}
+            style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+          >
+            <View style={styles.navCardIconWrap}>
+              <Ionicons name="shield-checkmark-outline" size={20} color="#34D399" />
             </View>
-          </View>
+            <View style={styles.navCardBody}>
+              <Text style={styles.navCardTitle}>Video Validation</Text>
+              <Text style={styles.navCardDescription}>
+                Current mode: {VIDEO_VALIDATION_OPTIONS.find((option) => option.mode === videoValidationMode)?.label || "Disabled"}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+          </Pressable>
+        </View>
+
+        <View style={styles.fieldWrapper}>
+          <Text style={styles.fieldLabel}>FPS</Text>
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/profile/fps-settings");
+            }}
+            style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+          >
+            <View style={styles.navCardIconWrap}>
+              <Ionicons name="speedometer-outline" size={20} color="#38BDF8" />
+            </View>
+            <View style={styles.navCardBody}>
+              <Text style={styles.navCardTitle}>Analysis FPS</Text>
+              <Text style={styles.navCardDescription}>
+                Low: {LOW_IMPACT_FPS_OPTIONS.find((option) => option.step === lowImpactFpsStep)?.label || "Step 2"} | High: {HIGH_IMPACT_FPS_OPTIONS.find((option) => option.step === highImpactFpsStep)?.label || "Step 1"}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+          </Pressable>
+        </View>
+
+        <View style={styles.fieldWrapper}>
+          <Text style={styles.fieldLabel}>Sports</Text>
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/profile/sports-settings");
+            }}
+            style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+          >
+            <View style={styles.navCardIconWrap}>
+              <Ionicons name="tennisball-outline" size={20} color="#F59E0B" />
+            </View>
+            <View style={styles.navCardBody}>
+              <Text style={styles.navCardTitle}>Sports</Text>
+              <Text style={styles.navCardDescription}>
+                Enable or disable sports available in the app
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+          </Pressable>
         </View>
 
         <Pressable
@@ -419,6 +468,42 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_500Medium",
     color: "#F8FAFC",
+  },
+  navCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#131328",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  navCardIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0E1022",
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+  },
+  navCardBody: {
+    flex: 1,
+    gap: 3,
+  },
+  navCardTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
+  },
+  navCardDescription: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
   },
   validationCard: {
     gap: 10,

@@ -10,11 +10,13 @@ import { pipeline } from "node:stream/promises";
 import { db } from "./db";
 import { buildInsertAuditFields, buildUpdateAuditFields } from "./audit-metadata";
 import { resolveProjectPath } from "./env";
+import { sql } from "drizzle-orm";
 
 export type VideoStorageMode = "filesystem" | "r2";
 export type MediaKind = "video" | "avatar";
 
-const VIDEO_STORAGE_MODE_KEY = "VIDEO_STORAGE_MODE";
+const VIDEO_STORAGE_MODE_KEY = "videoStorageMode";
+const LEGACY_VIDEO_STORAGE_MODE_KEY = "VIDEO_STORAGE_MODE";
 const uploadsRoot = resolveProjectPath("uploads");
 const avatarUploadsDir = path.join(uploadsRoot, "avatars");
 
@@ -25,7 +27,9 @@ function isVideoStorageMode(value: unknown): value is VideoStorageMode {
 }
 
 function getDefaultVideoStorageMode(): VideoStorageMode {
-  const envValue = String(process.env.VIDEO_STORAGE_MODE || "").trim().toLowerCase();
+  const envValue = String(
+    process.env.videoStorageMode || process.env.VIDEO_STORAGE_MODE || "",
+  ).trim().toLowerCase();
   if (isVideoStorageMode(envValue)) {
     return envValue;
   }
@@ -56,7 +60,7 @@ function normalizeKeyPrefix(value: string, fallback: string): string {
 function getR2Bucket(): string {
   const bucket = String(process.env.R2_BUCKET || "").trim();
   if (!bucket) {
-    throw new Error("R2_BUCKET is required when VIDEO_STORAGE_MODE is r2");
+    throw new Error("R2_BUCKET is required when videoStorageMode is r2");
   }
   return bucket;
 }
@@ -164,7 +168,39 @@ async function downloadR2ObjectToFile(key: string, targetPath: string): Promise<
   await pipeline(response.Body as NodeJS.ReadableStream, writeStream);
 }
 
+async function migrateLegacyVideoStorageModeSetting(): Promise<void> {
+  await db.execute(sql`
+    insert into app_settings (
+      key,
+      value,
+      created_at,
+      updated_at,
+      created_by_user_id,
+      updated_by_user_id
+    )
+    select
+      ${VIDEO_STORAGE_MODE_KEY},
+      legacy.value,
+      legacy.created_at,
+      legacy.updated_at,
+      legacy.created_by_user_id,
+      legacy.updated_by_user_id
+    from app_settings as legacy
+    where legacy.key = ${LEGACY_VIDEO_STORAGE_MODE_KEY}
+      and not exists (
+        select 1
+        from app_settings as current_setting
+        where current_setting.key = ${VIDEO_STORAGE_MODE_KEY}
+      )
+    on conflict (key) do nothing
+  `);
+
+  await db.delete(appSettings).where(eq(appSettings.key, LEGACY_VIDEO_STORAGE_MODE_KEY));
+}
+
 export async function ensureVideoStorageModeSetting(): Promise<VideoStorageMode> {
+  await migrateLegacyVideoStorageModeSetting();
+
   const defaultMode = getDefaultVideoStorageMode();
   const [existing] = await db
     .select()
@@ -199,6 +235,8 @@ export async function ensureVideoStorageModeSetting(): Promise<VideoStorageMode>
 }
 
 export async function getVideoStorageMode(): Promise<VideoStorageMode> {
+  await migrateLegacyVideoStorageModeSetting();
+
   const [existing] = await db
     .select()
     .from(appSettings)
@@ -217,6 +255,8 @@ export async function getVideoStorageMode(): Promise<VideoStorageMode> {
 }
 
 export async function setVideoStorageMode(mode: VideoStorageMode, actorUserId?: string | null): Promise<void> {
+  await migrateLegacyVideoStorageModeSetting();
+
   await db
     .insert(appSettings)
     .values({

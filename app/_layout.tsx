@@ -102,6 +102,18 @@ function RootNavigator() {
           name="profile/configure"
           options={{ headerShown: false }}
         />
+        <Stack.Screen
+          name="profile/fps-settings"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="profile/validation-settings"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="profile/sports-settings"
+          options={{ headerShown: false }}
+        />
       </Stack>
 
       {(isLoading || isRedirecting) && (

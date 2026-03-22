@@ -1,7 +1,9 @@
 import { fetch } from "expo/fetch";
 import { File } from "expo-file-system";
+import { Platform } from "react-native";
 import { getApiUrl } from "./query-client";
 import type { PipelineTiming } from "@shared/pipeline-timing";
+import type { ValidationScreeningSnapshot, VideoValidationMode } from "@shared/video-validation";
 
 export interface AnalysisResponse {
   id: string;
@@ -94,11 +96,30 @@ export interface VideoStorageSettingsResponse {
   isAdmin: boolean;
 }
 
-export type VideoValidationMode = "disabled" | "light" | "medium" | "full";
+export type AnalysisFpsStep = "step1" | "step2" | "step3";
 
 export interface VideoValidationSettingsResponse {
   mode: VideoValidationMode;
   isAdmin: boolean;
+}
+
+export interface AnalysisFpsSettingsResponse {
+  lowImpactStep: AnalysisFpsStep;
+  highImpactStep: AnalysisFpsStep;
+  tennisAutoDetectUsesHighImpact: boolean;
+  tennisMatchPlayUsesHighImpact: boolean;
+  isAdmin: boolean;
+}
+
+export interface SportAvailabilityResponse {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  description: string;
+  enabled: boolean;
+  isActive: boolean;
+  sortOrder: number;
 }
 
 export interface ScoringModelDashboardResponse {
@@ -249,6 +270,17 @@ export interface AnalysisDiagnosticsResponse {
   videoDurationSec: number;
   videoQuality: string;
   fps: number;
+  analysisFps?: {
+    effectiveStep?: AnalysisFpsStep | null;
+    sampleStep?: number | null;
+    effectiveFps: number;
+    sourceFps: number;
+    lowImpactStep?: AnalysisFpsStep | null;
+    highImpactStep?: AnalysisFpsStep | null;
+    tennisAutoDetectUsesHighImpact?: boolean | null;
+    tennisMatchPlayUsesHighImpact?: boolean | null;
+    routingReason?: string | null;
+  } | null;
   resolution: {
     width: number;
     height: number;
@@ -314,6 +346,7 @@ export interface AnalysisDiagnosticsResponse {
   detectedMovement: string;
   classificationRationale: string;
   pipelineTiming?: PipelineTiming | null;
+  validationScreening?: ValidationScreeningSnapshot | null;
   validation: {
     valid: boolean;
     confidence: number;
@@ -425,9 +458,16 @@ export interface ImprovedTennisScoreDetailResponse {
 }
 
 export interface ImprovedTennisReportResponse {
-  stroke: "forehand" | "backhand" | "serve" | "volley";
+  sessionType: "practice" | "match-play";
+  stroke: "forehand" | "backhand" | "serve" | "volley" | "match-play";
   biomechanics: ImprovedTennisScoreDetailResponse[];
+  tactical: ImprovedTennisScoreDetailResponse[];
   movement: ImprovedTennisScoreDetailResponse[];
+  strokeMix: Array<{
+    stroke: "forehand" | "backhand" | "serve" | "volley";
+    count: number;
+    sharePct: number;
+  }>;
   strengths: string[];
   improvementAreas: string[];
   coachingTips: string[];
@@ -863,6 +903,69 @@ export async function updateVideoValidationSettings(
   return res.json();
 }
 
+export async function fetchAnalysisFpsSettings(): Promise<AnalysisFpsSettingsResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/analysis-fps-settings`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch analysis FPS settings");
+  return res.json();
+}
+
+export async function updateAnalysisFpsSettings(
+  lowImpactStep: AnalysisFpsStep,
+  highImpactStep: AnalysisFpsStep,
+  tennisAutoDetectUsesHighImpact: boolean,
+  tennisMatchPlayUsesHighImpact: boolean,
+): Promise<{
+  lowImpactStep: AnalysisFpsStep;
+  highImpactStep: AnalysisFpsStep;
+  tennisAutoDetectUsesHighImpact: boolean;
+  tennisMatchPlayUsesHighImpact: boolean;
+}> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/analysis-fps-settings`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      lowImpactStep,
+      highImpactStep,
+      tennisAutoDetectUsesHighImpact,
+      tennisMatchPlayUsesHighImpact,
+    }),
+  });
+  if (!res.ok) throw new Error("Failed to update analysis FPS settings");
+  return res.json();
+}
+
+export async function fetchSportsSettings(): Promise<{
+  sports: SportAvailabilityResponse[];
+  isAdmin: boolean;
+}> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/sports-settings`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch sports settings");
+  return res.json();
+}
+
+export async function updateSportEnabled(
+  sportId: string,
+  enabled: boolean,
+): Promise<SportAvailabilityResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/sports-settings/${sportId}`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error("Failed to update sport availability");
+  return res.json();
+}
+
 export async function fetchScoringModelDashboard(
   movementName?: string | null,
   playerId?: string,
@@ -1220,6 +1323,40 @@ export async function deleteAnalysis(id: string): Promise<void> {
   if (!res.ok) throw new Error("Failed to delete analysis");
 }
 
+type UploadVideoOptions = {
+  onProgress?: (progress: {
+    loaded: number;
+    total: number | null;
+    percent: number | null;
+  }) => void;
+};
+
+function guessVideoMimeType(filename: string): string {
+  const normalized = String(filename || "").trim().toLowerCase();
+  if (normalized.endsWith(".mov")) return "video/quicktime";
+  if (normalized.endsWith(".webm")) return "video/webm";
+  if (normalized.endsWith(".avi")) return "video/x-msvideo";
+  if (normalized.endsWith(".m4v")) return "video/x-m4v";
+  return "video/mp4";
+}
+
+function parseApiErrorMessage(text: string): string {
+  let message = text?.trim() || "";
+
+  if (message) {
+    try {
+      const parsed = JSON.parse(message) as { error?: unknown };
+      if (typeof parsed?.error === "string" && parsed.error.trim()) {
+        message = parsed.error.trim();
+      }
+    } catch {
+      // Keep plain-text message as-is when response is not JSON.
+    }
+  }
+
+  return message;
+}
+
 export async function retryAnalysis(id: string): Promise<{ message: string; analysisId: string; status: string }> {
   const baseUrl = getApiUrl();
   const res = await fetch(`${baseUrl}api/analyses/${id}/retry`, {
@@ -1244,12 +1381,22 @@ export async function uploadVideo(
   recordedAt?: Date | null,
   requestedSessionType?: string | null,
   requestedFocusKey?: string | null,
+  options?: UploadVideoOptions,
 ): Promise<{ id: string }> {
   const baseUrl = getApiUrl();
   const formData = new FormData();
+  const mimeType = guessVideoMimeType(filename);
 
-  const file = new File(uri);
-  formData.append("video", file as any, filename);
+  if (Platform.OS === "web") {
+    const file = new File(uri);
+    formData.append("video", file as any, filename);
+  } else {
+    formData.append("video", {
+      uri,
+      name: filename,
+      type: mimeType,
+    } as any);
+  }
   if (sportId) formData.append("sportId", sportId);
   if (movementId) formData.append("movementId", movementId);
   if (targetUserId) formData.append("targetUserId", targetUserId);
@@ -1257,30 +1404,50 @@ export async function uploadVideo(
   if (requestedSessionType) formData.append("requestedSessionType", requestedSessionType);
   if (requestedFocusKey) formData.append("requestedFocusKey", requestedFocusKey);
 
-  const res = await fetch(`${baseUrl}api/upload`, {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-  });
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${baseUrl}api/upload`);
+    xhr.withCredentials = true;
+    xhr.responseType = "text";
 
-  if (!res.ok) {
-    const text = await res.text();
-    let message = text?.trim() || "";
+    xhr.upload.onprogress = (event) => {
+      if (!options?.onProgress) return;
+      const total = Number.isFinite(event.total) && event.total > 0 ? event.total : null;
+      const percent = total != null
+        ? Math.max(0, Math.min(100, Math.round((event.loaded / total) * 100)))
+        : null;
+      options.onProgress({
+        loaded: event.loaded,
+        total,
+        percent,
+      });
+    };
 
-    if (message) {
-      try {
-        const parsed = JSON.parse(message) as { error?: unknown };
-        if (typeof parsed?.error === "string" && parsed.error.trim()) {
-          message = parsed.error.trim();
-        }
-      } catch {
-        // Keep plain-text message as-is when response is not JSON.
+    xhr.onerror = () => {
+      reject(new Error("Upload failed"));
+    };
+
+    xhr.onabort = () => {
+      reject(new Error("Upload cancelled"));
+    };
+
+    xhr.onload = () => {
+      const responseText = String(xhr.responseText || "");
+      if (xhr.status < 200 || xhr.status >= 300) {
+        const message = parseApiErrorMessage(responseText);
+        reject(new Error(message || "Upload failed"));
+        return;
       }
-    }
 
-    throw new Error(message || "Upload failed");
-  }
-  return res.json();
+      try {
+        resolve(JSON.parse(responseText) as { id: string });
+      } catch {
+        reject(new Error("Upload failed"));
+      }
+    };
+
+    xhr.send(formData);
+  });
 }
 
 export interface FeedbackResponse {

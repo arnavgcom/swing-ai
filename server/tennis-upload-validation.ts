@@ -1,9 +1,12 @@
 import { execFile } from "child_process";
 import fs from "fs";
 import { PROJECT_ROOT, resolveProjectPath } from "./env";
+import type { VideoValidationMode } from "@shared/video-validation";
 
 const PYTHON_VALIDATION_TIMEOUT_MS = Number(process.env.PYTHON_VALIDATION_TIMEOUT_MS || 3600000);
 const PYTHON_VALIDATION_MAX_BUFFER = 10 * 1024 * 1024;
+const LIGHT_VALIDATION_SAMPLE_COUNT = Number(process.env.PYTHON_LIGHT_VALIDATION_SAMPLE_COUNT || 8);
+const MEDIUM_VALIDATION_SAMPLE_COUNT = Number(process.env.PYTHON_MEDIUM_VALIDATION_SAMPLE_COUNT || 24);
 
 export type TennisUploadGuardResult = {
   accepted: boolean;
@@ -116,6 +119,7 @@ function resolvePythonExecutable(): string {
 function runPythonSportValidation(
   videoPath: string,
   sportName: string,
+  sampleCount: number,
 ): Promise<SportValidationResult> {
   return new Promise((resolve, reject) => {
     const pythonExecutable = resolvePythonExecutable();
@@ -128,6 +132,8 @@ function runPythonSportValidation(
         videoPath,
         "--sport",
         sportName.toLowerCase(),
+        "--sample-count",
+        String(Math.max(1, sampleCount)),
       ],
       {
         cwd: PROJECT_ROOT,
@@ -157,10 +163,36 @@ function runPythonSportValidation(
   });
 }
 
+export function getTennisUploadValidationSampleCount(mode: VideoValidationMode): number | null {
+  if (mode !== "light" && mode !== "medium") return null;
+  return mode === "light" ? LIGHT_VALIDATION_SAMPLE_COUNT : MEDIUM_VALIDATION_SAMPLE_COUNT;
+}
+
 export async function validateTennisVideoUpload(
   videoPath: string,
+  validationMode: VideoValidationMode,
   _dominantProfile?: string | null,
 ): Promise<TennisUploadGuardResult> {
-  void videoPath;
-  return { accepted: true, reason: null };
+  if (validationMode === "disabled") {
+    return { accepted: true, reason: null };
+  }
+
+  if (validationMode === "full") {
+    // Full validation runs inside the main Python analysis pipeline.
+    return { accepted: true, reason: null };
+  }
+
+  const sampleCount = getTennisUploadValidationSampleCount(validationMode);
+  if (!sampleCount) {
+    return { accepted: true, reason: null };
+  }
+  const validation = await runPythonSportValidation(videoPath, "tennis", sampleCount);
+  if (validation.valid) {
+    return { accepted: true, reason: null };
+  }
+
+  return {
+    accepted: false,
+    reason: validation.reason || "Only tennis videos are allowed. Upload a clear tennis stroke or rally clip.",
+  };
 }

@@ -7,33 +7,68 @@ from .pose_detector import PoseDetector
 from .ball_tracker import BallTracker
 
 
+def _resolve_sample_step(analysis_fps_step: str) -> int:
+    normalized = str(analysis_fps_step or "step1").strip().lower()
+    if normalized == "step2":
+        return 2
+    if normalized == "step3":
+        return 3
+    return 1
+
+
 class BaseAnalyzer(ABC):
     config_key: str = "unknown"
+    core_metric_keys: Optional[set[str]] = None
+    ball_tracking_metric_keys: set[str] = {
+        "ballspeed",
+        "avgballspeed",
+        "shuttlespeed",
+        "trajectoryarc",
+        "spinrate",
+    }
 
     def __init__(self):
-        self.pose_detector = PoseDetector()
+        self.pose_detector: Optional[PoseDetector] = None
         self.ball_tracker = BallTracker()
+        self._requested_metric_keys: Optional[set[str]] = None
+
+    def _get_pose_detector(self) -> PoseDetector:
+        if self.pose_detector is None:
+            self.pose_detector = PoseDetector()
+        return self.pose_detector
 
     def analyze_video(
         self,
         video_path: str,
         include_frame_ranges: Optional[List[Tuple[int, int]]] = None,
         precomputed_pose_data: Optional[List[Optional[Dict]]] = None,
+        analysis_fps_mode: str = "full",
+        metric_computation_mode: str = "full",
+        requested_metric_keys: Optional[List[str]] = None,
     ) -> Dict:
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise ValueError(f"Cannot open video: {video_path}")
 
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        source_fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        duration = total_frames / fps
+        duration = total_frames / source_fps if source_fps > 0 else 0.0
+
+        sample_step = _resolve_sample_step(analysis_fps_mode)
+        fps = source_fps if sample_step <= 1 else (source_fps / sample_step)
 
         pose_data: List[Optional[Dict]] = []
-        frame_idx = 0
+        source_frame_idx = 0
+        sampled_frame_idx = 0
         analyzed_frames = 0
+        self._requested_metric_keys = self._resolve_requested_metric_keys(
+            metric_computation_mode,
+            requested_metric_keys,
+        )
         self.ball_tracker.reset()
+        should_track_ball = self._requires_any_metric(self.ball_tracking_metric_keys)
 
         normalized_ranges: Optional[List[Tuple[int, int]]] = None
         if include_frame_ranges:
@@ -47,30 +82,42 @@ class BaseAnalyzer(ABC):
             )
 
         while True:
-            ret, frame = cap.read()
-            if not ret:
+            grabbed = cap.grab()
+            if not grabbed:
                 break
+
+            if sample_step > 1 and (source_frame_idx % sample_step) != 0:
+                source_frame_idx += 1
+                continue
+
+            ret, frame = cap.retrieve()
+            if not ret:
+                source_frame_idx += 1
+                continue
 
             if normalized_ranges is not None:
                 in_range = False
                 for start, end in normalized_ranges:
-                    if start <= frame_idx <= end:
+                    if start <= sampled_frame_idx <= end:
                         in_range = True
                         break
-                    if frame_idx < start:
+                    if sampled_frame_idx < start:
                         break
                 if not in_range:
-                    frame_idx += 1
+                    source_frame_idx += 1
+                    sampled_frame_idx += 1
                     continue
 
-            if precomputed_pose_data is not None and 0 <= frame_idx < len(precomputed_pose_data):
-                landmarks = precomputed_pose_data[frame_idx]
+            if precomputed_pose_data is not None and 0 <= sampled_frame_idx < len(precomputed_pose_data):
+                landmarks = precomputed_pose_data[sampled_frame_idx]
             else:
-                landmarks = self.pose_detector.detect(frame)
+                landmarks = self._get_pose_detector().detect(frame)
             pose_data.append(landmarks)
 
-            self.ball_tracker.detect(frame, frame_idx)
-            frame_idx += 1
+            if should_track_ball:
+                self.ball_tracker.detect(frame, sampled_frame_idx)
+            source_frame_idx += 1
+            sampled_frame_idx += 1
             analyzed_frames += 1
 
         cap.release()
@@ -96,6 +143,44 @@ class BaseAnalyzer(ABC):
             "overallScore": overall_score,
             "coaching": coaching,
         }
+
+    def _resolve_requested_metric_keys(
+        self,
+        metric_computation_mode: str,
+        requested_metric_keys: Optional[List[str]] = None,
+    ) -> Optional[set[str]]:
+        if requested_metric_keys:
+            normalized = {
+                self._canonical_metric_key(key)
+                for key in requested_metric_keys
+                if str(key).strip()
+            }
+            return normalized or None
+
+        if str(metric_computation_mode or "full").strip().lower() == "core" and self.core_metric_keys:
+            return {
+                self._canonical_metric_key(key)
+                for key in self.core_metric_keys
+            }
+
+        return None
+
+    @staticmethod
+    def _canonical_metric_key(metric_key: str) -> str:
+        return "".join(ch for ch in str(metric_key or "").lower() if ch.isalnum())
+
+    def _metric_requested(self, metric_key: str) -> bool:
+        if self._requested_metric_keys is None:
+            return True
+        return self._canonical_metric_key(metric_key) in self._requested_metric_keys
+
+    def _requires_any_metric(self, metric_keys: set[str]) -> bool:
+        if self._requested_metric_keys is None:
+            return True
+        return any(
+            self._canonical_metric_key(metric_key) in self._requested_metric_keys
+            for metric_key in metric_keys
+        )
 
     @abstractmethod
     def _compute_metrics(self, pose_data: List[Optional[Dict]], video_info: Dict) -> Dict:
@@ -534,4 +619,5 @@ class BaseAnalyzer(ABC):
         }
 
     def close(self):
-        self.pose_detector.close()
+        if self.pose_detector is not None:
+            self.pose_detector.close()

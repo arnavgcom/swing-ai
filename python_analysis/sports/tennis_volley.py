@@ -6,6 +6,17 @@ from python_analysis.pose_detector import PoseDetector
 
 class TennisVolleyAnalyzer(BaseAnalyzer):
     config_key = "tennis-volley"
+    core_metric_keys = {
+        "reactionSpeed",
+        "racketPrep",
+        "wristFirmness",
+        "splitStepTiming",
+        "balanceScore",
+        "contactHeight",
+        "stepForward",
+        "ballSpeed",
+        "shotConsistency",
+    }
 
     def _compute_metrics(self, pose_data: List[Optional[Dict]], video_info: Dict) -> Dict:
         fps = video_info["fps"]
@@ -34,9 +45,11 @@ class TennisVolleyAnalyzer(BaseAnalyzer):
         shot_consistency = self._calc_shot_consistency(
             self._calc_elbow_angles(valid_poses), wrist_speeds
         )
-        rhythm_consistency = self._calc_rhythm_consistency(pose_data, fps)
+        rhythm_consistency = None
+        if self._metric_requested("rhythmConsistency"):
+            rhythm_consistency = self._calc_rhythm_consistency(pose_data, fps)
 
-        return {
+        metrics = {
             "reactionSpeed": round(reaction_speed, 2),
             "racketPrep": round(racket_prep, 2),
             "wristFirmness": round(wrist_firmness, 2),
@@ -46,8 +59,10 @@ class TennisVolleyAnalyzer(BaseAnalyzer):
             "stepForward": round(step_forward, 2),
             "ballSpeed": round(ball_speed, 2),
             "shotConsistency": round(shot_consistency, 2),
-            "rhythmConsistency": round(rhythm_consistency, 2),
         }
+        if rhythm_consistency is not None:
+            metrics["rhythmConsistency"] = round(rhythm_consistency, 2)
+        return metrics
 
     def _calc_reaction_speed(self, wrist_speeds: List[float], fps: float) -> float:
         if not wrist_speeds:

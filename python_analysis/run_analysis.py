@@ -17,6 +17,12 @@ VALIDATION_MODE_RANGES = {
     "medium": (24, 48),
 }
 
+ANALYSIS_FPS_STEPS = {
+    "step1": 1,
+    "step2": 2,
+    "step3": 3,
+}
+
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -147,13 +153,13 @@ def _apply_tennis_auto_detect_majority_normalization(shot_label_diagnostics: Lis
         opposite = forehands
 
     target_ratio = max(len(forehands), len(backhands)) / max(total, 1)
-    if target_ratio < 0.66 or len(opposite) > 2:
+    if target_ratio < 0.75 or len(opposite) > 1:
         return
 
     # Preserve truly strong opposite evidence.
     opposite_strong = [
         d for d in opposite
-        if float(d.get("confidence", 0.0)) >= 0.97
+        if float(d.get("confidence", 0.0)) >= 0.9
     ]
     if opposite_strong:
         return
@@ -195,6 +201,11 @@ def _build_validation_pose_subset(
     return [pose_data[index] for index in sampled_indices]
 
 
+def _resolve_sample_step(analysis_fps_step: str) -> int:
+    normalized_step = str(analysis_fps_step or "step1").strip().lower()
+    return ANALYSIS_FPS_STEPS.get(normalized_step, 1)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Swing AI Sport Analysis")
     parser.add_argument("video_path", help="Path to the video file")
@@ -206,6 +217,53 @@ def main():
         default="disabled",
         choices=["disabled", "light", "medium", "full"],
         help="Validation mode for pipeline rejection behavior",
+    )
+    parser.add_argument(
+        "--analysis-fps-mode",
+        default="step1",
+        choices=["step1", "step2", "step3"],
+        help="Frame sampling step for the analysis pipeline",
+    )
+    parser.add_argument(
+        "--low-impact-fps-step",
+        default="step2",
+        choices=["step1", "step2", "step3"],
+        help="Configured low-impact FPS step at analysis time",
+    )
+    parser.add_argument(
+        "--high-impact-fps-step",
+        default="step1",
+        choices=["step1", "step2", "step3"],
+        help="Configured high-impact FPS step at analysis time",
+    )
+    parser.add_argument(
+        "--tennis-auto-detect-uses-high-impact",
+        default="false",
+        choices=["true", "false"],
+        help="Whether tennis auto-detect high-impact override was enabled",
+    )
+    parser.add_argument(
+        "--tennis-match-play-uses-high-impact",
+        default="false",
+        choices=["true", "false"],
+        help="Whether tennis match-play high-impact override was enabled",
+    )
+    parser.add_argument(
+        "--analysis-fps-routing-reason",
+        default="default-low-impact",
+        choices=[
+            "serve-selected",
+            "tennis-auto-detect-override",
+            "tennis-match-play-override",
+            "default-low-impact",
+        ],
+        help="Reason the effective FPS mode was selected",
+    )
+    parser.add_argument(
+        "--metric-computation-mode",
+        default="full",
+        choices=["core", "full"],
+        help="Whether to compute only core scoring metrics or the full metric set",
     )
 
     args = parser.parse_args()
@@ -219,6 +277,16 @@ def main():
     dominant_profile = args.dominant_profile.lower().strip()
     preferred_dominant_side = dominant_profile if dominant_profile in ("right", "left") else None
     validation_mode = str(args.validation_mode or "disabled").strip().lower()
+    analysis_fps_step = str(args.analysis_fps_mode or "step1").strip().lower()
+    metric_computation_mode = str(args.metric_computation_mode or "full").strip().lower()
+    analysis_fps_snapshot = {
+        "effectiveStep": analysis_fps_step,
+        "lowImpactStep": str(args.low_impact_fps_step or "step2").strip().lower(),
+        "highImpactStep": str(args.high_impact_fps_step or "step1").strip().lower(),
+        "tennisAutoDetectUsesHighImpact": str(args.tennis_auto_detect_uses_high_impact or "false").strip().lower() == "true",
+        "tennisMatchPlayUsesHighImpact": str(args.tennis_match_play_uses_high_impact or "false").strip().lower() == "true",
+        "routingReason": str(args.analysis_fps_routing_reason or "default-low-impact").strip().lower(),
+    }
     movement = movement_aliases.get(movement, movement)
     user_config_key = f"{sport}-{movement}"
 
@@ -241,15 +309,16 @@ def main():
         if not cap.isOpened():
             raise ValueError(f"Cannot open video: {args.video_path}")
 
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        source_fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         cap.release()
 
         file_size_bytes = os.path.getsize(args.video_path) if os.path.exists(args.video_path) else 0
-        duration_seconds = (total_frames / fps) if fps > 0 and total_frames > 0 else 0.0
-        sample_step = max(1, total_frames // 30) if total_frames > 0 else 1
+        duration_seconds = (total_frames / source_fps) if source_fps > 0 and total_frames > 0 else 0.0
+        sample_step = _resolve_sample_step(analysis_fps_step)
+        fps = source_fps if sample_step <= 1 else (source_fps / sample_step)
         sampled_brightness: List[float] = []
         sampled_blur: List[float] = []
 
@@ -260,22 +329,28 @@ def main():
         cap2 = cv2.VideoCapture(args.video_path)
         pose_data = []
         full_pose_landmarks_per_frame: List[List[Dict[str, Any]]] = []
-        frame_index = 0
+        source_frame_index = 0
         first_pose_started_at = _utc_now_iso()
         first_pose_started_perf = time.perf_counter()
         _emit_pipeline_timing("firstPosePass", "running", started_at=first_pose_started_at)
         while True:
-            ret, frame = cap2.read()
-            if not ret:
+            grabbed = cap2.grab()
+            if not grabbed:
                 break
-            if frame_index % sample_step == 0:
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                sampled_brightness.append(float(gray.mean()))
-                sampled_blur.append(float(cv2.Laplacian(gray, cv2.CV_64F).var()))
+            if sample_step > 1 and (source_frame_index % sample_step) != 0:
+                source_frame_index += 1
+                continue
+            ret, frame = cap2.retrieve()
+            if not ret:
+                source_frame_index += 1
+                continue
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            sampled_brightness.append(float(gray.mean()))
+            sampled_blur.append(float(cv2.Laplacian(gray, cv2.CV_64F).var()))
             landmarks, full_landmarks = detector.detect_with_skeleton(frame)
             pose_data.append(landmarks)
             full_pose_landmarks_per_frame.append(full_landmarks)
-            frame_index += 1
+            source_frame_index += 1
         cap2.release()
         detector.close()
         _emit_pipeline_timing(
@@ -292,7 +367,9 @@ def main():
         classification_started_at = _utc_now_iso()
         classification_started_perf = time.perf_counter()
         _emit_pipeline_timing("classificationValidation", "running", started_at=classification_started_at)
-        bg_features = analyze_background(args.video_path, pose_data)
+        bg_features = None
+        if validation_mode != "disabled":
+            bg_features = analyze_background(args.video_path, pose_data)
         validation: Dict[str, Any] = {
             "valid": True,
             "reason": "validation_disabled",
@@ -453,8 +530,8 @@ def main():
                     "backhand": 0,
                 }
                 vote_conf_threshold = {
-                    "forehand": 0.62,
-                    "backhand": 0.74,
+                    "forehand": 0.68,
+                    "backhand": 0.68,
                 }
                 for diag in shot_label_diagnostics:
                     label = str(diag.get("label", "unknown"))
@@ -528,6 +605,8 @@ def main():
             args.video_path,
             include_frame_ranges=scored_shot_ranges if use_shot_window_scoring else None,
             precomputed_pose_data=pose_data,
+            analysis_fps_mode=analysis_fps_step,
+            metric_computation_mode=metric_computation_mode,
         )
         analyzer.close()
         _emit_pipeline_timing(
@@ -601,9 +680,18 @@ def main():
                 "videoPath": args.video_path,
                 "videoId": os.path.basename(args.video_path),
                 "fps": float(fps),
+                "sourceFps": float(source_fps),
+                "analysisFpsMode": analysis_fps_step,
+                "analysisFpsSnapshot": {
+                    **analysis_fps_snapshot,
+                    "sampleStep": int(sample_step),
+                    "effectiveFps": float(fps),
+                    "sourceFps": float(source_fps),
+                },
                 "frameWidth": int(frame_width),
                 "frameHeight": int(frame_height),
-                "totalFrames": int(total_frames if total_frames > 0 else len(pose_data)),
+                "totalFrames": int(len(pose_data)),
+                "sourceTotalFrames": int(total_frames if total_frames > 0 else len(pose_data)),
                 "durationSec": float(duration_seconds),
                 "fileSizeBytes": int(file_size_bytes),
                 "avgBrightness": float(avg_brightness),

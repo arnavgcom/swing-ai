@@ -64,6 +64,15 @@ import {
   withLocalMediaFile,
 } from "./media-storage";
 import { PROJECT_ROOT, resolveProjectPath } from "./env";
+import { isVideoValidationMode, type VideoValidationMode } from "@shared/video-validation";
+import {
+  getEnabledPrimarySport,
+  getSportById,
+  isPrimaryEnabledSportName,
+  isSportEnabledRecord,
+  listSports,
+  mapSportForApi,
+} from "./sport-availability";
 
 const uploadDir = resolveProjectPath("uploads");
 if (!fs.existsSync(uploadDir)) {
@@ -530,6 +539,7 @@ function getDrillForMetric(metric: string): string {
 }
 
 type ImprovedTennisStrokeType = "forehand" | "backhand" | "serve" | "volley";
+type ImprovedTennisSessionType = "practice" | "match-play";
 
 type ImprovedTennisScoreDetail = {
   key: string;
@@ -538,10 +548,19 @@ type ImprovedTennisScoreDetail = {
   explanation: string;
 };
 
-type ImprovedTennisReport = {
+type ImprovedTennisStrokeMixEntry = {
   stroke: ImprovedTennisStrokeType;
+  count: number;
+  sharePct: number;
+};
+
+type ImprovedTennisReport = {
+  sessionType: ImprovedTennisSessionType;
+  stroke: ImprovedTennisStrokeType | "match-play";
   biomechanics: ImprovedTennisScoreDetail[];
+  tactical: ImprovedTennisScoreDetail[];
   movement: ImprovedTennisScoreDetail[];
+  strokeMix: ImprovedTennisStrokeMixEntry[];
   strengths: string[];
   improvementAreas: string[];
   coachingTips: string[];
@@ -591,14 +610,126 @@ function normalizeBalanceScoreForImprovedModel(value: number | null): number | n
   return n <= 10 ? n * 10 : n;
 }
 
+function normalizeTenOrHundredScoreForImprovedModel(value: number | null): number | null {
+  if (!Number.isFinite(Number(value))) return null;
+  const n = Number(value);
+  return n <= 10 ? n * 10 : n;
+}
+
+function buildImprovedTacticalDetail(
+  key: "power" | "control" | "timing" | "technique",
+  scoreRaw: unknown,
+): ImprovedTennisScoreDetail {
+  const score = Number(scoreRaw);
+  const normalized = Number.isFinite(score) ? Number(Math.max(1, Math.min(10, score)).toFixed(1)) : 5.5;
+
+  if (key === "power") {
+    return {
+      key,
+      label: "Power",
+      score: normalized,
+      explanation:
+        normalized >= 8
+          ? "Ball quality and body drive are creating strong pressure through the session."
+          : normalized >= 6
+            ? "Power is present, but cleaner force transfer would raise penetration."
+            : "Power output fades too often; body drive and acceleration need work.",
+    };
+  }
+
+  if (key === "control") {
+    return {
+      key,
+      label: "Control",
+      score: normalized,
+      explanation:
+        normalized >= 8
+          ? "You are controlling ball shape and depth well under live-play variation."
+          : normalized >= 6
+            ? "Control is usable, but quality drops when tempo rises."
+            : "Control is unstable and is leaking points through short or rushed execution.",
+    };
+  }
+
+  if (key === "timing") {
+    return {
+      key,
+      label: "Timing",
+      score: normalized,
+      explanation:
+        normalized >= 8
+          ? "Preparation and strike timing stay coordinated across the rally."
+          : normalized >= 6
+            ? "Timing is mostly solid, but setup arrives late on some shots."
+            : "Late preparation is forcing rushed contact and weaker transitions.",
+    };
+  }
+
+  return {
+    key,
+    label: "Technique",
+    score: normalized,
+    explanation:
+      normalized >= 8
+        ? "Your movement shapes and shot mechanics hold together well during play."
+        : normalized >= 6
+          ? "Technique remains serviceable, though shape breaks down under pressure."
+          : "Mechanical shape is inconsistent and needs better repeatability in live points.",
+  };
+}
+
+function buildImprovedStrokeMix(aiDiagnosticsRaw: unknown): ImprovedTennisStrokeMixEntry[] {
+  const aiDiagnostics = aiDiagnosticsRaw && typeof aiDiagnosticsRaw === "object"
+    ? (aiDiagnosticsRaw as Record<string, unknown>)
+    : {};
+  const countsRaw = aiDiagnostics.movementTypeCounts && typeof aiDiagnostics.movementTypeCounts === "object"
+    ? (aiDiagnostics.movementTypeCounts as Record<string, unknown>)
+    : {};
+
+  const strokes: ImprovedTennisStrokeType[] = ["forehand", "backhand", "serve", "volley"];
+  const rows = strokes
+    .map((stroke) => ({
+      stroke,
+      count: Math.max(0, Math.trunc(Number(countsRaw[stroke] || 0))),
+    }))
+    .filter((item) => item.count > 0);
+
+  const total = rows.reduce((sum, item) => sum + item.count, 0);
+  if (total <= 0) return [];
+
+  return rows
+    .map((item) => ({
+      stroke: item.stroke,
+      count: item.count,
+      sharePct: Number(((item.count / total) * 100).toFixed(1)),
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
 function buildImprovedTennisReportFromMetrics(
+  requestedSessionType: unknown,
+  configKey: unknown,
   detectedMovement: unknown,
   metricValuesRaw: unknown,
+  tacticalComponentsRaw?: unknown,
+  overallScoreRaw?: unknown,
+  aiDiagnosticsRaw?: unknown,
 ): ImprovedTennisReport {
   const metricValues =
     metricValuesRaw && typeof metricValuesRaw === "object"
       ? (metricValuesRaw as Record<string, unknown>)
       : {};
+  const tacticalComponents =
+    tacticalComponentsRaw && typeof tacticalComponentsRaw === "object"
+      ? (tacticalComponentsRaw as Record<string, unknown>)
+      : {};
+
+  const normalizedSessionType = String(requestedSessionType || "").trim().toLowerCase();
+  const normalizedConfigKey = String(configKey || "").trim().toLowerCase();
+  const sessionType: ImprovedTennisSessionType =
+    normalizedSessionType === "match-play" || normalizedConfigKey === "tennis-game"
+      ? "match-play"
+      : "practice";
 
   const detected = String(detectedMovement || "").toLowerCase().trim();
   const stroke: ImprovedTennisStrokeType =
@@ -616,10 +747,185 @@ function buildImprovedTennisReportFromMetrics(
   const swingPathAngle = improvedPickMetric(metricValues, ["swingPathAngle", "swing_path_angle", "trajectoryArc"]);
   const balanceScore = improvedPickMetric(metricValues, ["balanceScore", "balance_score"]);
   const balanceScoreForModel = normalizeBalanceScoreForImprovedModel(balanceScore);
+  const shotConsistency = normalizeTenOrHundredScoreForImprovedModel(
+    improvedPickMetric(metricValues, ["shotConsistency", "shot_consistency"]),
+  );
+  const rhythmConsistency = normalizeTenOrHundredScoreForImprovedModel(
+    improvedPickMetric(metricValues, ["rhythmConsistency", "rhythm_consistency"]),
+  );
+  const courtCoverage = improvedPickMetric(metricValues, ["courtCoverage", "court_coverage"]);
+  const recoverySpeed = improvedPickMetric(metricValues, ["recoverySpeed", "recovery_speed", "recoveryTime"]);
+  const shotVariety = improvedPickMetric(metricValues, ["shotVariety", "shot_variety"]);
+  const rallyLength = improvedPickMetric(metricValues, ["rallyLength", "rally_length"]);
   const splitStepTime = improvedPickMetric(metricValues, ["splitStepTime", "splitStepTiming", "split_step_time"]);
   const reactionTime = improvedPickMetric(metricValues, ["reactionTime", "reactionSpeed", "reaction_time"]);
   const recoveryTime = improvedPickMetric(metricValues, ["recoveryTime", "recoverySpeed", "recovery_time"]);
   const ballSpeed = improvedPickMetric(metricValues, ["ballSpeed", "avgBallSpeed", "ball_speed"]);
+
+  if (sessionType === "match-play") {
+    const balanceUnderLoad = improvedScoreFromUnit(
+      0.5 * improvedNorm(balanceScoreForModel, 55, 98)
+      + 0.3 * improvedNorm(courtCoverage, 30, 98)
+      + 0.2 * improvedNorm(recoverySpeed, 1.5, 6.0),
+    );
+    const contactQuality = improvedScoreFromUnit(
+      0.45 * improvedNorm(shotConsistency, 55, 98)
+      + 0.35 * improvedNorm(ballSpeed, 40, 100)
+      + 0.2 * improvedNorm(rhythmConsistency, 50, 95),
+    );
+    const strokeShape = improvedScoreFromUnit(
+      0.55 * improvedNorm(rhythmConsistency, 50, 95)
+      + 0.45 * improvedNorm(shotVariety, 30, 95),
+    );
+    const forceTransfer = improvedScoreFromUnit(
+      0.35 * improvedNorm(hipRotationSpeed, 250, 1100)
+      + 0.25 * improvedNorm(shoulderRotationSpeed, 300, 1200)
+      + 0.2 * improvedNorm(ballSpeed, 40, 100)
+      + 0.2 * improvedNorm(balanceScoreForModel, 55, 98),
+    );
+
+    const biomechanics: ImprovedTennisScoreDetail[] = [
+      {
+        key: "balance-load",
+        label: "Balance Under Load",
+        score: balanceUnderLoad,
+        explanation:
+          balanceUnderLoad >= 8
+            ? "You are staying organized and stable while moving through live-play demands."
+            : balanceUnderLoad >= 6
+              ? "Balance holds up reasonably well, but body control drops at higher tempo."
+              : "Stability under live pressure is inconsistent and is affecting shot quality.",
+      },
+      {
+        key: "contact-quality",
+        label: "Contact Quality",
+        score: contactQuality,
+        explanation:
+          contactQuality >= 8
+            ? "Contact quality is repeatable across rallies, giving you cleaner ball outcomes."
+            : contactQuality >= 6
+              ? "Contact quality is workable, though it dips during faster exchanges."
+              : "Inconsistent contact quality is limiting depth, pace, and repeatability.",
+      },
+      {
+        key: "stroke-shape",
+        label: "Stroke Shape & Rhythm",
+        score: strokeShape,
+        explanation:
+          strokeShape >= 8
+            ? "Your shapes and rhythm remain composed across a varied shot mix."
+            : strokeShape >= 6
+              ? "Stroke shape is mostly stable, but rhythm breaks under rally stress."
+              : "Stroke shape and rhythm drift too often during points.",
+      },
+      {
+        key: "force-transfer",
+        label: "Force Transfer",
+        score: forceTransfer,
+        explanation:
+          forceTransfer >= 8
+            ? "Body sequencing is turning movement into useful ball pressure consistently."
+            : forceTransfer >= 6
+              ? "Force transfer is present, but some shots still rely too much on the arm."
+              : "Energy transfer is inefficient and is capping reliable match-play pressure.",
+      },
+    ];
+
+    const tactical: ImprovedTennisScoreDetail[] = [
+      buildImprovedTacticalDetail("power", tacticalComponents.power),
+      buildImprovedTacticalDetail("control", tacticalComponents.control),
+      buildImprovedTacticalDetail("timing", tacticalComponents.timing),
+      buildImprovedTacticalDetail("technique", tacticalComponents.technique),
+    ];
+
+    const movement: ImprovedTennisScoreDetail[] = [
+      {
+        key: "ready-base",
+        label: "Ready Base",
+        score: improvedScoreFromUnit(
+          0.5 * improvedNorm(balanceScoreForModel, 55, 98)
+          + 0.5 * improvedNorm(rhythmConsistency, 50, 95),
+        ),
+        explanation: "How consistently you establish a usable base before the next ball.",
+      },
+      {
+        key: "react-ball",
+        label: "React To Ball",
+        score: improvedScoreFromUnit(
+          0.6 * improvedNorm(courtCoverage, 30, 98)
+          + 0.4 * improvedNorm(recoverySpeed, 1.5, 6.0),
+        ),
+        explanation: "How quickly your movement patterns turn recognition into usable court position.",
+      },
+      {
+        key: "recover-neutral",
+        label: "Recover To Neutral",
+        score: improvedScoreFromUnit(
+          0.65 * improvedNorm(recoverySpeed, 1.5, 6.0)
+          + 0.35 * improvedNorm(balanceScoreForModel, 55, 98),
+        ),
+        explanation: "How efficiently you reset after contact and prepare for the next ball.",
+      },
+      {
+        key: "sustain-rally",
+        label: "Sustain Rally",
+        score: improvedScoreFromUnit(
+          0.55 * improvedNorm(rallyLength, 3, 12)
+          + 0.45 * improvedNorm(shotConsistency, 55, 98),
+        ),
+        explanation: "How well your movement and shot quality hold up across longer exchanges.",
+      },
+      {
+        key: "cover-space",
+        label: "Cover Space",
+        score: improvedScoreFromUnit(
+          0.7 * improvedNorm(courtCoverage, 30, 98)
+          + 0.3 * improvedNorm(recoverySpeed, 1.5, 6.0),
+        ),
+        explanation: "How effectively you move into and out of the spaces the rally demands.",
+      },
+    ];
+
+    const strokeMix = buildImprovedStrokeMix(aiDiagnosticsRaw);
+    const allItems = [...biomechanics, ...tactical, ...movement].sort((a, b) => b.score - a.score);
+    const strongest = allItems.slice(0, 3);
+    const weakest = [...allItems].reverse().slice(0, 3);
+    const storedOverallScore = Number(overallScoreRaw);
+    const overallScore = Number.isFinite(storedOverallScore)
+      ? Math.max(0, Math.min(100, Math.round(storedOverallScore)))
+      : Math.round(
+          improvedClamp(
+            (
+              biomechanics.reduce((sum, item) => sum + item.score, 0) / Math.max(biomechanics.length, 1) * 0.3
+              + tactical.reduce((sum, item) => sum + item.score, 0) / Math.max(tactical.length, 1) * 0.4
+              + movement.reduce((sum, item) => sum + item.score, 0) / Math.max(movement.length, 1) * 0.3
+            ) * 10,
+            0,
+            100,
+          ),
+        );
+
+    const coachingTips = [
+      `${weakest[0]?.label || "Control"}: make this the first match-play training priority.`,
+      `${weakest[1]?.label || "Recover To Neutral"}: improve this with live-ball repetition and short-interval work.`,
+      strokeMix.length > 0
+        ? `${strokeMix[0].stroke.charAt(0).toUpperCase()}${strokeMix[0].stroke.slice(1)} made up ${strokeMix[0].sharePct}% of the session. Train that pattern first, then stabilize the weakest secondary pattern.`
+        : "Use live-ball sequences that challenge recovery, spacing, and shot selection under pressure.",
+    ];
+
+    return {
+      sessionType,
+      stroke: "match-play",
+      biomechanics,
+      tactical,
+      movement,
+      strokeMix,
+      strengths: strongest.map((item) => `${item.label} is a match-play strength (${item.score}/10).`),
+      improvementAreas: weakest.map((item) => `${item.label} is the next match-play improvement area (${item.score}/10).`),
+      coachingTips,
+      overallScore,
+    };
+  }
 
   const balance = improvedScoreFromUnit(
     0.8 * improvedNorm(balanceScoreForModel, 55, 98) + 0.2 * improvedInvNorm(reactionTime, 180, 480),
@@ -829,9 +1135,12 @@ function buildImprovedTennisReportFromMetrics(
   ];
 
   return {
+    sessionType,
     stroke,
     biomechanics,
+    tactical: [],
     movement,
+    strokeMix: [],
     strengths: strongest.map((item) => `${item.label} is a strength (${item.score}/10).`),
     improvementAreas: weakest.map((item) => `${item.label} needs improvement (${item.score}/10).`),
     coachingTips,
@@ -868,11 +1177,50 @@ function computeSummarySectionScores(
 
 const MODEL_EVALUATION_MODE_KEY = "modelEvaluationMode";
 const VIDEO_VALIDATION_MODE_KEY = "videoValidationMode";
+const ANALYSIS_FPS_MODE_KEY = "analysisFpsMode";
 
-type VideoValidationMode = "disabled" | "light" | "medium" | "full";
+type AnalysisFpsMode = "3fps" | "6fps" | "12fps" | "15fps" | "24fps" | "30fps" | "full";
+type AnalysisFpsStep = "step1" | "step2" | "step3";
 
-function isVideoValidationMode(value: unknown): value is VideoValidationMode {
-  return value === "disabled" || value === "light" || value === "medium" || value === "full";
+type AnalysisFpsSettings = {
+  lowImpactStep: AnalysisFpsStep;
+  highImpactStep: AnalysisFpsStep;
+  tennisAutoDetectUsesHighImpact: boolean;
+  tennisMatchPlayUsesHighImpact: boolean;
+};
+
+function isAnalysisFpsMode(value: unknown): value is AnalysisFpsMode {
+  return value === "3fps"
+    || value === "6fps"
+    || value === "12fps"
+    || value === "15fps"
+    || value === "24fps"
+    || value === "30fps"
+    || value === "full";
+}
+
+function isAnalysisFpsStep(value: unknown): value is AnalysisFpsStep {
+  return value === "step1" || value === "step2" || value === "step3";
+}
+
+function coerceLowImpactStep(value: unknown): AnalysisFpsStep {
+  if (isAnalysisFpsStep(value)) return value;
+  if (isAnalysisFpsMode(value)) {
+    if (value === "15fps") return "step2";
+    if (value === "12fps" || value === "6fps" || value === "3fps") return "step3";
+    return "step1";
+  }
+  return "step2";
+}
+
+function coerceHighImpactStep(value: unknown): AnalysisFpsStep {
+  if (isAnalysisFpsStep(value)) return value;
+  if (isAnalysisFpsMode(value)) {
+    if (value === "15fps") return "step2";
+    if (value === "12fps" || value === "6fps" || value === "3fps") return "step3";
+    return "step1";
+  }
+  return "step1";
 }
 
 function getModelEvaluationModeKey(userId?: string): string {
@@ -1377,6 +1725,97 @@ async function ensureVideoValidationModeSetting(): Promise<void> {
     .values({
       key: VIDEO_VALIDATION_MODE_KEY,
       value: { mode: "disabled" satisfies VideoValidationMode },
+      ...buildInsertAuditFields(null),
+    })
+    .onConflictDoNothing();
+}
+
+async function getAnalysisFpsSettings(actorUserId?: string | null): Promise<AnalysisFpsSettings> {
+  const [setting] = await db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.key, ANALYSIS_FPS_MODE_KEY))
+    .limit(1);
+
+  const rawValue = setting?.value && typeof setting.value === "object"
+    ? (setting.value as Record<string, unknown>)
+    : null;
+
+  const lowImpactStep = coerceLowImpactStep(rawValue?.lowImpactStep ?? rawValue?.lowImpactMode);
+  const highImpactStep = coerceHighImpactStep(rawValue?.highImpactStep ?? rawValue?.highImpactMode);
+  const tennisAutoDetectUsesHighImpact = Boolean(rawValue?.tennisAutoDetectUsesHighImpact);
+  const tennisMatchPlayUsesHighImpact = Boolean(rawValue?.tennisMatchPlayUsesHighImpact);
+
+  if (
+    setting
+    && rawValue?.lowImpactStep === lowImpactStep
+    && rawValue?.highImpactStep === highImpactStep
+    && rawValue?.tennisAutoDetectUsesHighImpact === tennisAutoDetectUsesHighImpact
+    && rawValue?.tennisMatchPlayUsesHighImpact === tennisMatchPlayUsesHighImpact
+  ) {
+    return {
+      lowImpactStep,
+      highImpactStep,
+      tennisAutoDetectUsesHighImpact,
+      tennisMatchPlayUsesHighImpact,
+    };
+  }
+
+  const value = {
+    lowImpactStep,
+    highImpactStep,
+    tennisAutoDetectUsesHighImpact,
+    tennisMatchPlayUsesHighImpact,
+  };
+  await db
+    .insert(appSettings)
+    .values({
+      key: ANALYSIS_FPS_MODE_KEY,
+      value,
+      ...buildInsertAuditFields(actorUserId || null),
+    })
+    .onConflictDoUpdate({
+      target: appSettings.key,
+      set: {
+        value,
+        ...buildUpdateAuditFields(actorUserId || null),
+      },
+    });
+
+  return value;
+}
+
+async function setAnalysisFpsSettings(
+  settings: AnalysisFpsSettings,
+  actorUserId?: string | null,
+): Promise<void> {
+  await db
+    .insert(appSettings)
+    .values({
+      key: ANALYSIS_FPS_MODE_KEY,
+      value: settings,
+      ...buildInsertAuditFields(actorUserId || null),
+    })
+    .onConflictDoUpdate({
+      target: appSettings.key,
+      set: {
+        value: settings,
+        ...buildUpdateAuditFields(actorUserId || null),
+      },
+    });
+}
+
+async function ensureAnalysisFpsSetting(): Promise<void> {
+  await db
+    .insert(appSettings)
+    .values({
+      key: ANALYSIS_FPS_MODE_KEY,
+      value: {
+        lowImpactStep: "step2" satisfies AnalysisFpsStep,
+        highImpactStep: "step1" satisfies AnalysisFpsStep,
+        tennisAutoDetectUsesHighImpact: false,
+        tennisMatchPlayUsesHighImpact: false,
+      },
       ...buildInsertAuditFields(null),
     })
     .onConflictDoNothing();
@@ -1967,6 +2406,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`alter table sports add column if not exists updated_at timestamp default now()`);
   await db.execute(sql`alter table sports add column if not exists created_by_user_id varchar`);
   await db.execute(sql`alter table sports add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql`alter table sports add column if not exists enabled boolean`);
+  await db.execute(sql`
+    update sports
+    set enabled = case
+      when lower(name) = 'tennis' then true
+      else false
+    end
+    where enabled is null
+  `);
+  await db.execute(sql`alter table sports alter column enabled set default false`);
+  await db.execute(sql`update sports set enabled = true where lower(name) = 'tennis' and enabled is null`);
 
   await db.execute(sql`alter table sport_movements add column if not exists created_at timestamp default now()`);
   await db.execute(sql`alter table sport_movements add column if not exists updated_at timestamp default now()`);
@@ -2063,6 +2513,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`alter table app_settings add column if not exists updated_by_user_id varchar`);
 
   await ensureVideoValidationModeSetting();
+  await ensureAnalysisFpsSetting();
   await ensureVideoStorageModeSetting();
 
   await db.execute(sql`
@@ -2376,6 +2827,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await setVideoValidationMode(mode, userId);
       res.json({ mode });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/platform/analysis-fps-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const settings = await getAnalysisFpsSettings(userId);
+      res.json({
+        ...settings,
+        isAdmin,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/platform/analysis-fps-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const lowImpactStep = String(req.body?.lowImpactStep ?? req.body?.lowImpactMode ?? "").trim().toLowerCase();
+      const highImpactStep = String(req.body?.highImpactStep ?? req.body?.highImpactMode ?? "").trim().toLowerCase();
+      const tennisAutoDetectUsesHighImpact = Boolean(req.body?.tennisAutoDetectUsesHighImpact);
+      const tennisMatchPlayUsesHighImpact = Boolean(req.body?.tennisMatchPlayUsesHighImpact);
+
+      if (!isAnalysisFpsStep(lowImpactStep)) {
+        return res.status(400).json({ error: "lowImpactStep must be one of step1, step2, or step3" });
+      }
+
+      if (!isAnalysisFpsStep(highImpactStep)) {
+        return res.status(400).json({ error: "highImpactStep must be one of step1, step2, or step3" });
+      }
+
+      const settings = {
+        lowImpactStep,
+        highImpactStep,
+        tennisAutoDetectUsesHighImpact,
+        tennisMatchPlayUsesHighImpact,
+      };
+      await setAnalysisFpsSettings(settings, userId);
+      res.json(settings);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/platform/sports-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const allSports = await listSports({ includeDisabled: true });
+      res.json({
+        sports: allSports.map(mapSportForApi),
+        isAdmin,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/platform/sports-settings/:sportId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const enabled = Boolean(req.body?.enabled);
+      const sport = await getSportById(req.params.sportId);
+      if (!sport) {
+        return res.status(404).json({ error: "Sport not found" });
+      }
+
+      const allSports = await listSports({ includeDisabled: true });
+      const enabledCount = allSports.filter((item) => isSportEnabledRecord(item)).length;
+      if (!enabled && isSportEnabledRecord(sport) && enabledCount <= 1) {
+        return res.status(400).json({ error: "At least one sport must remain enabled" });
+      }
+
+      const [updatedSport] = await db
+        .update(sports)
+        .set({
+          enabled,
+          isActive: enabled,
+          ...buildUpdateAuditFields(userId),
+        })
+        .where(eq(sports.id, sport.id))
+        .returning();
+
+      res.json(mapSportForApi(updatedSport));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -2930,13 +3489,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/sports", async (_req: Request, res: Response) => {
+  app.get("/api/sports", async (req: Request, res: Response) => {
     try {
-      const allSports = await db
-        .select()
-        .from(sports)
-        .orderBy(asc(sports.sortOrder));
-      res.json(allSports);
+      const includeDisabled = String(req.query.includeDisabled || "").trim().toLowerCase() === "true";
+      const allSports = await listSports({ includeDisabled });
+      res.json(allSports.map(mapSportForApi));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -3289,8 +3846,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let resolvedMovementName = "";
 
         if (sportId) {
-          const [sport] = await db.select().from(sports).where(eq(sports.id, sportId));
+          const sport = await getSportById(sportId);
           if (sport) {
+            if (!isSportEnabledRecord(sport)) {
+              return res.status(400).json({ error: `${sport.name} is not enabled yet.` });
+            }
             resolvedSportId = sport.id;
             resolvedSportName = sport.name;
           }
@@ -3307,14 +3867,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
             resolvedMovementName = movement.name;
             if (!resolvedSportId) {
               resolvedSportId = movement.sportId;
-              const [movementSport] = await db
-                .select()
-                .from(sports)
-                .where(eq(sports.id, movement.sportId));
+              const movementSport = await getSportById(movement.sportId);
               if (movementSport) {
+                if (!isSportEnabledRecord(movementSport)) {
+                  return res.status(400).json({ error: `${movementSport.name} is not enabled yet.` });
+                }
                 resolvedSportName = movementSport.name;
               }
             }
+          }
+        }
+
+        if (!resolvedSportId && !resolvedSportName) {
+          const enabledPrimarySport = await getEnabledPrimarySport();
+          if (enabledPrimarySport) {
+            resolvedSportId = enabledPrimarySport.id;
+            resolvedSportName = enabledPrimarySport.name;
           }
         }
 
@@ -3342,7 +3910,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? { ...extractedMetadata, capturedAt: recordedAtOverride }
           : extractedMetadata;
 
-        if (resolvedSportName && String(resolvedSportName).trim().toLowerCase() !== "tennis") {
+        if (resolvedSportName && !isPrimaryEnabledSportName(resolvedSportName)) {
           await deleteStoredMedia(finalPathToCleanup);
           finalPathToCleanup = null;
           return res.status(400).json({ error: "Only tennis videos are allowed to be uploaded." });
@@ -3792,8 +4360,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const report = buildImprovedTennisReportFromMetrics(
+        analysis.requestedSessionType,
+        metricsData?.configKey,
         analysis.detectedMovement,
         inputMetrics,
+        metricsData?.scoreOutputs && typeof metricsData.scoreOutputs === "object"
+          ? (metricsData.scoreOutputs as Record<string, unknown>)?.tactical?.components
+          : null,
+        metricsData?.overallScore,
+        metricsData?.aiDiagnostics,
       );
 
       return res.json({
@@ -4562,11 +5137,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const refreshedDiagnostics = (() => {
         const pipelineTiming = extractPipelineTiming(persistedDiagnostics);
-        if (!pipelineTiming) return diagnostics;
         const diagnosticsRecord = diagnostics && typeof diagnostics === "object"
           ? (diagnostics as Record<string, unknown>)
           : {};
-        return attachPipelineTiming(diagnosticsRecord, pipelineTiming);
+        const validationScreening = persistedDiagnostics && typeof persistedDiagnostics === "object"
+          ? (persistedDiagnostics as Record<string, unknown>).validationScreening
+          : null;
+        const diagnosticsWithValidation = validationScreening == null
+          ? diagnosticsRecord
+          : {
+            ...diagnosticsRecord,
+            validationScreening,
+          };
+        if (!pipelineTiming) return diagnosticsWithValidation;
+        return attachPipelineTiming(diagnosticsWithValidation, pipelineTiming);
       })();
 
       await db
@@ -5216,7 +5800,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const storageMode = await getVideoStorageMode();
 
       if (storageMode === "r2") {
-        return res.status(400).json({ error: "Relink is only available when VIDEO_STORAGE_MODE is filesystem" });
+        return res.status(400).json({ error: "Relink is only available when videoStorageMode is filesystem" });
       }
 
       if (!filename) {

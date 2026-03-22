@@ -25,6 +25,10 @@ import * as Clipboard from "expo-clipboard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { extractPipelineTiming } from "@shared/pipeline-timing";
+import {
+  getAnalysisRefreshIntervalMs,
+  getCompletedAnalysisEnrichmentMessage,
+} from "@/lib/analysis-refresh";
 import Colors, { sportColors } from "@/constants/colors";
 import {
   fetchAnalysisDetail,
@@ -134,8 +138,8 @@ function normalizeSelection(value: string): string {
 
 function formatRequestedSessionTypeLabel(value: string | null | undefined): string | null {
   const normalized = String(value || "").trim().toLowerCase();
-  if (normalized === "practice") return "Practice";
-  if (normalized === "match-play") return "Match";
+  if (normalized === "practice") return "Practise / Drill";
+  if (normalized === "match-play") return "Match Play";
   return null;
 }
 
@@ -225,6 +229,13 @@ function scoreColor(score: number): string {
   if (score >= 8) return "#34D399";
   if (score >= 6) return "#60A5FA";
   return "#FBBF24";
+}
+
+function strokeMixColor(stroke: string): string {
+  if (stroke === "serve") return "#60A5FA";
+  if (stroke === "backhand") return "#FBBF24";
+  if (stroke === "volley") return "#A78BFA";
+  return "#34D399";
 }
 
 function TenPointBar({
@@ -581,6 +592,7 @@ export default function AnalysisDetailScreen() {
   const handoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backgroundRedirectStartedRef = useRef(false);
+  const enrichmentPendingRef = useRef(false);
   const [sectionOffsets, setSectionOffsets] = useState<Partial<Record<PerformanceSectionKey, number>>>({});
   const [activePerformanceSection, setActivePerformanceSection] = useState<PerformanceSectionKey>("technical");
 
@@ -594,9 +606,10 @@ export default function AnalysisDetailScreen() {
     queryFn: () => fetchAnalysisDetail(id!),
     enabled: !!id,
     refetchInterval: (query) => {
-      const status = query.state.data?.analysis?.status;
-      if (status === "pending" || status === "processing") return 2000;
-      return false;
+      return getAnalysisRefreshIntervalMs(
+        query.state.data?.analysis?.status,
+        query.state.data?.metrics?.aiDiagnostics,
+      );
     },
   });
 
@@ -673,6 +686,14 @@ export default function AnalysisDetailScreen() {
     () => extractPipelineTiming(data?.metrics?.aiDiagnostics),
     [data?.metrics?.aiDiagnostics],
   );
+  const enrichmentMessage = useMemo(
+    () => getCompletedAnalysisEnrichmentMessage(data?.analysis?.status, data?.metrics?.aiDiagnostics),
+    [data?.analysis?.status, data?.metrics?.aiDiagnostics],
+  );
+  const enrichmentRefreshInterval = useMemo(
+    () => getAnalysisRefreshIntervalMs(data?.analysis?.status, data?.metrics?.aiDiagnostics),
+    [data?.analysis?.status, data?.metrics?.aiDiagnostics],
+  );
 
   const { data: sportConfig } = useQuery({
     queryKey: ["sport-config", configKey],
@@ -684,6 +705,7 @@ export default function AnalysisDetailScreen() {
     queryKey: ["analysis", id, "metric-trends", "all-sessions"],
     queryFn: () => fetchAnalysisMetricTrends(id!, "all"),
     enabled: !!id && data?.analysis?.status === "completed",
+    refetchInterval: enrichmentRefreshInterval,
   });
 
   const { data: improvedData, isLoading: improvedLoading } = useQuery({
@@ -691,12 +713,17 @@ export default function AnalysisDetailScreen() {
     queryFn: () => fetchImprovedTennisAnalysis(id!),
     enabled: !!id && data?.analysis?.status === "completed",
     staleTime: 5 * 60 * 1000,
+    refetchInterval: enrichmentRefreshInterval,
   });
 
   const { data: diagnostics, isLoading: diagnosticsLoading } = useQuery({
     queryKey: ["analysis", id, "diagnostics"],
     queryFn: () => fetchAnalysisDiagnostics(id!),
     enabled: !!id && data?.analysis?.status === "completed",
+    refetchInterval: (query) => getAnalysisRefreshIntervalMs(
+      data?.analysis?.status,
+      query.state.data?.pipelineTiming ?? data?.metrics?.aiDiagnostics,
+    ),
   });
 
   const { data: videoMetadata, isLoading: videoMetadataLoading } = useQuery({
@@ -740,7 +767,24 @@ export default function AnalysisDetailScreen() {
     queryKey: ["analysis", id, "ghost-correction", primaryShotId],
     queryFn: () => fetchGhostCorrection(id!, primaryShotId!),
     enabled: !!id && primaryShotId != null && data?.analysis?.status === "completed",
+    refetchInterval: enrichmentRefreshInterval,
   });
+
+  useEffect(() => {
+    const enrichmentPending = Boolean(enrichmentMessage);
+    const shouldRefreshDependents = enrichmentPendingRef.current && !enrichmentPending && !!id;
+
+    if (shouldRefreshDependents) {
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["analysis", id, "metric-trends", "all-sessions"] }),
+        queryClient.invalidateQueries({ queryKey: ["analysis", id, "improved-tennis"] }),
+        queryClient.invalidateQueries({ queryKey: ["analysis", id, "diagnostics"] }),
+        queryClient.invalidateQueries({ queryKey: ["analysis", id, "ghost-correction"] }),
+      ]);
+    }
+
+    enrichmentPendingRef.current = enrichmentPending;
+  }, [enrichmentMessage, id, queryClient]);
 
   const {
     data: scoringShotSkeletons,
@@ -1120,6 +1164,8 @@ export default function AnalysisDetailScreen() {
   }, []);
 
   const improvedReport = improvedData?.report;
+  const isMatchPlayImproved = improvedReport?.sessionType === "match-play";
+  const improvedStrokeMixItems = useMemo(() => improvedReport?.strokeMix || [], [improvedReport?.strokeMix]);
 
   const selectedScoreSections = useMemo(() => {
     const sportKey = toSportPreferenceKey(sportConfig?.sportName);
@@ -1210,6 +1256,15 @@ export default function AnalysisDetailScreen() {
   );
 
   const tacticalItems = useMemo(() => {
+    if (isMatchPlayImproved && improvedReport?.tactical?.length) {
+      return improvedReport.tactical.map((item) => ({
+        key: item.key,
+        label: item.label,
+        score: item.score,
+        explanation: item.explanation,
+      }));
+    }
+
     const components = m?.scoreOutputs?.tactical?.components;
     if (!components) return [] as TacticalScoreDetail[];
     return tacticalScores.map((score) => {
@@ -1225,9 +1280,18 @@ export default function AnalysisDetailScreen() {
             : tacticalExplanation(score.key, score.label, value),
       };
     });
-  }, [m?.scoreOutputs?.tactical?.components, tacticalScores]);
+  }, [improvedReport?.tactical, isMatchPlayImproved, m?.scoreOutputs?.tactical?.components, tacticalScores]);
 
   const technicalBiomecItems = useMemo(() => {
+    if (isMatchPlayImproved && improvedReport?.biomechanics?.length) {
+      return improvedReport.biomechanics.map((item) => ({
+        key: item.key,
+        label: item.label,
+        score: item.score,
+        explanation: item.explanation,
+      }));
+    }
+
     const components = m?.scoreOutputs?.technical?.components;
     if (!components) return [] as Array<{ key: string; label: string; score: number | null; explanation: string }>;
 
@@ -1254,11 +1318,20 @@ export default function AnalysisDetailScreen() {
         };
       })
       .filter((item) => item.key !== "follow" && !String(item.label || "").toLowerCase().includes("follow"));
-  }, [m?.scoreOutputs?.technical?.components]);
+  }, [improvedReport?.biomechanics, isMatchPlayImproved, m?.scoreOutputs?.technical?.components]);
 
   const hasMoreTechnicalItems = technicalBiomecItems.length > TECHNICAL_COMPACT_COUNT;
   const hasMoreTacticalItems = tacticalItems.length > TECHNICAL_COMPACT_COUNT;
   const movementItems = useMemo(() => {
+    if (isMatchPlayImproved && improvedReport?.movement?.length) {
+      return improvedReport.movement.map((item) => ({
+        key: item.key,
+        label: item.label,
+        score: item.score,
+        explanation: item.explanation,
+      }));
+    }
+
     const components = m?.scoreOutputs?.movement?.components;
     if (!components) return [] as Array<{ key: string; label: string; score: number | null; explanation: string }>;
 
@@ -1283,7 +1356,7 @@ export default function AnalysisDetailScreen() {
             : movementExplanation(spec.key, spec.label, normalized),
       };
     });
-  }, [m?.scoreOutputs?.movement?.components]);
+  }, [improvedReport?.movement, isMatchPlayImproved, m?.scoreOutputs?.movement?.components]);
   const hasMoreMovementItems = movementItems.length > TECHNICAL_COMPACT_COUNT;
 
   const visibleTechnicalItems = useMemo(
@@ -1310,19 +1383,40 @@ export default function AnalysisDetailScreen() {
   }, [id, movementItems.length]);
 
   const currentTechnicalScore10 = useMemo(() => {
+    if (isMatchPlayImproved) {
+      return computeAverageSectionScore10(
+        technicalBiomecItems.filter(
+          (item): item is { key: string; label: string; score: number; explanation: string } => item.score != null,
+        ),
+      );
+    }
     const value = Number(m?.scoreOutputs?.technical?.overall);
     return Number.isFinite(value) ? value : null;
-  }, [m?.scoreOutputs?.technical?.overall]);
+  }, [isMatchPlayImproved, m?.scoreOutputs?.technical?.overall, technicalBiomecItems]);
 
   const currentMovementScore10 = useMemo(() => {
+    if (isMatchPlayImproved) {
+      return computeAverageSectionScore10(
+        movementItems.filter(
+          (item): item is { key: string; label: string; score: number; explanation: string } => item.score != null,
+        ),
+      );
+    }
     const value = Number(m?.scoreOutputs?.movement?.overall);
     return Number.isFinite(value) ? value : null;
-  }, [m?.scoreOutputs?.movement?.overall]);
+  }, [isMatchPlayImproved, m?.scoreOutputs?.movement?.overall, movementItems]);
 
   const currentTacticalScore10 = useMemo(() => {
+    if (isMatchPlayImproved) {
+      return computeAverageSectionScore10(
+        tacticalItems.filter(
+          (item): item is { key: string; label: string; score: number; explanation: string } => item.score != null,
+        ),
+      );
+    }
     const value = Number(m?.scoreOutputs?.tactical?.overall);
     return Number.isFinite(value) ? value : null;
-  }, [m?.scoreOutputs?.tactical?.overall]);
+  }, [isMatchPlayImproved, m?.scoreOutputs?.tactical?.overall, tacticalItems]);
 
   const derivedOverallScore10 = useMemo(() => {
     const value = Number(m?.scoreOutputs?.overall);
@@ -1330,15 +1424,80 @@ export default function AnalysisDetailScreen() {
   }, [m?.scoreOutputs?.overall]);
 
   const effectiveOverallScore = useMemo(() => {
+    if (isMatchPlayImproved && Number.isFinite(Number(improvedReport?.overallScore))) {
+      return Math.round(Math.max(0, Math.min(100, Number(improvedReport?.overallScore))));
+    }
     if (derivedOverallScore10 != null) {
       return Math.round(Math.max(0, Math.min(100, derivedOverallScore10 * 10)));
     }
     return null;
   }, [
     derivedOverallScore10,
+    improvedReport?.overallScore,
+    isMatchPlayImproved,
   ]);
 
   const displayOverallScore: number | null = effectiveOverallScore;
+  const showMatchPlaySummaryCard = isMatchPlayImproved;
+
+  const matchPlaySummaryStats = useMemo(() => {
+    if (!showMatchPlaySummaryCard) {
+      return [] as Array<{ key: string; label: string; value: string; rawValue: number | null }>;
+    }
+
+    const metricValues = (m?.metricValues || {}) as Record<string, unknown>;
+    const readMetric = (keys: string[]): number | null => {
+      for (const key of keys) {
+        const value = Number(metricValues[key]);
+        if (Number.isFinite(value)) return value;
+      }
+      return null;
+    };
+
+    const shotVariety = readMetric(["shotVariety", "shot_variety"]);
+    const rallyLength = readMetric(["rallyLength", "rally_length"]);
+    const courtCoverage = readMetric(["courtCoverage", "court_coverage"]);
+    const recoverySpeed = readMetric(["recoverySpeed", "recovery_speed"]);
+
+    return [
+      {
+        key: "shot-variety",
+        label: "Shot Variety",
+        value: shotVariety == null ? "--" : `${Math.round(shotVariety)}/100`,
+        rawValue: shotVariety,
+      },
+      {
+        key: "rally-length",
+        label: "Rally Length",
+        value: rallyLength == null ? "--" : `${rallyLength.toFixed(1)} shots`,
+        rawValue: rallyLength,
+      },
+      {
+        key: "court-coverage",
+        label: "Court Coverage",
+        value: courtCoverage == null ? "--" : `${Math.round(courtCoverage)}/100`,
+        rawValue: courtCoverage,
+      },
+      {
+        key: "recovery-speed",
+        label: "Recovery Speed",
+        value: recoverySpeed == null ? "--" : `${recoverySpeed.toFixed(1)} m/s`,
+        rawValue: recoverySpeed,
+      },
+    ];
+  }, [m?.metricValues, showMatchPlaySummaryCard]);
+
+  const primaryMatchStroke = useMemo(() => {
+    if (!improvedStrokeMixItems.length) return null;
+    return improvedStrokeMixItems[0] || null;
+  }, [improvedStrokeMixItems]);
+
+  const stickyHeaderIndex = useMemo(() => {
+    let index = 2;
+    if (enrichmentMessage) index += 1;
+    if (showMatchPlaySummaryCard) index += 1;
+    return index;
+  }, [enrichmentMessage, showMatchPlaySummaryCard]);
 
   const previousTrendPoint = useMemo(() => {
     const points = trendData?.points || [];
@@ -1378,6 +1537,47 @@ export default function AnalysisDetailScreen() {
     previousTrendPoint?.sectionScores?.tactical,
     previousTrendPoint?.sectionScores?.technical,
   ]);
+
+  const matchPlaySummaryStatsWithDelta = useMemo(() => {
+    if (!showMatchPlaySummaryCard) {
+      return [] as Array<{
+        key: string;
+        label: string;
+        value: string;
+        rawValue: number | null;
+        deltaPct: number | null;
+      }>;
+    }
+
+    const previousMetricValues = previousTrendPoint?.metricValues || {};
+    const previousValueMap: Record<string, number | null> = {
+      "shot-variety": Number.isFinite(Number(previousMetricValues.shotVariety))
+        ? Number(previousMetricValues.shotVariety)
+        : Number.isFinite(Number(previousMetricValues.shot_variety))
+          ? Number(previousMetricValues.shot_variety)
+          : null,
+      "rally-length": Number.isFinite(Number(previousMetricValues.rallyLength))
+        ? Number(previousMetricValues.rallyLength)
+        : Number.isFinite(Number(previousMetricValues.rally_length))
+          ? Number(previousMetricValues.rally_length)
+          : null,
+      "court-coverage": Number.isFinite(Number(previousMetricValues.courtCoverage))
+        ? Number(previousMetricValues.courtCoverage)
+        : Number.isFinite(Number(previousMetricValues.court_coverage))
+          ? Number(previousMetricValues.court_coverage)
+          : null,
+      "recovery-speed": Number.isFinite(Number(previousMetricValues.recoverySpeed))
+        ? Number(previousMetricValues.recoverySpeed)
+        : Number.isFinite(Number(previousMetricValues.recovery_speed))
+          ? Number(previousMetricValues.recovery_speed)
+          : null,
+    };
+
+    return matchPlaySummaryStats.map((item) => ({
+      ...item,
+      deltaPct: computePercentDelta(item.rawValue, previousValueMap[item.key] ?? null),
+    }));
+  }, [matchPlaySummaryStats, previousTrendPoint?.metricValues, showMatchPlaySummaryCard]);
 
   const effectiveCoaching = useMemo(() => {
     if (!m) return coaching ?? null;
@@ -2036,7 +2236,7 @@ export default function AnalysisDetailScreen() {
             { paddingBottom: insets.bottom + 34 },
           ]}
           showsVerticalScrollIndicator={false}
-          stickyHeaderIndices={[2]}
+          stickyHeaderIndices={[stickyHeaderIndex]}
           onScroll={handlePerformanceScroll}
           scrollEventThrottle={16}
         >
@@ -2103,6 +2303,13 @@ export default function AnalysisDetailScreen() {
             </View>
           </View>
 
+          {enrichmentMessage ? (
+            <View style={styles.enrichmentNotice}>
+              <ActivityIndicator size="small" color="#93C5FD" />
+              <Text style={styles.enrichmentNoticeText}>{enrichmentMessage}</Text>
+            </View>
+          ) : null}
+
           <Pressable
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -2144,6 +2351,56 @@ export default function AnalysisDetailScreen() {
               </View>
             )}
           </Pressable>
+
+          {showMatchPlaySummaryCard ? (
+            <View style={styles.matchPlaySummaryCard}>
+              <View style={styles.matchPlaySummaryHeader}>
+                <View>
+                  <Text style={styles.matchPlaySummaryEyebrow}>Match Play Summary</Text>
+                  <Text style={styles.matchPlaySummaryTitle}>Live-play snapshot for this session</Text>
+                </View>
+                {primaryMatchStroke ? (
+                  <View style={styles.matchPlayPrimaryStrokeBadge}>
+                    <View
+                      style={[
+                        styles.matchPlayPrimaryStrokeDot,
+                        { backgroundColor: strokeMixColor(primaryMatchStroke.stroke) },
+                      ]}
+                    />
+                    <Text style={styles.matchPlayPrimaryStrokeText}>
+                      Primary: {primaryMatchStroke.stroke.charAt(0).toUpperCase() + primaryMatchStroke.stroke.slice(1)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={styles.matchPlaySummaryGrid}>
+                {matchPlaySummaryStatsWithDelta.map((item) => (
+                  <View key={item.key} style={styles.matchPlaySummaryStatCard}>
+                    <Text style={styles.matchPlaySummaryStatLabel}>{item.label}</Text>
+                    <Text style={styles.matchPlaySummaryStatValue}>{item.value}</Text>
+                    {item.deltaPct != null ? (
+                      <View style={styles.matchPlaySummaryDeltaWrap}>
+                        <Ionicons
+                          name={deltaTrendIcon(item.deltaPct)}
+                          size={11}
+                          color={deltaColor(item.deltaPct)}
+                        />
+                        <Text
+                          style={[
+                            styles.matchPlaySummaryDeltaText,
+                            { color: deltaColor(item.deltaPct) },
+                          ]}
+                        >
+                          {formatDeltaPercent(item.deltaPct)}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
 
           <View style={styles.performanceJumpStickyWrap}>
             <View style={styles.performanceJumpRow}>
@@ -2202,7 +2459,7 @@ export default function AnalysisDetailScreen() {
               onLayout={(event) => registerSectionOffset("technical", event.nativeEvent.layout.y)}
             >
               <View style={styles.sectionScoreHeader}>
-                <Text style={styles.sectionTitle}>Technical (Biomec)</Text>
+                <Text style={styles.sectionTitle}>{isMatchPlayImproved ? "Technical" : "Technical (Biomec)"}</Text>
                 {currentTechnicalScore10 != null ? (
                   <View style={[styles.sectionScoreBadge, styles.sectionScoreBadgeTechnical]}>
                     {sectionDeltaPct.technical != null ? (
@@ -2360,6 +2617,44 @@ export default function AnalysisDetailScreen() {
                   </View>
                 )}
                 </View>
+            </View>
+          ) : null}
+
+          {isMatchPlayImproved && improvedStrokeMixItems.length > 0 ? (
+            <View style={styles.sectionCompact}>
+              <Text style={styles.sectionTitle}>Stroke Mix</Text>
+              <View style={styles.strokeMixList}>
+                {improvedStrokeMixItems.map((item) => (
+                  <View key={item.stroke} style={styles.strokeMixRow}>
+                    <View style={styles.strokeMixHeader}>
+                      <View style={styles.strokeMixTitleRow}>
+                        <View
+                          style={[
+                            styles.strokeMixDot,
+                            { backgroundColor: strokeMixColor(item.stroke) },
+                          ]}
+                        />
+                        <Text style={styles.strokeMixLabel}>
+                          {item.stroke.charAt(0).toUpperCase() + item.stroke.slice(1)}
+                        </Text>
+                      </View>
+                      <Text style={styles.strokeMixMeta}>{item.count} shots</Text>
+                    </View>
+                    <View style={styles.strokeMixTrack}>
+                      <View
+                        style={[
+                          styles.strokeMixFill,
+                          {
+                            width: `${Math.max(6, Math.min(100, item.sharePct))}%`,
+                            backgroundColor: strokeMixColor(item.stroke),
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.strokeMixPercent}>{item.sharePct.toFixed(1)}%</Text>
+                  </View>
+                ))}
+              </View>
             </View>
           ) : null}
 
@@ -3291,6 +3586,89 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },
+  matchPlaySummaryCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#15152D",
+    padding: 16,
+    gap: 14,
+  },
+  matchPlaySummaryHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  matchPlaySummaryEyebrow: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#93C5FD",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  matchPlaySummaryTitle: {
+    marginTop: 4,
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#E2E8F0",
+  },
+  matchPlayPrimaryStrokeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#33415588",
+    backgroundColor: "#0F172A",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  matchPlayPrimaryStrokeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
+  matchPlayPrimaryStrokeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#CBD5E1",
+  },
+  matchPlaySummaryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  matchPlaySummaryStatCard: {
+    flexBasis: "48%",
+    flexGrow: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A5050",
+    backgroundColor: "#13132A",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  matchPlaySummaryStatLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
+  },
+  matchPlaySummaryStatValue: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+  },
+  matchPlaySummaryDeltaWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  matchPlaySummaryDeltaText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
   barsContainer: {
     gap: 18,
   },
@@ -3387,6 +3765,55 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     color: "#60A5FA",
+  },
+  strokeMixList: {
+    gap: 10,
+  },
+  strokeMixRow: {
+    gap: 6,
+    paddingVertical: 2,
+  },
+  strokeMixHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  strokeMixTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  strokeMixDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
+  strokeMixLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#E2E8F0",
+  },
+  strokeMixMeta: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
+  },
+  strokeMixTrack: {
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: "#1F2937",
+    overflow: "hidden",
+  },
+  strokeMixFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+  strokeMixPercent: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#AFC4E0",
+    textAlign: "right",
   },
   periodRow: {
     flexDirection: "row",
@@ -3929,6 +4356,26 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: "Inter_700Bold",
     marginTop: 8,
+  enrichmentNotice: {
+    marginTop: 10,
+    marginBottom: 2,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#1E3A5F",
+    backgroundColor: "#0B1B30",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  enrichmentNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "Inter_500Medium",
+    color: "#BFDBFE",
+  },
     color: "#F8FAFC",
   },
   processingSubtitle: {

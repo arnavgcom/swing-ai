@@ -9,6 +9,7 @@ const SPORTS_DATA = [
     icon: "tennisball-outline",
     color: "#10B981",
     description: "Analyze your tennis strokes with AI-powered biomechanics",
+    enabled: true,
     sortOrder: 1,
     movements: [
       { name: "Forehand", description: "Forward stroke on dominant side", icon: "arrow-forward-circle-outline", sortOrder: 1 },
@@ -23,6 +24,7 @@ const SPORTS_DATA = [
     icon: "golf-outline",
     color: "#22D3EE",
     description: "Perfect your swing with precision motion analysis",
+    enabled: false,
     sortOrder: 2,
     movements: [
       { name: "Drive", description: "Long-distance tee shot", icon: "rocket-outline", sortOrder: 1 },
@@ -37,6 +39,7 @@ const SPORTS_DATA = [
     icon: "ellipse-outline",
     color: "#F59E0B",
     description: "Sharpen your pickleball technique with smart analysis",
+    enabled: false,
     sortOrder: 3,
     movements: [
       { name: "Dink", description: "Soft shot near the kitchen line", icon: "water-outline", sortOrder: 1 },
@@ -51,6 +54,7 @@ const SPORTS_DATA = [
     icon: "tablet-landscape-outline",
     color: "#8B5CF6",
     description: "Elevate your padel game with movement insights",
+    enabled: false,
     sortOrder: 4,
     movements: [
       { name: "Forehand", description: "Dominant side wall play", icon: "arrow-forward-circle-outline", sortOrder: 1 },
@@ -65,6 +69,7 @@ const SPORTS_DATA = [
     icon: "fitness-outline",
     color: "#EF4444",
     description: "Optimize your badminton strokes and footwork",
+    enabled: false,
     sortOrder: 5,
     movements: [
       { name: "Clear", description: "High deep shot to the baseline", icon: "arrow-up-circle-outline", sortOrder: 1 },
@@ -79,6 +84,7 @@ const SPORTS_DATA = [
     icon: "radio-button-off-outline",
     color: "#3B82F6",
     description: "Analyze your table tennis technique at high speed",
+    enabled: false,
     sortOrder: 6,
     movements: [
       { name: "Forehand", description: "Dominant side topspin drive", icon: "arrow-forward-circle-outline", sortOrder: 1 },
@@ -106,6 +112,8 @@ export async function seedSports() {
         icon: sportData.icon,
         color: sportData.color,
         description: sportData.description,
+        enabled: sportData.enabled,
+        isActive: sportData.enabled,
         sortOrder: sportData.sortOrder,
         ...buildInsertAuditFields(),
       })

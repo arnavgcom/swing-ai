@@ -11,7 +11,7 @@ export const PIPELINE_STAGE_DEFINITIONS = [
   },
   {
     key: "classificationValidation",
-    label: "Classification + validation",
+    label: "Classification",
     description: "Background analysis, validation, segmentation, and scoring window selection",
   },
   {
@@ -27,7 +27,6 @@ export const PIPELINE_STAGE_DEFINITIONS = [
 ] as const;
 
 export type PipelineStageKey = (typeof PIPELINE_STAGE_DEFINITIONS)[number]["key"];
-export type PipelineStageStatus = "pending" | "running" | "completed" | "failed";
 
 export interface PipelineTimingStage {
   key: PipelineStageKey;

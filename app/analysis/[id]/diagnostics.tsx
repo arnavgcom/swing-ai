@@ -8,10 +8,14 @@ import {
   View,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import {
+  getAnalysisRefreshIntervalMs,
+  getCompletedAnalysisEnrichmentMessage,
+} from "@/lib/analysis-refresh";
 import {
   fetchAnalysisDetail,
   fetchAnalysisDiagnostics,
@@ -50,24 +54,83 @@ function toTitle(value: string): string {
     .join(" ");
 }
 
+function formatFpsStep(step?: string | null): string {
+  if (!step) return "Not captured";
+  return toTitle(step);
+}
+
+function formatSamplingRule(step?: number | null): string {
+  if (!step || step <= 1) return "Every frame";
+  if (step === 2) return "1 out of 2 frames";
+  if (step === 3) return "1 out of 3 frames";
+  return `1 out of ${step} frames`;
+}
+
+function formatOptionalToggle(value?: boolean | null): string {
+  if (typeof value !== "boolean") return "Not captured";
+  return value ? "On" : "Off";
+}
+
+function formatRoutingReason(reason?: string | null): string {
+  if (!reason) return "Not captured";
+  return toTitle(reason);
+}
+
+function formatValidationMode(value?: string | null): string {
+  if (!value) return "Not captured";
+  return toTitle(value);
+}
+
 export default function AnalysisDiagnosticsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const profileTimeZone = resolveUserTimeZone(user);
   const [pipelineTimingExpanded, setPipelineTimingExpanded] = React.useState(false);
   const [videoTechnicalExpanded, setVideoTechnicalExpanded] = React.useState(false);
+  const enrichmentPendingRef = React.useRef(false);
 
   const { data: detail } = useQuery({
     queryKey: ["analysis", id],
     queryFn: () => fetchAnalysisDetail(id!),
     enabled: !!id,
+    refetchInterval: (query) => getAnalysisRefreshIntervalMs(
+      query.state.data?.analysis?.status,
+      query.state.data?.metrics?.aiDiagnostics,
+    ),
   });
 
   const { data: diagnostics, isLoading } = useQuery({
     queryKey: ["analysis", id, "diagnostics"],
     queryFn: () => fetchAnalysisDiagnostics(id!),
     enabled: !!id,
+    refetchInterval: (query) => getAnalysisRefreshIntervalMs(
+      detail?.analysis?.status,
+      query.state.data?.pipelineTiming ?? detail?.metrics?.aiDiagnostics,
+    ),
   });
+
+  const enrichmentMessage = React.useMemo(
+    () => getCompletedAnalysisEnrichmentMessage(
+      detail?.analysis?.status,
+      diagnostics?.pipelineTiming ?? detail?.metrics?.aiDiagnostics,
+    ),
+    [detail?.analysis?.status, detail?.metrics?.aiDiagnostics, diagnostics?.pipelineTiming],
+  );
+
+  React.useEffect(() => {
+    const enrichmentPending = Boolean(enrichmentMessage);
+    const shouldRefetchDiagnostics = enrichmentPendingRef.current && !enrichmentPending && !!id;
+
+    if (shouldRefetchDiagnostics) {
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["analysis", id] }),
+        queryClient.invalidateQueries({ queryKey: ["analysis", id, "diagnostics"] }),
+      ]);
+    }
+
+    enrichmentPendingRef.current = enrichmentPending;
+  }, [enrichmentMessage, id, queryClient]);
 
   const { data: videoMetadata } = useQuery({
     queryKey: ["analysis", id, "video-metadata"],
@@ -110,6 +173,15 @@ export default function AnalysisDiagnosticsScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          {enrichmentMessage ? (
+            <GlassCard style={styles.statusCard}>
+              <View style={styles.statusRow}>
+                <ActivityIndicator size="small" color="#93C5FD" />
+                <Text style={styles.statusText}>{enrichmentMessage}</Text>
+              </View>
+            </GlassCard>
+          ) : null}
+
           <GlassCard style={styles.heroCard}>
             <Text style={styles.heroLabel}>Confidence</Text>
             <Text style={styles.heroValue}>{diagnostics.aiConfidencePct.toFixed(1)}%</Text>
@@ -121,6 +193,17 @@ export default function AnalysisDiagnosticsScreen() {
             <Text style={styles.cardBody}>{diagnostics.classificationRationale}</Text>
           </GlassCard>
 
+          {diagnostics.validationScreening ? (
+            <GlassCard style={styles.card}>
+              <Text style={styles.cardTitle}>Validation Screening</Text>
+              <Text style={styles.rowText}>Upload guard mode: {formatValidationMode(diagnostics.validationScreening.uploadGuardMode)}</Text>
+              <Text style={styles.rowText}>Upload guard applied: {diagnostics.validationScreening.uploadGuardApplied ? "Yes" : "No"}</Text>
+              <Text style={styles.rowText}>Upload guard sample count: {diagnostics.validationScreening.uploadGuardSampleCount ?? "Not used"}</Text>
+              <Text style={styles.rowText}>Pipeline validation mode: {formatValidationMode(diagnostics.validationScreening.pipelineValidationMode)}</Text>
+              <Text style={styles.rowText}>Pipeline validation applied: {diagnostics.validationScreening.pipelineValidationApplied ? "Yes" : "No"}</Text>
+            </GlassCard>
+          ) : null}
+
           <GlassCard style={styles.card}>
             <Text style={styles.cardTitle}>Scoring Basis</Text>
             <Text style={styles.rowText}>Active time: {diagnostics.activeTimeSec.toFixed(2)}s ({diagnostics.activeTimePct.toFixed(1)}%)</Text>
@@ -131,6 +214,22 @@ export default function AnalysisDiagnosticsScreen() {
 
           <GlassCard style={styles.card}>
             <Text style={styles.cardTitle}>Shot-Level Labels</Text>
+            {diagnostics.analysisFps ? (
+              <GlassCard style={styles.shotItem}>
+                <Text style={styles.shotTitle}>Analysis FPS Snapshot</Text>
+                <Text style={styles.shotSub}>Effective step: {formatFpsStep(diagnostics.analysisFps.effectiveStep)}</Text>
+                <Text style={styles.shotSub}>Frame sampling: {formatSamplingRule(diagnostics.analysisFps.sampleStep)}</Text>
+                <Text style={styles.shotSub}>Effective sampled FPS: {diagnostics.analysisFps.effectiveFps.toFixed(2)}</Text>
+                <Text style={styles.shotSub}>Source FPS: {diagnostics.analysisFps.sourceFps.toFixed(2)}</Text>
+                <Text style={styles.shotSub}>Configured low impact: {formatFpsStep(diagnostics.analysisFps.lowImpactStep)}</Text>
+                <Text style={styles.shotSub}>Configured high impact: {formatFpsStep(diagnostics.analysisFps.highImpactStep)}</Text>
+                <Text style={styles.shotSub}>Tennis auto-detect high impact: {formatOptionalToggle(diagnostics.analysisFps.tennisAutoDetectUsesHighImpact)}</Text>
+                <Text style={styles.shotSub}>Tennis match play high impact: {formatOptionalToggle(diagnostics.analysisFps.tennisMatchPlayUsesHighImpact)}</Text>
+                <Text style={styles.shotSub}>Routing reason: {formatRoutingReason(diagnostics.analysisFps.routingReason)}</Text>
+              </GlassCard>
+            ) : (
+              <Text style={styles.rowText}>FPS snapshot not available for this analysis.</Text>
+            )}
             {diagnostics.shotSegments.length === 0 ? (
               <Text style={styles.rowText}>No shot segments available</Text>
             ) : (
@@ -249,6 +348,22 @@ const styles = StyleSheet.create({
   },
   cardBody: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", color: ds.color.textSecondary },
   rowText: { fontSize: 12, fontFamily: "Inter_500Medium", color: ds.color.textSecondary },
+  statusCard: {
+    borderRadius: ds.radius.md,
+    padding: ds.space.md,
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: ds.space.sm,
+  },
+  statusText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_500Medium",
+    color: "#BFDBFE",
+  },
   shotItem: {
     borderRadius: ds.radius.sm,
     paddingHorizontal: 10,

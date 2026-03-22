@@ -24,6 +24,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fetchAnalysesSummary, deleteAnalysis, retryAnalysis } from "@/lib/api";
 import type { AnalysisSummary } from "@/lib/api";
+import {
+  DEFAULT_SESSION_TYPE_FILTERS,
+  filterAnalysesBySessionAndStroke,
+  SESSION_TYPE_FILTER_OPTIONS,
+  STROKE_FILTER_OPTIONS,
+  type SessionTypeFilter,
+  type StrokeTypeFilter,
+} from "@/lib/analysis-filters";
 import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -344,8 +352,8 @@ function resolveAnalysisMovement(item: AnalysisSummary): string {
 
 function formatRequestedSessionTypeLabel(value: string | null | undefined): string | null {
   const normalized = normalizeText(value);
-  if (normalized === "practice") return "Practice";
-  if (normalized === "match-play") return "Match";
+  if (normalized === "practice") return "Practise / Drill";
+  if (normalized === "match-play") return "Match Play";
   return null;
 }
 
@@ -1011,6 +1019,10 @@ export default function HistoryScreen() {
     Array<{ id: string; name: string; email: string; role: string }>
   >([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSessionTypes, setSelectedSessionTypes] = useState<SessionTypeFilter[]>(
+    DEFAULT_SESSION_TYPE_FILTERS,
+  );
+  const [selectedStroke, setSelectedStroke] = useState<StrokeTypeFilter | null>(null);
   const [lastWorkedAnalysisId, setLastWorkedAnalysisId] = useState<string | null>(null);
   const [backgroundNotice, setBackgroundNotice] = useState<string | null>(null);
   const [completionNotice, setCompletionNotice] = useState<CompletionNotice | null>(null);
@@ -1019,6 +1031,30 @@ export default function HistoryScreen() {
   const lastTrackedStatusRef = useRef<string | null>(null);
   const toastTranslateY = useRef(new Animated.Value(24)).current;
   const toastOpacity = useRef(new Animated.Value(0)).current;
+  const areAllSessionTypesSelected = selectedSessionTypes.length === DEFAULT_SESSION_TYPE_FILTERS.length;
+  const hasHistoryFilters = !areAllSessionTypesSelected || selectedStroke !== null;
+
+  const toggleSessionType = useCallback((sessionType: SessionTypeFilter) => {
+    setSelectedSessionTypes((current) => {
+      if (current.includes(sessionType)) {
+        if (current.length === 1) return current;
+        const next = current.filter((value) => value !== sessionType);
+        return DEFAULT_SESSION_TYPE_FILTERS.filter((value) => next.includes(value));
+      }
+
+      const next = [...current, sessionType];
+      return DEFAULT_SESSION_TYPE_FILTERS.filter((value) => next.includes(value));
+    });
+  }, []);
+
+  const toggleStroke = useCallback((strokeType: StrokeTypeFilter) => {
+    setSelectedStroke((current) => (current === strokeType ? null : strokeType));
+  }, []);
+
+  const clearHistoryFilters = useCallback(() => {
+    setSelectedSessionTypes(DEFAULT_SESSION_TYPE_FILTERS);
+    setSelectedStroke(null);
+  }, []);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -1181,13 +1217,18 @@ export default function HistoryScreen() {
     return result;
   }, [analysesBySport, isAdmin, selectedPlayerId, user?.id]);
 
+  const filteredBySessionAndStroke = useMemo(
+    () => filterAnalysesBySessionAndStroke(comparisonAnalyses, selectedSessionTypes, selectedStroke),
+    [comparisonAnalyses, selectedSessionTypes, selectedStroke],
+  );
+
   const filteredAnalyses = useMemo(() => {
-    let result = comparisonAnalyses.filter((item) =>
+    let result = filteredBySessionAndStroke.filter((item) =>
       matchesAnalysisSearch(item, searchQuery, profileTimeZone),
     );
 
     return result;
-  }, [comparisonAnalyses, profileTimeZone, searchQuery]);
+  }, [filteredBySessionAndStroke, profileTimeZone, searchQuery]);
 
   const pendingSummaryVisible = useMemo(() => {
     if (!pendingAnalysisSummary) return null;
@@ -1215,6 +1256,13 @@ export default function HistoryScreen() {
       if (pendingAnalysisSummary.userId !== user.id) return null;
     }
 
+    const bySessionAndStroke = filterAnalysesBySessionAndStroke(
+      [pendingAnalysisSummary],
+      selectedSessionTypes,
+      selectedStroke,
+    );
+    if (!bySessionAndStroke.length) return null;
+
     if (!matchesAnalysisSearch(pendingAnalysisSummary, searchQuery, profileTimeZone)) {
       return null;
     }
@@ -1226,9 +1274,11 @@ export default function HistoryScreen() {
     pendingAnalysisSummary,
     profileTimeZone,
     searchQuery,
+    selectedSessionTypes,
     selectedMovement?.name,
     selectedPlayerId,
     selectedSport?.name,
+    selectedStroke,
     user?.id,
   ]);
 
@@ -1560,6 +1610,83 @@ export default function HistoryScreen() {
         ) : null}
       </View>
 
+      <View style={styles.filterSection}>
+        <View style={styles.filterGroup}>
+          <View style={styles.filterHeaderRow}>
+            <Text style={styles.filterLabel}>Session Type</Text>
+            {hasHistoryFilters ? (
+              <Pressable
+                onPress={clearHistoryFilters}
+                style={({ pressed }) => [
+                  styles.filterResetButton,
+                  { opacity: pressed ? 0.75 : 1 },
+                ]}
+              >
+                <Text style={[styles.filterResetText, { color: historyHighlightColor }]}>Clear filters</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <View style={styles.filterChipRow}>
+            {SESSION_TYPE_FILTER_OPTIONS.map((option) => {
+              const selected = selectedSessionTypes.includes(option.key);
+              return (
+                <Pressable
+                  key={option.key}
+                  onPress={() => toggleSessionType(option.key)}
+                  style={[
+                    styles.filterChip,
+                    {
+                      borderColor: selected ? `${historyHighlightColor}66` : "#2A2A5060",
+                      backgroundColor: selected ? `${historyHighlightColor}1A` : "#101426",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      { color: selected ? historyHighlightColor : "#94A3B8" },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.filterGroup}>
+          <Text style={styles.filterLabel}>Stroke Type</Text>
+          <View style={styles.filterChipRow}>
+            {STROKE_FILTER_OPTIONS.map((option) => {
+              const selected = selectedStroke === option.key;
+              return (
+                <Pressable
+                  key={option.key}
+                  onPress={() => toggleStroke(option.key)}
+                  style={[
+                    styles.filterChip,
+                    {
+                      borderColor: selected ? "#34D39955" : "#2A2A5060",
+                      backgroundColor: selected ? "#34D39918" : "#101426",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      { color: selected ? "#34D399" : "#94A3B8" },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+
       {isAdmin && showPlayerDropdown && (
         <Modal
           transparent
@@ -1805,7 +1932,9 @@ export default function HistoryScreen() {
               <Text style={styles.emptyText}>
                 {searchQuery.trim()
                   ? "No sessions match your search"
-                  : "Upload and analyze videos to see them here"}
+                  : hasHistoryFilters
+                    ? "No sessions match the selected session and stroke filters"
+                    : "Upload and analyze videos to see them here"}
               </Text>
             </View>
           }
@@ -1832,6 +1961,47 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 10,
     marginBottom: 12,
+  },
+  filterSection: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  filterGroup: {
+    gap: 8,
+  },
+  filterHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  filterLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#CBD5E1",
+  },
+  filterChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  filterChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  filterChipText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  filterResetButton: {
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+  },
+  filterResetText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
   },
   playerDropdown: {
     flexDirection: "row",

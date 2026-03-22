@@ -6,6 +6,15 @@ from python_analysis.pose_detector import PoseDetector
 
 class TennisGameAnalyzer(BaseAnalyzer):
     config_key = "tennis-game"
+    core_metric_keys = {
+        "courtCoverage",
+        "recoverySpeed",
+        "avgBallSpeed",
+        "shotVariety",
+        "balanceScore",
+        "shotConsistency",
+        "rhythmConsistency",
+    }
 
     def _compute_metrics(self, pose_data: List[Optional[Dict]], video_info: Dict) -> Dict:
         fps = video_info["fps"]
@@ -23,7 +32,9 @@ class TennisGameAnalyzer(BaseAnalyzer):
         court_coverage = self._calc_court_coverage(pose_data, frame_w)
         recovery_speed = self._calc_recovery_speed(pose_data, fps, frame_h)
         shot_variety = self._calc_shot_variety(wrist_speeds, elbow_angles)
-        rally_length = self._estimate_rally_length(pose_data, fps)
+        rally_length = None
+        if self._metric_requested("rallyLength"):
+            rally_length = self._estimate_rally_length(pose_data, fps)
 
         ball_speed = self.ball_tracker.estimate_speed(fps, frame_h / 1.8)
         avg_ball_speed = float(np.clip(ball_speed, 40.0, 100.0)) if ball_speed > 0 else float(65.00)
@@ -32,16 +43,18 @@ class TennisGameAnalyzer(BaseAnalyzer):
         shot_consistency = self._calc_shot_consistency(elbow_angles, wrist_speeds)
         rhythm_consistency = self._calc_rhythm_consistency(pose_data, fps)
 
-        return {
+        metrics = {
             "courtCoverage": round(court_coverage, 2),
             "recoverySpeed": round(recovery_speed, 2),
             "avgBallSpeed": round(avg_ball_speed, 2),
             "shotVariety": round(shot_variety, 2),
             "balanceScore": round(balance, 2),
-            "rallyLength": round(rally_length, 1),
             "shotConsistency": round(shot_consistency, 2),
             "rhythmConsistency": round(rhythm_consistency, 2),
         }
+        if rally_length is not None:
+            metrics["rallyLength"] = round(rally_length, 1)
+        return metrics
 
     def _calc_court_coverage(self, pose_data: List[Optional[Dict]], frame_w: int) -> float:
         positions_x = []

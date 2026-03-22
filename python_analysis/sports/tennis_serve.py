@@ -7,6 +7,21 @@ from python_analysis.pose_detector import PoseDetector
 
 class TennisServeAnalyzer(BaseAnalyzer):
     config_key = "tennis-serve"
+    core_metric_keys = {
+        "wristSpeed",
+        "shoulderRotation",
+        "tossHeight",
+        "trophyAngle",
+        "pronation",
+        "ballSpeed",
+        "trajectoryArc",
+        "spinRate",
+        "balanceScore",
+        "backswingDuration",
+        "contactTiming",
+        "contactHeight",
+        "rhythmConsistency",
+    }
 
     def _compute_metrics(self, pose_data: List[Optional[Dict]], video_info: Dict) -> Dict:
         fps = video_info["fps"]

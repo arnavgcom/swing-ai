@@ -70,6 +70,25 @@ def main() -> int:
             },
             "forehand",
         ),
+        (
+            "ambiguous_cross_body_backhand_not_forced_forehand",
+            {
+                "dominant_side": "right",
+                "dominant_side_confidence": 0.91,
+                "max_rw_speed": 3.4,
+                "max_lw_speed": 3.2,
+                "swing_arc_ratio": 0.34,
+                "is_cross_body": True,
+                "is_compact_forward": False,
+                "is_overhead": False,
+                "contact_height_ratio": 0.52,
+                "dominant_wrist_median_offset": -0.16,
+                "dominant_wrist_opposite_ratio": 0.52,
+                "dominant_wrist_same_ratio": 0.24,
+                "shoulder_rotation_delta_deg": 10.0,
+            },
+            "backhand",
+        ),
     ]
 
     results = [_run_case(name, features, expected) for name, features, expected in cases]

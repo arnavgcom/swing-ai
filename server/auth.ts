@@ -14,6 +14,7 @@ import {
 import { eq, or, sql } from "drizzle-orm";
 import { resolveMediaUrl, storeAvatarBuffer } from "./media-storage";
 import { buildInsertAuditFields, buildUpdateAuditFields } from "./audit-metadata";
+import { listSports, normalizeSportName } from "./sport-availability";
 
 async function sanitizeUser(user: User) {
   const selectedScoreSectionsBySport =
@@ -446,7 +447,23 @@ export async function setupAuth(app: Express) {
           return res.status(400).json({ error: "dominantProfile must be Right or Left" });
         }
       }
-      if (sportsInterests !== undefined) updates.sportsInterests = sportsInterests?.trim() || null;
+      if (sportsInterests !== undefined) {
+        const normalizedSportsInterest = String(sportsInterests || "").trim();
+        if (!normalizedSportsInterest) {
+          updates.sportsInterests = null;
+        } else {
+          const enabledSports = await listSports({ includeDisabled: false });
+          const matchingEnabledSport = enabledSports.find(
+            (sport) => normalizeSportName(sport.name) === normalizeSportName(normalizedSportsInterest),
+          );
+
+          if (!matchingEnabledSport) {
+            return res.status(400).json({ error: "Selected sport is not enabled." });
+          }
+
+          updates.sportsInterests = matchingEnabledSport.name;
+        }
+      }
       if (bio !== undefined) updates.bio = bio?.trim() || null;
       if (selectedScoreSections !== undefined) {
         if (!Array.isArray(selectedScoreSections) || !selectedScoreSections.every((v) => typeof v === "string")) {

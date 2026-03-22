@@ -132,6 +132,49 @@ def _apply_tennis_auto_detect_majority_normalization(shot_segments: List[Dict[st
         s["classificationDebug"] = dbg
 
 
+def _build_analysis_fps_snapshot(
+    artifact: Optional[Dict[str, Any]],
+    effective_fps: float,
+) -> Optional[Dict[str, Any]]:
+    if not artifact:
+        return None
+
+    raw_snapshot = artifact.get("analysisFpsSnapshot")
+    if isinstance(raw_snapshot, dict):
+        return {
+            "effectiveStep": str(raw_snapshot.get("effectiveStep") or raw_snapshot.get("effectiveMode") or artifact.get("analysisFpsMode") or "step1"),
+            "sampleStep": int(raw_snapshot.get("sampleStep") or 1),
+            "effectiveFps": round(float(raw_snapshot.get("effectiveFps") or artifact.get("fps") or effective_fps), 2),
+            "sourceFps": round(float(raw_snapshot.get("sourceFps") or artifact.get("sourceFps") or effective_fps), 2),
+            "lowImpactStep": str(raw_snapshot.get("lowImpactStep")) if raw_snapshot.get("lowImpactStep") else None,
+            "highImpactStep": str(raw_snapshot.get("highImpactStep")) if raw_snapshot.get("highImpactStep") else None,
+            "tennisAutoDetectUsesHighImpact": raw_snapshot.get("tennisAutoDetectUsesHighImpact")
+            if "tennisAutoDetectUsesHighImpact" in raw_snapshot
+            else None,
+            "tennisMatchPlayUsesHighImpact": raw_snapshot.get("tennisMatchPlayUsesHighImpact")
+            if "tennisMatchPlayUsesHighImpact" in raw_snapshot
+            else None,
+            "routingReason": str(raw_snapshot.get("routingReason")) if raw_snapshot.get("routingReason") else None,
+        }
+
+    legacy_mode = artifact.get("analysisFpsMode")
+    legacy_source_fps = artifact.get("sourceFps")
+    if legacy_mode is not None or legacy_source_fps is not None:
+        return {
+            "effectiveStep": str(legacy_mode or "step1"),
+            "sampleStep": 1,
+            "effectiveFps": round(float(artifact.get("fps") or effective_fps), 2),
+            "sourceFps": round(float(legacy_source_fps or effective_fps), 2),
+            "lowImpactStep": None,
+            "highImpactStep": None,
+            "tennisAutoDetectUsesHighImpact": None,
+            "tennisMatchPlayUsesHighImpact": None,
+            "routingReason": None,
+        }
+
+    return None
+
+
 def _estimate_quality(
     frame_width: int,
     frame_height: int,
@@ -825,12 +868,15 @@ def main():
             raise FileNotFoundError(f"Video does not exist: {args.video_path}")
         artifact = load_analysis_artifact(args.analysis_artifact) if args.analysis_artifact else None
 
+        analysis_fps_snapshot = _build_analysis_fps_snapshot(artifact, 30.0)
+
         if artifact:
             file_size_bytes = int(artifact.get("fileSizeBytes") or os.path.getsize(args.video_path))
             fps = float(artifact.get("fps") or 30.0)
             frame_width = int(artifact.get("frameWidth") or 0)
             frame_height = int(artifact.get("frameHeight") or 0)
             total_frames = int(artifact.get("totalFrames") or 0)
+            analysis_fps_snapshot = _build_analysis_fps_snapshot(artifact, fps)
             duration_seconds = float(
                 artifact.get("durationSec")
                 or ((total_frames / fps) if fps > 0 and total_frames > 0 else 0.0)
@@ -1154,6 +1200,7 @@ def main():
             "videoDurationSec": round(float(duration_seconds), 2),
             "videoQuality": _estimate_quality(frame_width, frame_height, fps, avg_brightness, avg_blur),
             "fps": round(float(fps), 2),
+            "analysisFps": analysis_fps_snapshot,
             "resolution": {
                 "width": frame_width,
                 "height": frame_height,

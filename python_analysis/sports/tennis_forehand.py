@@ -5,6 +5,20 @@ from python_analysis.base_analyzer import BaseAnalyzer
 
 class TennisForehandAnalyzer(BaseAnalyzer):
     config_key = "tennis-forehand"
+    core_metric_keys = {
+        "wristSpeed",
+        "shoulderRotation",
+        "balanceScore",
+        "ballSpeed",
+        "trajectoryArc",
+        "spinRate",
+        "shotConsistency",
+        "backswingDuration",
+        "contactTiming",
+        "followThroughDuration",
+        "rhythmConsistency",
+        "contactHeight",
+    }
 
     def _compute_metrics(self, pose_data: List[Optional[Dict]], video_info: Dict) -> Dict:
         fps = video_info["fps"]
@@ -26,7 +40,9 @@ class TennisForehandAnalyzer(BaseAnalyzer):
         wrist_speed_ms = wrist_speed / pixels_per_meter
         wrist_speed_ms = float(np.clip(wrist_speed_ms, 15.0, 45.0))
 
-        elbow_angle = float(np.mean(elbow_angles)) if elbow_angles else 130.0
+        elbow_angle = None
+        if self._metric_requested("elbowAngle"):
+            elbow_angle = float(np.mean(elbow_angles)) if elbow_angles else 130.0
 
         shoulder_rot_vel = float(np.percentile(shoulder_rotations, 90)) if shoulder_rotations else 600.0
         shoulder_rot_vel = float(np.clip(shoulder_rot_vel, 350.0, 950.0))
@@ -49,9 +65,8 @@ class TennisForehandAnalyzer(BaseAnalyzer):
         shot_consistency = self._calc_shot_consistency(elbow_angles, wrist_speeds)
         rhythm_consistency = self._calc_rhythm_consistency(pose_data, fps)
 
-        return {
+        metrics = {
             "wristSpeed": round(wrist_speed_ms, 2),
-            "elbowAngle": round(elbow_angle, 2),
             "shoulderRotation": round(shoulder_rot_vel, 2),
             "balanceScore": round(balance, 2),
             "ballSpeed": round(ball_speed, 2),
@@ -64,6 +79,9 @@ class TennisForehandAnalyzer(BaseAnalyzer):
             "rhythmConsistency": round(rhythm_consistency, 2),
             "contactHeight": round(contact_height, 2),
         }
+        if elbow_angle is not None:
+            metrics["elbowAngle"] = round(elbow_angle, 2)
+        return metrics
 
     def _compute_sub_scores(self, m: Dict) -> Dict:
         nr = self._normalize(m["wristSpeed"], 15.0, 45.0)

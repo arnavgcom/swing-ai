@@ -9,11 +9,15 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import Svg, { Line, Polyline, Circle, Polygon } from "react-native-svg";
+import {
+  getAnalysisRefreshIntervalMs,
+  getCompletedAnalysisEnrichmentMessage,
+} from "@/lib/analysis-refresh";
 import {
   fetchAnalysisDetail,
   fetchAnalysisMetricTrends,
@@ -309,12 +313,18 @@ export default function AnalysisMetricTrendsScreen() {
   const [metricOffsets, setMetricOffsets] = useState<Record<string, number>>({});
   const [sectionOffsets, setSectionOffsets] = useState<Record<string, number>>({});
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const profileTimeZone = resolveUserTimeZone(user);
+  const enrichmentPendingRef = useRef(false);
 
   const { data: analysisDetail } = useQuery({
     queryKey: ["analysis", id],
     queryFn: () => fetchAnalysisDetail(id!),
     enabled: !!id,
+    refetchInterval: (query) => getAnalysisRefreshIntervalMs(
+      query.state.data?.analysis?.status,
+      query.state.data?.metrics?.aiDiagnostics,
+    ),
   });
 
   const configKey = analysisDetail?.metrics?.configKey;
@@ -334,7 +344,19 @@ export default function AnalysisMetricTrendsScreen() {
     queryFn: () => fetchAnalysisMetricTrends(id!, "all"),
     enabled: !!id,
     retry: false,
+    refetchInterval: getAnalysisRefreshIntervalMs(
+      analysisDetail?.analysis?.status,
+      analysisDetail?.metrics?.aiDiagnostics,
+    ),
   });
+
+  const enrichmentMessage = useMemo(
+    () => getCompletedAnalysisEnrichmentMessage(
+      analysisDetail?.analysis?.status,
+      analysisDetail?.metrics?.aiDiagnostics,
+    ),
+    [analysisDetail?.analysis?.status, analysisDetail?.metrics?.aiDiagnostics],
+  );
 
   const allPoints = trendData?.points || [];
 
@@ -446,6 +468,20 @@ export default function AnalysisMetricTrendsScreen() {
     return sorted.filter((metric) => selected.has(normalizeMetricSelectionKey(metric.key)));
   }, [allPoints, selectedMetricKeys, sportConfig]);
 
+  useEffect(() => {
+    const enrichmentPending = Boolean(enrichmentMessage);
+    const shouldRefetch = enrichmentPendingRef.current && !enrichmentPending && !!id;
+
+    if (shouldRefetch) {
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["analysis", id] }),
+        queryClient.invalidateQueries({ queryKey: ["analysis", id, "metric-trends", "all-sessions"] }),
+      ]);
+    }
+
+    enrichmentPendingRef.current = enrichmentPending;
+  }, [enrichmentMessage, id, queryClient]);
+
     useEffect(() => {
     const targetSection = String(focusSection || "").trim().toLowerCase();
     if (targetSection === "overall" || targetSection === "breakdown") {
@@ -527,6 +563,15 @@ export default function AnalysisMetricTrendsScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {enrichmentMessage ? (
+            <GlassCard style={styles.enrichmentNotice}>
+              <View style={styles.enrichmentNoticeRow}>
+                <ActivityIndicator size="small" color="#93C5FD" />
+                <Text style={styles.enrichmentNoticeText}>{enrichmentMessage}</Text>
+              </View>
+            </GlassCard>
+          ) : null}
+
           <View
             onLayout={(event) => {
               const nextY = event.nativeEvent.layout.y;
@@ -741,6 +786,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: ds.space.xl,
     paddingBottom: 26,
     gap: ds.space.lg,
+  },
+  enrichmentNotice: {
+    borderRadius: ds.radius.md,
+    paddingHorizontal: ds.space.md,
+    paddingVertical: ds.space.md,
+  },
+  enrichmentNoticeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: ds.space.sm,
+  },
+  enrichmentNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_500Medium",
+    color: "#BFDBFE",
   },
   section: {
     gap: 10,
