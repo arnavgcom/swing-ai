@@ -2191,7 +2191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             rejection_reason = 'Processing timed out. Please rerun Recalc. Metrics/Scores.',
             updated_at = now()
         where status = 'processing'
-          and updated_at < now() - interval '10 minutes'
+          and updated_at < now() - interval '60 minutes'
           and user_id = ${userId}
       `);
       return;
@@ -2203,7 +2203,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           rejection_reason = 'Processing timed out. Please rerun Recalc. Metrics/Scores.',
           updated_at = now()
       where status = 'processing'
-        and updated_at < now() - interval '10 minutes'
+        and updated_at < now() - interval '60 minutes'
     `);
   };
 

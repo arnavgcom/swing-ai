@@ -1795,6 +1795,14 @@ export default function AnalysisDetailScreen() {
     analysis.requestedFocusKey,
     analysis.requestedSessionType,
   );
+  const displayMovementLabel =
+    (detectedMovement || sportConfig?.movementName || "").charAt(0).toUpperCase()
+    + (detectedMovement || sportConfig?.movementName || "").slice(1).replace(/-/g, " ");
+  const showRequestedFocusBadge = Boolean(
+    requestedFocusLabel
+    && normalizeSelection(requestedFocusLabel).replace(/[-\s]+/g, "")
+      !== normalizeSelection(displayMovementLabel).replace(/[-\s]+/g, ""),
+  );
   const profileTimeZone = resolveUserTimeZone(user);
   const filenamePlayerName = derivePlayerNameFromVideoName(displayVideoName);
   const headerPlayerNameResolved =
@@ -2059,7 +2067,7 @@ export default function AnalysisDetailScreen() {
                   <Text style={styles.requestedSessionBadgeText}>{requestedSessionLabel}</Text>
                 </View>
               ) : null}
-              {requestedFocusLabel ? (
+              {showRequestedFocusBadge ? (
                 <View style={styles.requestedFocusBadge}>
                   <Ionicons name="locate-outline" size={12} color="#C4B5FD" />
                   <Text style={styles.requestedFocusBadgeText}>{requestedFocusLabel}</Text>
@@ -2069,8 +2077,7 @@ export default function AnalysisDetailScreen() {
                 <View style={styles.categoryBadge}>
                   <Ionicons name="flash-outline" size={12} color="#34D399" />
                   <Text style={styles.categoryBadgeText}>
-                    {(detectedMovement || sportConfig?.movementName || "").charAt(0).toUpperCase() +
-                      (detectedMovement || sportConfig?.movementName || "").slice(1).replace(/-/g, " ")}
+                    {displayMovementLabel}
                   </Text>
                 </View>
               )}
