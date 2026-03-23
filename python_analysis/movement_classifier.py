@@ -2,6 +2,8 @@ import math
 import numpy as np
 from typing import Any, Dict, List, Optional, Tuple
 
+from python_analysis.tennis_movement_model import predict_tennis_movement
+
 
 SPORT_MOVEMENTS = {
     "tennis": ["forehand", "backhand", "serve", "volley", "game"],
@@ -26,6 +28,9 @@ TENNIS_MIN_LARGE_BODY_AREA_RATIO = 0.028
 TENNIS_MIN_DISTANT_MEDIAN_BODY_AREA_RATIO = 0.006
 TENNIS_MIN_DISTANT_P75_BODY_AREA_RATIO = 0.0075
 TENNIS_MIN_DISTANT_MAX_BODY_AREA_RATIO = 0.012
+
+TENNIS_MODEL_CONFIDENCE_THRESHOLD = 0.58
+TENNIS_MODEL_MARGIN_THRESHOLD = 0.06
 
 
 def _compute_body_presence_metrics(
@@ -521,7 +526,7 @@ def classify_movement(
             movements = SPORT_MOVEMENTS.get(sport, [])
             return (movements[0] if movements else "unknown"), shot_count
 
-    classifications: List[str] = []
+    classifications: List[Dict[str, Any]] = []
     for start, end in segments:
         segment_data = pose_data[start:end + 1]
         valid_in_segment = [p for p in segment_data if p is not None]
@@ -529,6 +534,18 @@ def classify_movement(
             continue
 
         if sport in RACQUET_SPORTS:
+            if sport == "tennis":
+                classifications.append(
+                    classify_segment_movement_with_diagnostics(
+                        segment_data,
+                        sport,
+                        fps,
+                        frame_width,
+                        frame_height,
+                        preferred_dominant_side,
+                    )
+                )
+                continue
             cls = _classify_racquet_sport(
                 segment_data,
                 sport,
@@ -537,12 +554,14 @@ def classify_movement(
                 frame_height,
                 preferred_dominant_side,
             )
+            classifications.append({"label": cls, "confidence": 0.7, "classifierSource": "rule"})
         elif sport == "golf":
             cls = _classify_golf(segment_data, fps, frame_width, frame_height)
+            classifications.append({"label": cls, "confidence": 0.75, "classifierSource": "rule"})
         else:
             movements = SPORT_MOVEMENTS.get(sport, [])
             cls = movements[0] if movements else "unknown"
-        classifications.append(cls)
+            classifications.append({"label": cls, "confidence": 0.5, "classifierSource": "default"})
 
     if not classifications:
         if sport in RACQUET_SPORTS:
@@ -559,8 +578,11 @@ def classify_movement(
         movements = SPORT_MOVEMENTS.get(sport, [])
         return (movements[0] if movements else "unknown"), shot_count
 
+    if sport == "tennis":
+        return _choose_tennis_dominant_label(classifications), shot_count
+
     from collections import Counter
-    counts = Counter(classifications)
+    counts = Counter(str(item.get("label", "unknown")) for item in classifications)
     if sport == "tennis" and counts.get("serve", 0) > 0:
         serve_votes = counts["serve"]
         strongest_non_serve = max(
@@ -611,6 +633,7 @@ def classify_segment_movement_with_diagnostics(
             "confidence": 0.0,
             "reasons": ["insufficient_pose_frames"],
             "keyFeatures": {},
+            "classifierSource": "none",
         }
 
     if sport in RACQUET_SPORTS:
@@ -627,11 +650,8 @@ def classify_segment_movement_with_diagnostics(
                 "label": "serve",
                 "confidence": 0.9,
                 "reasons": ["serve_motion_detected"],
-                "keyFeatures": {
-                    "is_serve": True,
-                    "swing_arc_ratio": float(features.get("swing_arc_ratio", 0.0)),
-                    "max_wrist_speed": float(features.get("max_wrist_speed", 0.0)),
-                },
+                "keyFeatures": _build_tennis_key_features(features),
+                "classifierSource": "rule",
             }
 
         if sport == "tennis" and features.get("is_compact_forward", False) and float(features.get("swing_arc_ratio", 0.0)) < 0.2:
@@ -639,28 +659,47 @@ def classify_segment_movement_with_diagnostics(
                 "label": "volley",
                 "confidence": 0.85,
                 "reasons": ["compact_forward_motion"],
-                "keyFeatures": {
-                    "is_compact_forward": bool(features.get("is_compact_forward", False)),
-                    "swing_arc_ratio": float(features.get("swing_arc_ratio", 0.0)),
-                    "max_wrist_speed": float(features.get("max_wrist_speed", 0.0)),
-                },
+                "keyFeatures": _build_tennis_key_features(features),
+                "classifierSource": "rule",
             }
 
         if sport == "tennis":
+            model_prediction = _predict_tennis_model(features)
+            if _is_actionable_tennis_model_prediction(model_prediction):
+                model_label = str(model_prediction.get("label", "unknown"))
+                model_confidence = float(model_prediction.get("confidence", 0.0))
+                model_margin = float(model_prediction.get("margin", 0.0))
+                return {
+                    "label": model_label,
+                    "confidence": model_confidence,
+                    "reasons": [
+                        "model_inference",
+                        f"model_predicted_{model_label}",
+                    ],
+                    "keyFeatures": _build_tennis_key_features(features),
+                    "classifierSource": "model",
+                    "modelLabel": model_label,
+                    "modelConfidence": model_confidence,
+                    "modelMargin": model_margin,
+                    "modelProbabilities": dict(model_prediction.get("probabilities", {})),
+                    "modelVersion": model_prediction.get("modelVersion"),
+                }
+
             label, confidence, reasons = _classify_tennis_forehand_backhand(features)
+            if model_prediction is not None:
+                reasons = list(reasons)
+                reasons.append("model_low_confidence_fallback")
             return {
                 "label": label,
                 "confidence": confidence,
                 "reasons": reasons,
-                "keyFeatures": {
-                    "is_cross_body": bool(features.get("is_cross_body", False)),
-                    "dominant_side": str(features.get("dominant_side", "right")),
-                    "dominant_side_confidence": float(features.get("dominant_side_confidence", 0.0)),
-                    "max_rw_speed": float(features.get("max_rw_speed", 0.0)),
-                    "max_lw_speed": float(features.get("max_lw_speed", 0.0)),
-                    "swing_arc_ratio": float(features.get("swing_arc_ratio", 0.0)),
-                    "is_compact_forward": bool(features.get("is_compact_forward", False)),
-                },
+                "keyFeatures": _build_tennis_key_features(features),
+                "classifierSource": "heuristic",
+                "modelLabel": model_prediction.get("label") if model_prediction is not None else None,
+                "modelConfidence": float(model_prediction.get("confidence", 0.0)) if model_prediction is not None else None,
+                "modelMargin": float(model_prediction.get("margin", 0.0)) if model_prediction is not None else None,
+                "modelProbabilities": dict(model_prediction.get("probabilities", {})) if model_prediction is not None else None,
+                "modelVersion": model_prediction.get("modelVersion") if model_prediction is not None else None,
             }
 
         label = _classify_racquet_sport(segment_data, sport, fps, frame_width, frame_height)
@@ -672,6 +711,7 @@ def classify_segment_movement_with_diagnostics(
                 "swing_arc_ratio": float(features.get("swing_arc_ratio", 0.0)),
                 "max_wrist_speed": float(features.get("max_wrist_speed", 0.0)),
             },
+            "classifierSource": "rule",
         }
 
     if sport == "golf":
@@ -681,6 +721,7 @@ def classify_segment_movement_with_diagnostics(
             "confidence": 0.75,
             "reasons": ["golf_rule"],
             "keyFeatures": {},
+            "classifierSource": "rule",
         }
 
     movements = SPORT_MOVEMENTS.get(sport, [])
@@ -689,7 +730,72 @@ def classify_segment_movement_with_diagnostics(
         "confidence": 0.5,
         "reasons": ["default_movement"],
         "keyFeatures": {},
+        "classifierSource": "default",
     }
+
+
+def _build_tennis_key_features(features: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "dominant_side": str(features.get("dominant_side", "right")),
+        "dominant_side_confidence": float(features.get("dominant_side_confidence", 0.0)),
+        "is_cross_body": bool(features.get("is_cross_body", False)),
+        "is_serve": bool(features.get("is_serve", False)),
+        "is_compact_forward": bool(features.get("is_compact_forward", False)),
+        "is_overhead": bool(features.get("is_overhead", False)),
+        "is_downward_motion": bool(features.get("is_downward_motion", False)),
+        "max_wrist_speed": float(features.get("max_wrist_speed", 0.0)),
+        "max_rw_speed": float(features.get("max_rw_speed", 0.0)),
+        "max_lw_speed": float(features.get("max_lw_speed", 0.0)),
+        "swing_arc_ratio": float(features.get("swing_arc_ratio", 0.0)),
+        "contact_height_ratio": float(features.get("contact_height_ratio", 0.0)),
+        "dominant_wrist_median_offset": float(features.get("dominant_wrist_median_offset", 0.0)),
+        "dominant_wrist_opposite_ratio": float(features.get("dominant_wrist_opposite_ratio", 0.0)),
+        "dominant_wrist_same_ratio": float(features.get("dominant_wrist_same_ratio", 0.0)),
+        "shoulder_rotation_delta_deg": float(features.get("shoulder_rotation_delta_deg", 0.0)),
+    }
+
+
+def _predict_tennis_model(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    model_input = _build_tennis_key_features(features)
+    return predict_tennis_movement(model_input)
+
+
+def _is_actionable_tennis_model_prediction(prediction: Optional[Dict[str, Any]]) -> bool:
+    if prediction is None:
+        return False
+    label = str(prediction.get("label", "unknown"))
+    confidence = float(prediction.get("confidence", 0.0))
+    margin = float(prediction.get("margin", 0.0))
+    return label in {"forehand", "backhand", "serve", "volley"} and confidence >= TENNIS_MODEL_CONFIDENCE_THRESHOLD and margin >= TENNIS_MODEL_MARGIN_THRESHOLD
+
+
+def _choose_tennis_dominant_label(classifications: List[Dict[str, Any]]) -> str:
+    weighted_votes: Dict[str, float] = {}
+    raw_counts: Dict[str, int] = {}
+
+    for classification in classifications:
+        label = str(classification.get("label", "unknown"))
+        if label == "unknown":
+            continue
+        confidence = max(0.25, float(classification.get("confidence", 0.0)))
+        weighted_votes[label] = weighted_votes.get(label, 0.0) + confidence
+        raw_counts[label] = raw_counts.get(label, 0) + 1
+
+    if not weighted_votes:
+        return "unknown"
+
+    serve_votes = weighted_votes.get("serve", 0.0)
+    strongest_non_serve = max(
+        (vote for label, vote in weighted_votes.items() if label != "serve"),
+        default=0.0,
+    )
+    if serve_votes > 0.0 and serve_votes >= strongest_non_serve * 0.92:
+        return "serve"
+
+    return max(
+        weighted_votes.items(),
+        key=lambda item: (item[1], raw_counts.get(item[0], 0)),
+    )[0]
 
 
 def _classify_racquet_sport(

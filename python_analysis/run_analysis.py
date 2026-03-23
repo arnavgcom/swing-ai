@@ -443,6 +443,7 @@ def main():
             )
             diag["classificationDebug"] = {
                 "dominantSide": segment_features.get("dominant_side"),
+                "dominantSideConfidence": round(float(segment_features.get("dominant_side_confidence", 0.0)), 4),
                 "isCrossBody": bool(segment_features.get("is_cross_body", False)),
                 "isServe": bool(segment_features.get("is_serve", False)),
                 "isCompactForward": bool(segment_features.get("is_compact_forward", False)),
@@ -453,6 +454,16 @@ def main():
                 "leftWristSpeed": round(float(segment_features.get("max_lw_speed", 0.0)), 4),
                 "swingArcRatio": round(float(segment_features.get("swing_arc_ratio", 0.0)), 4),
                 "contactHeightRatio": round(float(segment_features.get("contact_height_ratio", 0.0)), 4),
+                "dominantWristMedianOffset": round(float(segment_features.get("dominant_wrist_median_offset", 0.0)), 4),
+                "dominantWristOppositeRatio": round(float(segment_features.get("dominant_wrist_opposite_ratio", 0.0)), 4),
+                "dominantWristSameRatio": round(float(segment_features.get("dominant_wrist_same_ratio", 0.0)), 4),
+                "shoulderRotationDeltaDeg": round(float(segment_features.get("shoulder_rotation_delta_deg", 0.0)), 4),
+                "classifierSource": str(diag.get("classifierSource", "heuristic")),
+                "modelLabel": diag.get("modelLabel"),
+                "modelConfidence": round(float(diag.get("modelConfidence", 0.0)), 4) if diag.get("modelConfidence") is not None else None,
+                "modelMargin": round(float(diag.get("modelMargin", 0.0)), 4) if diag.get("modelMargin") is not None else None,
+                "modelProbabilities": diag.get("modelProbabilities"),
+                "modelVersion": diag.get("modelVersion"),
                 "reasons": list(diag.get("reasons", [])),
             }
             shot_label_diagnostics.append(diag)
