@@ -11,6 +11,13 @@ PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
 RunningMode = mp.tasks.vision.RunningMode
 
 
+POSE_LANDMARKER_MODEL_FILES = {
+    "lite": "pose_landmarker_lite.task",
+    "full": "pose_landmarker_full.task",
+    "heavy": "pose_landmarker_heavy.task",
+}
+
+
 class PoseDetector:
     LANDMARK_MAP = {
         0: "nose",
@@ -28,12 +35,29 @@ class PoseDetector:
         28: "right_ankle",
     }
 
+    @staticmethod
+    def _resolve_model_path() -> str:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        models_dir = os.path.join(project_root, "models")
+        requested_model = os.getenv("POSE_LANDMARKER_MODEL", "lite").strip().lower()
+        selected_model = requested_model if requested_model in POSE_LANDMARKER_MODEL_FILES else "lite"
+        selected_path = os.path.join(models_dir, POSE_LANDMARKER_MODEL_FILES[selected_model])
+
+        if os.path.exists(selected_path):
+            return selected_path
+
+        fallback_path = os.path.join(models_dir, POSE_LANDMARKER_MODEL_FILES["lite"])
+        if selected_model != "lite" and os.path.exists(fallback_path):
+            print(
+                f"Requested pose model '{selected_model}' not found at {selected_path}; falling back to lite",
+                flush=True,
+            )
+            return fallback_path
+
+        return selected_path
+
     def __init__(self):
-        model_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "models",
-            "pose_landmarker_lite.task",
-        )
+        model_path = self._resolve_model_path()
 
         options = PoseLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=model_path),

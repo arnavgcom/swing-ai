@@ -4,6 +4,7 @@ import {
   text,
   varchar,
   real,
+  integer,
   timestamp,
   boolean,
   jsonb,
@@ -285,38 +286,136 @@ export const appSettings = pgTable("app_settings", {
   updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
 });
 
-export const scoringModelRegistryEntries = pgTable("scoring_model_registry_entries", {
+export const modelRegistryVersions = pgTable("model_registry_versions", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  modelVersion: varchar("model_version").notNull(),
-  modelVersionDescription: text("model_version_description").notNull(),
-  movementType: text("movement_type").notNull(),
-  movementDetectionAccuracyPct: real("movement_detection_accuracy_pct").notNull(),
-  scoringAccuracyPct: real("scoring_accuracy_pct").notNull(),
-  datasetsUsed: jsonb("datasets_used").$type<string[]>().notNull(),
-  manifestModelVersion: varchar("manifest_model_version").notNull().default("0.1"),
-  manifestDatasets: jsonb("manifest_datasets")
-    .$type<Array<{ name: string; videos: Array<{ videoId: string; filename: string; movementType: string }> }>>()
-    .notNull()
-    .default(sql`'[]'::jsonb`),
-  createdByUserId: varchar("created_by_user_id").references(() => users.id),
-  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
+  modelVersion: varchar("model_version").notNull().unique(),
+  description: text("description").notNull().default(""),
+  status: varchar("status").notNull().default("draft"),
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
+  activatedByUserId: varchar("activated_by_user_id").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
 });
 
-export const scoringModelRegistryDatasetMetrics = pgTable("scoring_model_registry_dataset_metrics", {
+export const modelRegistryDatasets = pgTable("model_registry_datasets", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  registryEntryId: varchar("registry_entry_id")
+  name: text("name").notNull().unique(),
+  description: text("description").notNull().default(""),
+  source: text("source").notNull().default("manual-annotation"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
+});
+
+export const modelRegistryDatasetItems = pgTable("model_registry_dataset_items", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  datasetId: varchar("dataset_id")
     .notNull()
-    .references(() => scoringModelRegistryEntries.id),
+    .references(() => modelRegistryDatasets.id),
+  analysisId: varchar("analysis_id")
+    .notNull()
+    .references(() => analyses.id),
+  annotatorUserId: varchar("annotator_user_id").references(() => users.id),
+  expectedMovement: text("expected_movement").notNull(),
+  evaluationVideoId: text("evaluation_video_id"),
+  sourceFilename: text("source_filename"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
+});
+
+export const modelTrainingDatasets = pgTable("model_training_datasets", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  modelFamily: text("model_family").notNull(),
+  sportName: text("sport_name").notNull().default("tennis"),
   datasetName: text("dataset_name").notNull(),
-  movementType: text("movement_type").notNull(),
-  movementDetectionAccuracyPct: real("movement_detection_accuracy_pct").notNull(),
-  scoringAccuracyPct: real("scoring_accuracy_pct").notNull(),
+  source: text("source").notNull().default("manual-annotation"),
+  analysisCount: integer("analysis_count").notNull().default(0),
+  rowCount: integer("row_count").notNull().default(0),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
+});
+
+export const modelTrainingDatasetRows = pgTable("model_training_dataset_rows", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  datasetId: varchar("dataset_id")
+    .notNull()
+    .references(() => modelTrainingDatasets.id),
+  analysisId: varchar("analysis_id")
+    .notNull()
+    .references(() => analyses.id),
+  userId: varchar("user_id").references(() => users.id),
+  videoFilename: text("video_filename").notNull(),
+  shotIndex: integer("shot_index").notNull(),
+  groupKey: text("group_key").notNull(),
+  label: text("label").notNull(),
+  heuristicLabel: text("heuristic_label"),
+  heuristicConfidence: real("heuristic_confidence"),
+  heuristicReasons: jsonb("heuristic_reasons").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  featureValues: jsonb("feature_values").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
+});
+
+export const modelTrainingJobs = pgTable("model_training_jobs", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().unique(),
+  modelFamily: text("model_family").notNull(),
+  sportName: text("sport_name").notNull().default("tennis"),
+  status: varchar("status").notNull(),
+  datasetId: text("dataset_id"),
+  eligibleAnalysisCount: integer("eligible_analysis_count").notNull().default(0),
+  eligibleShotCount: integer("eligible_shot_count").notNull().default(0),
+  exportRows: integer("export_rows"),
+  trainRows: integer("train_rows"),
+  testRows: integer("test_rows"),
+  macroF1: real("macro_f1"),
+  modelOutputPath: text("model_output_path"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  report: jsonb("report").$type<Record<string, unknown>>(),
+  requestedAt: timestamp("requested_at", { withTimezone: true }).defaultNow().notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  requestedByUserId: varchar("requested_by_user_id").references(() => users.id),
+  savedModelVersion: varchar("saved_model_version"),
+  savedModelArtifactPath: text("saved_model_artifact_path"),
+  savedAt: timestamp("saved_at", { withTimezone: true }),
+  versionDescription: text("version_description"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
+});
+
+export const modelTrainingState = pgTable("model_training_state", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  modelFamily: text("model_family").notNull(),
+  sportName: text("sport_name").notNull().default("tennis"),
+  currentJobId: varchar("current_job_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   createdByUserId: varchar("created_by_user_id").references(() => users.id),
@@ -381,5 +480,13 @@ export type CoachingInsight = typeof coachingInsights.$inferSelect;
 export type AnalysisShotAnnotation = typeof analysisShotAnnotations.$inferSelect;
 export type AnalysisShotDiscrepancy = typeof analysisShotDiscrepancies.$inferSelect;
 export type AppSetting = typeof appSettings.$inferSelect;
-export type ScoringModelRegistryEntry = typeof scoringModelRegistryEntries.$inferSelect;
-export type ScoringModelRegistryDatasetMetric = typeof scoringModelRegistryDatasetMetrics.$inferSelect;
+export type ModelRegistryVersion = typeof modelRegistryVersions.$inferSelect;
+export type ModelRegistryDataset = typeof modelRegistryDatasets.$inferSelect;
+export type ModelRegistryDatasetItem = typeof modelRegistryDatasetItems.$inferSelect;
+export type ModelTrainingDataset = typeof modelTrainingDatasets.$inferSelect;
+export type ModelTrainingDatasetRow = typeof modelTrainingDatasetRows.$inferSelect;
+export type TennisTrainingDataset = ModelTrainingDataset;
+export type TennisTrainingDatasetRow = ModelTrainingDatasetRow;
+export type ModelTrainingJob = typeof modelTrainingJobs.$inferSelect;
+export type ModelTrainingState = typeof modelTrainingState.$inferSelect;
+export type TennisModelTrainingRun = ModelTrainingJob;

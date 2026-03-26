@@ -87,10 +87,6 @@ function RootNavigator() {
           options={{ headerShown: false }}
         />
         <Stack.Screen
-          name="model-version/[id]"
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
           name="profile/add-player"
           options={{ headerShown: false }}
         />
@@ -108,6 +104,22 @@ function RootNavigator() {
         />
         <Stack.Screen
           name="profile/validation-settings"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="profile/pose-landmarker-settings"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="profile/classification-model-settings"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="profile/drive-movement-classification-model-settings"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="profile/dataset-insights"
           options={{ headerShown: false }}
         />
         <Stack.Screen

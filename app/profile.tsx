@@ -15,7 +15,7 @@ import {
   FlatList,
   Switch,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -62,14 +62,52 @@ type PickerItem = {
   badge?: string;
 };
 
+type ProfileDraftPayload = {
+  name: string;
+  phone: string;
+  country: string;
+  dominantProfile: string;
+  sportsInterests: string;
+  role: "admin" | "player";
+};
+
 const normalizeRole = (value?: string | null): "admin" | "player" => {
   return value?.trim().toLowerCase() === "admin" ? "admin" : "player";
 };
 
+const buildNormalizedProfileDraft = (input: Partial<ProfileDraftPayload>): ProfileDraftPayload => ({
+  name: String(input.name || "").trim(),
+  phone: String(input.phone || "").trim(),
+  country: String(input.country || "").trim(),
+  dominantProfile: String(input.dominantProfile || "").trim(),
+  sportsInterests: String(input.sportsInterests || "").trim(),
+  role: normalizeRole(input.role),
+});
+
+const areProfileDraftsEqual = (
+  left: ProfileDraftPayload | null,
+  right: ProfileDraftPayload | null,
+): boolean => {
+  if (!left || !right) return false;
+
+  return (
+    left.name === right.name
+    && left.phone === right.phone
+    && left.country === right.country
+    && left.dominantProfile === right.dominantProfile
+    && left.sportsInterests === right.sportsInterests
+    && left.role === right.role
+  );
+};
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const { returnTo: rawReturnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const { user, logout, refreshUser } = useAuth();
   const webTopInset = Platform.OS === "web" ? 67 : 0;
+  const returnTo = Array.isArray(rawReturnTo) ? rawReturnTo[0] : rawReturnTo;
+
+  const profileRouteParams = returnTo ? { returnTo } : undefined;
 
   const [name, setName] = useState(user?.name || "");
   const [phone, setPhone] = useState(user?.phone || "+65 ");
@@ -93,6 +131,11 @@ export default function ProfileScreen() {
   const isSelectedAdmin = normalizeRole(role) === "admin";
   const showAdminControls = isSelectedAdmin;
   const canUseAdminApis = isPersistedAdmin && isSelectedAdmin;
+  const lastSavedProfileRef = useRef<ProfileDraftPayload | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isHydratedRef = useRef(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   useEffect(() => {
     if (user) {
@@ -109,6 +152,18 @@ export default function ProfileScreen() {
       if (user.avatarUrl) {
         setAvatarUri(resolveClientMediaUrl(user.avatarUrl));
       }
+      lastSavedProfileRef.current = buildNormalizedProfileDraft({
+        name: user.name || "",
+        phone: user.phone || "+65 ",
+        country: user.country || "Singapore",
+        dominantProfile: user.dominantProfile
+          ? user.dominantProfile.charAt(0).toUpperCase() + user.dominantProfile.slice(1).toLowerCase()
+          : "",
+        sportsInterests: user.sportsInterests || "",
+        role: normalizeRole(user.role),
+      });
+      isHydratedRef.current = true;
+      setSaveState("saved");
     }
   }, [user]);
 
@@ -251,40 +306,39 @@ export default function ProfileScreen() {
     }
   };
 
-  const persistProfile = async ({
-    nextRole,
-    navigateBack = false,
-  }: {
-    nextRole?: "admin" | "player";
-    navigateBack?: boolean;
-  } = {}) => {
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      Alert.alert("Required", "Name cannot be empty");
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+      if (autoSaveResetTimerRef.current) {
+        clearTimeout(autoSaveResetTimerRef.current);
+      }
+    };
+  }, []);
+
+  const persistProfile = async (payload: ProfileDraftPayload) => {
+    if (!payload.name) {
       return false;
     }
 
     setSaving(true);
+    setSaveState("saving");
 
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await apiRequest("PUT", "/api/profile", {
-        name: trimmedName,
-        phone: phone.trim(),
-        country: country.trim(),
-        dominantProfile: dominantProfile.trim(),
-        sportsInterests: sportsInterests.trim(),
-        role: normalizeRole(nextRole ?? role),
-      });
+      await apiRequest("PUT", "/api/profile", payload);
       await refreshUser();
-
-      if (navigateBack) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.back();
+      lastSavedProfileRef.current = payload;
+      setSaveState("saved");
+      if (autoSaveResetTimerRef.current) {
+        clearTimeout(autoSaveResetTimerRef.current);
       }
-
+      autoSaveResetTimerRef.current = setTimeout(() => {
+        setSaveState("idle");
+      }, 1400);
       return true;
     } catch (e) {
+      setSaveState("error");
       Alert.alert("Error", "Failed to save profile");
       return false;
     } finally {
@@ -292,9 +346,38 @@ export default function ProfileScreen() {
     }
   };
 
-  const saveProfile = async () => {
-    await persistProfile({ navigateBack: true });
-  };
+  useEffect(() => {
+    if (!user || !isHydratedRef.current) {
+      return;
+    }
+
+    const nextPayload = buildNormalizedProfileDraft({
+      name,
+      phone,
+      country,
+      dominantProfile,
+      sportsInterests,
+      role,
+    });
+
+    if (!nextPayload.name || areProfileDraftsEqual(nextPayload, lastSavedProfileRef.current)) {
+      return;
+    }
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      void persistProfile(nextPayload);
+    }, 700);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [country, dominantProfile, name, phone, role, sportsInterests, user]);
 
   const handleRoleToggle = async (value: boolean) => {
     const nextRole = value ? "admin" : "player";
@@ -307,39 +390,32 @@ export default function ProfileScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setRole(nextRole);
 
-    const saved = await persistProfile({ nextRole });
+    const saved = await persistProfile(buildNormalizedProfileDraft({
+      name,
+      phone,
+      country,
+      dominantProfile,
+      sportsInterests,
+      role: nextRole,
+    }));
     if (!saved) {
       setRole(previousRole);
     }
   };
 
-  const handleClearHistory = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      "Clear History",
-      "This will permanently delete all your analysis history. This action cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Clear History",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await apiRequest("DELETE", "/api/analyses");
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              if (Platform.OS === "web") {
-                globalThis.alert("History cleared successfully");
-              } else {
-                Alert.alert("Done", "History cleared successfully");
-              }
-            } catch (e) {
-              Alert.alert("Error", "Failed to clear history");
-            }
-          },
-        },
-      ],
-    );
-  };
+  const saveStatusLabel = saveState === "saving"
+    ? "Saving"
+    : saveState === "saved"
+      ? "Saved"
+      : saveState === "error"
+        ? "Retry needed"
+        : "Auto-save";
+
+  const saveStatusTone = saveState === "error"
+    ? styles.statusPillError
+    : saveState === "saved"
+      ? styles.statusPillSuccess
+      : styles.statusPillNeutral;
 
   const handleLogout = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -355,8 +431,14 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const canClearHistory = false;
-  const showClearHistory = false;
+  const handleBack = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (returnTo && returnTo !== "/profile") {
+      router.replace(returnTo as any);
+      return;
+    }
+    router.back();
+  };
 
   return (
     <View style={styles.container}>
@@ -372,17 +454,16 @@ export default function ProfileScreen() {
         ]}
       >
         <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.back();
-          }}
+          onPress={handleBack}
           style={styles.backButton}
           testID="profile-back"
         >
           <Ionicons name="chevron-back" size={24} color="#F8FAFC" />
         </Pressable>
         <Text style={styles.headerTitle}>Profile</Text>
-        <View style={{ width: 40 }} />
+        <View style={[styles.statusPill, saveStatusTone]}>
+          <Text style={styles.statusPillText}>{saveStatusLabel}</Text>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -422,201 +503,178 @@ export default function ProfileScreen() {
           <Text style={styles.changePhotoText}>Change Photo</Text>
         </Pressable>
 
-        <View style={styles.fieldsContainer}>
-          <ProfileField
-            label="Full Name"
-            value={name}
-            onChangeText={setName}
-            icon="person-outline"
-            placeholder="Your name"
-          />
-          <ProfileField
-            label="Email"
-            value={user?.email || ""}
-            icon="mail-outline"
-            editable={false}
-          />
-          <ProfileField
-            label="Mobile Number"
-            value={phone}
-            onChangeText={setPhone}
-            icon="call-outline"
-            placeholder="+65 9123 4567"
-            keyboardType="phone-pad"
-          />
-
-          <View style={styles.fieldWrapper}>
-            <Text style={styles.fieldLabel}>Country</Text>
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setShowCountryPicker(true);
-              }}
-              style={styles.fieldInput}
-              testID="field-country"
-            >
-              <Ionicons name="globe-outline" size={18} color="#6C5CE7" />
-              <Text style={[styles.dropdownText, !country && styles.dropdownPlaceholder]}>
-                {country || "Select country"}
-              </Text>
-              <Ionicons name="chevron-down" size={16} color="#64748B" />
-            </Pressable>
-          </View>
-
-          <View style={styles.fieldWrapper}>
-            <Text style={styles.fieldLabel}>Dominant Profile</Text>
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setShowDominantProfilePicker(true);
-              }}
-              style={styles.fieldInput}
-              testID="field-dominant-profile"
-            >
-              <Ionicons name="hand-left-outline" size={18} color="#6C5CE7" />
-              <Text style={[styles.dropdownText, !dominantProfile && styles.dropdownPlaceholder]}>
-                {dominantProfile || "Select dominant profile"}
-              </Text>
-              <Ionicons name="chevron-down" size={16} color="#64748B" />
-            </Pressable>
-          </View>
-
-          <View style={styles.fieldWrapper}>
-            <Text style={styles.fieldLabel}>Sport</Text>
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setShowSportsPicker(true);
-              }}
-              style={styles.fieldInput}
-              testID="field-sport"
-            >
-              <Ionicons name="tennisball-outline" size={18} color="#6C5CE7" />
-              <Text style={[styles.dropdownText, !sportsInterests && styles.dropdownPlaceholder]}>
-                {sportsInterests || "Select sport"}
-              </Text>
-              <Ionicons name="chevron-down" size={16} color="#64748B" />
-            </Pressable>
-            <Text style={styles.fieldHint}>All sports are visible. Only enabled sports can be selected.</Text>
-          </View>
-
-          {user ? (
-            <View style={styles.fieldWrapper}>
-              <Text style={styles.fieldLabel}>Role</Text>
-              <View style={styles.roleToggleRow}>
-                <View style={styles.roleInfo}>
-                  <Ionicons
-                    name={role === "admin" ? "shield-checkmark" : "person"}
-                    size={18}
-                    color={role === "admin" ? "#FBBF24" : "#6C5CE7"}
-                  />
-                  <Text style={styles.roleText}>
-                    {role === "admin" ? "Admin" : "Player"}
-                  </Text>
-                  <View style={[styles.roleBadge, role === "admin" ? styles.roleBadgeAdmin : styles.roleBadgePlayer]}>
-                    <Text style={[styles.roleBadgeText, role === "admin" ? styles.roleBadgeTextAdmin : styles.roleBadgeTextPlayer]}>
-                      {role === "admin" ? "ADMIN" : "PLAYER"}
-                    </Text>
-                  </View>
-                </View>
-                <Switch
-                  value={role === "admin"}
-                  onValueChange={handleRoleToggle}
-                  disabled={saving}
-                  trackColor={{ false: "#2A2A50", true: "#FBBF2440" }}
-                  thumbColor={role === "admin" ? "#FBBF24" : "#64748B"}
-                  testID="role-toggle"
-                />
-              </View>
+        <View style={styles.sectionGroup}>
+          <Text style={styles.sectionLabel}>Personal</Text>
+          <View style={styles.sectionCard}>
+            <View style={styles.fieldsContainer}>
+              <ProfileField
+                label="Full Name"
+                value={name}
+                onChangeText={setName}
+                icon="person-outline"
+                placeholder="Your name"
+              />
+              <ProfileField
+                label="Email"
+                value={user?.email || ""}
+                icon="mail-outline"
+                editable={false}
+              />
+              <ProfileField
+                label="Mobile Number"
+                value={phone}
+                onChangeText={setPhone}
+                icon="call-outline"
+                placeholder="+65 9123 4567"
+                keyboardType="phone-pad"
+              />
             </View>
-          ) : null}
-
+          </View>
         </View>
 
-        {showAdminControls && (
-          <Pressable
-            onPress={() => {
-              if (!canUseAdminApis) {
-                Alert.alert("Role update in progress", "Please wait a moment and try again.");
-                return;
-              }
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push("/profile/configure");
-            }}
-            style={({ pressed }) => [
-              styles.recalculateButton,
-              { transform: [{ scale: pressed ? 0.97 : 1 }] },
-            ]}
-            testID="profile-configure"
-          >
-            <Ionicons name="settings-outline" size={20} color="#6C5CE7" />
-            <Text style={styles.recalculateText}>Configure</Text>
-          </Pressable>
-        )}
+        <View style={styles.sectionGroup}>
+          <Text style={styles.sectionLabel}>Preferences</Text>
+          <View style={styles.sectionCard}>
+            <View style={styles.fieldsContainer}>
+              <View style={styles.fieldWrapper}>
+                <Text style={styles.fieldLabel}>Country</Text>
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setShowCountryPicker(true);
+                  }}
+                  style={styles.fieldInput}
+                  testID="field-country"
+                >
+                  <Ionicons name="globe-outline" size={18} color="#6C5CE7" />
+                  <Text style={[styles.dropdownText, !country && styles.dropdownPlaceholder]}>
+                    {country || "Select country"}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color="#64748B" />
+                </Pressable>
+              </View>
 
-        {!showAdminControls && (
-          <Pressable
-            onPress={() => {
-              router.push("/profile/score-metrics-selection");
-            }}
-            style={({ pressed }) => [
-              styles.recalculateButton,
-              { transform: [{ scale: pressed ? 0.97 : 1 }] },
-            ]}
-            testID="score-metrics-selection"
-          >
-            <Ionicons name="options-outline" size={20} color="#6C5CE7" />
-            <Text style={styles.recalculateText}>Select Score/Metrics</Text>
-          </Pressable>
-        )}
+              <View style={styles.fieldWrapper}>
+                <Text style={styles.fieldLabel}>Dominant Profile</Text>
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setShowDominantProfilePicker(true);
+                  }}
+                  style={styles.fieldInput}
+                  testID="field-dominant-profile"
+                >
+                  <Ionicons name="hand-left-outline" size={18} color="#6C5CE7" />
+                  <Text style={[styles.dropdownText, !dominantProfile && styles.dropdownPlaceholder]}>
+                    {dominantProfile || "Select dominant profile"}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color="#64748B" />
+                </Pressable>
+              </View>
 
-        {showClearHistory && (
-          <Pressable
-            onPress={handleClearHistory}
-            disabled={!canClearHistory}
-            style={({ pressed }) => [
-              styles.clearHistoryButton,
-              !canClearHistory && styles.clearHistoryButtonDisabled,
-              { transform: [{ scale: pressed ? 0.97 : 1 }] },
-            ]}
-            testID="clear-history"
-          >
-            <Ionicons
-              name="trash-outline"
-              size={20}
-              color={canClearHistory ? "#EF4444" : "#64748B"}
-            />
-            <Text
-              style={[
-                styles.clearHistoryText,
-                !canClearHistory && styles.clearHistoryTextDisabled,
-              ]}
-            >
-              Clear History
-            </Text>
-          </Pressable>
-        )}
+              <View style={styles.fieldWrapper}>
+                <Text style={styles.fieldLabel}>Sport</Text>
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setShowSportsPicker(true);
+                  }}
+                  style={styles.fieldInput}
+                  testID="field-sport"
+                >
+                  <Ionicons name="tennisball-outline" size={18} color="#6C5CE7" />
+                  <Text style={[styles.dropdownText, !sportsInterests && styles.dropdownPlaceholder]}>
+                    {sportsInterests || "Select sport"}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color="#64748B" />
+                </Pressable>
+                <Text style={styles.fieldHint}>All sports are visible. Only enabled sports can be selected.</Text>
+              </View>
+            </View>
+          </View>
+        </View>
 
-        <Pressable
-          onPress={saveProfile}
-          disabled={saving}
-          style={({ pressed }) => [
-            styles.saveButton,
-            { transform: [{ scale: pressed ? 0.97 : 1 }], opacity: saving ? 0.7 : 1 },
-          ]}
-          testID="save-profile"
-        >
-          <View style={styles.saveContent}>
-            {saving ? (
-              <ActivityIndicator size="small" color="#6C5CE7" />
+        {user ? (
+          <View style={styles.sectionGroup}>
+            <Text style={styles.sectionLabel}>Access</Text>
+            <View style={styles.sectionCard}>
+              <View style={styles.fieldWrapper}>
+                <Text style={styles.fieldLabel}>Role</Text>
+                <View style={styles.roleToggleRow}>
+                  <View style={styles.roleInfo}>
+                    <Ionicons
+                      name={role === "admin" ? "shield-checkmark" : "person"}
+                      size={18}
+                      color={role === "admin" ? "#FBBF24" : "#6C5CE7"}
+                    />
+                    <Text style={styles.roleText}>
+                      {role === "admin" ? "Admin" : "Player"}
+                    </Text>
+                    <View style={[styles.roleBadge, role === "admin" ? styles.roleBadgeAdmin : styles.roleBadgePlayer]}>
+                      <Text style={[styles.roleBadgeText, role === "admin" ? styles.roleBadgeTextAdmin : styles.roleBadgeTextPlayer]}>
+                        {role === "admin" ? "ADMIN" : "PLAYER"}
+                      </Text>
+                    </View>
+                  </View>
+                  <Switch
+                    value={role === "admin"}
+                    onValueChange={handleRoleToggle}
+                    disabled={saving}
+                    trackColor={{ false: "#2A2A50", true: "#FBBF2440" }}
+                    thumbColor={role === "admin" ? "#FBBF24" : "#64748B"}
+                    testID="role-toggle"
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.sectionGroup}>
+          <Text style={styles.sectionLabel}>{showAdminControls ? "Admin Tools" : "Tools"}</Text>
+          <View style={styles.sectionCards}>
+            {showAdminControls ? (
+              <Pressable
+                onPress={() => {
+                  if (!canUseAdminApis) {
+                    Alert.alert("Role update in progress", "Please wait a moment and try again.");
+                    return;
+                  }
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push({ pathname: "/profile/configure", params: profileRouteParams });
+                }}
+                style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+                testID="profile-configure"
+              >
+                <View style={styles.navCardIconWrap}>
+                  <Ionicons name="settings-outline" size={20} color="#6C5CE7" />
+                </View>
+                <View style={styles.navCardBody}>
+                  <Text style={styles.navCardTitle}>Configure</Text>
+                  <Text style={styles.navCardDescription}>Platform, pipeline, scoring, and dataset controls</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+              </Pressable>
             ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={20} color="#6C5CE7" />
-                <Text style={styles.saveText}>Save</Text>
-              </>
+              <Pressable
+                onPress={() => {
+                  router.push({ pathname: "/profile/score-metrics-selection", params: profileRouteParams });
+                }}
+                style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+                testID="score-metrics-selection"
+              >
+                <View style={styles.navCardIconWrap}>
+                  <Ionicons name="options-outline" size={20} color="#6C5CE7" />
+                </View>
+                <View style={styles.navCardBody}>
+                  <Text style={styles.navCardTitle}>Select Score/Metrics</Text>
+                  <Text style={styles.navCardDescription}>Customize score sections and visible metrics by sport</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+              </Pressable>
             )}
           </View>
-        </Pressable>
+        </View>
 
           <Pressable
             onPress={handleLogout}
@@ -832,13 +890,41 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
   },
+  statusPill: {
+    minWidth: 74,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  statusPillNeutral: {
+    backgroundColor: "#1A1A36",
+    borderColor: "#2A2A50",
+  },
+  statusPillSuccess: {
+    backgroundColor: "#052E1A",
+    borderColor: "#166534",
+  },
+  statusPillError: {
+    backgroundColor: "#3F1114",
+    borderColor: "#7F1D1D",
+  },
+  statusPillText: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
   scroll: {
     paddingHorizontal: 20,
     paddingTop: 24,
   },
   avatarSection: {
     alignItems: "center",
-    marginBottom: 32,
+    marginBottom: 20,
   },
   avatarContainer: {
     width: 100,
@@ -897,9 +983,29 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     color: "#6C5CE7",
   },
+  sectionGroup: {
+    gap: 10,
+    marginBottom: 22,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#94A3B8",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  sectionCard: {
+    backgroundColor: "#131328",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+    padding: 14,
+  },
+  sectionCards: {
+    gap: 12,
+  },
   fieldsContainer: {
     gap: 16,
-    marginBottom: 28,
   },
   fieldWrapper: {
     gap: 6,
@@ -908,7 +1014,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
     color: "#94A3B8",
-    textTransform: "uppercase" as const,
+    textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   fieldHint: {
@@ -943,7 +1049,7 @@ const styles = StyleSheet.create({
   },
   textMultiline: {
     minHeight: 60,
-    textAlignVertical: "top" as const,
+    textAlignVertical: "top",
   },
   dropdownText: {
     flex: 1,
@@ -1025,6 +1131,42 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
     marginTop: 6,
   },
+  navCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+    backgroundColor: "#131328",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  navCardIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0E1022",
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+  },
+  navCardBody: {
+    flex: 1,
+    gap: 3,
+  },
+  navCardTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
+  },
+  navCardDescription: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
   recalculateButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1069,28 +1211,6 @@ const styles = StyleSheet.create({
   },
   clearHistoryTextDisabled: {
     color: "#64748B",
-  },
-  saveButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#6C5CE740",
-    backgroundColor: "#6C5CE720",
-    borderRadius: 14,
-    marginBottom: 16,
-  },
-  saveContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 16,
-  },
-  saveText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: "#6C5CE7",
   },
   logoutButton: {
     flexDirection: "row",

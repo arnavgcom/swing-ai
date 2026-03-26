@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,7 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
@@ -19,14 +20,18 @@ import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/query-client";
 import {
   fetchAnalysisFpsSettings,
-  fetchModelEvaluationSettings,
+  fetchDriveMovementClassificationModelSettings,
+  fetchPoseLandmarkerSettings,
+  fetchSportsSettings,
   fetchVideoValidationSettings,
   fetchVideoStorageSettings,
   type AnalysisFpsStep,
+  type DriveMovementClassificationModelOptionResponse,
+  type SportAvailabilityResponse,
   type VideoValidationMode,
-  updateModelEvaluationSettings,
   updateVideoStorageSettings,
 } from "@/lib/api";
+import type { PoseLandmarkerModel } from "@shared/pose-landmarker";
 
 const LOW_IMPACT_FPS_OPTIONS: Array<{
   step: AnalysisFpsStep;
@@ -75,18 +80,54 @@ const VIDEO_VALIDATION_OPTIONS: Array<{
   },
 ];
 
+const POSE_LANDMARKER_OPTIONS: Array<{
+  model: PoseLandmarkerModel;
+  label: string;
+  description: string;
+}> = [
+  { model: "lite", label: "Lite", description: "Fastest default model" },
+  { model: "full", label: "Full", description: "Higher accuracy with more compute" },
+  { model: "heavy", label: "Heavy", description: "Highest accuracy and slowest runtime" },
+];
+
 const normalizeRole = (value?: string | null): "admin" | "player" => {
   return value?.trim().toLowerCase() === "admin" ? "admin" : "player";
 };
 
+const toSportPreferenceKey = (sportName?: string | null): string => {
+  return String(sportName || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+};
+
+const summarizeEnabledSports = (sports: SportAvailabilityResponse[]): string => {
+  const enabledSports = sports.filter((sport) => sport.enabled).map((sport) => sport.name.trim()).filter(Boolean);
+  if (enabledSports.length === 0) {
+    return "No sports enabled";
+  }
+
+  const preview = enabledSports.slice(0, 3).join(", ");
+  const remaining = enabledSports.length - 3;
+  return remaining > 0
+    ? `${enabledSports.length} enabled: ${preview} +${remaining} more`
+    : `${enabledSports.length} enabled: ${preview}`;
+};
+
 export default function ConfigureScreen() {
   const insets = useSafeAreaInsets();
+  const { returnTo: rawReturnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const { user } = useAuth();
-  const [modelEvaluationMode, setModelEvaluationMode] = useState(false);
-  const [modelEvalLoading, setModelEvalLoading] = useState(false);
+  const returnTo = Array.isArray(rawReturnTo) ? rawReturnTo[0] : rawReturnTo;
+  const childRouteParams = returnTo ? { returnTo } : undefined;
   const [videoValidationMode, setVideoValidationMode] = useState<VideoValidationMode>("disabled");
   const [lowImpactFpsStep, setLowImpactFpsStep] = useState<AnalysisFpsStep>("step2");
   const [highImpactFpsStep, setHighImpactFpsStep] = useState<AnalysisFpsStep>("step1");
+  const [poseLandmarkerModel, setPoseLandmarkerModel] = useState<PoseLandmarkerModel>("lite");
+  const [driveMovementClassificationModelOptions, setDriveMovementClassificationModelOptions] = useState<DriveMovementClassificationModelOptionResponse[]>([]);
+  const [selectedClassificationModelKey, setSelectedClassificationModelKey] = useState<string>("tennis-active");
+  const [classificationModelLoading, setClassificationModelLoading] = useState(false);
+  const [sports, setSports] = useState<SportAvailabilityResponse[]>([]);
   const [videoStorageMode, setVideoStorageMode] = useState<"filesystem" | "r2">("filesystem");
   const [videoStorageLoading, setVideoStorageLoading] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
@@ -99,18 +140,69 @@ export default function ConfigureScreen() {
   const canUseAdminApis = normalizeRole(user?.role) === "admin";
 
   const refreshAdminSettings = React.useCallback(async () => {
-    const [settings, storageSettings, validationSettings, fpsSettings] = await Promise.all([
-      fetchModelEvaluationSettings(),
+    const [storageSettings, validationSettings, fpsSettings, poseSettings, sportsSettings, classificationModelSettings] = await Promise.all([
       fetchVideoStorageSettings(),
       fetchVideoValidationSettings(),
       fetchAnalysisFpsSettings(),
+      fetchPoseLandmarkerSettings(),
+      fetchSportsSettings(),
+      fetchDriveMovementClassificationModelSettings(),
     ]);
-    setModelEvaluationMode(Boolean(settings.enabled));
     setVideoStorageMode(storageSettings.mode);
     setVideoValidationMode(validationSettings.mode);
     setLowImpactFpsStep(fpsSettings.lowImpactStep);
     setHighImpactFpsStep(fpsSettings.highImpactStep);
+    setPoseLandmarkerModel(poseSettings.model);
+    setSports(sportsSettings.sports || []);
+    setDriveMovementClassificationModelOptions(classificationModelSettings.options || []);
+    setSelectedClassificationModelKey(classificationModelSettings.selectedModelKey || "tennis-active");
   }, []);
+
+  const sportsSummary = React.useMemo(() => summarizeEnabledSports(sports), [sports]);
+
+  const scoreMetricSummary = React.useMemo(() => {
+    const sportLabel = String(user?.sportsInterests || "").trim();
+    const sportKey = toSportPreferenceKey(sportLabel);
+    const scoreMap =
+      user?.selectedScoreSectionsBySport && typeof user.selectedScoreSectionsBySport === "object"
+        ? user.selectedScoreSectionsBySport
+        : {};
+    const metricMap =
+      user?.selectedMetricKeysBySport && typeof user.selectedMetricKeysBySport === "object"
+        ? user.selectedMetricKeysBySport
+        : {};
+
+    const scopedSections = sportKey ? scoreMap[sportKey] : null;
+    const scopedMetrics = sportKey ? metricMap[sportKey] : null;
+    const fallbackSections = Array.isArray(user?.selectedScoreSections) ? user.selectedScoreSections : [];
+    const fallbackMetrics = Array.isArray(user?.selectedMetricKeys) ? user.selectedMetricKeys : [];
+    const selectedSections = Array.isArray(scopedSections) && scopedSections.length > 0 ? scopedSections : fallbackSections;
+    const selectedMetrics = Array.isArray(scopedMetrics) && scopedMetrics.length > 0 ? scopedMetrics : fallbackMetrics;
+
+    if (selectedSections.length === 0 && selectedMetrics.length === 0) {
+      return "No score or metric preferences saved yet";
+    }
+
+    const prefix = sportLabel ? `${sportLabel}: ` : "";
+    return `${prefix}${selectedSections.length} sections · ${selectedMetrics.length} metrics selected`;
+  }, [user]);
+
+  const selectedClassificationModel = React.useMemo(() => {
+    return driveMovementClassificationModelOptions.find((option) => option.key === selectedClassificationModelKey)
+      || driveMovementClassificationModelOptions[0]
+      || {
+        key: "tennis-active",
+        label: "Current production model",
+        description: "Uses the live tennis classifier",
+        badge: "Active",
+      };
+  }, [driveMovementClassificationModelOptions, selectedClassificationModelKey]);
+
+  const classificationModelSummary = selectedClassificationModel.badge
+    ? `Current model: ${selectedClassificationModel.label} (${selectedClassificationModel.badge.toLowerCase()})`
+    : `Current model: ${selectedClassificationModel.label}`;
+
+  const classificationModelCardBadge = selectedClassificationModel.badge || "Selected";
 
   useEffect(() => {
     if (!canUseAdminApis) {
@@ -149,26 +241,6 @@ export default function ConfigureScreen() {
     };
   }, []);
 
-  const handleModelEvaluationToggle = async (enabled: boolean) => {
-    if (!canUseAdminApis) return;
-    setModelEvalLoading(true);
-    try {
-      await updateModelEvaluationSettings(enabled);
-      setModelEvaluationMode(enabled);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["model-evaluation-settings"] }),
-        queryClient.invalidateQueries({ queryKey: ["scoring-model-dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["discrepancy-summary"] }),
-        queryClient.invalidateQueries({ queryKey: ["scoring-model-registry"] }),
-      ]);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      Alert.alert("Error", "Failed to update Model Evaluation Mode");
-    } finally {
-      setModelEvalLoading(false);
-    }
-  };
-
   const handleVideoStorageToggle = async (enabled: boolean) => {
     if (!canUseAdminApis) return;
     setVideoStorageLoading(true);
@@ -185,41 +257,83 @@ export default function ConfigureScreen() {
   };
 
   const handleRecalculateMetrics = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setRecalculating(true);
-    try {
-      const res = await apiRequest("POST", "/api/analyses/recalculate");
-      const data = await res.json();
-      const queued = Number(data?.queuedAnalyses ?? 0);
+    const runRecalculation = async () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setRecalculating(true);
+      try {
+        const res = await apiRequest("POST", "/api/analyses/recalculate");
+        const data = await res.json();
+        const queued = Number(data?.queuedAnalyses ?? 0);
 
-      if (recalcToastTimerRef.current) {
-        clearTimeout(recalcToastTimerRef.current);
+        if (recalcToastTimerRef.current) {
+          clearTimeout(recalcToastTimerRef.current);
+        }
+
+        setRecalcToast({
+          visible: true,
+          tone: "success",
+          message: `Started in background for ${queued} videos`,
+        });
+
+        await queryClient.invalidateQueries({ queryKey: ["analyses-summary"] });
+        await queryClient.refetchQueries({ queryKey: ["analyses-summary"] });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+        recalcToastTimerRef.current = setTimeout(() => {
+          setRecalcToast((prev) => ({ ...prev, visible: false }));
+        }, 1800);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "Failed to recalc";
+        Alert.alert("Error", reason);
+        setRecalcToast({
+          visible: true,
+          tone: "error",
+          message: reason,
+        });
+      } finally {
+        setRecalculating(false);
       }
+    };
 
-      setRecalcToast({
-        visible: true,
-        tone: "success",
-        message: `Recalc of ${queued} videos started`,
-      });
+    if (Platform.OS === "web") {
+      const confirmed = typeof globalThis.confirm === "function"
+        ? globalThis.confirm(
+            "This processing can take time and will run in the background. Do you want to continue?",
+          )
+        : true;
 
-      await queryClient.invalidateQueries({ queryKey: ["analyses-summary"] });
-      await queryClient.refetchQueries({ queryKey: ["analyses-summary"] });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      recalcToastTimerRef.current = setTimeout(() => {
-        setRecalcToast((prev) => ({ ...prev, visible: false }));
-      }, 1800);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "Failed to recalc";
-      Alert.alert("Error", reason);
-      setRecalcToast({
-        visible: true,
-        tone: "error",
-        message: reason,
-      });
-    } finally {
-      setRecalculating(false);
+      if (confirmed) {
+        await runRecalculation();
+      }
+      return;
     }
+
+    Alert.alert(
+      "Recalculate Score/Metrics?",
+      "This processing can take time and will run in the background. Do you want to continue?",
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes",
+          onPress: () => {
+            void runRecalculation();
+          },
+        },
+      ],
+    );
+  };
+
+  const handleBack = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (typeof router.canGoBack === "function" && router.canGoBack()) {
+      router.back();
+      return;
+    }
+    if (returnTo && returnTo !== "/profile") {
+      router.replace(returnTo as any);
+      return;
+    }
+    router.replace("/profile");
   };
 
   return (
@@ -228,10 +342,7 @@ export default function ConfigureScreen() {
 
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}> 
         <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.back();
-          }}
+          onPress={handleBack}
           style={styles.backButton}
         >
           <Ionicons name="chevron-back" size={24} color="#F8FAFC" />
@@ -241,156 +352,242 @@ export default function ConfigureScreen() {
       </View>
 
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}>
-        <View style={styles.fieldWrapper}>
-          <Text style={styles.fieldLabel}>Video Storage Mode</Text>
-          <View style={styles.toggleRow}>
-            <View style={styles.toggleInfoInline}>
-              <Ionicons
-                name={videoStorageMode === "r2" ? "cloud" : "folder-open"}
-                size={18}
-                color={videoStorageMode === "r2" ? "#38BDF8" : "#6C5CE7"}
+        <View style={styles.sectionGroup}>
+          <Text style={styles.sectionLabel}>Platform</Text>
+          <View style={styles.sectionCards}>
+            <View style={styles.navCard}>
+              <View style={styles.navCardIconWrap}>
+                <Ionicons
+                  name={videoStorageMode === "r2" ? "cloud-outline" : "folder-open-outline"}
+                  size={20}
+                  color={videoStorageMode === "r2" ? "#38BDF8" : "#6C5CE7"}
+                />
+              </View>
+              <View style={styles.navCardBody}>
+                <Text style={styles.navCardTitle}>Video Storage Mode</Text>
+                <Text style={styles.navCardDescription}>
+                  {videoStorageMode === "r2"
+                    ? "Store uploaded videos in Cloudflare R2"
+                    : "Store uploaded videos on the local filesystem"}
+                </Text>
+              </View>
+              <View style={styles.storageModeControl}>
+                <Text style={styles.storageModeValue}>
+                  {videoStorageMode === "r2" ? "R2" : "Filesystem"}
+                </Text>
+              </View>
+              <Switch
+                value={videoStorageMode === "r2"}
+                disabled={videoStorageLoading}
+                onValueChange={(value) => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  handleVideoStorageToggle(value);
+                }}
+                trackColor={{ false: "#2A2A50", true: "#38BDF840" }}
+                thumbColor={videoStorageMode === "r2" ? "#38BDF8" : "#64748B"}
               />
-              <Text style={styles.toggleText}>
-                {videoStorageMode === "r2" ? "R2 on Cloud" : "Filesystem"}
-              </Text>
             </View>
-            <Switch
-              value={videoStorageMode === "r2"}
-              disabled={videoStorageLoading}
-              onValueChange={(value) => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                handleVideoStorageToggle(value);
+
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({ pathname: "/profile/sports-settings", params: childRouteParams });
               }}
-              trackColor={{ false: "#2A2A50", true: "#38BDF840" }}
-              thumbColor={videoStorageMode === "r2" ? "#38BDF8" : "#64748B"}
-            />
+              style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+            >
+              <View style={styles.navCardIconWrap}>
+                <Ionicons name="tennisball-outline" size={20} color="#F59E0B" />
+              </View>
+              <View style={styles.navCardBody}>
+                <Text style={styles.navCardTitle}>Sports</Text>
+                <Text style={styles.navCardDescription}>
+                  {sportsSummary}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+            </Pressable>
           </View>
         </View>
 
-        <View style={styles.fieldWrapper}>
-          <Text style={styles.fieldLabel}>Model Evaluation Mode</Text>
-          <View style={styles.toggleRow}>
-            <View style={styles.toggleInfoInline}>
-              <Ionicons
-                name={modelEvaluationMode ? "analytics" : "analytics-outline"}
-                size={18}
-                color={modelEvaluationMode ? "#34D399" : "#6C5CE7"}
-              />
-              <Text style={styles.toggleText}>
-                {modelEvaluationMode ? "ON - Evaluation Dataset Only" : "OFF - All Videos"}
-              </Text>
-            </View>
-            <Switch
-              value={modelEvaluationMode}
-              disabled={modelEvalLoading}
-              onValueChange={(value) => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                handleModelEvaluationToggle(value);
+        <View style={styles.sectionGroup}>
+          <Text style={styles.sectionLabel}>Analysis Pipeline</Text>
+          <View style={styles.sectionCards}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({ pathname: "/profile/validation-settings", params: childRouteParams });
               }}
-              trackColor={{ false: "#2A2A50", true: "#34D39940" }}
-              thumbColor={modelEvaluationMode ? "#34D399" : "#64748B"}
-            />
+              style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+            >
+              <View style={styles.navCardIconWrap}>
+                <Ionicons name="shield-checkmark-outline" size={20} color="#34D399" />
+              </View>
+              <View style={styles.navCardBody}>
+                <Text style={styles.navCardTitle}>Video Validation</Text>
+                <Text style={styles.navCardDescription}>
+                  Current mode: {VIDEO_VALIDATION_OPTIONS.find((option) => option.mode === videoValidationMode)?.label || "Disabled"}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({ pathname: "/profile/fps-settings", params: childRouteParams });
+              }}
+              style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+            >
+              <View style={styles.navCardIconWrap}>
+                <Ionicons name="speedometer-outline" size={20} color="#38BDF8" />
+              </View>
+              <View style={styles.navCardBody}>
+                <Text style={styles.navCardTitle}>Analysis FPS</Text>
+                <Text style={styles.navCardDescription}>
+                  Low: {LOW_IMPACT_FPS_OPTIONS.find((option) => option.step === lowImpactFpsStep)?.label || "Step 2"} | High: {HIGH_IMPACT_FPS_OPTIONS.find((option) => option.step === highImpactFpsStep)?.label || "Step 1"}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({ pathname: "/profile/pose-landmarker-settings", params: childRouteParams });
+              }}
+              style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+            >
+              <View style={styles.navCardIconWrap}>
+                <Ionicons name="body-outline" size={20} color="#F97316" />
+              </View>
+              <View style={styles.navCardBody}>
+                <Text style={styles.navCardTitle}>Pose Landmarker Model</Text>
+                <Text style={styles.navCardDescription}>
+                  Current model: {POSE_LANDMARKER_OPTIONS.find((option) => option.model === poseLandmarkerModel)?.label || "Lite"}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({ pathname: "/profile/drive-movement-classification-model-settings", params: childRouteParams });
+              }}
+              style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+            >
+              <View style={styles.navCardIconWrap}>
+                {classificationModelLoading ? (
+                  <ActivityIndicator size="small" color="#A78BFA" />
+                ) : (
+                  <Ionicons name="git-branch-outline" size={20} color="#A78BFA" />
+                )}
+              </View>
+              <View style={styles.navCardBody}>
+                <Text style={styles.navCardTitle}>Drive Movement Classification Model</Text>
+                <Text style={styles.navCardDescription}>
+                  {classificationModelSummary}
+                </Text>
+              </View>
+              <View style={styles.inlineStatusBadge}>
+                <Text style={styles.inlineStatusBadgeText}>{classificationModelCardBadge}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+            </Pressable>
           </View>
         </View>
 
-        <View style={styles.fieldWrapper}>
-          <Text style={styles.fieldLabel}>Validation</Text>
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push("/profile/validation-settings");
-            }}
-            style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
-          >
-            <View style={styles.navCardIconWrap}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#34D399" />
-            </View>
-            <View style={styles.navCardBody}>
-              <Text style={styles.navCardTitle}>Video Validation</Text>
-              <Text style={styles.navCardDescription}>
-                Current mode: {VIDEO_VALIDATION_OPTIONS.find((option) => option.mode === videoValidationMode)?.label || "Disabled"}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
-          </Pressable>
+        <View style={styles.sectionGroup}>
+          <Text style={styles.sectionLabel}>Scoring</Text>
+          <View style={styles.sectionCards}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({ pathname: "/profile/score-metrics-selection", params: childRouteParams });
+              }}
+              style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+            >
+              <View style={styles.navCardIconWrap}>
+                <Ionicons name="options-outline" size={20} color="#A78BFA" />
+              </View>
+              <View style={styles.navCardBody}>
+                <Text style={styles.navCardTitle}>Select Score/Metrics</Text>
+                <Text style={styles.navCardDescription}>
+                  {scoreMetricSummary}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+            </Pressable>
+
+            <Pressable
+              onPress={handleRecalculateMetrics}
+              disabled={recalculating}
+              style={({ pressed }) => [
+                styles.navCard,
+                recalculating && styles.navCardDisabled,
+                { transform: [{ scale: pressed ? 0.99 : 1 }] },
+              ]}
+            >
+              <View style={styles.navCardIconWrap}>
+                {recalculating ? (
+                  <ActivityIndicator size="small" color="#38BDF8" />
+                ) : (
+                  <Ionicons name="refresh-outline" size={20} color="#38BDF8" />
+                )}
+              </View>
+              <View style={styles.navCardBody}>
+                <Text style={styles.navCardTitle}>Recalc Score/Metrics</Text>
+                <Text style={styles.navCardDescription}>
+                  Re-run scoring and metrics for eligible analyses
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({ pathname: "/profile/dataset-insights", params: childRouteParams });
+              }}
+              style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+            >
+              <View style={styles.navCardIconWrap}>
+                <Ionicons name="analytics-outline" size={20} color="#22C55E" />
+              </View>
+              <View style={styles.navCardBody}>
+                <Text style={styles.navCardTitle}>Dataset Insights</Text>
+                <Text style={styles.navCardDescription}>
+                  Coverage mix, practice vs match-play, and active model quality
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+            </Pressable>
+          </View>
         </View>
 
-        <View style={styles.fieldWrapper}>
-          <Text style={styles.fieldLabel}>FPS</Text>
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push("/profile/fps-settings");
-            }}
-            style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
-          >
-            <View style={styles.navCardIconWrap}>
-              <Ionicons name="speedometer-outline" size={20} color="#38BDF8" />
-            </View>
-            <View style={styles.navCardBody}>
-              <Text style={styles.navCardTitle}>Analysis FPS</Text>
-              <Text style={styles.navCardDescription}>
-                Low: {LOW_IMPACT_FPS_OPTIONS.find((option) => option.step === lowImpactFpsStep)?.label || "Step 2"} | High: {HIGH_IMPACT_FPS_OPTIONS.find((option) => option.step === highImpactFpsStep)?.label || "Step 1"}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
-          </Pressable>
+        <View style={styles.sectionGroup}>
+          <Text style={styles.sectionLabel}>Players</Text>
+          <View style={styles.sectionCards}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({ pathname: "/profile/add-player", params: childRouteParams });
+              }}
+              style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+            >
+              <View style={styles.navCardIconWrap}>
+                <Ionicons name="person-add-outline" size={20} color="#F59E0B" />
+              </View>
+              <View style={styles.navCardBody}>
+                <Text style={styles.navCardTitle}>Add Player</Text>
+                <Text style={styles.navCardDescription}>
+                  Create a new player profile for uploads and analysis
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+            </Pressable>
+          </View>
         </View>
-
-        <View style={styles.fieldWrapper}>
-          <Text style={styles.fieldLabel}>Sports</Text>
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push("/profile/sports-settings");
-            }}
-            style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
-          >
-            <View style={styles.navCardIconWrap}>
-              <Ionicons name="tennisball-outline" size={20} color="#F59E0B" />
-            </View>
-            <View style={styles.navCardBody}>
-              <Text style={styles.navCardTitle}>Sports</Text>
-              <Text style={styles.navCardDescription}>
-                Enable or disable sports available in the app
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
-          </Pressable>
-        </View>
-
-        <Pressable
-          onPress={() => router.push("/profile/score-metrics-selection")}
-          style={({ pressed }) => [styles.actionButton, { transform: [{ scale: pressed ? 0.97 : 1 }] }]}
-        >
-          <Ionicons name="options-outline" size={20} color="#6C5CE7" />
-          <Text style={styles.actionText}>Select Score/Metrics</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={handleRecalculateMetrics}
-          disabled={recalculating}
-          style={({ pressed }) => [
-            styles.actionButton,
-            recalculating && styles.actionButtonDisabled,
-            { transform: [{ scale: pressed ? 0.97 : 1 }] },
-          ]}
-        >
-          {recalculating ? (
-            <ActivityIndicator size="small" color="#6C5CE7" />
-          ) : (
-            <Ionicons name="refresh" size={20} color="#6C5CE7" />
-          )}
-          <Text style={styles.actionText}>Recalc Score/Metrics</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => router.push("/profile/add-player")}
-          style={({ pressed }) => [styles.actionButton, { transform: [{ scale: pressed ? 0.97 : 1 }] }]}
-        >
-          <Ionicons name="person-add" size={20} color="#6C5CE7" />
-          <Text style={styles.actionText}>Add Player</Text>
-        </Pressable>
       </ScrollView>
 
       {recalcToast.visible ? (
@@ -437,37 +634,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 24,
   },
-  fieldWrapper: {
-    gap: 6,
-    marginBottom: 16,
+  sectionGroup: {
+    gap: 10,
+    marginBottom: 22,
   },
-  fieldLabel: {
+  sectionLabel: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
     color: "#94A3B8",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  toggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#131328",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#2A2A50",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  toggleInfoInline: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  toggleText: {
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
-    color: "#F8FAFC",
+  sectionCards: {
+    gap: 12,
   },
   navCard: {
     flexDirection: "row",
@@ -493,6 +672,35 @@ const styles = StyleSheet.create({
   navCardBody: {
     flex: 1,
     gap: 3,
+  },
+  navCardDisabled: {
+    opacity: 0.7,
+  },
+  inlineStatusBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#A78BFA55",
+    backgroundColor: "#A78BFA22",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  inlineStatusBadgeText: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    color: "#C4B5FD",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  storageModeControl: {
+    alignItems: "flex-end",
+    gap: 8,
+  },
+  storageModeValue: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#94A3B8",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   navCardTitle: {
     fontSize: 15,
@@ -564,26 +772,6 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: "#94A3B8",
   },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#6C5CE740",
-    backgroundColor: "#6C5CE720",
-    marginBottom: 12,
-  },
-  actionButtonDisabled: {
-    opacity: 0.7,
-  },
-  actionText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: "#6C5CE7",
-  },
   toastContainer: {
     position: "absolute",
     left: 0,
@@ -613,5 +801,196 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
     color: "#E2E8F0",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#131328",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 12,
+    paddingHorizontal: 12,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#4A4A6A",
+    alignSelf: "center",
+    marginBottom: 12,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2A2A50",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+  },
+  modalDoneButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#6C5CE720",
+  },
+  modalDoneText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#6C5CE7",
+  },
+  modalIntroText: {
+    paddingHorizontal: 8,
+    paddingTop: 14,
+    paddingBottom: 10,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  modalOptionsList: {
+    gap: 8,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
+  },
+  modalCreateSection: {
+    gap: 10,
+    marginTop: 12,
+    marginBottom: 6,
+    borderTopWidth: 1,
+    borderTopColor: "#2A2A50",
+    paddingTop: 14,
+    paddingHorizontal: 4,
+  },
+  modalCreateTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+  },
+  modalCreateHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  modalCreateFields: {
+    gap: 10,
+  },
+  modalFieldGroup: {
+    gap: 6,
+  },
+  modalFieldLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    color: "#94A3B8",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  modalTextInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+    backgroundColor: "#0E1022",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: "#F8FAFC",
+  },
+  modalAddButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#A78BFA55",
+    backgroundColor: "#A78BFA22",
+    paddingVertical: 12,
+  },
+  modalAddButtonText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#C4B5FD",
+  },
+  modalItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+    backgroundColor: "#0E1022",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  modalItemSelected: {
+    borderColor: "#A78BFA66",
+    backgroundColor: "#1B1331",
+  },
+  modalItemDisabled: {
+    opacity: 0.72,
+  },
+  modalItemMeta: {
+    flex: 1,
+    gap: 4,
+  },
+  modalItemActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  modalItemTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  modalRemoveButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#3F1114",
+    borderWidth: 1,
+    borderColor: "#7F1D1D",
+  },
+  modalItemText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#E2E8F0",
+  },
+  modalItemTextSelected: {
+    color: "#F5F3FF",
+  },
+  modalItemHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  modalBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#A78BFA55",
+    backgroundColor: "#A78BFA22",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  modalBadgeText: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    color: "#C4B5FD",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
 });

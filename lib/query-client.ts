@@ -46,9 +46,13 @@ export function getApiUrlCandidates(): string[] {
   if (__DEV__) {
     const constantsHost = resolveHostFromExpoConstants();
     return dedupeUrls([
+      constantsHost ? `http://${constantsHost}:5001/` : "",
       constantsHost ? `http://${constantsHost}:5000/` : "",
+      "http://10.0.2.2:5001/",
       "http://10.0.2.2:5000/",
+      "http://localhost:5001/",
       "http://localhost:5000/",
+      "http://127.0.0.1:5001/",
       "http://127.0.0.1:5000/",
     ]);
   }

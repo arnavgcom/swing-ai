@@ -52,6 +52,23 @@
 				"scripts/inspect_shot_labels.py"
 			],
 			"isBackground": false
+		},
+		{
+			"label": "build-server-dist",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"server:build"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "restart-swing-ai-server-5001",
+			"type": "shell",
+			"command": "PORT=5001 DATABASE_URL='postgres://swing_ai:swing_ai@localhost:5432/swing_ai_local' EXPO_PUBLIC_API_URL='http://192.168.0.166:5001' npm run server:dev",
+			"isBackground": true
 		}
 	]
 }

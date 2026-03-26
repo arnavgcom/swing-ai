@@ -4,16 +4,64 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
+// server/env.ts
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+function stripWrappingQuotes(value) {
+  if (value.startsWith('"') && value.endsWith('"') || value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+  const content = fs.readFileSync(filePath, "utf8");
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    const normalized = line.startsWith("export ") ? line.slice(7).trim() : line;
+    const equalsIndex = normalized.indexOf("=");
+    if (equalsIndex <= 0) {
+      continue;
+    }
+    const key = normalized.slice(0, equalsIndex).trim();
+    const existingValue = process.env[key];
+    if (!key || existingValue != null && String(existingValue).trim() !== "") {
+      continue;
+    }
+    const rawValue = normalized.slice(equalsIndex + 1).trim();
+    process.env[key] = stripWrappingQuotes(rawValue);
+  }
+}
+var serverDir = path.dirname(fileURLToPath(import.meta.url));
+var PROJECT_ROOT = path.resolve(serverDir, "..");
+function resolveProjectPath(...segments) {
+  return path.resolve(PROJECT_ROOT, ...segments);
+}
+function ensureEnvLoaded() {
+  const candidateRoots = Array.from(/* @__PURE__ */ new Set([process.cwd(), PROJECT_ROOT]));
+  for (const root of candidateRoots) {
+    loadEnvFile(path.resolve(root, ".env"));
+    loadEnvFile(path.resolve(root, ".env.local"));
+  }
+}
+ensureEnvLoaded();
+
 // server/index.ts
 import express from "express";
 
 // server/routes.ts
 import { createServer } from "node:http";
-import { execFile as execFile2 } from "child_process";
+import { execFile as execFile2, spawn as spawn2 } from "child_process";
 import { randomUUID as randomUUID3 } from "crypto";
 import multer2 from "multer";
-import path5 from "path";
-import fs5 from "fs";
+import path4 from "path";
+import fs7 from "fs";
 
 // server/db.ts
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -32,12 +80,16 @@ __export(schema_exports, {
   insertUserSchema: () => insertUserSchema,
   loginSchema: () => loginSchema,
   metrics: () => metrics,
+  modelRegistryDatasetItems: () => modelRegistryDatasetItems,
+  modelRegistryDatasets: () => modelRegistryDatasets,
+  modelRegistryVersions: () => modelRegistryVersions,
   registerSchema: () => registerSchema,
-  scoringModelRegistryDatasetMetrics: () => scoringModelRegistryDatasetMetrics,
-  scoringModelRegistryEntries: () => scoringModelRegistryEntries,
   sportCategoryMetricRanges: () => sportCategoryMetricRanges,
   sportMovements: () => sportMovements,
   sports: () => sports,
+  tennisModelTrainingRuns: () => tennisModelTrainingRuns,
+  tennisTrainingDatasetRows: () => tennisTrainingDatasetRows,
+  tennisTrainingDatasets: () => tennisTrainingDatasets,
   users: () => users
 });
 import { sql } from "drizzle-orm";
@@ -46,6 +98,7 @@ import {
   text,
   varchar,
   real,
+  integer,
   timestamp,
   boolean,
   jsonb
@@ -68,7 +121,7 @@ var users = pgTable("users", {
   selectedMetricKeysBySport: jsonb("selected_metric_keys_by_sport").$type().default(sql`'{}'::jsonb`),
   sportsInterests: text("sports_interests"),
   bio: text("bio"),
-  role: text("role").default("player").notNull(),
+  role: text("role").default("admin").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   createdByUserId: varchar("created_by_user_id"),
@@ -80,6 +133,7 @@ var sports = pgTable("sports", {
   icon: text("icon").notNull(),
   color: text("color").notNull(),
   description: text("description").notNull(),
+  enabled: boolean("enabled").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   sortOrder: real("sort_order").default(0).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -104,6 +158,8 @@ var analyses = pgTable("analyses", {
   userId: varchar("user_id").references(() => users.id),
   sportId: varchar("sport_id").references(() => sports.id),
   movementId: varchar("movement_id").references(() => sportMovements.id),
+  requestedSessionType: text("requested_session_type"),
+  requestedFocusKey: text("requested_focus_key"),
   videoFilename: text("video_filename").notNull(),
   sourceFilename: text("source_filename"),
   evaluationVideoId: text("evaluation_video_id"),
@@ -215,28 +271,96 @@ var appSettings = pgTable("app_settings", {
   createdByUserId: varchar("created_by_user_id").references(() => users.id),
   updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
 });
-var scoringModelRegistryEntries = pgTable("scoring_model_registry_entries", {
+var modelRegistryVersions = pgTable("model_registry_versions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  modelVersion: varchar("model_version").notNull(),
-  modelVersionDescription: text("model_version_description").notNull(),
-  movementType: text("movement_type").notNull(),
-  movementDetectionAccuracyPct: real("movement_detection_accuracy_pct").notNull(),
-  scoringAccuracyPct: real("scoring_accuracy_pct").notNull(),
-  datasetsUsed: jsonb("datasets_used").$type().notNull(),
-  manifestModelVersion: varchar("manifest_model_version").notNull().default("0.1"),
-  manifestDatasets: jsonb("manifest_datasets").$type().notNull().default(sql`'[]'::jsonb`),
-  createdByUserId: varchar("created_by_user_id").references(() => users.id),
-  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
+  modelVersion: varchar("model_version").notNull().unique(),
+  description: text("description").notNull().default(""),
+  status: varchar("status").notNull().default("draft"),
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
+  activatedByUserId: varchar("activated_by_user_id").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
 });
-var scoringModelRegistryDatasetMetrics = pgTable("scoring_model_registry_dataset_metrics", {
+var modelRegistryDatasets = pgTable("model_registry_datasets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  registryEntryId: varchar("registry_entry_id").notNull().references(() => scoringModelRegistryEntries.id),
+  name: text("name").notNull().unique(),
+  description: text("description").notNull().default(""),
+  source: text("source").notNull().default("manual-annotation"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
+});
+var modelRegistryDatasetItems = pgTable("model_registry_dataset_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  datasetId: varchar("dataset_id").notNull().references(() => modelRegistryDatasets.id),
+  analysisId: varchar("analysis_id").notNull().references(() => analyses.id),
+  annotatorUserId: varchar("annotator_user_id").references(() => users.id),
+  expectedMovement: text("expected_movement").notNull(),
+  evaluationVideoId: text("evaluation_video_id"),
+  sourceFilename: text("source_filename"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
+});
+var tennisTrainingDatasets = pgTable("tennis_training_datasets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sportName: text("sport_name").notNull().default("tennis"),
   datasetName: text("dataset_name").notNull(),
-  movementType: text("movement_type").notNull(),
-  movementDetectionAccuracyPct: real("movement_detection_accuracy_pct").notNull(),
-  scoringAccuracyPct: real("scoring_accuracy_pct").notNull(),
+  source: text("source").notNull().default("manual-annotation"),
+  analysisCount: integer("analysis_count").notNull().default(0),
+  rowCount: integer("row_count").notNull().default(0),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
+});
+var tennisTrainingDatasetRows = pgTable("tennis_training_dataset_rows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  datasetId: varchar("dataset_id").notNull().references(() => tennisTrainingDatasets.id),
+  analysisId: varchar("analysis_id").notNull().references(() => analyses.id),
+  userId: varchar("user_id").references(() => users.id),
+  videoFilename: text("video_filename").notNull(),
+  shotIndex: integer("shot_index").notNull(),
+  groupKey: text("group_key").notNull(),
+  label: text("label").notNull(),
+  heuristicLabel: text("heuristic_label"),
+  heuristicConfidence: real("heuristic_confidence"),
+  heuristicReasons: jsonb("heuristic_reasons").$type().notNull().default(sql`'[]'::jsonb`),
+  featureValues: jsonb("feature_values").$type().notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id)
+});
+var tennisModelTrainingRuns = pgTable("tennis_model_training_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().unique(),
+  sportName: text("sport_name").notNull().default("tennis"),
+  status: varchar("status").notNull(),
+  datasetId: varchar("dataset_id").references(() => tennisTrainingDatasets.id),
+  eligibleAnalysisCount: integer("eligible_analysis_count").notNull().default(0),
+  eligibleShotCount: integer("eligible_shot_count").notNull().default(0),
+  exportRows: integer("export_rows"),
+  trainRows: integer("train_rows"),
+  testRows: integer("test_rows"),
+  macroF1: real("macro_f1"),
+  modelOutputPath: text("model_output_path"),
+  metadata: jsonb("metadata").$type(),
+  report: jsonb("report").$type(),
+  requestedAt: timestamp("requested_at", { withTimezone: true }).defaultNow().notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  requestedByUserId: varchar("requested_by_user_id").references(() => users.id),
+  savedModelVersion: varchar("saved_model_version"),
+  savedModelArtifactPath: text("saved_model_artifact_path"),
+  savedAt: timestamp("saved_at", { withTimezone: true }),
+  versionDescription: text("version_description"),
+  error: text("error"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   createdByUserId: varchar("created_by_user_id").references(() => users.id),
@@ -441,7 +565,7 @@ function buildUpdateAuditFields(actorUserId) {
 
 // server/storage.ts
 var DatabaseStorage = class {
-  async createAnalysis(videoFilename, videoPath, userId, sportId, movementId, metadata, sourceFilename, evaluationVideoId, actorUserId) {
+  async createAnalysis(videoFilename, videoPath, userId, sportId, movementId, requestedSessionType, requestedFocusKey, metadata, sourceFilename, evaluationVideoId, actorUserId) {
     const [analysis] = await db.insert(analyses).values({
       videoFilename,
       sourceFilename: sourceFilename || null,
@@ -451,6 +575,8 @@ var DatabaseStorage = class {
       userId: userId || null,
       sportId: sportId || null,
       movementId: movementId || null,
+      requestedSessionType: requestedSessionType || null,
+      requestedFocusKey: requestedFocusKey || null,
       capturedAt: metadata?.capturedAt ?? null,
       sourceApp: metadata?.sourceApp ?? null,
       videoDurationSec: metadata?.videoDurationSec ?? null,
@@ -602,8 +728,8 @@ var DatabaseStorage = class {
 var storage = new DatabaseStorage();
 
 // server/analysis-engine.ts
-import { and as and2, desc as desc2, eq as eq3, isNotNull, ne, or } from "drizzle-orm";
-import { execFile } from "child_process";
+import { and as and3, desc as desc3, eq as eq6, isNotNull, ne, or } from "drizzle-orm";
+import { spawn } from "child_process";
 import { createHash as createHash2 } from "crypto";
 
 // shared/sport-configs/tennis-forehand.ts
@@ -653,12 +779,12 @@ var tennisForehandConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Hip-to-ankle alignment stability throughout the stroke",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "ballSpeed",
@@ -693,12 +819,12 @@ var tennisForehandConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Variance in elbow angles and wrist speeds across the video",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "backswingDuration",
@@ -733,12 +859,12 @@ var tennisForehandConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Smoothness of the speed profile throughout the swing",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "contactHeight",
@@ -800,12 +926,12 @@ var tennisBackhandConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Weight transfer stability during the backhand stroke",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "ballSpeed",
@@ -840,12 +966,12 @@ var tennisBackhandConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Stroke repeatability across frames",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "backswingDuration",
@@ -880,12 +1006,12 @@ var tennisBackhandConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Swing rhythm smoothness",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "contactHeight",
@@ -997,12 +1123,12 @@ var tennisServeConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body balance throughout the service motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "backswingDuration",
@@ -1037,12 +1163,12 @@ var tennisServeConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Smoothness and consistency of the service motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -1104,12 +1230,12 @@ var tennisVolleyConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "body",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability during the volley",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "contactHeight",
@@ -1144,22 +1270,22 @@ var tennisVolleyConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Repeatability of volley technique",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Fluidity and rhythm of the volley motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -1221,12 +1347,12 @@ var tennisGameConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "body",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Overall body balance during match play",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "rallyLength",
@@ -1241,22 +1367,22 @@ var tennisGameConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Overall consistency of shot technique",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Movement rhythm and pacing between shots",
-      optimalRange: [60, 90]
+      optimalRange: [6, 9]
     }
   ]
 };
@@ -1328,12 +1454,12 @@ var golfDriveConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Weight distribution and stability throughout the swing",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "tempoRatio",
@@ -1388,12 +1514,12 @@ var golfDriveConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "consistency",
       color: "#6C5CE7",
       description: "Overall smoothness and flow of the swing",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -1465,12 +1591,12 @@ var golfIronConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Weight transfer and stability",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "tempoRatio",
@@ -1505,12 +1631,12 @@ var golfIronConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "consistency",
       color: "#6C5CE7",
       description: "Swing rhythm consistency",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -1552,12 +1678,12 @@ var golfChipConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Weight distribution \u2014 should favor front foot",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "headStability",
@@ -1602,12 +1728,12 @@ var golfChipConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "consistency",
       color: "#6C5CE7",
       description: "Smoothness of the chipping motion",
-      optimalRange: [70, 95]
+      optimalRange: [7, 9.5]
     }
   ]
 };
@@ -1679,12 +1805,12 @@ var golfPuttConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability \u2014 no swaying or weight shift",
-      optimalRange: [80, 98]
+      optimalRange: [8, 9.8]
     },
     {
       key: "tempoRatio",
@@ -1699,12 +1825,12 @@ var golfPuttConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "consistency",
       color: "#6C5CE7",
       description: "Smoothness and consistency of stroke tempo",
-      optimalRange: [75, 98]
+      optimalRange: [7.5, 9.8]
     }
   ]
 };
@@ -1776,12 +1902,12 @@ var golfFullSwingConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Weight distribution and stability",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "tempoRatio",
@@ -1816,12 +1942,12 @@ var golfFullSwingConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "consistency",
       color: "#6C5CE7",
       description: "Overall swing rhythm and flow",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -1883,32 +2009,32 @@ var pickleballDinkConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability during the dink motion",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Repeatability of dink technique across multiple shots",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Smoothness and tempo of the dink motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -1970,32 +2096,32 @@ var pickleballDriveConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability during the aggressive drive motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Repeatability of drive technique across multiple shots",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Smoothness and tempo of the drive motion",
-      optimalRange: [60, 90]
+      optimalRange: [6, 9]
     }
   ]
 };
@@ -2057,22 +2183,22 @@ var pickleballServeConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability throughout the serve motion",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Smoothness and tempo of the serve motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -2124,12 +2250,12 @@ var pickleballVolleyConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability during quick volley exchanges",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "ballSpeed",
@@ -2144,22 +2270,22 @@ var pickleballVolleyConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Repeatability of volley technique across exchanges",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Fluidity and tempo of volley exchanges",
-      optimalRange: [60, 90]
+      optimalRange: [6, 9]
     }
   ]
 };
@@ -2211,32 +2337,32 @@ var pickleballThirdShotDropConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Repeatability of third shot drop execution",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability during the transition drop shot",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Smoothness and timing of the drop shot motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -2288,12 +2414,12 @@ var paddleForehandConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Hip-to-ankle alignment stability throughout the stroke",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "ballSpeed",
@@ -2318,22 +2444,22 @@ var paddleForehandConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Variance in technique across repeated strokes",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Smoothness and timing flow throughout the swing",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "contactHeight",
@@ -2395,12 +2521,12 @@ var paddleBackhandConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability throughout the backhand stroke",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "ballSpeed",
@@ -2415,22 +2541,22 @@ var paddleBackhandConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Repeatability of backhand technique across strokes",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Fluidity and timing flow of the backhand motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "contactHeight",
@@ -2492,32 +2618,32 @@ var paddleServeConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Repeatability of serve technique across attempts",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability during the underhand serve motion",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Smoothness and timing of the serve motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -2589,22 +2715,22 @@ var paddleSmashConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability during and after the smash",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Fluidity and timing of the smash motion",
-      optimalRange: [60, 92]
+      optimalRange: [6, 9.2]
     }
   ]
 };
@@ -2666,32 +2792,32 @@ var paddleBandejaConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability during the defensive overhead",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Repeatability of bandeja technique",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Fluidity and timing of the bandeja motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -2763,22 +2889,22 @@ var badmintonClearConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "body",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability throughout the clear motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Smoothness and tempo of the clear stroke",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -2860,12 +2986,12 @@ var badmintonSmashConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Smoothness and timing of the smash motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -2927,22 +3053,22 @@ var badmintonDropConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Repeatability of drop shot placement",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Fluidity and timing of the drop shot motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -2984,12 +3110,12 @@ var badmintonNetShotConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "body",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability during the net shot",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "footworkScore",
@@ -3004,22 +3130,22 @@ var badmintonNetShotConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Repeatability of net shot technique",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Fluidity and timing of the net shot motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -3071,22 +3197,22 @@ var badmintonServeConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#6C5CE7",
       description: "Repeatability of serve technique and placement",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#6C5CE7",
       description: "Smoothness and timing of the serve motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -3158,22 +3284,22 @@ var tabletennisForehandConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#FBBF24",
       description: "Repeatability of bat speed and stroke mechanics across frames",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#A78BFA",
       description: "Smoothness and tempo consistency of the stroke cycle",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -3225,32 +3351,32 @@ var tabletennisBackhandConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#FBBF24",
       description: "Stroke repeatability across multiple backhand shots",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability and center of gravity control during the stroke",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#A78BFA",
       description: "Tempo consistency and fluidity of the backhand motion",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -3322,12 +3448,12 @@ var tabletennisServeConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#A78BFA",
       description: "Consistency of serve motion tempo and timing",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
@@ -3389,22 +3515,22 @@ var tabletennisLoopConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Body stability and weight transfer during the explosive loop",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     },
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#A78BFA",
       description: "Tempo consistency of the loop stroke cycle",
-      optimalRange: [60, 92]
+      optimalRange: [6, 9.2]
     }
   ]
 };
@@ -3436,12 +3562,12 @@ var tabletennisChopConfig = {
     {
       key: "shotConsistency",
       label: "Consistency",
-      unit: "/100",
+      unit: "/10",
       icon: "ribbon",
       category: "consistency",
       color: "#FBBF24",
       description: "Repeatability of chop depth and backspin across strokes",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "spinRate",
@@ -3456,12 +3582,12 @@ var tabletennisChopConfig = {
     {
       key: "balanceScore",
       label: "Balance",
-      unit: "/100",
+      unit: "/10",
       icon: "footsteps",
       category: "biomechanics",
       color: "#60A5FA",
       description: "Stability during the defensive chopping stance",
-      optimalRange: [70, 98]
+      optimalRange: [7, 9.8]
     },
     {
       key: "footworkScore",
@@ -3476,15 +3602,45 @@ var tabletennisChopConfig = {
     {
       key: "rhythmConsistency",
       label: "Rhythm",
-      unit: "/100",
+      unit: "/10",
       icon: "musical-notes",
       category: "timing",
       color: "#A78BFA",
       description: "Tempo consistency of the defensive chop cycle",
-      optimalRange: [65, 95]
+      optimalRange: [6.5, 9.5]
     }
   ]
 };
+
+// shared/metric-scale.ts
+var TEN_POINT_METRIC_KEYS = /* @__PURE__ */ new Set([
+  "balanceScore",
+  "rhythmConsistency",
+  "shotConsistency"
+]);
+function round1(value) {
+  return Number(value.toFixed(1));
+}
+function usesTenPointScale(metricKey) {
+  return TEN_POINT_METRIC_KEYS.has(String(metricKey || ""));
+}
+function normalizeMetricUnit(metricKey, unit) {
+  if (!usesTenPointScale(metricKey)) return unit;
+  return "/10";
+}
+function normalizeMetricValueToTenScale(metricKey, value) {
+  if (!Number.isFinite(value)) return value;
+  if (!usesTenPointScale(metricKey)) return round1(value);
+  const scaled = value > 10 ? value / 10 : value;
+  return round1(Math.max(0, Math.min(10, scaled)));
+}
+function normalizeMetricRangeToTenScale(metricKey, range) {
+  if (!range || range.length !== 2) return range;
+  return [
+    normalizeMetricValueToTenScale(metricKey, Number(range[0])),
+    normalizeMetricValueToTenScale(metricKey, Number(range[1]))
+  ];
+}
 
 // shared/sport-configs/index.ts
 var configRegistry = {
@@ -3551,13 +3707,23 @@ function normalizeScoresWithoutConsistency(config) {
   });
   return { ...config, scores: normalized };
 }
+function normalizeMetricPresentation(config) {
+  return {
+    ...config,
+    metrics: (config.metrics || []).map((metric) => ({
+      ...metric,
+      unit: normalizeMetricUnit(metric.key, metric.unit),
+      optimalRange: normalizeMetricRangeToTenScale(metric.key, metric.optimalRange)
+    }))
+  };
+}
 function getSportConfig(configKey) {
   const config = configRegistry[configKey];
-  return config ? normalizeScoresWithoutConsistency(config) : void 0;
+  return config ? normalizeMetricPresentation(normalizeScoresWithoutConsistency(config)) : void 0;
 }
 function getAllConfigs() {
   return Object.fromEntries(
-    Object.entries(configRegistry).map(([key, config]) => [key, normalizeScoresWithoutConsistency(config)])
+    Object.entries(configRegistry).map(([key, config]) => [key, normalizeMetricPresentation(normalizeScoresWithoutConsistency(config))])
   );
 }
 var movementAliases = {
@@ -3577,30 +3743,206 @@ function getConfigKey(sportName, movementName) {
   return key;
 }
 
+// shared/pipeline-timing.ts
+var PIPELINE_STAGE_DEFINITIONS = [
+  {
+    key: "upload",
+    label: "Upload",
+    description: "Video received over HTTP and stored"
+  },
+  {
+    key: "firstPosePass",
+    label: "First pose pass",
+    description: "Initial full-video pose detection for classification"
+  },
+  {
+    key: "classificationValidation",
+    label: "Classification",
+    description: "Background analysis, validation, segmentation, and scoring window selection"
+  },
+  {
+    key: "secondPosePass",
+    label: "Second pose pass",
+    description: "Analyzer pass for metrics, scores, and coaching"
+  },
+  {
+    key: "diagnostics",
+    label: "Diagnostics",
+    description: "Diagnostics subprocess and skeleton dataset build"
+  }
+];
+function isRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+function toNullableString(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+function toNullableNumber(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+function isPipelineStageKey(value) {
+  return PIPELINE_STAGE_DEFINITIONS.some((stage) => stage.key === value);
+}
+function createDefaultStage(definition) {
+  return {
+    key: definition.key,
+    label: definition.label,
+    description: definition.description,
+    status: "pending",
+    startedAt: null,
+    completedAt: null,
+    elapsedMs: null,
+    note: null
+  };
+}
+function computeElapsedMs(stage, nowMs) {
+  if (typeof stage.elapsedMs === "number" && Number.isFinite(stage.elapsedMs) && stage.elapsedMs >= 0) {
+    return stage.elapsedMs;
+  }
+  const startedMs = stage.startedAt ? Date.parse(stage.startedAt) : NaN;
+  if (!Number.isFinite(startedMs)) return null;
+  if (stage.completedAt) {
+    const completedMs = Date.parse(stage.completedAt);
+    if (Number.isFinite(completedMs)) {
+      return Math.max(completedMs - startedMs, 0);
+    }
+  }
+  if (stage.status === "running") {
+    return Math.max(nowMs - startedMs, 0);
+  }
+  return null;
+}
+function createEmptyPipelineTiming(nowIso) {
+  return {
+    stages: PIPELINE_STAGE_DEFINITIONS.map(createDefaultStage),
+    currentStageKey: null,
+    totalElapsedMs: 0,
+    updatedAt: nowIso || null
+  };
+}
+function extractPipelineTiming(value) {
+  const raw = isRecord(value) && isRecord(value.pipelineTiming) ? value.pipelineTiming : isRecord(value) ? value : null;
+  if (!raw || !Array.isArray(raw.stages)) {
+    return null;
+  }
+  const stageMap = /* @__PURE__ */ new Map();
+  for (const entry of raw.stages) {
+    if (!isRecord(entry) || !isPipelineStageKey(entry.key)) continue;
+    const definition = PIPELINE_STAGE_DEFINITIONS.find((stage) => stage.key === entry.key);
+    if (!definition) continue;
+    const status = entry.status;
+    stageMap.set(entry.key, {
+      key: definition.key,
+      label: definition.label,
+      description: definition.description,
+      status: status === "running" || status === "completed" || status === "failed" ? status : "pending",
+      startedAt: toNullableString(entry.startedAt),
+      completedAt: toNullableString(entry.completedAt),
+      elapsedMs: toNullableNumber(entry.elapsedMs),
+      note: toNullableString(entry.note)
+    });
+  }
+  const stages = PIPELINE_STAGE_DEFINITIONS.map((definition) => {
+    return stageMap.get(definition.key) || createDefaultStage(definition);
+  });
+  const currentStageKey = isPipelineStageKey(raw.currentStageKey) ? raw.currentStageKey : null;
+  const totalElapsedMs = toNullableNumber(raw.totalElapsedMs);
+  const updatedAt = toNullableString(raw.updatedAt);
+  return {
+    stages,
+    currentStageKey,
+    totalElapsedMs,
+    updatedAt
+  };
+}
+function getPipelineTotalElapsedMs(timing, nowMs = Date.now()) {
+  if (!timing) return null;
+  const values = timing.stages.map((stage) => computeElapsedMs(stage, nowMs)).filter((value) => typeof value === "number" && Number.isFinite(value));
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0);
+}
+function updatePipelineTiming(current, update, nowIso) {
+  const next = extractPipelineTiming(current) || createEmptyPipelineTiming(nowIso);
+  const effectiveNowIso = nowIso || (/* @__PURE__ */ new Date()).toISOString();
+  next.stages = next.stages.map((stage) => {
+    if (stage.key !== update.stageKey) return stage;
+    const startedAt = update.startedAt !== void 0 ? update.startedAt : update.status === "running" && !stage.startedAt ? effectiveNowIso : stage.startedAt || null;
+    const completedAt = update.completedAt !== void 0 ? update.completedAt : update.status === "completed" || update.status === "failed" ? effectiveNowIso : stage.completedAt || null;
+    let elapsedMs = update.elapsedMs !== void 0 ? update.elapsedMs : stage.elapsedMs ?? null;
+    if ((elapsedMs == null || !Number.isFinite(elapsedMs)) && startedAt && completedAt) {
+      const startedMs = Date.parse(startedAt);
+      const completedMs = Date.parse(completedAt);
+      if (Number.isFinite(startedMs) && Number.isFinite(completedMs)) {
+        elapsedMs = Math.max(completedMs - startedMs, 0);
+      }
+    }
+    return {
+      ...stage,
+      status: update.status,
+      startedAt,
+      completedAt,
+      elapsedMs,
+      note: update.note !== void 0 ? update.note : stage.note || null
+    };
+  });
+  const runningStage = next.stages.find((stage) => stage.status === "running");
+  next.currentStageKey = runningStage?.key || null;
+  next.updatedAt = effectiveNowIso;
+  next.totalElapsedMs = getPipelineTotalElapsedMs(next, Date.parse(effectiveNowIso));
+  return next;
+}
+function attachPipelineTiming(payload, timing) {
+  if (!timing) return payload;
+  return {
+    ...payload,
+    pipelineTiming: timing
+  };
+}
+
+// shared/video-validation.ts
+var VIDEO_VALIDATION_MODES = ["disabled", "light", "medium", "full"];
+function isVideoValidationMode(value) {
+  return typeof value === "string" && VIDEO_VALIDATION_MODES.includes(value);
+}
+
 // server/model-registry.ts
-import fs from "fs";
-import path from "path";
+import fs2 from "fs";
+import path2 from "path";
 import { createHash, randomUUID } from "crypto";
-var configPath = path.resolve(process.cwd(), "config", "model-registry.config.json");
-var evaluationDatasetFolder = path.resolve(process.cwd(), "model_evaluation_datasets", "dataset");
-var evaluationDatasetFolderPrefix = "model_evaluation_datasets/dataset";
+import { asc, desc as desc2, eq as eq2, inArray } from "drizzle-orm";
+var legacyConfigPath = resolveProjectPath("config", "model-registry.config.json");
+var legacyManifestPath = resolveProjectPath("model_evaluation_datasets", "manifest.json");
+var legacyDatasetFolderPrefix = "model_evaluation_datasets/dataset";
 var manualTuningDatasetName = "manual-annotations";
+var databaseManifestPath = "database://model-registry";
 var defaultConfig = {
   activeModelVersion: "0.1",
   modelVersionChangeDescription: "Initial baseline scoring model release.",
-  evaluationDatasetManifestPath: "model_evaluation_datasets/manifest.json"
+  evaluationDatasetManifestPath: databaseManifestPath
 };
-function getConfigPath() {
-  return configPath;
-}
-function ensureConfigDirExists() {
-  const dir = path.dirname(getConfigPath());
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
+var cache = {
+  initialized: false,
+  config: defaultConfig,
+  manifest: { datasets: [] },
+  validation: {
+    valid: true,
+    datasetCount: 0,
+    totalVideos: 0,
+    duplicateFilenames: [],
+    duplicateVideoIds: [],
+    errors: [],
+    warnings: []
+  },
+  versions: [],
+  datasets: [],
+  datasetMap: /* @__PURE__ */ new Map()
+};
 function normalizeToken(value) {
   return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+function normalizeFilenameToken(value) {
+  return path2.basename(String(value || "").trim()).toLowerCase();
 }
 function toLegacyVideoId(filename) {
   const normalized = String(filename || "").trim().toLowerCase();
@@ -3612,39 +3954,24 @@ function resolveVideoId(video) {
   if (parsed) return parsed;
   return toLegacyVideoId(String(video.filename || ""));
 }
-function readModelRegistryConfig() {
+function parseLegacyConfigFile() {
   try {
-    const raw = fs.readFileSync(configPath, "utf-8");
+    const raw = fs2.readFileSync(legacyConfigPath, "utf-8");
     const parsed = JSON.parse(raw);
     return {
       activeModelVersion: String(parsed.activeModelVersion || defaultConfig.activeModelVersion),
       modelVersionChangeDescription: String(
         parsed.modelVersionChangeDescription || defaultConfig.modelVersionChangeDescription
       ),
-      evaluationDatasetManifestPath: String(
-        parsed.evaluationDatasetManifestPath || defaultConfig.evaluationDatasetManifestPath
-      )
+      evaluationDatasetManifestPath: databaseManifestPath
     };
   } catch {
     return defaultConfig;
   }
 }
-function writeModelRegistryConfig(nextConfig) {
-  const sanitized = {
-    activeModelVersion: String(nextConfig.activeModelVersion || "").trim() || defaultConfig.activeModelVersion,
-    modelVersionChangeDescription: String(nextConfig.modelVersionChangeDescription || "").trim(),
-    evaluationDatasetManifestPath: String(nextConfig.evaluationDatasetManifestPath || "").trim() || defaultConfig.evaluationDatasetManifestPath
-  };
-  ensureConfigDirExists();
-  fs.writeFileSync(getConfigPath(), `${JSON.stringify(sanitized, null, 2)}
-`, "utf-8");
-  return sanitized;
-}
-function readEvaluationDatasetManifest(config) {
-  const cfg = config || readModelRegistryConfig();
-  const manifestPath = path.resolve(process.cwd(), cfg.evaluationDatasetManifestPath);
+function parseLegacyManifestFile() {
   try {
-    const raw = fs.readFileSync(manifestPath, "utf-8");
+    const raw = fs2.readFileSync(legacyManifestPath, "utf-8");
     const parsed = JSON.parse(raw);
     const datasets = Array.isArray(parsed.datasets) ? parsed.datasets.map((dataset) => ({
       name: String(dataset?.name || "unnamed-dataset"),
@@ -3654,174 +3981,22 @@ function readEvaluationDatasetManifest(config) {
         movementType: String(video?.movementType || "").trim()
       })).filter((video) => video.filename) : []
     })) : [];
-    const versionHistory = Array.isArray(parsed.versionHistory) ? parsed.versionHistory.map((item) => ({
-      modelVersion: String(item?.modelVersion || "").trim(),
-      savedAt: String(item?.savedAt || "").trim(),
-      datasets: Array.isArray(item?.datasets) ? item.datasets.map((dataset) => ({
-        name: String(dataset?.name || "unnamed-dataset"),
-        videos: Array.isArray(dataset?.videos) ? dataset.videos.map((video) => ({
-          videoId: resolveVideoId(video || {}),
-          filename: String(video?.filename || "").trim(),
-          movementType: String(video?.movementType || "").trim()
-        })).filter((video) => video.filename) : []
-      })) : []
-    })).filter((item) => item.modelVersion) : [];
     return {
       activeModelVersion: String(parsed.activeModelVersion || "").trim() || void 0,
-      versionHistory,
+      versionHistory: [],
       datasets
     };
   } catch {
     return { datasets: [] };
   }
 }
-function getEvaluationDatasetVideoMap(config) {
-  const manifest = readEvaluationDatasetManifest(config);
-  const map = /* @__PURE__ */ new Map();
-  for (const dataset of manifest.datasets) {
-    for (const video of dataset.videos) {
-      const entry = {
-        videoId: video.videoId,
-        datasetName: dataset.name,
-        movementType: video.movementType
-      };
-      if (video.videoId) {
-        map.set(video.videoId, entry);
-      }
-      const fullName = String(video.filename || "").trim();
-      if (!fullName) continue;
-      map.set(fullName, entry);
-      const basename = path.basename(fullName);
-      if (basename && basename !== fullName) {
-        map.set(basename, entry);
-      }
-    }
-  }
-  return map;
-}
-function ensureEvaluationDatasetDir() {
-  if (!fs.existsSync(evaluationDatasetFolder)) {
-    fs.mkdirSync(evaluationDatasetFolder, { recursive: true });
-  }
-}
-function getManifestPath(config) {
-  return path.resolve(process.cwd(), config.evaluationDatasetManifestPath);
-}
-function writeEvaluationDatasetManifest(config, manifest) {
-  const manifestPath = getManifestPath(config);
-  const manifestDir = path.dirname(manifestPath);
-  if (!fs.existsSync(manifestDir)) {
-    fs.mkdirSync(manifestDir, { recursive: true });
-  }
-  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}
-`, "utf-8");
-}
-function buildEvaluationDatasetEntryPath(filename) {
-  return `${evaluationDatasetFolderPrefix}/${filename}`;
-}
-function removeVideoFromAllDatasets(manifest, filename, videoId) {
-  const filenameTrimmed = String(filename || "").trim();
-  const targetPath = buildEvaluationDatasetEntryPath(filenameTrimmed);
-  const legacyVideoId = toLegacyVideoId(targetPath);
-  const nextVideoId = String(videoId || "").trim();
-  return {
-    ...manifest,
-    datasets: (manifest.datasets || []).map((dataset) => ({
-      ...dataset,
-      videos: (dataset.videos || []).filter((video) => {
-        const candidate = String(video.filename || "").trim();
-        const videoId2 = String(video.videoId || "").trim();
-        if (!candidate) return false;
-        return candidate !== filenameTrimmed && candidate !== targetPath && path.basename(candidate) !== filenameTrimmed && videoId2 !== legacyVideoId && (!nextVideoId || videoId2 !== nextVideoId);
-      })
-    }))
-  };
-}
-function incrementModelVersion(currentVersion) {
-  const raw = String(currentVersion || "").trim();
-  const match = raw.match(/^(\d+)(?:\.(\d+))?$/);
-  if (!match) return "0.1";
-  let major = Number(match[1] || 0);
-  let minor = Number(match[2] || 0);
-  minor += 1;
-  if (minor >= 10) {
-    major += 1;
-    minor = 0;
-  }
-  return `${major}.${minor}`;
-}
-function updateManifestActiveModelVersion(activeModelVersion, config) {
-  const cfg = config || readModelRegistryConfig();
-  const manifest = readEvaluationDatasetManifest(cfg);
-  const nextManifest = {
-    ...manifest,
-    activeModelVersion: String(activeModelVersion || "").trim() || void 0
-  };
-  writeEvaluationDatasetManifest(cfg, nextManifest);
-  return nextManifest;
-}
-function syncVideoForModelTuning(params) {
-  const config = params.config || readModelRegistryConfig();
-  const filename = path.basename(String(params.sourceVideoFilename || "").trim());
-  if (!filename) {
-    throw new Error("Invalid sourceVideoFilename");
-  }
-  const nextMovementType = String(params.movementType || "").trim() || "unknown";
-  const manifestFilename = buildEvaluationDatasetEntryPath(filename);
-  const datasetName = String(params.datasetName || "").trim() || manualTuningDatasetName;
-  const nextVideoId = String(params.videoId || "").trim() || randomUUID();
-  let manifest = readEvaluationDatasetManifest(config);
-  manifest = removeVideoFromAllDatasets(manifest, filename, nextVideoId);
-  if (params.enabled) {
-    ensureEvaluationDatasetDir();
-    const sourcePath = path.resolve(String(params.sourceVideoPath || ""));
-    if (!sourcePath || !fs.existsSync(sourcePath)) {
-      throw new Error("Source video not found for model tuning copy");
-    }
-    const targetPath = path.join(evaluationDatasetFolder, filename);
-    if (!fs.existsSync(targetPath)) {
-      fs.copyFileSync(sourcePath, targetPath);
-    }
-    const datasets = [...manifest.datasets || []];
-    const datasetIndex = datasets.findIndex((item) => String(item.name || "").trim() === datasetName);
-    if (datasetIndex >= 0) {
-      datasets[datasetIndex] = {
-        ...datasets[datasetIndex],
-        videos: [
-          ...datasets[datasetIndex].videos || [],
-          { videoId: nextVideoId, filename: manifestFilename, movementType: nextMovementType }
-        ]
-      };
-    } else {
-      datasets.push({
-        name: datasetName,
-        videos: [{ videoId: nextVideoId, filename: manifestFilename, movementType: nextMovementType }]
-      });
-    }
-    manifest = { datasets };
-  }
-  writeEvaluationDatasetManifest(config, manifest);
-  return {
-    enabled: params.enabled,
-    manifestFilename,
-    videoId: nextVideoId
-  };
-}
-function isMovementMatch(expectedMovement, detectedMovement) {
-  const expected = normalizeToken(expectedMovement);
-  const detected = normalizeToken(detectedMovement);
-  if (!expected || !detected) return false;
-  return expected === detected;
-}
-function validateEvaluationDatasetManifest(config) {
-  const cfg = config || readModelRegistryConfig();
-  const manifest = readEvaluationDatasetManifest(cfg);
+function computeValidation(manifest) {
   const errors = [];
-  const warnings = [];
+  const warnings = ["Evaluation registry is stored in the database."];
   const filenameCounts = /* @__PURE__ */ new Map();
   const videoIdCounts = /* @__PURE__ */ new Map();
   if (!manifest.datasets.length) {
-    warnings.push("No datasets configured in evaluation manifest.");
+    warnings.push("No datasets configured in the model registry.");
   }
   for (const dataset of manifest.datasets) {
     if (!String(dataset.name || "").trim()) {
@@ -3840,40 +4015,386 @@ function validateEvaluationDatasetManifest(config) {
         continue;
       }
       if (!videoId) {
-        warnings.push(`Video '${filename}' in dataset '${dataset.name}' is missing videoId; a legacy fallback id will be used.`);
+        warnings.push(`Video '${filename}' in dataset '${dataset.name}' is missing videoId.`);
       }
-      if (videoId) {
-        videoIdCounts.set(videoId, (videoIdCounts.get(videoId) || 0) + 1);
-      }
-      filenameCounts.set(filename, (filenameCounts.get(filename) || 0) + 1);
       if (!movementType) {
         errors.push(`Video '${filename}' in dataset '${dataset.name}' is missing movementType.`);
+      }
+      filenameCounts.set(filename, (filenameCounts.get(filename) || 0) + 1);
+      if (videoId) {
+        videoIdCounts.set(videoId, (videoIdCounts.get(videoId) || 0) + 1);
       }
     }
   }
   const duplicateFilenames = Array.from(filenameCounts.entries()).filter(([, count]) => count > 1).map(([filename]) => filename).sort();
   const duplicateVideoIds = Array.from(videoIdCounts.entries()).filter(([, count]) => count > 1).map(([videoId]) => videoId).sort();
   if (duplicateFilenames.length > 0) {
-    errors.push(`Found duplicate filenames in manifest: ${duplicateFilenames.join(", ")}.`);
+    errors.push(`Found duplicate filenames in registry datasets: ${duplicateFilenames.join(", ")}.`);
   }
   if (duplicateVideoIds.length > 0) {
-    errors.push(`Found duplicate videoIds in manifest: ${duplicateVideoIds.join(", ")}.`);
+    errors.push(`Found duplicate videoIds in registry datasets: ${duplicateVideoIds.join(", ")}.`);
   }
-  const totalVideos = Array.from(filenameCounts.values()).reduce((sum, count) => sum + count, 0);
   return {
     valid: errors.length === 0,
     datasetCount: manifest.datasets.length,
-    totalVideos,
+    totalVideos: Array.from(filenameCounts.values()).reduce((sum, count) => sum + count, 0),
     duplicateFilenames,
     duplicateVideoIds,
     errors,
     warnings
   };
 }
+function buildDatasetMap(manifest) {
+  const map = /* @__PURE__ */ new Map();
+  for (const dataset of manifest.datasets) {
+    for (const video of dataset.videos) {
+      const entry = {
+        videoId: video.videoId,
+        datasetName: dataset.name,
+        movementType: video.movementType
+      };
+      const fullName = String(video.filename || "").trim();
+      if (video.videoId) {
+        map.set(video.videoId, entry);
+      }
+      if (!fullName) continue;
+      map.set(fullName, entry);
+      map.set(normalizeFilenameToken(fullName), entry);
+      const legacyPath = `${legacyDatasetFolderPrefix}/${path2.basename(fullName)}`;
+      map.set(legacyPath, entry);
+      map.set(normalizeFilenameToken(legacyPath), entry);
+    }
+  }
+  return map;
+}
+async function ensureDefaultVersionRow() {
+  const [existing] = await db.select().from(modelRegistryVersions).where(eq2(modelRegistryVersions.modelVersion, defaultConfig.activeModelVersion)).limit(1);
+  if (!existing) {
+    await db.insert(modelRegistryVersions).values({
+      modelVersion: defaultConfig.activeModelVersion,
+      description: defaultConfig.modelVersionChangeDescription,
+      status: "active",
+      activatedAt: /* @__PURE__ */ new Date(),
+      ...buildInsertAuditFields(null)
+    });
+  }
+}
+async function migrateLegacyFilesystemRegistryIfNeeded() {
+  const [versionCountRow] = await db.select({ id: modelRegistryVersions.id }).from(modelRegistryVersions).limit(1);
+  const hasVersions = Boolean(versionCountRow?.id);
+  const [datasetCountRow] = await db.select({ id: modelRegistryDatasets.id }).from(modelRegistryDatasets).limit(1);
+  const hasDatasets = Boolean(datasetCountRow?.id);
+  if (hasVersions && hasDatasets) {
+    return;
+  }
+  const legacyConfig = parseLegacyConfigFile();
+  const legacyManifest = parseLegacyManifestFile();
+  if (!hasVersions) {
+    await db.insert(modelRegistryVersions).values({
+      modelVersion: legacyConfig.activeModelVersion,
+      description: legacyConfig.modelVersionChangeDescription,
+      status: "active",
+      activatedAt: /* @__PURE__ */ new Date(),
+      ...buildInsertAuditFields(null)
+    }).onConflictDoNothing();
+  }
+  if (hasDatasets || legacyManifest.datasets.length === 0) {
+    return;
+  }
+  const allAnalyses = await db.select({
+    id: analyses.id,
+    videoFilename: analyses.videoFilename,
+    sourceFilename: analyses.sourceFilename,
+    evaluationVideoId: analyses.evaluationVideoId
+  }).from(analyses);
+  for (const dataset of legacyManifest.datasets) {
+    const datasetName = String(dataset.name || "").trim() || manualTuningDatasetName;
+    const [datasetRow] = await db.insert(modelRegistryDatasets).values({
+      name: datasetName,
+      description: "Migrated from legacy manifest",
+      source: "legacy-manifest",
+      ...buildInsertAuditFields(null)
+    }).onConflictDoNothing().returning();
+    const targetDataset = datasetRow || (await db.select().from(modelRegistryDatasets).where(eq2(modelRegistryDatasets.name, datasetName)).limit(1))[0];
+    if (!targetDataset) continue;
+    for (const video of dataset.videos || []) {
+      const filename = String(video.filename || "").trim();
+      const normalizedFilename = normalizeFilenameToken(filename);
+      const videoId = String(video.videoId || "").trim();
+      const matchedAnalysis = allAnalyses.find((analysis) => {
+        if (videoId && String(analysis.evaluationVideoId || "").trim() === videoId) {
+          return true;
+        }
+        return [
+          analysis.sourceFilename,
+          analysis.videoFilename,
+          `${legacyDatasetFolderPrefix}/${analysis.videoFilename}`,
+          `${legacyDatasetFolderPrefix}/${analysis.sourceFilename || ""}`
+        ].filter(Boolean).some((candidate) => normalizeFilenameToken(String(candidate)) === normalizedFilename);
+      });
+      if (!matchedAnalysis) continue;
+      await db.insert(modelRegistryDatasetItems).values({
+        datasetId: targetDataset.id,
+        analysisId: matchedAnalysis.id,
+        expectedMovement: String(video.movementType || "").trim() || "unknown",
+        evaluationVideoId: videoId || matchedAnalysis.evaluationVideoId || null,
+        sourceFilename: matchedAnalysis.sourceFilename || path2.basename(filename) || matchedAnalysis.videoFilename,
+        ...buildInsertAuditFields(null)
+      }).onConflictDoNothing();
+      if (videoId && videoId !== String(matchedAnalysis.evaluationVideoId || "").trim()) {
+        await db.update(analyses).set({
+          evaluationVideoId: videoId,
+          ...buildUpdateAuditFields(null)
+        }).where(eq2(analyses.id, matchedAnalysis.id));
+      }
+    }
+  }
+}
+async function loadVersionSummaries() {
+  const rows = await db.select().from(modelRegistryVersions).orderBy(desc2(modelRegistryVersions.activatedAt), desc2(modelRegistryVersions.createdAt));
+  return rows.map((row) => ({
+    id: row.id,
+    modelVersion: row.modelVersion,
+    description: row.description,
+    status: row.status,
+    activatedAt: row.activatedAt ? row.activatedAt.toISOString() : null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString()
+  }));
+}
+async function loadDatasetsAndManifest() {
+  const datasetRows = await db.select().from(modelRegistryDatasets).orderBy(asc(modelRegistryDatasets.name));
+  const datasetIds = datasetRows.map((row) => row.id);
+  const items = datasetIds.length ? await db.select({
+    item: modelRegistryDatasetItems,
+    analysis: analyses
+  }).from(modelRegistryDatasetItems).innerJoin(analyses, eq2(modelRegistryDatasetItems.analysisId, analyses.id)).where(inArray(modelRegistryDatasetItems.datasetId, datasetIds)) : [];
+  const itemsByDatasetId = /* @__PURE__ */ new Map();
+  for (const row of items) {
+    const current = itemsByDatasetId.get(row.item.datasetId) || [];
+    current.push(row);
+    itemsByDatasetId.set(row.item.datasetId, current);
+  }
+  const summaries = [];
+  const manifestDatasets = [];
+  for (const dataset of datasetRows) {
+    const rows = itemsByDatasetId.get(dataset.id) || [];
+    const movementTypes = Array.from(new Set(rows.map((row) => String(row.item.expectedMovement || "").trim()).filter(Boolean))).sort();
+    const videos = rows.map((row) => ({
+      videoId: String(row.item.evaluationVideoId || row.analysis.evaluationVideoId || "").trim() || toLegacyVideoId(String(row.item.sourceFilename || row.analysis.sourceFilename || row.analysis.videoFilename || "")),
+      filename: String(row.item.sourceFilename || row.analysis.sourceFilename || row.analysis.videoFilename || "").trim(),
+      movementType: String(row.item.expectedMovement || "").trim() || "unknown"
+    }));
+    summaries.push({
+      id: dataset.id,
+      name: dataset.name,
+      description: dataset.description,
+      source: dataset.source,
+      videoCount: videos.length,
+      movementTypes,
+      updatedAt: dataset.updatedAt.toISOString()
+    });
+    manifestDatasets.push({
+      id: dataset.id,
+      name: dataset.name,
+      description: dataset.description,
+      source: dataset.source,
+      videos
+    });
+  }
+  return {
+    datasets: summaries,
+    manifest: { datasets: manifestDatasets }
+  };
+}
+async function ensureDraftVersion(activeModelVersion, actorUserId) {
+  const nextModelVersion = incrementModelVersion(activeModelVersion);
+  const [existing] = await db.select().from(modelRegistryVersions).where(eq2(modelRegistryVersions.modelVersion, nextModelVersion)).limit(1);
+  if (!existing) {
+    await db.insert(modelRegistryVersions).values({
+      modelVersion: nextModelVersion,
+      description: `Draft prepared after ${activeModelVersion}`,
+      status: "draft",
+      ...buildInsertAuditFields(actorUserId || null)
+    });
+  }
+  return nextModelVersion;
+}
+async function initializeModelRegistryCache() {
+  await refreshModelRegistryCache();
+}
+async function refreshModelRegistryCache() {
+  await migrateLegacyFilesystemRegistryIfNeeded();
+  await ensureDefaultVersionRow();
+  let versions = await loadVersionSummaries();
+  let activeVersion = versions.find((version) => version.status === "active");
+  if (!activeVersion && versions.length > 0) {
+    const fallback = versions[0];
+    await db.update(modelRegistryVersions).set({
+      status: "active",
+      activatedAt: /* @__PURE__ */ new Date(),
+      ...buildUpdateAuditFields(null)
+    }).where(eq2(modelRegistryVersions.id, fallback.id));
+    versions = await loadVersionSummaries();
+    activeVersion = versions.find((version) => version.modelVersion === fallback.modelVersion) || versions[0];
+  }
+  const { datasets, manifest } = await loadDatasetsAndManifest();
+  manifest.activeModelVersion = activeVersion?.modelVersion || defaultConfig.activeModelVersion;
+  const validation = computeValidation(manifest);
+  const config = {
+    activeModelVersion: activeVersion?.modelVersion || defaultConfig.activeModelVersion,
+    modelVersionChangeDescription: activeVersion?.description || defaultConfig.modelVersionChangeDescription,
+    evaluationDatasetManifestPath: databaseManifestPath
+  };
+  cache = {
+    initialized: true,
+    config,
+    manifest,
+    validation,
+    versions,
+    datasets,
+    datasetMap: buildDatasetMap(manifest)
+  };
+  return {
+    storage: "database",
+    config,
+    versions,
+    datasets,
+    validation
+  };
+}
+function readModelRegistryConfig() {
+  return cache.config;
+}
+function readEvaluationDatasetManifest(_config) {
+  return cache.manifest;
+}
+function getEvaluationDatasetVideoMap(_config) {
+  return cache.datasetMap;
+}
+function listModelRegistryVersions() {
+  return cache.versions;
+}
+function getModelRegistryOverview() {
+  return {
+    storage: "database",
+    config: cache.config,
+    versions: cache.versions,
+    datasets: cache.datasets,
+    validation: cache.validation
+  };
+}
+async function writeModelRegistryConfig(nextConfig, actorUserId) {
+  const activeModelVersion = String(nextConfig.activeModelVersion || "").trim() || defaultConfig.activeModelVersion;
+  const description = String(nextConfig.modelVersionChangeDescription || "").trim();
+  const [existingTarget] = await db.select().from(modelRegistryVersions).where(eq2(modelRegistryVersions.modelVersion, activeModelVersion)).limit(1);
+  if (existingTarget) {
+    await db.update(modelRegistryVersions).set({
+      description,
+      status: "active",
+      activatedAt: /* @__PURE__ */ new Date(),
+      activatedByUserId: actorUserId || null,
+      ...buildUpdateAuditFields(actorUserId || null)
+    }).where(eq2(modelRegistryVersions.id, existingTarget.id));
+  } else {
+    await db.insert(modelRegistryVersions).values({
+      modelVersion: activeModelVersion,
+      description,
+      status: "active",
+      activatedAt: /* @__PURE__ */ new Date(),
+      activatedByUserId: actorUserId || null,
+      ...buildInsertAuditFields(actorUserId || null)
+    });
+  }
+  const activeRows = await db.select().from(modelRegistryVersions).where(eq2(modelRegistryVersions.status, "active"));
+  for (const row of activeRows) {
+    if (row.modelVersion === activeModelVersion) continue;
+    await db.update(modelRegistryVersions).set({
+      status: "archived",
+      ...buildUpdateAuditFields(actorUserId || null)
+    }).where(eq2(modelRegistryVersions.id, row.id));
+  }
+  await ensureDraftVersion(activeModelVersion, actorUserId || null);
+  await refreshModelRegistryCache();
+  return cache.config;
+}
+async function syncVideoForModelTuning(params) {
+  const filename = path2.basename(String(params.sourceVideoFilename || "").trim());
+  if (!filename) {
+    throw new Error("Invalid sourceVideoFilename");
+  }
+  if (!params.analysisId) {
+    throw new Error("analysisId is required to sync model training dataset state");
+  }
+  const nextMovementType = String(params.movementType || "").trim() || "unknown";
+  const manifestFilename = filename;
+  const datasetName = String(params.datasetName || "").trim() || manualTuningDatasetName;
+  const nextVideoId = String(params.videoId || "").trim() || randomUUID();
+  const actorUserId = params.actorUserId || null;
+  if (!params.enabled) {
+    await db.delete(modelRegistryDatasetItems).where(eq2(modelRegistryDatasetItems.analysisId, params.analysisId));
+    await refreshModelRegistryCache();
+    return {
+      enabled: false,
+      manifestFilename,
+      videoId: nextVideoId
+    };
+  }
+  const [analysis] = await db.select().from(analyses).where(eq2(analyses.id, params.analysisId)).limit(1);
+  if (!analysis) {
+    throw new Error("Analysis not found for model training sync");
+  }
+  let [dataset] = await db.select().from(modelRegistryDatasets).where(eq2(modelRegistryDatasets.name, datasetName)).limit(1);
+  if (!dataset) {
+    [dataset] = await db.insert(modelRegistryDatasets).values({
+      name: datasetName,
+      description: "Manually curated evaluation dataset",
+      source: "manual-annotation",
+      ...buildInsertAuditFields(actorUserId)
+    }).returning();
+  }
+  await db.delete(modelRegistryDatasetItems).where(eq2(modelRegistryDatasetItems.analysisId, params.analysisId));
+  await db.insert(modelRegistryDatasetItems).values({
+    datasetId: dataset.id,
+    analysisId: params.analysisId,
+    annotatorUserId: params.annotatorUserId || null,
+    expectedMovement: nextMovementType,
+    evaluationVideoId: nextVideoId,
+    sourceFilename: analysis.sourceFilename || analysis.videoFilename,
+    ...buildInsertAuditFields(actorUserId)
+  });
+  await refreshModelRegistryCache();
+  return {
+    enabled: true,
+    manifestFilename,
+    videoId: nextVideoId
+  };
+}
+function isMovementMatch(expectedMovement, detectedMovement) {
+  const expected = normalizeToken(expectedMovement);
+  const detected = normalizeToken(detectedMovement);
+  if (!expected || !detected) return false;
+  return expected === detected;
+}
+function incrementModelVersion(currentVersion) {
+  const raw = String(currentVersion || "").trim();
+  const match = raw.match(/^(\d+)(?:\.(\d+))?$/);
+  if (!match) return "0.1";
+  let major = Number(match[1] || 0);
+  let minor = Number(match[2] || 0);
+  minor += 1;
+  if (minor >= 10) {
+    major += 1;
+    minor = 0;
+  }
+  return `${major}.${minor}`;
+}
+function validateEvaluationDatasetManifest(_config) {
+  return cache.validation;
+}
 
 // server/score-input-params.ts
-import fs2 from "fs";
-import path2 from "path";
+import fs3 from "fs";
 var TECHNICAL_DEFS = [
   { name: "Balance", parameters: ["balanceScore", "reactionTime"] },
   { name: "Inertia", parameters: ["stanceAngle", "shoulderRotationSpeed"] },
@@ -3962,12 +4483,12 @@ function extractComputeSubScoresBlock(src) {
 var analyzerDepsCache = /* @__PURE__ */ new Map();
 function parseAnalyzerDependencies(configKey) {
   if (analyzerDepsCache.has(configKey)) return analyzerDepsCache.get(configKey) || null;
-  const analyzerPath = path2.resolve(process.cwd(), "python_analysis", "sports", `${configKey.replace(/-/g, "_")}.py`);
-  if (!fs2.existsSync(analyzerPath)) {
+  const analyzerPath = resolveProjectPath("python_analysis", "sports", `${configKey.replace(/-/g, "_")}.py`);
+  if (!fs3.existsSync(analyzerPath)) {
     analyzerDepsCache.set(configKey, null);
     return null;
   }
-  const src = fs2.readFileSync(analyzerPath, "utf8");
+  const src = fs3.readFileSync(analyzerPath, "utf8");
   const fnBlock = extractComputeSubScoresBlock(src);
   if (!fnBlock) {
     analyzerDepsCache.set(configKey, null);
@@ -4348,27 +4869,30 @@ function buildScoreOutputsPayload(input) {
 }
 
 // server/analysis-engine.ts
-import fs4 from "fs";
-import path4 from "path";
+import fs6 from "fs";
 
 // server/media-storage.ts
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { eq as eq2 } from "drizzle-orm";
+import { eq as eq3 } from "drizzle-orm";
 import { randomUUID as randomUUID2 } from "node:crypto";
-import fs3 from "node:fs";
+import fs4 from "node:fs";
 import os from "node:os";
 import path3 from "node:path";
 import { pipeline } from "node:stream/promises";
-var VIDEO_STORAGE_MODE_KEY = "VIDEO_STORAGE_MODE";
-var uploadsRoot = path3.resolve(process.cwd(), "uploads");
+import { sql as sql3 } from "drizzle-orm";
+var VIDEO_STORAGE_MODE_KEY = "videoStorageMode";
+var LEGACY_VIDEO_STORAGE_MODE_KEY = "VIDEO_STORAGE_MODE";
+var uploadsRoot = resolveProjectPath("uploads");
 var avatarUploadsDir = path3.join(uploadsRoot, "avatars");
 var cachedR2Client = null;
 function isVideoStorageMode(value) {
   return value === "filesystem" || value === "r2";
 }
 function getDefaultVideoStorageMode() {
-  const envValue = String(process.env.VIDEO_STORAGE_MODE || "").trim().toLowerCase();
+  const envValue = String(
+    process.env.videoStorageMode || process.env.VIDEO_STORAGE_MODE || ""
+  ).trim().toLowerCase();
   if (isVideoStorageMode(envValue)) {
     return envValue;
   }
@@ -4376,8 +4900,8 @@ function getDefaultVideoStorageMode() {
   return isReplitProduction ? "r2" : "filesystem";
 }
 function ensureDirectory(dirPath) {
-  if (!fs3.existsSync(dirPath)) {
-    fs3.mkdirSync(dirPath, { recursive: true });
+  if (!fs4.existsSync(dirPath)) {
+    fs4.mkdirSync(dirPath, { recursive: true });
   }
 }
 function isHttpUrl(value) {
@@ -4393,7 +4917,7 @@ function normalizeKeyPrefix(value, fallback) {
 function getR2Bucket() {
   const bucket = String(process.env.R2_BUCKET || "").trim();
   if (!bucket) {
-    throw new Error("R2_BUCKET is required when VIDEO_STORAGE_MODE is r2");
+    throw new Error("R2_BUCKET is required when videoStorageMode is r2");
   }
   return bucket;
 }
@@ -4473,12 +4997,41 @@ async function downloadR2ObjectToFile(key, targetPath) {
   if (!response.Body) {
     throw new Error(`R2 object not found: ${key}`);
   }
-  const writeStream = fs3.createWriteStream(targetPath);
+  const writeStream = fs4.createWriteStream(targetPath);
   await pipeline(response.Body, writeStream);
 }
+async function migrateLegacyVideoStorageModeSetting() {
+  await db.execute(sql3`
+    insert into app_settings (
+      key,
+      value,
+      created_at,
+      updated_at,
+      created_by_user_id,
+      updated_by_user_id
+    )
+    select
+      ${VIDEO_STORAGE_MODE_KEY},
+      legacy.value,
+      legacy.created_at,
+      legacy.updated_at,
+      legacy.created_by_user_id,
+      legacy.updated_by_user_id
+    from app_settings as legacy
+    where legacy.key = ${LEGACY_VIDEO_STORAGE_MODE_KEY}
+      and not exists (
+        select 1
+        from app_settings as current_setting
+        where current_setting.key = ${VIDEO_STORAGE_MODE_KEY}
+      )
+    on conflict (key) do nothing
+  `);
+  await db.delete(appSettings).where(eq3(appSettings.key, LEGACY_VIDEO_STORAGE_MODE_KEY));
+}
 async function ensureVideoStorageModeSetting() {
+  await migrateLegacyVideoStorageModeSetting();
   const defaultMode = getDefaultVideoStorageMode();
-  const [existing] = await db.select().from(appSettings).where(eq2(appSettings.key, VIDEO_STORAGE_MODE_KEY)).limit(1);
+  const [existing] = await db.select().from(appSettings).where(eq3(appSettings.key, VIDEO_STORAGE_MODE_KEY)).limit(1);
   const storedMode = existing?.value && typeof existing.value === "object" ? String(existing.value.mode || "").trim().toLowerCase() : "";
   if (isVideoStorageMode(storedMode)) {
     return storedMode;
@@ -4497,7 +5050,8 @@ async function ensureVideoStorageModeSetting() {
   return defaultMode;
 }
 async function getVideoStorageMode() {
-  const [existing] = await db.select().from(appSettings).where(eq2(appSettings.key, VIDEO_STORAGE_MODE_KEY)).limit(1);
+  await migrateLegacyVideoStorageModeSetting();
+  const [existing] = await db.select().from(appSettings).where(eq3(appSettings.key, VIDEO_STORAGE_MODE_KEY)).limit(1);
   const storedMode = existing?.value && typeof existing.value === "object" ? String(existing.value.mode || "").trim().toLowerCase() : "";
   if (isVideoStorageMode(storedMode)) {
     return storedMode;
@@ -4505,6 +5059,7 @@ async function getVideoStorageMode() {
   return ensureVideoStorageModeSetting();
 }
 async function setVideoStorageMode(mode, actorUserId) {
+  await migrateLegacyVideoStorageModeSetting();
   await db.insert(appSettings).values({
     key: VIDEO_STORAGE_MODE_KEY,
     value: { mode },
@@ -4531,7 +5086,7 @@ async function storeAvatarBuffer(params) {
   const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${extension}`;
   if (mode === "filesystem") {
     const targetPath = buildFilesystemAvatarPath(filename);
-    fs3.writeFileSync(targetPath, params.buffer);
+    fs4.writeFileSync(targetPath, params.buffer);
     return `/uploads/avatars/${filename}`;
   }
   const key = buildR2Key("avatar", filename);
@@ -4547,7 +5102,7 @@ async function storeVideoBuffer(params) {
   const mode = await getVideoStorageMode();
   if (mode === "filesystem") {
     const targetPath = buildFilesystemVideoPath(params.filename);
-    fs3.writeFileSync(targetPath, params.buffer);
+    fs4.writeFileSync(targetPath, params.buffer);
     return targetPath;
   }
   const key = buildR2Key("video", params.filename);
@@ -4586,7 +5141,7 @@ async function withLocalMediaFile(storedPath, fallbackFilename, fn) {
   const r2Key = parseR2Reference(raw);
   if (!r2Key) {
     const localPath = getFilesystemLocalPath(raw);
-    if (!localPath || !fs3.existsSync(localPath)) {
+    if (!localPath || !fs4.existsSync(localPath)) {
       throw new Error("Media file not found");
     }
     return fn(localPath);
@@ -4598,7 +5153,7 @@ async function withLocalMediaFile(storedPath, fallbackFilename, fn) {
     return await fn(tempPath);
   } finally {
     try {
-      fs3.unlinkSync(tempPath);
+      fs4.unlinkSync(tempPath);
     } catch {
     }
   }
@@ -4618,30 +5173,371 @@ async function deleteStoredMedia(storedPath) {
     return;
   }
   const localPath = getFilesystemLocalPath(raw);
-  if (localPath && fs3.existsSync(localPath)) {
-    fs3.unlinkSync(localPath);
+  if (localPath && fs4.existsSync(localPath)) {
+    fs4.unlinkSync(localPath);
   }
 }
 function isStoredMediaLocallyAccessible(storedPath) {
   const localPath = getFilesystemLocalPath(String(storedPath || ""));
-  return Boolean(localPath && fs3.existsSync(localPath));
+  return Boolean(localPath && fs4.existsSync(localPath));
+}
+
+// server/tennis-upload-validation.ts
+import { execFile } from "child_process";
+import fs5 from "fs";
+var PYTHON_VALIDATION_TIMEOUT_MS = Number(process.env.PYTHON_VALIDATION_TIMEOUT_MS || 36e5);
+var PYTHON_VALIDATION_MAX_BUFFER = 10 * 1024 * 1024;
+var LIGHT_VALIDATION_SAMPLE_COUNT = Number(process.env.PYTHON_LIGHT_VALIDATION_SAMPLE_COUNT || 8);
+var MEDIUM_VALIDATION_SAMPLE_COUNT = Number(process.env.PYTHON_MEDIUM_VALIDATION_SAMPLE_COUNT || 24);
+function parsePythonErrorPayload(raw) {
+  const lines = String(raw || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const candidate = lines[index];
+    if (!candidate.startsWith("{")) continue;
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && (typeof parsed.error === "string" || typeof parsed.traceback === "string")) {
+        return parsed;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+function summarizePythonFailure(context, error, stderr) {
+  const parsedPayload = parsePythonErrorPayload(stderr);
+  if (parsedPayload?.error) {
+    return new Error(`${context}: ${parsedPayload.error}`);
+  }
+  if (error?.killed && error?.signal === "SIGTERM") {
+    return new Error(
+      `${context}: validation timed out after ${Math.round(PYTHON_VALIDATION_TIMEOUT_MS / 1e3)}s on the current runtime`
+    );
+  }
+  const stderrLines = String(stderr || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).filter(
+    (line) => !/^INFO: Created TensorFlow Lite XNNPACK delegate for CPU\.?$/i.test(line)
+  ).filter(
+    (line) => !/Feedback manager requires a model with a single signature inference/i.test(line)
+  ).filter(
+    (line) => !/Using NORM_RECT without IMAGE_DIMENSIONS is only supported for the square ROI/i.test(line)
+  );
+  if (stderrLines.length > 0) {
+    return new Error(`${context}: ${stderrLines[stderrLines.length - 1]}`);
+  }
+  return new Error(`${context}: ${error?.message || "command failed"}`);
+}
+function resolvePythonExecutable() {
+  const envExecutable = process.env.PYTHON_EXECUTABLE;
+  if (envExecutable && fs5.existsSync(envExecutable)) {
+    return envExecutable;
+  }
+  const localCandidates = [
+    resolveProjectPath(".venv", "bin", "python3"),
+    resolveProjectPath(".venv", "bin", "python")
+  ];
+  for (const candidate of localCandidates) {
+    if (fs5.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return "python3";
+}
+function runPythonSportValidation(videoPath, sportName, sampleCount) {
+  return new Promise((resolve2, reject) => {
+    const pythonExecutable = resolvePythonExecutable();
+    execFile(
+      pythonExecutable,
+      [
+        "-m",
+        "python_analysis.run_sport_validation",
+        videoPath,
+        "--sport",
+        sportName.toLowerCase(),
+        "--sample-count",
+        String(Math.max(1, sampleCount))
+      ],
+      {
+        cwd: PROJECT_ROOT,
+        timeout: PYTHON_VALIDATION_TIMEOUT_MS,
+        maxBuffer: PYTHON_VALIDATION_MAX_BUFFER
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          if (stderr) console.error("Python sport validation stderr:", stderr);
+          reject(summarizePythonFailure("Python sport validation failed", error, stderr));
+          return;
+        }
+        try {
+          const result = JSON.parse(String(stdout || "").trim());
+          if (result?.error) {
+            reject(new Error(result.error));
+            return;
+          }
+          resolve2(result);
+        } catch {
+          if (stderr) console.error("Python sport validation stderr:", stderr);
+          reject(new Error("Failed to parse sport validation results"));
+        }
+      }
+    );
+  });
+}
+function getTennisUploadValidationSampleCount(mode) {
+  if (mode !== "light" && mode !== "medium") return null;
+  return mode === "light" ? LIGHT_VALIDATION_SAMPLE_COUNT : MEDIUM_VALIDATION_SAMPLE_COUNT;
+}
+async function validateTennisVideoUpload(videoPath, validationMode, _dominantProfile) {
+  if (validationMode === "disabled") {
+    return { accepted: true, reason: null };
+  }
+  if (validationMode === "full") {
+    return { accepted: true, reason: null };
+  }
+  const sampleCount = getTennisUploadValidationSampleCount(validationMode);
+  if (!sampleCount) {
+    return { accepted: true, reason: null };
+  }
+  const validation = await runPythonSportValidation(videoPath, "tennis", sampleCount);
+  if (validation.valid) {
+    return { accepted: true, reason: null };
+  }
+  return {
+    accepted: false,
+    reason: validation.reason || "Only tennis videos are allowed. Upload a clear tennis stroke or rally clip."
+  };
+}
+
+// server/sport-availability.ts
+import { and as and2, asc as asc2, eq as eq4 } from "drizzle-orm";
+var PRIMARY_ENABLED_SPORT_NAME = "Tennis";
+function normalizeSportName(value) {
+  return String(value || "").trim().toLowerCase();
+}
+function isPrimaryEnabledSportName(value) {
+  return normalizeSportName(value) === normalizeSportName(PRIMARY_ENABLED_SPORT_NAME);
+}
+function isSportEnabledRecord(sport) {
+  if (!sport) return false;
+  if (typeof sport.enabled === "boolean") return sport.enabled;
+  return Boolean(sport.isActive);
+}
+async function listSports(options) {
+  const includeDisabled = Boolean(options?.includeDisabled);
+  const query = db.select().from(sports).orderBy(asc2(sports.sortOrder), asc2(sports.name));
+  if (includeDisabled) {
+    return query;
+  }
+  return db.select().from(sports).where(eq4(sports.enabled, true)).orderBy(asc2(sports.sortOrder), asc2(sports.name));
+}
+async function getSportById(sportId) {
+  const [sport] = await db.select().from(sports).where(eq4(sports.id, sportId)).limit(1);
+  return sport ?? null;
+}
+async function getEnabledPrimarySport() {
+  const [sport] = await db.select().from(sports).where(and2(eq4(sports.enabled, true), eq4(sports.name, PRIMARY_ENABLED_SPORT_NAME))).limit(1);
+  return sport ?? null;
+}
+function mapSportForApi(sport) {
+  return {
+    ...sport,
+    enabled: isSportEnabledRecord(sport)
+  };
+}
+
+// shared/pose-landmarker.ts
+function isPoseLandmarkerModel(value) {
+  return value === "lite" || value === "full" || value === "heavy";
+}
+
+// server/pose-landmarker-settings.ts
+import { eq as eq5 } from "drizzle-orm";
+var POSE_LANDMARKER_MODEL_KEY = "poseLandmarkerModel";
+var DEFAULT_POSE_LANDMARKER_MODEL = "lite";
+var POSE_LANDMARKER_ENV_KEY = "POSE_LANDMARKER_MODEL";
+async function getPoseLandmarkerModel(actorUserId) {
+  const [setting] = await db.select().from(appSettings).where(eq5(appSettings.key, POSE_LANDMARKER_MODEL_KEY)).limit(1);
+  const rawModel = setting?.value && typeof setting.value === "object" ? setting.value.model : null;
+  if (isPoseLandmarkerModel(rawModel)) {
+    return rawModel;
+  }
+  await db.insert(appSettings).values({
+    key: POSE_LANDMARKER_MODEL_KEY,
+    value: { model: DEFAULT_POSE_LANDMARKER_MODEL },
+    ...buildInsertAuditFields(actorUserId || null)
+  }).onConflictDoNothing();
+  return DEFAULT_POSE_LANDMARKER_MODEL;
+}
+async function setPoseLandmarkerModel(model, actorUserId) {
+  await db.insert(appSettings).values({
+    key: POSE_LANDMARKER_MODEL_KEY,
+    value: { model },
+    ...buildInsertAuditFields(actorUserId || null)
+  }).onConflictDoUpdate({
+    target: appSettings.key,
+    set: {
+      value: { model },
+      ...buildUpdateAuditFields(actorUserId || null)
+    }
+  });
+}
+async function getPoseLandmarkerPythonEnv(actorUserId) {
+  const model = await getPoseLandmarkerModel(actorUserId);
+  return {
+    [POSE_LANDMARKER_ENV_KEY]: model
+  };
 }
 
 // server/analysis-engine.ts
+var VIDEO_VALIDATION_MODE_KEY = "videoValidationMode";
+var ANALYSIS_FPS_MODE_KEY = "analysisFpsMode";
+var ASYNC_METRIC_ENRICHMENT_KEYS_BY_CONFIG = {
+  "tennis-forehand": ["elbowAngle"],
+  "tennis-backhand": ["elbowAngle"],
+  "tennis-volley": ["rhythmConsistency"],
+  "tennis-game": ["rallyLength"]
+};
+function isAnalysisFpsMode(value) {
+  return value === "3fps" || value === "6fps" || value === "12fps" || value === "15fps" || value === "24fps" || value === "30fps" || value === "full";
+}
+function isAnalysisFpsStep(value) {
+  return value === "step1" || value === "step2" || value === "step3";
+}
+function shouldUseCoreMetricComputation(configKey) {
+  return String(configKey || "").trim().toLowerCase().startsWith("tennis-");
+}
+function hasPendingAsyncMetricEnrichment(configKey, metricValues) {
+  const requiredKeys = ASYNC_METRIC_ENRICHMENT_KEYS_BY_CONFIG[configKey] || [];
+  if (!requiredKeys.length) return false;
+  return requiredKeys.some((key) => !Number.isFinite(Number(metricValues?.[key])));
+}
+function buildValidationScreeningSnapshot(validationMode) {
+  const uploadGuardSampleCount = getTennisUploadValidationSampleCount(validationMode);
+  return {
+    uploadGuardMode: validationMode,
+    uploadGuardApplied: uploadGuardSampleCount != null,
+    uploadGuardSampleCount,
+    pipelineValidationMode: validationMode,
+    pipelineValidationApplied: validationMode !== "disabled"
+  };
+}
+function mergeValidationScreeningSnapshot(diagnosticsPayload, validationScreening) {
+  if (!validationScreening) return diagnosticsPayload;
+  return {
+    ...diagnosticsPayload,
+    validationScreening
+  };
+}
+function coerceLowImpactStep(value) {
+  if (isAnalysisFpsStep(value)) return value;
+  if (isAnalysisFpsMode(value)) {
+    if (value === "15fps") return "step2";
+    if (value === "12fps" || value === "6fps" || value === "3fps") return "step3";
+    return "step1";
+  }
+  return "step2";
+}
+function coerceHighImpactStep(value) {
+  if (isAnalysisFpsStep(value)) return value;
+  if (isAnalysisFpsMode(value)) {
+    if (value === "15fps") return "step2";
+    if (value === "12fps" || value === "6fps" || value === "3fps") return "step3";
+    return "step1";
+  }
+  return "step1";
+}
+var DEFAULT_PIPELINE_CONFIG_KEY = "tennis-forehand";
+var DEFAULT_PIPELINE_MODEL_VERSION = "0.1";
+function isPipelineStageStatus(value) {
+  return value === "pending" || value === "running" || value === "completed" || value === "failed";
+}
+function parsePipelineProgressLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("{")) return null;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed.type !== "pipeline_timing") return null;
+    if (!isPipelineStageKey(parsed.stageKey) || !isPipelineStageStatus(parsed.status)) return null;
+    return {
+      type: "pipeline_timing",
+      stageKey: parsed.stageKey,
+      status: parsed.status,
+      startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : null,
+      completedAt: typeof parsed.completedAt === "string" ? parsed.completedAt : null,
+      elapsedMs: Number.isFinite(Number(parsed.elapsedMs)) ? Number(parsed.elapsedMs) : null,
+      note: typeof parsed.note === "string" ? parsed.note : null
+    };
+  } catch {
+    return null;
+  }
+}
+async function upsertAnalysisDiagnosticsPayload(analysisId, aiDiagnostics, options = {}) {
+  const [existingRow] = await db.select({
+    id: metrics.id,
+    configKey: metrics.configKey,
+    modelVersion: metrics.modelVersion
+  }).from(metrics).where(eq6(metrics.analysisId, analysisId)).orderBy(desc3(metrics.createdAt)).limit(1);
+  const configKey = options.configKey || existingRow?.configKey || DEFAULT_PIPELINE_CONFIG_KEY;
+  const modelVersion = options.modelVersion || existingRow?.modelVersion || DEFAULT_PIPELINE_MODEL_VERSION;
+  if (existingRow) {
+    await db.update(metrics).set({
+      configKey,
+      modelVersion,
+      aiDiagnostics,
+      ...buildUpdateAuditFields(options.auditActorUserId ?? null)
+    }).where(eq6(metrics.id, existingRow.id));
+    return;
+  }
+  await db.insert(metrics).values({
+    analysisId,
+    configKey,
+    modelVersion,
+    aiDiagnostics,
+    ...buildInsertAuditFields(options.auditActorUserId ?? null)
+  });
+}
+async function persistPipelineTimingUpdate(analysisId, update, options = {}) {
+  let basePayload = {};
+  let baseTiming = options.existingTiming || null;
+  if (!baseTiming) {
+    const [existingRow] = await db.select({ aiDiagnostics: metrics.aiDiagnostics }).from(metrics).where(eq6(metrics.analysisId, analysisId)).orderBy(desc3(metrics.createdAt)).limit(1);
+    if (existingRow?.aiDiagnostics && typeof existingRow.aiDiagnostics === "object") {
+      basePayload = existingRow.aiDiagnostics;
+      baseTiming = extractPipelineTiming(basePayload);
+    }
+  }
+  const nextTiming = updatePipelineTiming(baseTiming, update);
+  const nextPayload = attachPipelineTiming(basePayload, nextTiming);
+  await upsertAnalysisDiagnosticsPayload(analysisId, nextPayload, options);
+  return nextTiming;
+}
+async function seedUploadPipelineTiming(analysisId, uploadTiming, options = {}) {
+  return persistPipelineTimingUpdate(
+    analysisId,
+    {
+      stageKey: "upload",
+      status: "completed",
+      startedAt: uploadTiming.startedAt,
+      completedAt: uploadTiming.completedAt,
+      elapsedMs: uploadTiming.elapsedMs
+    },
+    options
+  );
+}
 async function resolveLockedMovementForRepeatUpload(analysis) {
   if (!analysis.userId || !analysis.sportId) return null;
   const hashValue = String(analysis.videoContentHash || "").trim();
   if (hashValue) {
     const [priorByHash] = await db.select({ detectedMovement: analyses.detectedMovement }).from(analyses).where(
-      and2(
-        eq3(analyses.userId, analysis.userId),
-        eq3(analyses.sportId, analysis.sportId),
-        eq3(analyses.status, "completed"),
+      and3(
+        eq6(analyses.userId, analysis.userId),
+        eq6(analyses.sportId, analysis.sportId),
+        eq6(analyses.status, "completed"),
         ne(analyses.id, analysis.id),
         isNotNull(analyses.detectedMovement),
-        eq3(analyses.videoContentHash, hashValue)
+        eq6(analyses.videoContentHash, hashValue)
       )
-    ).orderBy(desc2(analyses.createdAt)).limit(1);
+    ).orderBy(desc3(analyses.createdAt)).limit(1);
     const movementByHash = String(priorByHash?.detectedMovement || "").trim();
     if (movementByHash.length > 0) {
       return movementByHash;
@@ -4650,26 +5546,26 @@ async function resolveLockedMovementForRepeatUpload(analysis) {
   const filenameCandidates = [analysis.sourceFilename, analysis.videoFilename].map((value) => String(value || "").trim()).filter((value) => value.length > 0);
   if (!filenameCandidates.length) return null;
   const filenamePredicates = filenameCandidates.map(
-    (candidate) => or(eq3(analyses.videoFilename, candidate), eq3(analyses.sourceFilename, candidate))
+    (candidate) => or(eq6(analyses.videoFilename, candidate), eq6(analyses.sourceFilename, candidate))
   );
   const [prior] = await db.select({ detectedMovement: analyses.detectedMovement }).from(analyses).where(
-    and2(
-      eq3(analyses.userId, analysis.userId),
-      eq3(analyses.sportId, analysis.sportId),
-      eq3(analyses.status, "completed"),
+    and3(
+      eq6(analyses.userId, analysis.userId),
+      eq6(analyses.sportId, analysis.sportId),
+      eq6(analyses.status, "completed"),
       ne(analyses.id, analysis.id),
       isNotNull(analyses.detectedMovement),
       filenamePredicates.length === 1 ? filenamePredicates[0] : or(...filenamePredicates)
     )
-  ).orderBy(desc2(analyses.createdAt)).limit(1);
+  ).orderBy(desc3(analyses.createdAt)).limit(1);
   const lockedMovement = String(prior?.detectedMovement || "").trim();
   return lockedMovement.length > 0 ? lockedMovement : null;
 }
 async function computeVideoContentHash(videoPath) {
-  if (!videoPath || !fs4.existsSync(videoPath)) return null;
+  if (!videoPath || !fs6.existsSync(videoPath)) return null;
   const hash = createHash2("sha256");
   return await new Promise((resolve2, reject) => {
-    const stream = fs4.createReadStream(videoPath);
+    const stream = fs6.createReadStream(videoPath);
     stream.on("data", (chunk) => hash.update(chunk));
     stream.on("error", (error) => reject(error));
     stream.on("end", () => resolve2(hash.digest("hex")));
@@ -4680,11 +5576,11 @@ async function findReusableAnalysisPayload(analysis, activeModelVersion) {
   if (!analysis.userId || !analysis.sportId) return null;
   const filenameCandidates = [analysis.sourceFilename, analysis.videoFilename].map((value) => String(value || "").trim()).filter((value) => value.length > 0);
   const filenamePredicates = filenameCandidates.map(
-    (candidate) => or(eq3(analyses.videoFilename, candidate), eq3(analyses.sourceFilename, candidate))
+    (candidate) => or(eq6(analyses.videoFilename, candidate), eq6(analyses.sourceFilename, candidate))
   );
   const duplicateMatchers = [];
   if (hashValue) {
-    duplicateMatchers.push(eq3(analyses.videoContentHash, hashValue));
+    duplicateMatchers.push(eq6(analyses.videoContentHash, hashValue));
   }
   if (filenamePredicates.length === 1) {
     duplicateMatchers.push(filenamePredicates[0]);
@@ -4693,14 +5589,14 @@ async function findReusableAnalysisPayload(analysis, activeModelVersion) {
   }
   if (!duplicateMatchers.length) return null;
   const conditions = [
-    eq3(analyses.userId, analysis.userId),
-    eq3(analyses.sportId, analysis.sportId),
-    eq3(analyses.status, "completed"),
+    eq6(analyses.userId, analysis.userId),
+    eq6(analyses.sportId, analysis.sportId),
+    eq6(analyses.status, "completed"),
     ne(analyses.id, analysis.id),
     duplicateMatchers.length === 1 ? duplicateMatchers[0] : or(...duplicateMatchers)
   ];
   if (analysis.movementId) {
-    conditions.push(eq3(analyses.movementId, analysis.movementId));
+    conditions.push(eq6(analyses.movementId, analysis.movementId));
   }
   const [row] = await db.select({
     detectedMovement: analyses.detectedMovement,
@@ -4715,7 +5611,7 @@ async function findReusableAnalysisPayload(analysis, activeModelVersion) {
     improvementArea: coachingInsights.improvementArea,
     trainingSuggestion: coachingInsights.trainingSuggestion,
     simpleExplanation: coachingInsights.simpleExplanation
-  }).from(analyses).leftJoin(metrics, eq3(metrics.analysisId, analyses.id)).leftJoin(coachingInsights, eq3(coachingInsights.analysisId, analyses.id)).where(and2(...conditions)).orderBy(desc2(analyses.createdAt)).limit(1);
+  }).from(analyses).leftJoin(metrics, eq6(metrics.analysisId, analyses.id)).leftJoin(coachingInsights, eq6(coachingInsights.analysisId, analyses.id)).where(and3(...conditions)).orderBy(desc3(analyses.createdAt)).limit(1);
   if (!row) return null;
   if (!row.configKey || !row.modelVersion || row.modelVersion !== activeModelVersion) return null;
   if (row.overallScore == null || !row.metricValues) return null;
@@ -4820,19 +5716,8 @@ function toFiniteNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
-var PERCENT_LIKE_METRIC_KEYS = /* @__PURE__ */ new Set([
-  "balanceScore",
-  "rhythmConsistency",
-  "shotConsistency"
-]);
-function round1(value) {
-  return Number(value.toFixed(1));
-}
 function normalizeMetricScaleForPersistence(metricKey, value) {
-  if (!Number.isFinite(value)) return value;
-  if (!PERCENT_LIKE_METRIC_KEYS.has(metricKey)) return round1(value);
-  const scaled = value > 10 ? value / 10 : value;
-  return round1(Math.max(0, Math.min(10, scaled)));
+  return normalizeMetricValueToTenScale(metricKey, value);
 }
 function readDiagnosticsComputedMetric(diagnostics, metricKey) {
   if (!diagnostics || typeof diagnostics !== "object") return null;
@@ -4883,6 +5768,242 @@ function normalizeMetricValuesForPersistence(rawMetricValues, diagnostics) {
   }
   return out;
 }
+async function loadUserAnalysisPreferences(userId) {
+  if (!userId) {
+    return {
+      dominantProfile: null,
+      userMetricPreferences: null
+    };
+  }
+  const [profile] = await db.select({
+    dominantProfile: users.dominantProfile,
+    selectedMetricKeys: users.selectedMetricKeys,
+    selectedMetricKeysBySport: users.selectedMetricKeysBySport
+  }).from(users).where(eq6(users.id, userId)).limit(1);
+  return {
+    dominantProfile: profile?.dominantProfile ?? null,
+    userMetricPreferences: {
+      selectedMetricKeys: Array.isArray(profile?.selectedMetricKeys) ? profile.selectedMetricKeys : [],
+      selectedMetricKeysBySport: profile?.selectedMetricKeysBySport && typeof profile.selectedMetricKeysBySport === "object" ? profile.selectedMetricKeysBySport : {}
+    }
+  };
+}
+var COACHING_FACTOR_DEFINITIONS = [
+  { key: "balance", label: "Balance", section: "technical", inputKey: "Balance" },
+  { key: "inertia", label: "Inertia", section: "technical", inputKey: "Inertia" },
+  { key: "oppositeForce", label: "Opposite Force", section: "technical", inputKey: "Opposite Force" },
+  { key: "momentum", label: "Momentum", section: "technical", inputKey: "Momentum" },
+  { key: "elastic", label: "Elastic Energy", section: "technical", inputKey: "Elastic Energy" },
+  { key: "contact", label: "Contact", section: "technical", inputKey: "Contact" },
+  { key: "power", label: "Power", section: "tactical", inputKey: "power" },
+  { key: "control", label: "Control", section: "tactical", inputKey: "control" },
+  { key: "timing", label: "Timing", section: "tactical", inputKey: "timing" },
+  { key: "technique", label: "Technique", section: "tactical", inputKey: "technique" },
+  { key: "ready", label: "Ready", section: "movement", inputKey: "Ready" },
+  { key: "read", label: "Read", section: "movement", inputKey: "Read" },
+  { key: "react", label: "React", section: "movement", inputKey: "React" },
+  { key: "respond", label: "Respond", section: "movement", inputKey: "Respond" },
+  { key: "recover", label: "Recover", section: "movement", inputKey: "Recover" }
+];
+var DRILL_SUGGESTION_BY_METRIC = [
+  {
+    keys: ["reactionTime", "splitStepTime"],
+    message: "Add split-step timing and live-reaction drills so your first move starts earlier."
+  },
+  {
+    keys: ["balanceScore", "stanceAngle", "recoveryTime"],
+    message: "Use balance and recovery footwork drills to stabilize your base before and after contact."
+  },
+  {
+    keys: ["hipRotationSpeed", "shoulderRotation", "shoulderRotationSpeed"],
+    message: "Work on hip-to-shoulder sequencing drills to create cleaner rotation through the shot."
+  },
+  {
+    keys: ["contactDistance", "contactHeight", "contactTiming"],
+    message: "Run spacing and contact-point reps to make your strike window more repeatable."
+  },
+  {
+    keys: ["racketLagAngle", "swingPathAngle", "spinRate"],
+    message: "Use shadow swings and guided path drills to refine racket delivery and shape at contact."
+  },
+  {
+    keys: ["ballSpeed", "shotSpeed", "wristSpeed"],
+    message: "Build controlled acceleration with progressive speed reps instead of chasing power too early."
+  }
+];
+function toSportPreferenceKey(configKey) {
+  return String(configKey || "").split("-")[0]?.trim().toLowerCase() || "";
+}
+function titleCase(value) {
+  return String(value || "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").trim().replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+function formatScore10(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "-";
+  return `${num.toFixed(1)}/10`;
+}
+function formatMetricValue(value, unit) {
+  if (unit.startsWith("/")) {
+    return `${value.toFixed(1)}${unit}`;
+  }
+  if (unit === "%") {
+    return `${Math.round(value)}%`;
+  }
+  const decimals = Math.abs(value) >= 100 ? 0 : 1;
+  return unit ? `${value.toFixed(decimals)} ${unit}` : value.toFixed(decimals);
+}
+function formatRange(range, unit) {
+  if (!range || range.length !== 2) return null;
+  const [min, max] = range;
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  if (unit?.startsWith("/")) {
+    return `${min.toFixed(1)}-${max.toFixed(1)}${unit}`;
+  }
+  if (unit === "%") {
+    return `${Math.round(min)}-${Math.round(max)}%`;
+  }
+  const decimals = Math.max(Math.abs(min), Math.abs(max)) >= 100 ? 0 : 1;
+  return unit ? `${min.toFixed(decimals)}-${max.toFixed(decimals)} ${unit}` : `${min.toFixed(decimals)}-${max.toFixed(decimals)}`;
+}
+function resolveSelectedMetricKeysForCoaching(configKey, preferences) {
+  if (!preferences) return [];
+  const sportKey = toSportPreferenceKey(configKey);
+  const scoped = sportKey ? preferences.selectedMetricKeysBySport?.[sportKey] : null;
+  const fallback = Array.isArray(preferences.selectedMetricKeys) ? preferences.selectedMetricKeys : [];
+  const base = Array.isArray(scoped) && scoped.length > 0 ? scoped : fallback;
+  return Array.from(new Set(base.map((key) => String(key || "").trim()).filter(Boolean)));
+}
+function buildMetricSnapshotMap(configKey, metricValues) {
+  const config = getSportConfig(configKey);
+  const metricDefs = new Map(
+    (config?.metrics || []).map((metric) => [canonicalKey4(metric.key), metric])
+  );
+  const snapshots = /* @__PURE__ */ new Map();
+  for (const [rawKey, rawValue] of Object.entries(metricValues || {})) {
+    const key = String(rawKey || "").trim();
+    const value = Number(rawValue);
+    if (!key || !Number.isFinite(value)) continue;
+    const def = metricDefs.get(canonicalKey4(key));
+    const optimalRange = def?.optimalRange;
+    const inRange = !!(optimalRange && Number.isFinite(optimalRange[0]) && Number.isFinite(optimalRange[1]) && value >= optimalRange[0] && value <= optimalRange[1]);
+    snapshots.set(key, {
+      key,
+      label: def?.label || titleCase(key),
+      unit: def?.unit || "",
+      value,
+      optimalRange,
+      inRange
+    });
+  }
+  return snapshots;
+}
+function extractCoachingFactors(scoreInputs, scoreOutputs) {
+  if (!scoreInputs || !scoreOutputs) return [];
+  return COACHING_FACTOR_DEFINITIONS.map((definition) => {
+    const sectionOutputs = scoreOutputs[definition.section];
+    const components = sectionOutputs && typeof sectionOutputs === "object" ? sectionOutputs.components : null;
+    const rawScore = components && typeof components === "object" ? components[definition.key] : null;
+    const score = Number(rawScore);
+    if (!Number.isFinite(score)) return null;
+    const sectionInputs = scoreInputs[definition.section];
+    const detail = sectionInputs && typeof sectionInputs === "object" ? sectionInputs[definition.inputKey] : null;
+    const parameters = detail && typeof detail === "object" && Array.isArray(detail.parameters) ? detail.parameters.map((item) => String(item || "").trim()).filter(Boolean) : [];
+    return {
+      ...definition,
+      score,
+      parameters
+    };
+  }).filter((item) => item !== null).sort((a, b) => b.score - a.score);
+}
+function chooseSignals(factor, selectedMetricKeys, snapshots, mode) {
+  const selectedCanonical = new Set(selectedMetricKeys.map((key) => canonicalKey4(key)));
+  const factorParameterCanon = new Set((factor?.parameters || []).map((key) => canonicalKey4(key)));
+  const all = [...snapshots.values()].filter(
+    (snapshot) => mode === "positive" ? snapshot.inRange : !snapshot.inRange
+  );
+  const prioritized = all.map((snapshot) => ({
+    snapshot,
+    selected: selectedCanonical.has(canonicalKey4(snapshot.key)),
+    linked: factorParameterCanon.has(canonicalKey4(snapshot.key))
+  })).sort((left, right) => {
+    if (left.selected !== right.selected) return left.selected ? -1 : 1;
+    if (left.linked !== right.linked) return left.linked ? -1 : 1;
+    return left.snapshot.label.localeCompare(right.snapshot.label, void 0, { sensitivity: "base" });
+  }).map((item) => item.snapshot);
+  return prioritized.slice(0, 2);
+}
+function metricSignalText(snapshot, mode) {
+  const valueText = formatMetricValue(snapshot.value, snapshot.unit);
+  const rangeText = formatRange(snapshot.optimalRange, snapshot.unit);
+  if (mode === "positive") {
+    return `${snapshot.label} is a real positive at ${valueText}${rangeText ? `, right in the target window of ${rangeText}` : ""}`;
+  }
+  if (!snapshot.optimalRange) {
+    return `${snapshot.label} at ${valueText} is the next area to tighten`;
+  }
+  const direction = snapshot.value < snapshot.optimalRange[0] ? "below" : "above";
+  return `${snapshot.label} is ${direction} the target window at ${valueText}${rangeText ? `, with the goal set at ${rangeText}` : ""}`;
+}
+function buildTrainingSuggestion(parameters, selectedSignals) {
+  const parameterCanon = new Set(parameters.map((key) => canonicalKey4(key)));
+  const matched = DRILL_SUGGESTION_BY_METRIC.find(
+    (entry) => entry.keys.some((key) => parameterCanon.has(canonicalKey4(key)))
+  );
+  const trackedMetrics = selectedSignals.map((snapshot) => snapshot.label);
+  const trackLine = trackedMetrics.length > 0 ? ` Keep an eye on ${trackedMetrics.join(trackedMetrics.length > 1 ? " and " : "")} across your next few sessions so the improvement is measurable.` : "";
+  return `${matched?.message || "Build the next training block around the weakest score factor, then recheck the supporting metrics after each session."}${trackLine}`;
+}
+function buildPersonalizedCoaching(args) {
+  const config = getSportConfig(args.configKey);
+  const movementLabel = titleCase(args.detectedMovement || config?.movementName || "session");
+  const selectedMetricKeys = resolveSelectedMetricKeysForCoaching(args.configKey, args.preferences);
+  const metricSnapshots = buildMetricSnapshotMap(args.configKey, args.metricValues);
+  const factors = extractCoachingFactors(args.scoreInputs, args.scoreOutputs);
+  const bestFactor = factors[0] || null;
+  const weakestFactor = factors.length > 0 ? [...factors].sort((a, b) => a.score - b.score)[0] : null;
+  const sectionScores = [
+    { label: "Technical", score: Number(args.scoreOutputs?.technical?.overall) },
+    { label: "Tactical", score: Number(args.scoreOutputs?.tactical?.overall) },
+    { label: "Movement", score: Number(args.scoreOutputs?.movement?.overall) }
+  ].filter((entry) => Number.isFinite(entry.score));
+  const bestSection = sectionScores.slice().sort((a, b) => b.score - a.score)[0] || null;
+  const weakestSection = sectionScores.slice().sort((a, b) => a.score - b.score)[0] || null;
+  const positiveSignals = chooseSignals(bestFactor, selectedMetricKeys, metricSnapshots, "positive");
+  const improvementSignals = chooseSignals(weakestFactor, selectedMetricKeys, metricSnapshots, "improvement");
+  const intro = args.overallScore != null && args.overallScore >= 8 ? "Excellent work. This session shows high-quality patterns you can trust and build on." : args.overallScore != null && args.overallScore >= 6.5 ? "There is a strong base here, and several indicators are moving in the right direction." : "There is still work to do, but this session already shows a few encouraging building blocks.";
+  const strengthLines = [intro];
+  if (bestSection && bestFactor) {
+    strengthLines.push(
+      `${bestSection.label} leads this session at ${formatScore10(bestSection.score)}, with ${bestFactor.label} setting the tone at ${formatScore10(bestFactor.score)}.`
+    );
+  }
+  if (positiveSignals.length > 0) {
+    strengthLines.push(`Shout-out: ${positiveSignals.map((signal) => metricSignalText(signal, "positive")).join("; ")}. These are the indicators to keep owning.`);
+  } else if (bestFactor?.parameters?.length) {
+    strengthLines.push(`Shout-out: the indicators feeding ${bestFactor.label} are giving you a strong platform to build from.`);
+  }
+  const improvementLines = [];
+  if (weakestSection && weakestFactor) {
+    improvementLines.push(
+      `${weakestSection.label} is the clearest opportunity right now at ${formatScore10(weakestSection.score)}, especially ${weakestFactor.label} at ${formatScore10(weakestFactor.score)}.`
+    );
+  } else {
+    improvementLines.push("The next jump will come from tightening the weakest score factor and the metrics underneath it.");
+  }
+  if (improvementSignals.length > 0) {
+    improvementLines.push(`Priority focus: ${improvementSignals.map((signal) => metricSignalText(signal, "improvement")).join("; ")}.`);
+  } else if (weakestFactor?.parameters?.length) {
+    improvementLines.push(`Focus on the indicators behind ${weakestFactor.label}: ${weakestFactor.parameters.map((key) => titleCase(key)).join(", ")}.`);
+  }
+  const trainingSuggestion = buildTrainingSuggestion(weakestFactor?.parameters || [], improvementSignals);
+  const simpleExplanation = `${movementLabel} scored ${formatScore10(args.overallScore)} overall. Your best edge today was ${bestFactor ? `${bestFactor.label} at ${formatScore10(bestFactor.score)}` : "your strongest component"}, and the next gain is in ${weakestFactor ? `${weakestFactor.label} at ${formatScore10(weakestFactor.score)}` : "the weakest component"}.`;
+  return {
+    keyStrength: strengthLines.join(" "),
+    improvementArea: improvementLines.join(" "),
+    trainingSuggestion,
+    simpleExplanation
+  };
+}
 function hasAllRequiredUploadDiagnosticsMetrics(metricValues) {
   for (const key of REQUIRED_UPLOAD_DIAGNOSTIC_METRIC_KEYS) {
     if (!Number.isFinite(Number(metricValues[key]))) {
@@ -4891,51 +6012,110 @@ function hasAllRequiredUploadDiagnosticsMetrics(metricValues) {
   }
   return true;
 }
-function resolvePythonExecutable() {
+function resolvePythonExecutable2() {
   const envExecutable = process.env.PYTHON_EXECUTABLE;
-  if (envExecutable && fs4.existsSync(envExecutable)) {
+  if (envExecutable && fs6.existsSync(envExecutable)) {
     return envExecutable;
   }
   const localCandidates = [
-    path4.resolve(process.cwd(), ".venv", "bin", "python3"),
-    path4.resolve(process.cwd(), ".venv", "bin", "python")
+    resolveProjectPath(".venv", "bin", "python3"),
+    resolveProjectPath(".venv", "bin", "python")
   ];
   for (const candidate of localCandidates) {
-    if (fs4.existsSync(candidate)) {
+    if (fs6.existsSync(candidate)) {
       return candidate;
     }
   }
   return "python3";
 }
-function runPythonAnalysis(videoPath, sportName, movementName, dominantProfile) {
+function runPythonAnalysis(videoPath, sportName, movementName, validationMode, analysisFpsSnapshot, metricComputationMode, dominantProfile, onProgress) {
   return new Promise((resolve2, reject) => {
-    const pythonExecutable = resolvePythonExecutable();
-    const args = [
-      "-m",
-      "python_analysis.run_analysis",
-      videoPath,
-      "--sport",
-      sportName.toLowerCase(),
-      "--movement",
-      movementName.toLowerCase().replace(/\s+/g, "-")
-    ];
-    const dominant = String(dominantProfile || "").trim().toLowerCase();
-    if (dominant === "right" || dominant === "left") {
-      args.push("--dominant-profile", dominant);
-    }
-    execFile(
-      pythonExecutable,
-      args,
-      {
-        cwd: process.cwd(),
-        timeout: 12e4,
-        maxBuffer: 10 * 1024 * 1024
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          console.error("Python analysis error:", error.message);
-          if (stderr) console.error("Python stderr:", stderr);
-          reject(new Error(`Python analysis failed: ${error.message}`));
+    void (async () => {
+      const pythonExecutable = resolvePythonExecutable2();
+      const poseEnv = await getPoseLandmarkerPythonEnv();
+      const args = [
+        "-m",
+        "python_analysis.run_analysis",
+        videoPath,
+        "--sport",
+        sportName.toLowerCase(),
+        "--movement",
+        movementName.toLowerCase().replace(/\s+/g, "-"),
+        "--validation-mode",
+        validationMode,
+        "--analysis-fps-mode",
+        analysisFpsSnapshot.effectiveStep,
+        "--low-impact-fps-step",
+        analysisFpsSnapshot.lowImpactStep,
+        "--high-impact-fps-step",
+        analysisFpsSnapshot.highImpactStep,
+        "--tennis-auto-detect-uses-high-impact",
+        String(analysisFpsSnapshot.tennisAutoDetectUsesHighImpact),
+        "--tennis-match-play-uses-high-impact",
+        String(analysisFpsSnapshot.tennisMatchPlayUsesHighImpact),
+        "--analysis-fps-routing-reason",
+        analysisFpsSnapshot.routingReason,
+        "--metric-computation-mode",
+        metricComputationMode
+      ];
+      const dominant = String(dominantProfile || "").trim().toLowerCase();
+      if (dominant === "right" || dominant === "left") {
+        args.push("--dominant-profile", dominant);
+      }
+      const child = spawn(pythonExecutable, args, {
+        cwd: PROJECT_ROOT,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, ...poseEnv }
+      });
+      let stdout = "";
+      let stderr = "";
+      let stderrBuffer = "";
+      let progressChain = Promise.resolve();
+      let settled = false;
+      const timeoutHandle = setTimeout(() => {
+        if (settled) return;
+        child.kill("SIGKILL");
+      }, 36e5);
+      child.stdout.on("data", (chunk) => {
+        stdout += chunk.toString();
+      });
+      child.stderr.on("data", (chunk) => {
+        const text2 = chunk.toString();
+        stderr += text2;
+        stderrBuffer += text2;
+        const lines = stderrBuffer.split(/\r?\n/);
+        stderrBuffer = lines.pop() || "";
+        for (const line of lines) {
+          const event = parsePipelineProgressLine(line);
+          if (!event || !onProgress) continue;
+          progressChain = progressChain.then(() => Promise.resolve(onProgress(event))).catch((error) => {
+            console.warn("Pipeline progress update failed:", error);
+          });
+        }
+      });
+      child.on("error", (error) => {
+        clearTimeout(timeoutHandle);
+        settled = true;
+        reject(new Error(`Python analysis failed: ${error.message}`));
+      });
+      child.on("close", async (code, signal) => {
+        clearTimeout(timeoutHandle);
+        if (settled) return;
+        settled = true;
+        if (stderrBuffer) {
+          stderr += `${stderr.endsWith("\n") || !stderr ? "" : "\n"}${stderrBuffer}`;
+        }
+        try {
+          await progressChain;
+        } catch {
+        }
+        if (signal) {
+          reject(new Error(`Python analysis terminated by signal ${signal}`));
+          return;
+        }
+        if (code !== 0) {
+          if (stderr) console.error("Python analysis stderr:", stderr);
+          reject(new Error(`Python analysis failed with exit code ${code}`));
           return;
         }
         try {
@@ -4944,48 +6124,376 @@ function runPythonAnalysis(videoPath, sportName, movementName, dominantProfile) 
             reject(new Error(result.error));
             return;
           }
-          if (result.rejected) {
-            resolve2(result);
-            return;
-          }
           resolve2(result);
-        } catch (parseError) {
-          console.error("Failed to parse Python output:", stdout);
-          if (stderr) console.error("Python stderr:", stderr);
+        } catch {
+          if (stderr) console.error("Python analysis stderr:", stderr);
           reject(new Error("Failed to parse analysis results"));
         }
-      }
-    );
+      });
+    })().catch((error) => {
+      reject(error);
+    });
   });
 }
-function runPythonDiagnostics(videoPath, sportName, movementName, dominantProfile) {
+function runPythonMetricEnrichment(videoPath, configKey, analysisArtifactPath) {
   return new Promise((resolve2, reject) => {
-    const pythonExecutable = resolvePythonExecutable();
+    const pythonExecutable = resolvePythonExecutable2();
     const args = [
       "-m",
-      "python_analysis.run_diagnostics",
+      "python_analysis.run_metric_enrichment",
       videoPath,
-      "--sport",
-      sportName.toLowerCase(),
-      "--movement",
-      movementName.toLowerCase().replace(/\s+/g, "-")
+      "--config-key",
+      configKey,
+      "--analysis-artifact",
+      analysisArtifactPath
     ];
-    const dominant = String(dominantProfile || "").trim().toLowerCase();
-    if (dominant === "right" || dominant === "left") {
-      args.push("--dominant-profile", dominant);
+    const child = spawn(pythonExecutable, args, {
+      cwd: PROJECT_ROOT,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const timeoutHandle = setTimeout(() => {
+      if (settled) return;
+      child.kill("SIGKILL");
+    }, 36e5);
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => {
+      clearTimeout(timeoutHandle);
+      settled = true;
+      reject(new Error(`Python metric enrichment failed: ${error.message}`));
+    });
+    child.on("close", (code, signal) => {
+      clearTimeout(timeoutHandle);
+      if (settled) return;
+      settled = true;
+      if (code !== 0) {
+        if (stderr) console.error("Python metric enrichment stderr:", stderr);
+        const suffix = signal ? ` (signal: ${signal})` : "";
+        reject(new Error(`Python metric enrichment failed: exit code ${code ?? "unknown"}${suffix}`));
+        return;
+      }
+      try {
+        const result = JSON.parse(stdout.trim());
+        if (result?.error) {
+          reject(new Error(result.error));
+          return;
+        }
+        resolve2(result);
+      } catch {
+        if (stderr) console.error("Python metric enrichment stderr:", stderr);
+        reject(new Error("Failed to parse metric enrichment results"));
+      }
+    });
+  });
+}
+async function backfillAnalysisEnrichment(args) {
+  const enrichmentStartedAt = Date.now();
+  let pipelineTiming = await persistPipelineTimingUpdate(
+    args.analysisId,
+    {
+      stageKey: "diagnostics",
+      status: "running",
+      startedAt: new Date(enrichmentStartedAt).toISOString()
+    },
+    {
+      configKey: args.configKey,
+      modelVersion: args.modelVersion,
+      auditActorUserId: args.auditActorUserId
     }
-    execFile(
-      pythonExecutable,
-      args,
+  );
+  try {
+    const [analysisRow] = await db.select({
+      userId: analyses.userId,
+      detectedMovement: analyses.detectedMovement
+    }).from(analyses).where(eq6(analyses.id, args.analysisId)).limit(1);
+    const [metricRow] = await db.select({
+      id: metrics.id,
+      configKey: metrics.configKey,
+      modelVersion: metrics.modelVersion,
+      overallScore: metrics.overallScore,
+      metricValues: metrics.metricValues,
+      scoreOutputs: metrics.scoreOutputs,
+      aiDiagnostics: metrics.aiDiagnostics
+    }).from(metrics).where(eq6(metrics.analysisId, args.analysisId)).orderBy(desc3(metrics.createdAt)).limit(1);
+    const configKey = metricRow?.configKey || args.configKey || DEFAULT_PIPELINE_CONFIG_KEY;
+    const analysisArtifactPath = String(args.analysisArtifactPath || "").trim();
+    const shouldRunMetricEnrichment = Boolean(
+      analysisArtifactPath && metricRow && hasPendingAsyncMetricEnrichment(
+        configKey,
+        metricRow.metricValues || {}
+      )
+    );
+    const [diagnosticsResult, metricEnrichmentResult] = await Promise.allSettled([
+      runPythonDiagnostics(
+        args.videoPath,
+        args.sportName,
+        args.movementName,
+        args.dominantProfile,
+        args.analysisArtifactPath
+      ),
+      shouldRunMetricEnrichment ? runPythonMetricEnrichment(args.videoPath, configKey, analysisArtifactPath) : Promise.resolve(null)
+    ]);
+    const diagnosticsPayload = diagnosticsResult.status === "fulfilled" ? diagnosticsResult.value : null;
+    const diagnosticsError = diagnosticsResult.status === "rejected" ? diagnosticsResult.reason : null;
+    const metricEnrichmentPayload = metricEnrichmentResult.status === "fulfilled" ? metricEnrichmentResult.value : null;
+    const metricEnrichmentError = metricEnrichmentResult.status === "rejected" ? metricEnrichmentResult.reason : null;
+    const existingDiagnosticsRecord = metricRow?.aiDiagnostics && typeof metricRow.aiDiagnostics === "object" ? metricRow.aiDiagnostics : {};
+    const existingValidationScreening = existingDiagnosticsRecord.validationScreening;
+    const diagnosticsFailureMessage = diagnosticsError ? String(diagnosticsError.message || diagnosticsError) : null;
+    const metricEnrichmentFailureMessage = metricEnrichmentError ? String(metricEnrichmentError.message || metricEnrichmentError) : null;
+    const finalStatus = diagnosticsFailureMessage && metricEnrichmentFailureMessage ? "failed" : "completed";
+    const noteParts = [
+      diagnosticsFailureMessage ? `diagnostics: ${diagnosticsFailureMessage}` : null,
+      metricEnrichmentFailureMessage ? `metric enrichment: ${metricEnrichmentFailureMessage}` : null
+    ].filter((value) => Boolean(value));
+    pipelineTiming = await persistPipelineTimingUpdate(
+      args.analysisId,
       {
-        cwd: process.cwd(),
-        timeout: 12e4,
-        maxBuffer: 10 * 1024 * 1024
+        stageKey: "diagnostics",
+        status: finalStatus,
+        completedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        elapsedMs: Date.now() - enrichmentStartedAt,
+        note: noteParts.length ? noteParts.join(" | ") : null
       },
-      (error, stdout, stderr) => {
-        if (error) {
+      {
+        configKey: args.configKey,
+        modelVersion: args.modelVersion,
+        auditActorUserId: args.auditActorUserId,
+        existingTiming: pipelineTiming
+      }
+    );
+    const diagnosticsBaseRecord = diagnosticsPayload && typeof diagnosticsPayload === "object" ? mergeValidationScreeningSnapshot(
+      diagnosticsPayload,
+      existingValidationScreening
+    ) : mergeValidationScreeningSnapshot(existingDiagnosticsRecord, existingValidationScreening);
+    const diagnosticsWithTiming = attachPipelineTiming(
+      diagnosticsBaseRecord,
+      pipelineTiming
+    );
+    if (!metricRow || !analysisRow) {
+      await upsertAnalysisDiagnosticsPayload(args.analysisId, diagnosticsWithTiming, {
+        configKey: args.configKey,
+        modelVersion: args.modelVersion,
+        auditActorUserId: args.auditActorUserId
+      });
+      if (diagnosticsError && metricEnrichmentError) {
+        throw diagnosticsError;
+      }
+      return;
+    }
+    const metricEnrichmentResultValue = metricEnrichmentPayload;
+    const enrichedMetricValues = metricEnrichmentResultValue?.metricValues || {};
+    const mergedMetricValuesRaw = {
+      ...metricRow.metricValues || {},
+      ...enrichedMetricValues
+    };
+    const normalizedMetricValues = normalizeMetricValuesForPersistence(
+      mergedMetricValuesRaw,
+      diagnosticsWithTiming
+    );
+    const metricValues = sanitizePersistedMap(normalizedMetricValues);
+    const scoreInputs = buildScoreInputsPayload(configKey, metricValues);
+    const tacticalComponents = extractStandardizedTacticalScores10(
+      sanitizePersistedMap(
+        metricRow.scoreOutputs?.tactical?.components || metricRow.scoreOutputs?.tacticalComponents || {}
+      )
+    );
+    const scoreOutputs = buildScoreOutputsPayload({
+      configKey,
+      detectedMovement: analysisRow.detectedMovement || args.movementName,
+      tacticalComponents,
+      metricValues,
+      overallScore: metricRow.overallScore == null ? null : Number(metricRow.overallScore)
+    });
+    const { userMetricPreferences } = await loadUserAnalysisPreferences(analysisRow.userId);
+    const coaching = buildPersonalizedCoaching({
+      configKey,
+      detectedMovement: analysisRow.detectedMovement || args.movementName,
+      overallScore: metricRow.overallScore == null ? null : Number(metricRow.overallScore),
+      scoreInputs,
+      scoreOutputs,
+      metricValues,
+      preferences: userMetricPreferences
+    });
+    await db.transaction(async (tx) => {
+      await tx.update(metrics).set({
+        configKey,
+        modelVersion: metricRow.modelVersion || args.modelVersion || DEFAULT_PIPELINE_MODEL_VERSION,
+        metricValues,
+        scoreInputs,
+        scoreOutputs,
+        aiDiagnostics: diagnosticsWithTiming,
+        ...buildUpdateAuditFields(args.auditActorUserId ?? null)
+      }).where(eq6(metrics.id, metricRow.id));
+      await tx.delete(coachingInsights).where(eq6(coachingInsights.analysisId, args.analysisId));
+      await tx.insert(coachingInsights).values({
+        analysisId: args.analysisId,
+        ...coaching,
+        ...buildInsertAuditFields(args.auditActorUserId ?? null)
+      });
+    });
+    if (diagnosticsFailureMessage) {
+      console.warn(
+        `Diagnostics generation failed for analysis ${args.analysisId}: ${diagnosticsFailureMessage}`
+      );
+    }
+    if (metricEnrichmentFailureMessage) {
+      console.warn(
+        `Metric enrichment failed for analysis ${args.analysisId}: ${metricEnrichmentFailureMessage}`
+      );
+    }
+  } catch (error) {
+    await persistPipelineTimingUpdate(
+      args.analysisId,
+      {
+        stageKey: "diagnostics",
+        status: "failed",
+        completedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        note: error?.message || String(error)
+      },
+      {
+        configKey: args.configKey,
+        modelVersion: args.modelVersion,
+        auditActorUserId: args.auditActorUserId,
+        existingTiming: pipelineTiming
+      }
+    );
+    console.warn(
+      `Diagnostics generation failed for analysis ${args.analysisId}: ${error?.message || error}`
+    );
+  } finally {
+    const artifactPath = String(args.analysisArtifactPath || "").trim();
+    if (artifactPath) {
+      try {
+        fs6.unlinkSync(artifactPath);
+      } catch (cleanupError) {
+        console.warn(
+          `Failed to remove analysis artifact for ${args.analysisId}: ${String(cleanupError)}`
+        );
+      }
+    }
+  }
+}
+async function getVideoValidationMode() {
+  const [setting] = await db.select().from(appSettings).where(eq6(appSettings.key, VIDEO_VALIDATION_MODE_KEY)).limit(1);
+  const rawMode = setting?.value && typeof setting.value === "object" ? setting.value.mode : null;
+  return isVideoValidationMode(rawMode) ? rawMode : "disabled";
+}
+async function getAnalysisFpsSettings() {
+  const [setting] = await db.select().from(appSettings).where(eq6(appSettings.key, ANALYSIS_FPS_MODE_KEY)).limit(1);
+  const rawValue = setting?.value && typeof setting.value === "object" ? setting.value : null;
+  return {
+    lowImpactStep: coerceLowImpactStep(rawValue?.lowImpactStep ?? rawValue?.lowImpactMode),
+    highImpactStep: coerceHighImpactStep(rawValue?.highImpactStep ?? rawValue?.highImpactMode),
+    tennisAutoDetectUsesHighImpact: Boolean(rawValue?.tennisAutoDetectUsesHighImpact),
+    tennisMatchPlayUsesHighImpact: Boolean(rawValue?.tennisMatchPlayUsesHighImpact)
+  };
+}
+function resolveAnalysisFpsModeForMovement(sportName, movementName, requestedSessionType, settings) {
+  const normalizedSport = String(sportName || "").trim().toLowerCase();
+  const normalized = String(movementName || "").trim().toLowerCase();
+  const normalizedSessionType = String(requestedSessionType || "").trim().toLowerCase();
+  if (normalized === "serve") {
+    return {
+      effectiveStep: settings.highImpactStep,
+      lowImpactStep: settings.lowImpactStep,
+      highImpactStep: settings.highImpactStep,
+      tennisAutoDetectUsesHighImpact: settings.tennisAutoDetectUsesHighImpact,
+      tennisMatchPlayUsesHighImpact: settings.tennisMatchPlayUsesHighImpact,
+      routingReason: "serve-selected"
+    };
+  }
+  if (normalizedSport === "tennis" && normalized === "auto-detect" && settings.tennisAutoDetectUsesHighImpact) {
+    return {
+      effectiveStep: settings.highImpactStep,
+      lowImpactStep: settings.lowImpactStep,
+      highImpactStep: settings.highImpactStep,
+      tennisAutoDetectUsesHighImpact: settings.tennisAutoDetectUsesHighImpact,
+      tennisMatchPlayUsesHighImpact: settings.tennisMatchPlayUsesHighImpact,
+      routingReason: "tennis-auto-detect-override"
+    };
+  }
+  if (normalizedSport === "tennis" && normalizedSessionType === "match-play" && settings.tennisMatchPlayUsesHighImpact) {
+    return {
+      effectiveStep: settings.highImpactStep,
+      lowImpactStep: settings.lowImpactStep,
+      highImpactStep: settings.highImpactStep,
+      tennisAutoDetectUsesHighImpact: settings.tennisAutoDetectUsesHighImpact,
+      tennisMatchPlayUsesHighImpact: settings.tennisMatchPlayUsesHighImpact,
+      routingReason: "tennis-match-play-override"
+    };
+  }
+  return {
+    effectiveStep: settings.lowImpactStep,
+    lowImpactStep: settings.lowImpactStep,
+    highImpactStep: settings.highImpactStep,
+    tennisAutoDetectUsesHighImpact: settings.tennisAutoDetectUsesHighImpact,
+    tennisMatchPlayUsesHighImpact: settings.tennisMatchPlayUsesHighImpact,
+    routingReason: "default-low-impact"
+  };
+}
+function runPythonDiagnostics(videoPath, sportName, movementName, dominantProfile, analysisArtifactPath) {
+  return new Promise((resolve2, reject) => {
+    void (async () => {
+      const pythonExecutable = resolvePythonExecutable2();
+      const poseEnv = await getPoseLandmarkerPythonEnv();
+      const args = [
+        "-m",
+        "python_analysis.run_diagnostics",
+        videoPath,
+        "--sport",
+        sportName.toLowerCase(),
+        "--movement",
+        movementName.toLowerCase().replace(/\s+/g, "-")
+      ];
+      const dominant = String(dominantProfile || "").trim().toLowerCase();
+      if (dominant === "right" || dominant === "left") {
+        args.push("--dominant-profile", dominant);
+      }
+      if (analysisArtifactPath) {
+        args.push("--analysis-artifact", analysisArtifactPath);
+      }
+      const child = spawn(pythonExecutable, args, {
+        cwd: PROJECT_ROOT,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, ...poseEnv }
+      });
+      let stdout = "";
+      let stderr = "";
+      let settled = false;
+      const timeoutHandle = setTimeout(() => {
+        if (settled) return;
+        child.kill("SIGKILL");
+      }, 36e5);
+      child.stdout.on("data", (chunk) => {
+        stdout += chunk.toString();
+      });
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+      child.on("error", (error) => {
+        clearTimeout(timeoutHandle);
+        settled = true;
+        reject(new Error(`Python diagnostics failed: ${error.message}`));
+      });
+      child.on("close", (code, signal) => {
+        clearTimeout(timeoutHandle);
+        if (settled) return;
+        settled = true;
+        if (signal) {
+          reject(new Error(`Python diagnostics terminated by signal ${signal}`));
+          return;
+        }
+        if (code !== 0) {
           if (stderr) console.error("Python diagnostics stderr:", stderr);
-          reject(new Error(`Python diagnostics failed: ${error.message}`));
+          reject(new Error(`Python diagnostics failed with exit code ${code}`));
           return;
         }
         try {
@@ -4999,14 +6507,17 @@ function runPythonDiagnostics(videoPath, sportName, movementName, dominantProfil
           if (stderr) console.error("Python diagnostics stderr:", stderr);
           reject(new Error("Failed to parse diagnostics results"));
         }
-      }
-    );
+      });
+    })().catch((error) => {
+      reject(error);
+    });
   });
 }
-async function processAnalysis(analysisId) {
+async function processAnalysis(analysisId, options) {
+  let pipelineTiming = null;
   try {
-    await db.update(analyses).set({ status: "processing", rejectionReason: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq3(analyses.id, analysisId));
-    const [analysis] = await db.select().from(analyses).where(eq3(analyses.id, analysisId));
+    await db.update(analyses).set({ status: "processing", rejectionReason: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq6(analyses.id, analysisId));
+    const [analysis] = await db.select().from(analyses).where(eq6(analyses.id, analysisId));
     if (!analysis) {
       throw new Error("Analysis not found");
     }
@@ -5014,57 +6525,113 @@ async function processAnalysis(analysisId) {
     let sportName = "tennis";
     let movementName = "auto-detect";
     if (analysis.movementId) {
-      const [movement] = await db.select().from(sportMovements).where(eq3(sportMovements.id, analysis.movementId));
+      const [movement] = await db.select().from(sportMovements).where(eq6(sportMovements.id, analysis.movementId));
       if (movement) {
         movementName = movement.name;
       }
     }
     if (analysis.sportId) {
-      const [sport] = await db.select().from(sports).where(eq3(sports.id, analysis.sportId));
+      const sport = await getSportById(analysis.sportId);
       if (sport) {
+        if (!isSportEnabledRecord(sport)) {
+          await db.update(analyses).set({
+            status: "failed",
+            rejectionReason: `${sport.name} is currently disabled and was not executed.`,
+            ...buildUpdateAuditFields(auditActorUserId)
+          }).where(eq6(analyses.id, analysisId));
+          return;
+        }
         sportName = sport.name;
       }
+    } else {
+      const enabledPrimarySport = await getEnabledPrimarySport();
+      if (!enabledPrimarySport) {
+        await db.update(analyses).set({
+          status: "failed",
+          rejectionReason: "No enabled sport is available for execution.",
+          ...buildUpdateAuditFields(auditActorUserId)
+        }).where(eq6(analyses.id, analysisId));
+        return;
+      }
+      sportName = enabledPrimarySport.name;
     }
     let dominantProfile = null;
-    if (analysis.userId) {
-      const [profile] = await db.select({ dominantProfile: users.dominantProfile }).from(users).where(eq3(users.id, analysis.userId)).limit(1);
-      dominantProfile = profile?.dominantProfile ?? null;
-    }
+    let userMetricPreferences = null;
+    const [videoValidationMode, analysisFpsSettings] = await Promise.all([
+      getVideoValidationMode(),
+      getAnalysisFpsSettings()
+    ]);
+    const validationScreening = buildValidationScreeningSnapshot(videoValidationMode);
+    const profileContext = await loadUserAnalysisPreferences(analysis.userId);
+    dominantProfile = profileContext.dominantProfile;
+    userMetricPreferences = profileContext.userMetricPreferences;
     await withLocalMediaFile(analysis.videoPath, analysis.videoFilename, async (localVideoPath) => {
-      const videoContentHash = await computeVideoContentHash(localVideoPath);
-      if (videoContentHash) {
-        await db.update(analyses).set({ videoContentHash, updatedAt: /* @__PURE__ */ new Date() }).where(eq3(analyses.id, analysis.id));
-        analysis.videoContentHash = videoContentHash;
+      if (String(sportName || "").trim().toLowerCase() === "tennis") {
+        const tennisUploadGuard = await validateTennisVideoUpload(
+          localVideoPath,
+          videoValidationMode,
+          dominantProfile
+        );
+        if (!tennisUploadGuard.accepted) {
+          await db.update(analyses).set({
+            status: "rejected",
+            rejectionReason: tennisUploadGuard.reason || "Only tennis videos are allowed. Upload a clear tennis stroke or rally clip.",
+            ...buildUpdateAuditFields(auditActorUserId)
+          }).where(eq6(analyses.id, analysisId));
+          return;
+        }
       }
+      const videoContentHashPromise = computeVideoContentHash(localVideoPath).then(async (videoContentHash) => {
+        if (!videoContentHash) return null;
+        await db.update(analyses).set({ videoContentHash, updatedAt: /* @__PURE__ */ new Date() }).where(eq6(analyses.id, analysis.id));
+        analysis.videoContentHash = videoContentHash;
+        return videoContentHash;
+      }).catch((hashError) => {
+        console.warn(
+          `Video hash computation failed for analysis ${analysisId}: ${String(hashError)}`
+        );
+        return null;
+      });
       const modelRegistryConfig = readModelRegistryConfig();
-      const reusablePayload = await findReusableAnalysisPayload(
+      const initialConfigKey = getConfigKey(sportName, movementName);
+      const applyPipelineUpdate = async (update) => {
+        pipelineTiming = await persistPipelineTimingUpdate(analysisId, update, {
+          configKey: initialConfigKey,
+          modelVersion: modelRegistryConfig.activeModelVersion,
+          auditActorUserId,
+          existingTiming: pipelineTiming
+        });
+      };
+      const reusablePayload = options?.forceFreshDiagnostics ? null : await findReusableAnalysisPayload(
         analysis,
         modelRegistryConfig.activeModelVersion
       );
       if (reusablePayload) {
+        const needsDiagnosticsBackfill = !hasAllRequiredUploadDiagnosticsMetrics(
+          normalizeMetricValuesForPersistence(
+            reusablePayload.metricValues || {},
+            reusablePayload.aiDiagnostics
+          )
+        );
+        const needsAsyncMetricEnrichment = hasPendingAsyncMetricEnrichment(
+          reusablePayload.configKey,
+          reusablePayload.metricValues
+        );
         let normalizedReusableMetrics = normalizeMetricValuesForPersistence(
           reusablePayload.metricValues || {},
           reusablePayload.aiDiagnostics
         );
         let reusableDiagnosticsPayload = reusablePayload.aiDiagnostics;
-        if (!hasAllRequiredUploadDiagnosticsMetrics(normalizedReusableMetrics)) {
-          try {
-            const diagnosticsMovement = reusablePayload.detectedMovement || movementName;
-            reusableDiagnosticsPayload = await runPythonDiagnostics(
-              localVideoPath,
-              sportName,
-              diagnosticsMovement,
-              dominantProfile
-            );
-            normalizedReusableMetrics = normalizeMetricValuesForPersistence(
-              normalizedReusableMetrics,
-              reusableDiagnosticsPayload
-            );
-          } catch (diagnosticsError) {
-            console.warn(
-              `Diagnostics backfill failed for reused analysis ${analysisId}: ${diagnosticsError?.message || diagnosticsError}`
-            );
-          }
+        if (needsDiagnosticsBackfill || needsAsyncMetricEnrichment) {
+          pipelineTiming = updatePipelineTiming(pipelineTiming, {
+            stageKey: "diagnostics",
+            status: "pending"
+          });
+          const queuedDiagnostics = reusableDiagnosticsPayload && typeof reusableDiagnosticsPayload === "object" ? reusableDiagnosticsPayload : {};
+          reusableDiagnosticsPayload = attachPipelineTiming(
+            mergeValidationScreeningSnapshot(queuedDiagnostics, validationScreening),
+            pipelineTiming
+          );
         }
         const sanitizedMetricValues = sanitizePersistedMap(normalizedReusableMetrics);
         const reusableScoreInputs = buildScoreInputsPayload(
@@ -5083,9 +6650,18 @@ async function processAnalysis(analysisId) {
           metricValues: sanitizedMetricValues,
           overallScore: reusablePayload.overallScore
         });
+        const reusableCoaching = buildPersonalizedCoaching({
+          configKey: reusablePayload.configKey,
+          detectedMovement: reusablePayload.detectedMovement || movementName,
+          overallScore: reusablePayload.overallScore,
+          scoreInputs: reusableScoreInputs,
+          scoreOutputs: reusableScoreOutputs,
+          metricValues: sanitizedMetricValues,
+          preferences: userMetricPreferences
+        });
         await db.transaction(async (tx) => {
-          await tx.delete(coachingInsights).where(eq3(coachingInsights.analysisId, analysisId));
-          await tx.delete(metrics).where(eq3(metrics.analysisId, analysisId));
+          await tx.delete(coachingInsights).where(eq6(coachingInsights.analysisId, analysisId));
+          await tx.delete(metrics).where(eq6(metrics.analysisId, analysisId));
           await tx.insert(metrics).values({
             analysisId,
             configKey: reusablePayload.configKey,
@@ -5099,7 +6675,7 @@ async function processAnalysis(analysisId) {
           });
           await tx.insert(coachingInsights).values({
             analysisId,
-            ...reusablePayload.coaching,
+            ...reusableCoaching,
             ...buildInsertAuditFields(auditActorUserId)
           });
         });
@@ -5108,7 +6684,20 @@ async function processAnalysis(analysisId) {
           detectedMovement: reusablePayload.detectedMovement || movementName,
           rejectionReason: null,
           ...buildUpdateAuditFields(auditActorUserId)
-        }).where(eq3(analyses.id, analysisId));
+        }).where(eq6(analyses.id, analysisId));
+        if (needsDiagnosticsBackfill || needsAsyncMetricEnrichment) {
+          void backfillAnalysisEnrichment({
+            analysisId,
+            videoPath: localVideoPath,
+            sportName,
+            movementName: reusablePayload.detectedMovement || movementName,
+            dominantProfile,
+            configKey: reusablePayload.configKey,
+            modelVersion: modelRegistryConfig.activeModelVersion,
+            auditActorUserId
+          });
+        }
+        void videoContentHashPromise;
         console.log(`Analysis ${analysisId} reused scores from prior identical video hash`);
         return;
       }
@@ -5122,6 +6711,12 @@ async function processAnalysis(analysisId) {
         }
       }
       const configKey = getConfigKey(sportName, movementName);
+      const analysisFpsSnapshot = resolveAnalysisFpsModeForMovement(
+        sportName,
+        movementName,
+        analysis.requestedSessionType,
+        analysisFpsSettings
+      );
       console.log(
         `Starting Python analysis for: ${analysis.videoPath} (${sportName}/${movementName}, config: ${configKey})`
       );
@@ -5129,17 +6724,23 @@ async function processAnalysis(analysisId) {
         localVideoPath,
         sportName,
         movementName,
-        dominantProfile
+        videoValidationMode,
+        analysisFpsSnapshot,
+        shouldUseCoreMetricComputation(configKey) ? "core" : "full",
+        dominantProfile,
+        async (event) => {
+          await applyPipelineUpdate(event);
+        }
       );
       if (result.rejected) {
-        console.log(
-          `Analysis ${analysisId} rejected: ${result.rejectionReason}`
+        console.warn(
+          `Analysis ${analysisId} rejected by pipeline validation mode ${videoValidationMode}: ${result.rejectionReason}`
         );
         await db.update(analyses).set({
           status: "rejected",
-          rejectionReason: result.rejectionReason || "Video content does not match the selected sport.",
+          rejectionReason: result.rejectionReason || "Video content does not match the selected validation mode.",
           ...buildUpdateAuditFields(auditActorUserId)
-        }).where(eq3(analyses.id, analysisId));
+        }).where(eq6(analyses.id, analysisId));
         return;
       }
       const actualMovement = result.detectedMovement || movementName;
@@ -5153,32 +6754,14 @@ async function processAnalysis(analysisId) {
           `Python analysis complete. Overall score: ${result.overallScore}`
         );
       }
-      const runtimeOverallScore100 = normalizeRuntimeScoreToHundred(result.overallScore);
-      if (runtimeOverallScore100 != null && runtimeOverallScore100 < 15) {
-        const sportLabel = sportName.charAt(0).toUpperCase() + sportName.slice(1);
-        console.log(
-          `Analysis ${analysisId} auto-rejected: score ${runtimeOverallScore100} below minimum threshold`
-        );
-        await db.update(analyses).set({
-          status: "rejected",
-          rejectionReason: `The video content could not be reliably analyzed as a ${sportLabel} movement. Please upload a clearer video of your ${sportLabel} technique.`,
-          ...buildUpdateAuditFields(auditActorUserId)
-        }).where(eq3(analyses.id, analysisId));
-        return;
-      }
-      let diagnosticsPayload = null;
-      try {
-        diagnosticsPayload = await runPythonDiagnostics(
-          localVideoPath,
-          sportName,
-          actualMovement,
-          dominantProfile
-        );
-      } catch (diagnosticsError) {
-        console.warn(
-          `Diagnostics generation failed for analysis ${analysisId}: ${diagnosticsError?.message || diagnosticsError}`
-        );
-      }
+      pipelineTiming = updatePipelineTiming(pipelineTiming, {
+        stageKey: "diagnostics",
+        status: "pending"
+      });
+      const diagnosticsPayload = pipelineTiming ? attachPipelineTiming(
+        mergeValidationScreeningSnapshot({}, validationScreening),
+        pipelineTiming
+      ) : null;
       const metricValuesRaw = { ...result.metricValues };
       if (result.shotCount != null) {
         metricValuesRaw.shotCount = result.shotCount;
@@ -5204,9 +6787,18 @@ async function processAnalysis(analysisId) {
         metricValues,
         overallScore: persistedOverallScore
       });
+      const coaching = buildPersonalizedCoaching({
+        configKey: resolvedConfigKey,
+        detectedMovement: actualMovement,
+        overallScore: persistedOverallScore,
+        scoreInputs,
+        scoreOutputs,
+        metricValues,
+        preferences: userMetricPreferences
+      });
       await db.transaction(async (tx) => {
-        await tx.delete(coachingInsights).where(eq3(coachingInsights.analysisId, analysisId));
-        await tx.delete(metrics).where(eq3(metrics.analysisId, analysisId));
+        await tx.delete(coachingInsights).where(eq6(coachingInsights.analysisId, analysisId));
+        await tx.delete(metrics).where(eq6(metrics.analysisId, analysisId));
         await tx.insert(metrics).values({
           analysisId,
           configKey: resolvedConfigKey,
@@ -5220,7 +6812,7 @@ async function processAnalysis(analysisId) {
         });
         await tx.insert(coachingInsights).values({
           analysisId,
-          ...result.coaching,
+          ...coaching,
           ...buildInsertAuditFields(auditActorUserId)
         });
       });
@@ -5229,12 +6821,46 @@ async function processAnalysis(analysisId) {
         detectedMovement: actualMovement,
         rejectionReason: null,
         ...buildUpdateAuditFields(auditActorUserId)
-      }).where(eq3(analyses.id, analysisId));
+      }).where(eq6(analyses.id, analysisId));
+      void backfillAnalysisEnrichment({
+        analysisId,
+        videoPath: localVideoPath,
+        sportName,
+        movementName: actualMovement,
+        dominantProfile,
+        analysisArtifactPath: result.analysisArtifactPath,
+        configKey: resolvedConfigKey,
+        modelVersion: modelRegistryConfig.activeModelVersion,
+        auditActorUserId
+      });
+      void videoContentHashPromise;
       console.log(`Analysis ${analysisId} completed successfully`);
     });
   } catch (error) {
     console.error("Analysis processing error:", error);
-    await db.update(analyses).set({ status: "failed", ...buildUpdateAuditFields(null) }).where(eq3(analyses.id, analysisId));
+    const failureMessage = error instanceof Error && error.message.trim().length > 0 ? error.message.trim() : "Processing failed unexpectedly. Please try again.";
+    const currentTiming = pipelineTiming;
+    const currentStageKey = currentTiming?.currentStageKey ?? null;
+    if (currentStageKey) {
+      try {
+        pipelineTiming = await persistPipelineTimingUpdate(
+          analysisId,
+          {
+            stageKey: currentStageKey,
+            status: "failed",
+            note: failureMessage
+          },
+          { existingTiming: currentTiming }
+        );
+      } catch (timingError) {
+        console.warn("Failed to persist pipeline timing failure state:", timingError);
+      }
+    }
+    await db.update(analyses).set({
+      status: "failed",
+      rejectionReason: failureMessage,
+      ...buildUpdateAuditFields(null)
+    }).where(eq6(analyses.id, analysisId));
   }
 }
 
@@ -5243,7 +6869,22 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import multer from "multer";
-import { eq as eq4, or as or2, sql as sql3 } from "drizzle-orm";
+
+// shared/default-user-preferences.ts
+var DEFAULT_SELECTED_METRIC_KEYS = [
+  "ballSpeed",
+  "spinRate",
+  "shoulderRotation",
+  "hipRotationSpeed"
+];
+var DEFAULT_SELECTED_SCORE_SECTIONS = [
+  "Technical (Biomechanics)",
+  "Tactical",
+  "Movement"
+];
+
+// server/auth.ts
+import { eq as eq7, or as or2, sql as sql4 } from "drizzle-orm";
 async function sanitizeUser(user) {
   const selectedScoreSectionsBySport = user.selectedScoreSectionsBySport && typeof user.selectedScoreSectionsBySport === "object" ? user.selectedScoreSectionsBySport : {};
   const selectedMetricKeysBySport = user.selectedMetricKeysBySport && typeof user.selectedMetricKeysBySport === "object" ? user.selectedMetricKeysBySport : {};
@@ -5280,19 +6921,22 @@ var avatarUpload = multer({
 var PgSession = connectPgSimple(session);
 async function setupAuth(app2) {
   await db.execute(
-    sql3`alter table users add column if not exists dominant_profile text`
+    sql4`alter table users add column if not exists dominant_profile text`
   );
   await db.execute(
-    sql3`alter table users add column if not exists selected_score_sections jsonb default '[]'::jsonb`
+    sql4`alter table users add column if not exists selected_score_sections jsonb default '[]'::jsonb`
   );
   await db.execute(
-    sql3`alter table users add column if not exists selected_metric_keys jsonb default '[]'::jsonb`
+    sql4`alter table users add column if not exists selected_metric_keys jsonb default '[]'::jsonb`
   );
   await db.execute(
-    sql3`alter table users add column if not exists selected_score_sections_by_sport jsonb default '{}'::jsonb`
+    sql4`alter table users add column if not exists selected_score_sections_by_sport jsonb default '{}'::jsonb`
   );
   await db.execute(
-    sql3`alter table users add column if not exists selected_metric_keys_by_sport jsonb default '{}'::jsonb`
+    sql4`alter table users add column if not exists selected_metric_keys_by_sport jsonb default '{}'::jsonb`
+  );
+  await db.execute(
+    sql4`alter table users alter column role set default 'admin'`
   );
   app2.use(
     session({
@@ -5318,7 +6962,7 @@ async function setupAuth(app2) {
         return res.status(400).json({ error: parsed.error.errors[0].message });
       }
       const { email, name, password } = parsed.data;
-      const [existing] = await db.select().from(users).where(eq4(users.email, email.toLowerCase()));
+      const [existing] = await db.select().from(users).where(eq7(users.email, email.toLowerCase()));
       if (existing) {
         return res.status(409).json({ error: "Email already registered" });
       }
@@ -5327,6 +6971,9 @@ async function setupAuth(app2) {
         email: email.toLowerCase(),
         name,
         passwordHash,
+        role: "admin",
+        selectedScoreSections: [...DEFAULT_SELECTED_SCORE_SECTIONS],
+        selectedMetricKeys: [...DEFAULT_SELECTED_METRIC_KEYS],
         ...buildInsertAuditFields(null)
       }).returning();
       req.session.userId = user.id;
@@ -5338,7 +6985,7 @@ async function setupAuth(app2) {
   });
   app2.post("/api/admin/players", requireAuth, async (req, res) => {
     try {
-      const [requester] = await db.select().from(users).where(eq4(users.id, req.session.userId));
+      const [requester] = await db.select().from(users).where(eq7(users.id, req.session.userId));
       if (!requester || requester.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
@@ -5347,7 +6994,7 @@ async function setupAuth(app2) {
         return res.status(400).json({ error: parsed.error.errors[0].message });
       }
       const { email, name, password } = parsed.data;
-      const [existing] = await db.select().from(users).where(eq4(users.email, email.toLowerCase()));
+      const [existing] = await db.select().from(users).where(eq7(users.email, email.toLowerCase()));
       if (existing) {
         return res.status(409).json({ error: "Email already registered" });
       }
@@ -5358,6 +7005,8 @@ async function setupAuth(app2) {
         passwordHash,
         role: "player",
         country: requester.country || null,
+        selectedScoreSections: [...DEFAULT_SELECTED_SCORE_SECTIONS],
+        selectedMetricKeys: [...DEFAULT_SELECTED_METRIC_KEYS],
         ...buildInsertAuditFields(requester.id)
       }).returning();
       res.status(201).json(await sanitizeUser(createdPlayer));
@@ -5380,8 +7029,8 @@ async function setupAuth(app2) {
       const normalizedEmail = normalizedIdentifier.toLowerCase();
       const [user] = await db.select().from(users).where(
         or2(
-          eq4(users.id, normalizedIdentifier),
-          eq4(users.email, normalizedEmail)
+          eq7(users.id, normalizedIdentifier),
+          eq7(users.email, normalizedEmail)
         )
       );
       if (!user) {
@@ -5464,7 +7113,7 @@ async function setupAuth(app2) {
       if (!googleUser || !googleUser.email) {
         return res.status(401).json({ error: "Could not verify Google account" });
       }
-      const [existing] = await db.select().from(users).where(eq4(users.email, googleUser.email.toLowerCase()));
+      const [existing] = await db.select().from(users).where(eq7(users.email, googleUser.email.toLowerCase()));
       if (existing) {
         req.session.userId = existing.id;
         const updates = {};
@@ -5475,7 +7124,7 @@ async function setupAuth(app2) {
           const [updated] = await db.update(users).set({
             ...updates,
             ...buildUpdateAuditFields(existing.id)
-          }).where(eq4(users.id, existing.id)).returning();
+          }).where(eq7(users.id, existing.id)).returning();
           return res.json(await sanitizeUser(updated));
         }
         return res.json(await sanitizeUser(existing));
@@ -5488,6 +7137,9 @@ async function setupAuth(app2) {
         passwordHash,
         avatarUrl: googleUser.picture || null,
         country: "Singapore",
+        role: "admin",
+        selectedScoreSections: [...DEFAULT_SELECTED_SCORE_SECTIONS],
+        selectedMetricKeys: [...DEFAULT_SELECTED_METRIC_KEYS],
         ...buildInsertAuditFields(null)
       }).returning();
       req.session.userId = newUser.id;
@@ -5502,7 +7154,7 @@ async function setupAuth(app2) {
       return res.status(401).json({ error: "Not authenticated" });
     }
     try {
-      const [user] = await db.select().from(users).where(eq4(users.id, req.session.userId));
+      const [user] = await db.select().from(users).where(eq7(users.id, req.session.userId));
       if (!user) {
         req.session.destroy(() => {
         });
@@ -5515,7 +7167,7 @@ async function setupAuth(app2) {
   });
   app2.get("/api/profile", requireAuth, async (req, res) => {
     try {
-      const [user] = await db.select().from(users).where(eq4(users.id, req.session.userId));
+      const [user] = await db.select().from(users).where(eq7(users.id, req.session.userId));
       if (!user) return res.status(404).json({ error: "User not found" });
       res.json(await sanitizeUser(user));
     } catch (error) {
@@ -5538,7 +7190,7 @@ async function setupAuth(app2) {
         role
       } = req.body;
       const requesterId = req.session.userId;
-      const [requester] = await db.select().from(users).where(eq4(users.id, requesterId));
+      const [requester] = await db.select().from(users).where(eq7(users.id, requesterId));
       if (!requester) {
         return res.status(401).json({ error: "User not found" });
       }
@@ -5560,7 +7212,21 @@ async function setupAuth(app2) {
           return res.status(400).json({ error: "dominantProfile must be Right or Left" });
         }
       }
-      if (sportsInterests !== void 0) updates.sportsInterests = sportsInterests?.trim() || null;
+      if (sportsInterests !== void 0) {
+        const normalizedSportsInterest = String(sportsInterests || "").trim();
+        if (!normalizedSportsInterest) {
+          updates.sportsInterests = null;
+        } else {
+          const enabledSports = await listSports({ includeDisabled: false });
+          const matchingEnabledSport = enabledSports.find(
+            (sport) => normalizeSportName(sport.name) === normalizeSportName(normalizedSportsInterest)
+          );
+          if (!matchingEnabledSport) {
+            return res.status(400).json({ error: "Selected sport is not enabled." });
+          }
+          updates.sportsInterests = matchingEnabledSport.name;
+        }
+      }
       if (bio !== void 0) updates.bio = bio?.trim() || null;
       if (selectedScoreSections !== void 0) {
         if (!Array.isArray(selectedScoreSections) || !selectedScoreSections.every((v) => typeof v === "string")) {
@@ -5603,7 +7269,7 @@ async function setupAuth(app2) {
       const [updated] = await db.update(users).set({
         ...updates,
         ...buildUpdateAuditFields(requesterId)
-      }).where(eq4(users.id, requesterId)).returning();
+      }).where(eq7(users.id, requesterId)).returning();
       res.json(await sanitizeUser(updated));
     } catch (error) {
       res.status(500).json({ error: "Failed to update profile" });
@@ -5636,7 +7302,7 @@ async function setupAuth(app2) {
         const [updated] = await db.update(users).set({
           avatarUrl,
           ...buildUpdateAuditFields(req.session.userId)
-        }).where(eq4(users.id, req.session.userId)).returning();
+        }).where(eq7(users.id, req.session.userId)).returning();
         res.json(await sanitizeUser(updated));
       } catch (error) {
         res.status(500).json({ error: "Failed to upload avatar" });
@@ -5652,16 +7318,242 @@ function requireAuth(req, res, next) {
 }
 
 // server/routes.ts
-import { eq as eq5, asc, and as and3, desc as desc3, inArray, sql as sql4 } from "drizzle-orm";
-var uploadDir = path5.resolve(process.cwd(), "uploads");
-if (!fs5.existsSync(uploadDir)) {
-  fs5.mkdirSync(uploadDir, { recursive: true });
+import { eq as eq8, asc as asc3, and as and4, desc as desc4, inArray as inArray2, sql as sql6 } from "drizzle-orm";
+
+// server/tennis-training-storage.ts
+import { sql as sql5 } from "drizzle-orm";
+function normalizeLabel(value) {
+  const normalized = String(value || "").trim().toLowerCase().replace(/[_\s]+/g, "-");
+  if (["forehand", "backhand", "serve", "volley", "unknown"].includes(normalized)) return normalized;
+  return "";
+}
+function numberOrNull(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+function boolNumber(value) {
+  return value ? 1 : 0;
+}
+function toLabelArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+function toShotDiagnosticsArray(diagnostics) {
+  if (Array.isArray(diagnostics?.shotLabelDiagnostics)) {
+    return diagnostics.shotLabelDiagnostics;
+  }
+  if (Array.isArray(diagnostics?.shotSegments)) {
+    return diagnostics.shotSegments.map((segment) => ({
+      shotIndex: numberOrNull(segment?.index) ?? void 0,
+      label: String(segment?.label || ""),
+      rawLabel: String(segment?.rawLabel || segment?.label || ""),
+      confidence: numberOrNull(segment?.confidence) ?? void 0,
+      frames: numberOrNull(segment?.frames) ?? void 0,
+      fps: numberOrNull(diagnostics?.fps) ?? void 0,
+      validPoseFrames: numberOrNull(segment?.validPoseFrames) ?? void 0,
+      classificationDebug: segment?.classificationDebug && typeof segment.classificationDebug === "object" ? segment.classificationDebug : {},
+      reasons: Array.isArray(segment?.classificationDebug?.reasons) ? segment.classificationDebug.reasons : []
+    }));
+  }
+  return [];
+}
+function buildFeatureValues(diag, row) {
+  const dbg = diag?.classificationDebug && typeof diag.classificationDebug === "object" ? diag.classificationDebug : {};
+  const key = diag?.keyFeatures && typeof diag.keyFeatures === "object" ? diag.keyFeatures : {};
+  const reasons = Array.isArray(diag?.reasons) ? diag.reasons : Array.isArray(dbg?.reasons) ? dbg.reasons : [];
+  const rightSpeed = numberOrNull(dbg.rightWristSpeed ?? key.max_rw_speed);
+  const leftSpeed = numberOrNull(dbg.leftWristSpeed ?? key.max_lw_speed);
+  const maxWristSpeed = numberOrNull(dbg.maxWristSpeed ?? key.max_wrist_speed);
+  const swingArcRatio = numberOrNull(dbg.swingArcRatio ?? key.swing_arc_ratio);
+  const contactHeightRatio = numberOrNull(dbg.contactHeightRatio ?? key.contact_height_ratio);
+  const shoulderRotationDeltaDeg = numberOrNull(dbg.shoulderRotationDeltaDeg ?? key.shoulder_rotation_delta_deg);
+  const isServe = Boolean(dbg.isServe ?? key.is_serve);
+  const isOverhead = Boolean(dbg.isOverhead ?? key.is_overhead);
+  const segmentFrames = numberOrNull(diag?.frames);
+  const fps = numberOrNull(diag?.fps);
+  const validPoseFrames = numberOrNull(diag?.validPoseFrames);
+  const wristSpeedBalanceRatio = rightSpeed != null && leftSpeed != null ? Math.max(rightSpeed, leftSpeed) / Math.max(Math.min(rightSpeed, leftSpeed), 1e-6) : null;
+  const wristSpeedGap = rightSpeed != null && leftSpeed != null ? Math.abs(rightSpeed - leftSpeed) : null;
+  const segmentDurationSec = segmentFrames != null && fps != null && fps > 0 ? segmentFrames / fps : null;
+  const validPoseFrameRatio = validPoseFrames != null && segmentFrames != null && segmentFrames > 0 ? validPoseFrames / segmentFrames : null;
+  const label = normalizeLabel(diag?.label);
+  const heuristicLabel = normalizeLabel(diag?.rawLabel || diag?.label);
+  return {
+    analysisId: row.analysisId,
+    userId: row.userId,
+    videoFilename: row.videoFilename,
+    shotIndex: row.shotIndex,
+    groupKey: row.userId || row.analysisId || row.videoFilename,
+    label,
+    heuristicLabel: heuristicLabel || null,
+    heuristicConfidence: numberOrNull(diag?.confidence),
+    heuristicReasons: reasons,
+    featureValues: {
+      dominant_side: String(dbg.dominantSide ?? key.dominant_side ?? "").trim(),
+      dominant_side_confidence: numberOrNull(dbg.dominantSideConfidence ?? key.dominant_side_confidence),
+      is_cross_body: boolNumber(Boolean(dbg.isCrossBody ?? key.is_cross_body)),
+      is_serve: boolNumber(Boolean(dbg.isServe ?? key.is_serve)),
+      is_compact_forward: boolNumber(Boolean(dbg.isCompactForward ?? key.is_compact_forward)),
+      is_overhead: boolNumber(Boolean(dbg.isOverhead ?? key.is_overhead)),
+      is_downward_motion: boolNumber(Boolean(dbg.isDownwardMotion ?? key.is_downward_motion)),
+      max_wrist_speed: maxWristSpeed,
+      max_rw_speed: rightSpeed,
+      max_lw_speed: leftSpeed,
+      swing_arc_ratio: swingArcRatio,
+      contact_height_ratio: contactHeightRatio,
+      dominant_wrist_median_offset: numberOrNull(dbg.dominantWristMedianOffset ?? key.dominant_wrist_median_offset),
+      dominant_wrist_opposite_ratio: numberOrNull(dbg.dominantWristOppositeRatio ?? key.dominant_wrist_opposite_ratio),
+      dominant_wrist_same_ratio: numberOrNull(dbg.dominantWristSameRatio ?? key.dominant_wrist_same_ratio),
+      dominant_wrist_mean_speed: numberOrNull(dbg.dominantWristMeanSpeed ?? key.dominant_wrist_mean_speed),
+      dominant_wrist_speed_std: numberOrNull(dbg.dominantWristSpeedStd ?? key.dominant_wrist_speed_std),
+      dominant_wrist_speed_p90: numberOrNull(dbg.dominantWristSpeedP90 ?? key.dominant_wrist_speed_p90),
+      dominant_wrist_accel_p90: numberOrNull(dbg.dominantWristAccelP90 ?? key.dominant_wrist_accel_p90),
+      peak_speed_frame_ratio: numberOrNull(dbg.peakSpeedFrameRatio ?? key.peak_speed_frame_ratio),
+      dominant_wrist_horizontal_range_ratio: numberOrNull(dbg.dominantWristHorizontalRangeRatio ?? key.dominant_wrist_horizontal_range_ratio),
+      dominant_wrist_vertical_range_ratio: numberOrNull(dbg.dominantWristVerticalRangeRatio ?? key.dominant_wrist_vertical_range_ratio),
+      wrist_height_range: numberOrNull(dbg.wristHeightRange ?? key.wrist_height_range),
+      peak_wrist_height_frame_ratio: numberOrNull(dbg.peakWristHeightFrameRatio ?? key.peak_wrist_height_frame_ratio),
+      contact_height_std: numberOrNull(dbg.contactHeightStd ?? key.contact_height_std),
+      shoulder_rotation_delta_deg: shoulderRotationDeltaDeg,
+      shoulder_rotation_range_deg: numberOrNull(dbg.shoulderRotationRangeDeg ?? key.shoulder_rotation_range_deg),
+      shoulder_rotation_std_deg: numberOrNull(dbg.shoulderRotationStdDeg ?? key.shoulder_rotation_std_deg),
+      dominant_wrist_offset_std: numberOrNull(dbg.dominantWristOffsetStd ?? key.dominant_wrist_offset_std),
+      segment_frames: segmentFrames,
+      segment_duration_sec: segmentDurationSec,
+      valid_pose_frame_ratio: validPoseFrameRatio,
+      wrist_speed_balance_ratio: wristSpeedBalanceRatio,
+      wrist_speed_gap: wristSpeedGap,
+      arc_speed_product: maxWristSpeed != null && swingArcRatio != null ? maxWristSpeed * swingArcRatio : null,
+      contact_arc_product: contactHeightRatio != null && swingArcRatio != null ? contactHeightRatio * swingArcRatio : null,
+      serve_height_product: contactHeightRatio != null ? (isServe ? 1 : 0) * contactHeightRatio : null,
+      overhead_contact_product: contactHeightRatio != null ? (isOverhead ? 1 : 0) * contactHeightRatio : null,
+      shoulder_rotation_abs_deg: shoulderRotationDeltaDeg != null ? Math.abs(shoulderRotationDeltaDeg) : null,
+      valid_pose_frames: validPoseFrames
+    }
+  };
+}
+function chunkArray(items, chunkSize) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+  return chunks;
+}
+async function exportTennisTrainingDatasetSnapshot(params) {
+  const countsResult = await db.execute(sql5`
+    with latest_annotations as (
+      select distinct on (ann.analysis_id)
+        ann.analysis_id,
+        ann.user_id,
+        ann.ordered_shot_labels,
+        ann.updated_at
+      from analysis_shot_annotations ann
+      order by ann.analysis_id, ann.updated_at desc
+    )
+    select
+      a.id as analysis_id,
+      a.user_id,
+      a.video_filename,
+      m.ai_diagnostics,
+      la.ordered_shot_labels
+    from analyses a
+    inner join metrics m on m.analysis_id = a.id
+    inner join latest_annotations la on la.analysis_id = a.id
+    where a.status = 'completed'
+      and m.ai_diagnostics is not null
+      and lower(coalesce(m.config_key, '')) like 'tennis-%'
+    order by a.created_at desc
+  `);
+  const rows = Array.isArray(countsResult.rows) ? countsResult.rows : [];
+  const datasetRows = [];
+  const trainingSamples = [];
+  const analysisIds = /* @__PURE__ */ new Set();
+  for (const row of rows) {
+    const diagnostics = row.ai_diagnostics && typeof row.ai_diagnostics === "object" ? row.ai_diagnostics : {};
+    const shotDiags = toShotDiagnosticsArray(diagnostics);
+    const manualLabels = toLabelArray(row.ordered_shot_labels).map(normalizeLabel);
+    if (!shotDiags.length || !manualLabels.length) continue;
+    for (let index = 0; index < Math.min(shotDiags.length, manualLabels.length); index += 1) {
+      const manualLabel = manualLabels[index];
+      if (!manualLabel) continue;
+      const built = buildFeatureValues(shotDiags[index], {
+        analysisId: String(row.analysis_id),
+        userId: row.user_id ? String(row.user_id) : null,
+        videoFilename: String(row.video_filename || ""),
+        shotIndex: index + 1
+      });
+      if (!built) continue;
+      datasetRows.push({
+        ...built,
+        label: manualLabel
+      });
+      trainingSamples.push({
+        label: manualLabel,
+        groupKey: built.groupKey,
+        featureValues: built.featureValues
+      });
+      analysisIds.add(String(row.analysis_id));
+    }
+  }
+  const timestamp2 = (/* @__PURE__ */ new Date()).toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+  const datasetName = String(params?.datasetName || `tennis-training-${timestamp2}`).trim();
+  const actorUserId = params?.actorUserId || null;
+  const [dataset] = await db.insert(tennisTrainingDatasets).values({
+    sportName: "tennis",
+    datasetName,
+    source: "manual-annotation",
+    analysisCount: analysisIds.size,
+    rowCount: datasetRows.length,
+    notes: params?.notes || null,
+    ...buildInsertAuditFields(actorUserId)
+  }).returning({ id: tennisTrainingDatasets.id });
+  if (datasetRows.length > 0) {
+    for (const chunk of chunkArray(datasetRows, 500)) {
+      await db.insert(tennisTrainingDatasetRows).values(
+        chunk.map((row) => ({
+          datasetId: dataset.id,
+          analysisId: row.analysisId,
+          userId: row.userId,
+          videoFilename: row.videoFilename,
+          shotIndex: row.shotIndex,
+          groupKey: row.groupKey,
+          label: row.label,
+          heuristicLabel: row.heuristicLabel,
+          heuristicConfidence: row.heuristicConfidence,
+          heuristicReasons: row.heuristicReasons,
+          featureValues: row.featureValues,
+          ...buildInsertAuditFields(actorUserId)
+        }))
+      );
+    }
+  }
+  return {
+    datasetId: dataset.id,
+    outputPath: `database://tennis-training-datasets/${dataset.id}`,
+    rows: datasetRows.length,
+    analyses: analysisIds.size,
+    samples: trainingSamples
+  };
+}
+
+// server/routes.ts
+var uploadDir = resolveProjectPath("uploads");
+if (!fs7.existsSync(uploadDir)) {
+  fs7.mkdirSync(uploadDir, { recursive: true });
 }
 var uploadToFilesystem = multer2({
   storage: multer2.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadDir),
     filename: (_req, file, cb) => {
-      const ext = path5.extname(file.originalname) || ".mp4";
+      const ext = path4.extname(file.originalname) || ".mp4";
       cb(null, `${randomUUID3().toUpperCase()}${ext}`);
     }
   }),
@@ -5714,25 +7606,26 @@ async function runVideoUploadMiddleware(req, res, next) {
     return next(error);
   }
 }
-function resolvePythonExecutable2() {
+function resolvePythonExecutable3() {
   const envExecutable = process.env.PYTHON_EXECUTABLE;
-  if (envExecutable && fs5.existsSync(envExecutable)) {
+  if (envExecutable && fs7.existsSync(envExecutable)) {
     return envExecutable;
   }
   const localCandidates = [
-    path5.resolve(process.cwd(), ".venv", "bin", "python3"),
-    path5.resolve(process.cwd(), ".venv", "bin", "python")
+    resolveProjectPath(".venv", "bin", "python3"),
+    resolveProjectPath(".venv", "bin", "python")
   ];
   for (const candidate of localCandidates) {
-    if (fs5.existsSync(candidate)) {
+    if (fs7.existsSync(candidate)) {
       return candidate;
     }
   }
   return "python3";
 }
 function runPythonDiagnostics2(videoPath, sportName, movementName, dominantProfile) {
-  return new Promise((resolve2, reject) => {
-    const pythonExecutable = resolvePythonExecutable2();
+  return (async () => {
+    const pythonExecutable = resolvePythonExecutable3();
+    const poseLandmarkerEnv = await getPoseLandmarkerPythonEnv();
     const args = [
       "-m",
       "python_analysis.run_diagnostics",
@@ -5746,38 +7639,693 @@ function runPythonDiagnostics2(videoPath, sportName, movementName, dominantProfi
     if (dominant === "right" || dominant === "left") {
       args.push("--dominant-profile", dominant);
     }
-    execFile2(
-      pythonExecutable,
-      args,
-      {
-        cwd: process.cwd(),
-        timeout: 12e4,
-        maxBuffer: 10 * 1024 * 1024
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          if (stderr) console.error("Python diagnostics stderr:", stderr);
-          reject(new Error(`Python diagnostics failed: ${error.message}`));
-          return;
-        }
-        try {
-          const result = JSON.parse(stdout.trim());
-          if (result?.error) {
-            reject(new Error(result.error));
+    return new Promise((resolve2, reject) => {
+      execFile2(
+        pythonExecutable,
+        args,
+        {
+          cwd: PROJECT_ROOT,
+          env: { ...process.env, ...poseLandmarkerEnv },
+          timeout: 12e4,
+          maxBuffer: 10 * 1024 * 1024
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            if (stderr) console.error("Python diagnostics stderr:", stderr);
+            reject(new Error(`Python diagnostics failed: ${error.message}`));
             return;
           }
-          resolve2(result);
-        } catch {
-          if (stderr) console.error("Python diagnostics stderr:", stderr);
-          reject(new Error("Failed to parse diagnostics results"));
+          try {
+            const result = JSON.parse(stdout.trim());
+            if (result?.error) {
+              reject(new Error(result.error));
+              return;
+            }
+            resolve2(result);
+          } catch {
+            if (stderr) console.error("Python diagnostics stderr:", stderr);
+            reject(new Error("Failed to parse diagnostics results"));
+          }
         }
+      );
+    });
+  })();
+}
+var TENNIS_DATASET_INSIGHT_LABELS = ["forehand", "backhand", "serve", "volley"];
+var TENNIS_MODEL_TRAINING_STATE_KEY = "tennisModelTrainingState";
+var TENNIS_MODEL_VERSION_ARCHIVE_DIR = resolveProjectPath("models", "versions");
+var MAX_TENNIS_TRAINING_HISTORY = 20;
+var activeTennisTrainingJobId = null;
+var activeTennisTrainingPromise = null;
+function runPythonJsonModuleWithInput(moduleName, args, input, env) {
+  return new Promise((resolve2, reject) => {
+    const pythonExecutable = resolvePythonExecutable3();
+    const child = spawn2(pythonExecutable, ["-m", moduleName, ...args], {
+      cwd: PROJECT_ROOT,
+      env: { ...process.env, ...env },
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += String(chunk || "");
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += String(chunk || "");
+    });
+    child.on("error", (error) => {
+      reject(new Error(`Failed to run ${moduleName}: ${error.message}`));
+    });
+    child.on("close", (code) => {
+      if (code !== 0) {
+        if (stderr) console.error(`Python module stderr (${moduleName}):`, stderr);
+        reject(new Error(`Failed to run ${moduleName}: exit code ${code}`));
+        return;
       }
-    );
+      try {
+        resolve2(JSON.parse(String(stdout || "").trim()));
+      } catch {
+        if (stderr) console.error(`Python module stderr (${moduleName}):`, stderr);
+        reject(new Error(`Failed to parse ${moduleName} output`));
+      }
+    });
+    child.stdin.write(input);
+    child.stdin.end();
   });
+}
+async function statIfExists(filePath) {
+  try {
+    return await fs7.promises.stat(filePath);
+  } catch {
+    return null;
+  }
+}
+function normalizeTennisTrainingHistoryEntry(value) {
+  if (!value || typeof value !== "object") return null;
+  const row = value;
+  const jobId = String(row.jobId || "").trim();
+  const status = String(row.status || "").trim();
+  const requestedAt = String(row.requestedAt || "").trim();
+  if (!jobId || !requestedAt) return null;
+  if (status !== "queued" && status !== "running" && status !== "succeeded" && status !== "failed") {
+    return null;
+  }
+  const numOrNull = (input) => {
+    const parsed = Number(input);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  return {
+    jobId,
+    status,
+    requestedAt,
+    startedAt: row.startedAt ? String(row.startedAt) : null,
+    completedAt: row.completedAt ? String(row.completedAt) : null,
+    requestedByUserId: row.requestedByUserId ? String(row.requestedByUserId) : null,
+    eligibleAnalysisCount: Number(row.eligibleAnalysisCount || 0),
+    eligibleShotCount: Number(row.eligibleShotCount || 0),
+    exportRows: numOrNull(row.exportRows),
+    trainRows: numOrNull(row.trainRows),
+    testRows: numOrNull(row.testRows),
+    macroF1: numOrNull(row.macroF1),
+    error: row.error ? String(row.error) : null,
+    savedModelVersion: row.savedModelVersion ? String(row.savedModelVersion) : null,
+    savedAt: row.savedAt ? String(row.savedAt) : null,
+    versionDescription: row.versionDescription ? String(row.versionDescription) : null
+  };
+}
+function normalizeTennisTrainingState(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const rawHistory = Array.isArray(source.history) ? source.history : [];
+  const history = rawHistory.map((entry) => normalizeTennisTrainingHistoryEntry(entry)).filter((entry) => Boolean(entry)).sort((left, right) => String(right.requestedAt).localeCompare(String(left.requestedAt))).slice(0, MAX_TENNIS_TRAINING_HISTORY);
+  const currentJobIdRaw = String(source.currentJobId || "").trim();
+  const currentJobId = history.some((entry) => entry.jobId === currentJobIdRaw && (entry.status === "queued" || entry.status === "running")) ? currentJobIdRaw : null;
+  return { currentJobId, history };
+}
+function upsertTennisTrainingHistoryEntry(history, nextEntry) {
+  const next = [nextEntry, ...history.filter((entry) => entry.jobId !== nextEntry.jobId)].sort((left, right) => String(right.requestedAt).localeCompare(String(left.requestedAt)));
+  return next.slice(0, MAX_TENNIS_TRAINING_HISTORY);
+}
+async function readTennisTrainingState() {
+  const [setting] = await db.select().from(appSettings).where(eq8(appSettings.key, TENNIS_MODEL_TRAINING_STATE_KEY)).limit(1);
+  const normalized = normalizeTennisTrainingState(setting?.value);
+  const current = normalized.currentJobId ? normalized.history.find((entry) => entry.jobId === normalized.currentJobId) || null : null;
+  if (current && (current.status === "queued" || current.status === "running") && activeTennisTrainingJobId !== current.jobId) {
+    const repairedEntry = {
+      ...current,
+      status: "failed",
+      completedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      error: "Training job was interrupted before completion."
+    };
+    const repairedState = {
+      currentJobId: null,
+      history: upsertTennisTrainingHistoryEntry(normalized.history, repairedEntry)
+    };
+    await db.insert(appSettings).values({
+      key: TENNIS_MODEL_TRAINING_STATE_KEY,
+      value: repairedState,
+      ...buildInsertAuditFields(null)
+    }).onConflictDoUpdate({
+      target: appSettings.key,
+      set: {
+        value: repairedState,
+        ...buildUpdateAuditFields(null)
+      }
+    });
+    return repairedState;
+  }
+  return normalized;
+}
+async function writeTennisTrainingState(nextState, actorUserId) {
+  const normalized = normalizeTennisTrainingState(nextState);
+  await db.insert(appSettings).values({
+    key: TENNIS_MODEL_TRAINING_STATE_KEY,
+    value: normalized,
+    ...buildInsertAuditFields(actorUserId || null)
+  }).onConflictDoUpdate({
+    target: appSettings.key,
+    set: {
+      value: normalized,
+      ...buildUpdateAuditFields(actorUserId || null)
+    }
+  });
+  return normalized;
+}
+async function mutateTennisTrainingState(actorUserId, updater) {
+  const current = await readTennisTrainingState();
+  return writeTennisTrainingState(updater(current), actorUserId || null);
+}
+function buildTennisModelArchivePaths(modelVersion) {
+  const safeVersion = String(modelVersion || "").trim().replace(/[^0-9A-Za-z._-]+/g, "_");
+  const normalizedVersion = safeVersion.toLowerCase().startsWith("v") ? safeVersion : `v${safeVersion}`;
+  return {
+    modelPath: path4.join(TENNIS_MODEL_VERSION_ARCHIVE_DIR, `tennis_movement_classifier_${normalizedVersion}.joblib`)
+  };
+}
+async function createTennisTrainingRun(jobId, actorUserId, payload) {
+  await db.insert(tennisModelTrainingRuns).values({
+    jobId,
+    sportName: "tennis",
+    status: payload.status,
+    eligibleAnalysisCount: payload.eligibleAnalysisCount,
+    eligibleShotCount: payload.eligibleShotCount,
+    requestedAt: payload.requestedAt || /* @__PURE__ */ new Date(),
+    startedAt: payload.startedAt || null,
+    completedAt: payload.completedAt || null,
+    requestedByUserId: payload.requestedByUserId || actorUserId,
+    ...buildInsertAuditFields(actorUserId)
+  });
+}
+async function updateTennisTrainingRun(jobId, actorUserId, patch) {
+  const updates = {
+    ...patch,
+    ...buildUpdateAuditFields(actorUserId || null)
+  };
+  Object.keys(updates).forEach((key) => {
+    if (updates[key] === void 0) delete updates[key];
+  });
+  await db.update(tennisModelTrainingRuns).set(updates).where(eq8(tennisModelTrainingRuns.jobId, jobId));
+}
+async function getLatestSuccessfulTennisTrainingRun() {
+  const [row] = await db.select().from(tennisModelTrainingRuns).where(and4(eq8(tennisModelTrainingRuns.sportName, "tennis"), eq8(tennisModelTrainingRuns.status, "succeeded"))).orderBy(desc4(tennisModelTrainingRuns.completedAt), desc4(tennisModelTrainingRuns.updatedAt)).limit(1);
+  return row || null;
+}
+async function getTennisTrainingStatus() {
+  const modelPath = resolveProjectPath("models", "tennis_movement_classifier.joblib");
+  const config = readModelRegistryConfig();
+  const trainingState = await readTennisTrainingState();
+  const [countsResult, latestRun, modelStats] = await Promise.all([
+    db.execute(sql6`
+      with latest_annotations as (
+        select distinct on (ann.analysis_id)
+          ann.analysis_id,
+          ann.ordered_shot_labels
+        from analysis_shot_annotations ann
+        order by ann.analysis_id, ann.updated_at desc
+      )
+      select
+        count(*)::int as eligible_analysis_count,
+        coalesce(
+          sum(
+            case
+              when jsonb_typeof(la.ordered_shot_labels) = 'array' then jsonb_array_length(la.ordered_shot_labels)
+              else 0
+            end
+          ),
+          0
+        )::int as eligible_shot_count
+      from analyses a
+      inner join metrics m on m.analysis_id = a.id
+      inner join latest_annotations la on la.analysis_id = a.id
+      where a.status = 'completed'
+        and m.ai_diagnostics is not null
+        and lower(coalesce(m.config_key, '')) like 'tennis-%'
+    `),
+    getLatestSuccessfulTennisTrainingRun(),
+    statIfExists(modelPath)
+  ]);
+  const row = Array.isArray(countsResult.rows) ? countsResult.rows[0] : null;
+  const metadata = latestRun?.metadata && typeof latestRun.metadata === "object" ? latestRun.metadata : null;
+  const report = latestRun?.report && typeof latestRun.report === "object" ? latestRun.report : null;
+  const macroF1Raw = report?.classificationReport?.["macro avg"]?.["f1-score"];
+  const macroF1 = typeof macroF1Raw === "number" ? macroF1Raw : null;
+  const latestTraining = latestRun && metadata ? {
+    modelVersion: String(latestRun.savedModelVersion || metadata.modelVersion || config.activeModelVersion),
+    trainedAt: String(metadata.trainedAt || latestRun.completedAt?.toISOString() || (modelStats?.mtime?.toISOString() || "")),
+    trainRows: Number(latestRun.trainRows || metadata.trainRows || 0),
+    testRows: Number(latestRun.testRows || metadata.testRows || 0),
+    datasetPath: String(metadata.datasetPath || `database://tennis-training-datasets/${latestRun.datasetId || "latest"}`),
+    macroF1
+  } : null;
+  return {
+    sport: "tennis",
+    eligibleAnalysisCount: Number(row?.eligible_analysis_count || 0),
+    eligibleShotCount: Number(row?.eligible_shot_count || 0),
+    trainedModelAvailable: Boolean(modelStats && latestRun),
+    latestTraining,
+    activeVersion: config.activeModelVersion,
+    activeVersionDescription: config.modelVersionChangeDescription,
+    draftVersion: incrementModelVersion(config.activeModelVersion),
+    currentJob: trainingState.currentJobId ? trainingState.history.find((entry) => entry.jobId === trainingState.currentJobId) || null : null,
+    history: trainingState.history
+  };
+}
+async function getTennisDatasetInsights(params) {
+  const config = readModelRegistryConfig();
+  const playerId = String(params?.playerId || "").trim() || null;
+  let startDate = parseDateFilterBoundary(params?.startDate, "start");
+  let endDate = parseDateFilterBoundary(params?.endDate, "end");
+  if (startDate && endDate && startDate.getTime() > endDate.getTime()) {
+    const swappedStart = endDate;
+    endDate = startDate;
+    startDate = swappedStart;
+  }
+  const datasetWhereClauses = [
+    sql6`a.status = 'completed'`,
+    sql6`m.ai_diagnostics is not null`,
+    sql6`lower(coalesce(m.config_key, '')) like 'tennis-%'`
+  ];
+  if (playerId) {
+    datasetWhereClauses.push(sql6`a.user_id = ${playerId}`);
+  }
+  if (startDate) {
+    datasetWhereClauses.push(sql6`coalesce(a.captured_at, a.created_at) >= ${startDate.toISOString()}`);
+  }
+  if (endDate) {
+    datasetWhereClauses.push(sql6`coalesce(a.captured_at, a.created_at) <= ${endDate.toISOString()}`);
+  }
+  const [eligibleResult, activeRun, trendRuns] = await Promise.all([
+    db.execute(sql6`
+      with latest_annotations as (
+        select distinct on (ann.analysis_id)
+          ann.analysis_id,
+          ann.ordered_shot_labels
+        from analysis_shot_annotations ann
+        order by ann.analysis_id, ann.updated_at desc
+      )
+      select
+        a.id as analysis_id,
+        a.requested_session_type,
+        a.video_filename,
+        la.ordered_shot_labels
+      from analyses a
+      inner join metrics m on m.analysis_id = a.id
+      inner join latest_annotations la on la.analysis_id = a.id
+      where ${sql6.join(datasetWhereClauses, sql6` and `)}
+      order by a.created_at desc
+    `),
+    db.select().from(tennisModelTrainingRuns).where(
+      and4(
+        eq8(tennisModelTrainingRuns.sportName, "tennis"),
+        eq8(tennisModelTrainingRuns.status, "succeeded"),
+        eq8(tennisModelTrainingRuns.savedModelVersion, config.activeModelVersion)
+      )
+    ).orderBy(
+      desc4(tennisModelTrainingRuns.savedAt),
+      desc4(tennisModelTrainingRuns.completedAt),
+      desc4(tennisModelTrainingRuns.updatedAt)
+    ).limit(1).then((rows) => rows[0] || null),
+    db.select().from(tennisModelTrainingRuns).where(
+      and4(
+        eq8(tennisModelTrainingRuns.sportName, "tennis"),
+        eq8(tennisModelTrainingRuns.status, "succeeded"),
+        sql6`${tennisModelTrainingRuns.savedModelVersion} is not null`
+      )
+    ).orderBy(
+      desc4(tennisModelTrainingRuns.savedAt),
+      desc4(tennisModelTrainingRuns.completedAt),
+      desc4(tennisModelTrainingRuns.updatedAt)
+    ).limit(12)
+  ]);
+  const eligibleRows = Array.isArray(eligibleResult.rows) ? eligibleResult.rows : [];
+  const videoCounts = /* @__PURE__ */ new Map();
+  const shotCounts = /* @__PURE__ */ new Map();
+  const sessionCounts = /* @__PURE__ */ new Map();
+  let eligibleShotCount = 0;
+  for (const row of eligibleRows) {
+    const rawLabels = Array.isArray(row.ordered_shot_labels) ? row.ordered_shot_labels : [];
+    const normalizedLabels = rawLabels.map((value) => normalizeShotLabel(value)).filter((value) => TENNIS_DATASET_INSIGHT_LABELS.includes(value));
+    for (const label of normalizedLabels) {
+      shotCounts.set(label, Number(shotCounts.get(label) || 0) + 1);
+    }
+    eligibleShotCount += normalizedLabels.length;
+    const primaryLabel = getPrimaryInsightLabel(normalizedLabels);
+    if (primaryLabel !== "unknown") {
+      videoCounts.set(primaryLabel, Number(videoCounts.get(primaryLabel) || 0) + 1);
+    }
+    const sessionType = normalizeTennisSessionType(row.requested_session_type);
+    sessionCounts.set(sessionType, Number(sessionCounts.get(sessionType) || 0) + 1);
+  }
+  const currentDataset = {
+    eligibleVideoCount: eligibleRows.length,
+    eligibleShotCount,
+    videoDistribution: buildInsightDistribution(videoCounts, eligibleRows.length, TENNIS_DATASET_INSIGHT_LABELS),
+    shotDistribution: buildInsightDistribution(shotCounts, eligibleShotCount, TENNIS_DATASET_INSIGHT_LABELS),
+    sessionTypeDistribution: ["practice", "match-play"].map((label) => ({
+      label,
+      count: Number(sessionCounts.get(label) || 0),
+      pct: toFixedPercent(Number(sessionCounts.get(label) || 0), eligibleRows.length)
+    }))
+  };
+  let activeModel = null;
+  if (activeRun) {
+    const report = activeRun.report && typeof activeRun.report === "object" ? activeRun.report : {};
+    const classificationReport = report.classificationReport && typeof report.classificationReport === "object" ? report.classificationReport : {};
+    const rawLabels = Array.isArray(report.labels) ? report.labels.map((item) => normalizeShotLabel(item)) : [];
+    const labelIndex = /* @__PURE__ */ new Map();
+    rawLabels.forEach((label, index) => labelIndex.set(label, index));
+    const matrix = Array.isArray(report.confusionMatrix) ? report.confusionMatrix : [];
+    const accuracyFromReport = numberOrNull2(classificationReport.accuracy);
+    const dataset = activeRun.datasetId ? await db.select().from(tennisTrainingDatasets).where(eq8(tennisTrainingDatasets.id, activeRun.datasetId)).limit(1).then((rows) => rows[0] || null) : null;
+    const perLabel = TENNIS_DATASET_INSIGHT_LABELS.map((label) => {
+      const metricsForLabel = classificationReport[label] && typeof classificationReport[label] === "object" ? classificationReport[label] : {};
+      const rowIndex = labelIndex.get(label);
+      const rowValues = rowIndex != null && Array.isArray(matrix[rowIndex]) ? matrix[rowIndex] : [];
+      const supportFromMatrix = rowValues.reduce((sum, value) => sum + Number(value || 0), 0);
+      return {
+        label,
+        precision: numberOrNull2(metricsForLabel.precision),
+        recall: numberOrNull2(metricsForLabel.recall),
+        f1: numberOrNull2(metricsForLabel["f1-score"]),
+        support: Number(numberOrNull2(metricsForLabel.support) ?? supportFromMatrix ?? 0)
+      };
+    });
+    const confusionLabels = [...TENNIS_DATASET_INSIGHT_LABELS];
+    const confusionRows = confusionLabels.map((actual) => {
+      const actualIndex = labelIndex.get(actual);
+      const actualRow = actualIndex != null && Array.isArray(matrix[actualIndex]) ? matrix[actualIndex] : [];
+      const rowTotal = confusionLabels.reduce((sum, predicted) => {
+        const predictedIndex = labelIndex.get(predicted);
+        return sum + Number(predictedIndex != null ? actualRow[predictedIndex] || 0 : 0);
+      }, 0);
+      return {
+        actual,
+        counts: confusionLabels.map((predicted) => {
+          const predictedIndex = labelIndex.get(predicted);
+          const count = Number(predictedIndex != null ? actualRow[predictedIndex] || 0 : 0);
+          return {
+            predicted,
+            count,
+            pct: toFixedPercent(count, rowTotal)
+          };
+        })
+      };
+    });
+    const matrixTotal = confusionRows.reduce(
+      (total, row) => total + row.counts.reduce((sum, cell) => sum + cell.count, 0),
+      0
+    );
+    const matrixCorrect = confusionRows.reduce(
+      (total, row) => total + (row.counts.find((cell) => cell.predicted === row.actual)?.count || 0),
+      0
+    );
+    activeModel = {
+      modelVersion: String(activeRun.savedModelVersion || config.activeModelVersion),
+      trainedAt: String(
+        activeRun.savedAt?.toISOString() || activeRun.completedAt?.toISOString() || activeRun.requestedAt.toISOString()
+      ),
+      trainRows: Number(activeRun.trainRows || 0),
+      testRows: Number(activeRun.testRows || 0),
+      datasetAnalysisCount: Number(dataset?.analysisCount || 0),
+      datasetShotCount: Number(dataset?.rowCount || 0),
+      macroF1: numberOrNull2(activeRun.macroF1),
+      accuracy: accuracyFromReport ?? (matrixTotal > 0 ? Number((matrixCorrect / matrixTotal).toFixed(4)) : null),
+      perLabel,
+      confusionMatrix: {
+        labels: confusionLabels,
+        rows: confusionRows
+      }
+    };
+  }
+  const versionsByNumber = new Map(
+    listModelRegistryVersions().map((version) => [version.modelVersion, version])
+  );
+  const modelTrend = trendRuns.slice().reverse().map((run) => {
+    const runReport = run.report && typeof run.report === "object" ? run.report : {};
+    const trendClassificationReport = runReport.classificationReport && typeof runReport.classificationReport === "object" ? runReport.classificationReport : {};
+    const versionMeta = versionsByNumber.get(String(run.savedModelVersion || ""));
+    return {
+      modelVersion: String(run.savedModelVersion || run.jobId),
+      trainedAt: String(run.completedAt?.toISOString() || run.requestedAt.toISOString()),
+      savedAt: run.savedAt?.toISOString() || null,
+      macroF1: numberOrNull2(run.macroF1),
+      accuracy: numberOrNull2(trendClassificationReport.accuracy),
+      trainRows: Number(run.trainRows || 0),
+      testRows: Number(run.testRows || 0),
+      isActiveModelVersion: versionMeta?.status === "active",
+      versionStatus: versionMeta?.status || "archived",
+      versionDescription: versionMeta?.description || String(run.versionDescription || "")
+    };
+  });
+  return {
+    sport: "tennis",
+    currentVersion: config.activeModelVersion,
+    currentVersionDescription: config.modelVersionChangeDescription,
+    filters: {
+      playerId,
+      startDate: startDate?.toISOString() || null,
+      endDate: endDate?.toISOString() || null
+    },
+    currentDataset,
+    activeModel,
+    modelTrend,
+    suggestions: buildTennisDatasetInsightSuggestions({
+      currentDataset,
+      activeModel: activeModel ? {
+        macroF1: activeModel.macroF1,
+        perLabel: activeModel.perLabel.map((item) => ({ label: item.label, f1: item.f1 }))
+      } : null
+    })
+  };
+}
+async function trainTennisMovementModel(jobId, actorUserId) {
+  const exportSummary = await exportTennisTrainingDatasetSnapshot({
+    actorUserId,
+    datasetName: `tennis-training-${jobId}`,
+    notes: `Generated for job ${jobId}`
+  });
+  const trainingSummary = await runPythonJsonModuleWithInput(
+    "python_analysis.train_tennis_movement_model",
+    ["--dataset-json-stdin"],
+    JSON.stringify({
+      datasetId: exportSummary.datasetId,
+      datasetPath: exportSummary.outputPath,
+      rows: exportSummary.samples
+    })
+  );
+  const status = await getTennisTrainingStatus();
+  return {
+    ...status,
+    exportSummary: {
+      outputPath: String(exportSummary?.outputPath || ""),
+      rows: Number(exportSummary?.rows || 0),
+      analyses: Number(exportSummary?.analyses || 0)
+    },
+    trainingSummary: {
+      modelOut: String(trainingSummary?.modelOut || ""),
+      trainRows: Number(trainingSummary?.trainRows || 0),
+      testRows: Number(trainingSummary?.testRows || 0),
+      labels: trainingSummary?.labels && typeof trainingSummary.labels === "object" ? trainingSummary.labels : {},
+      macroF1: typeof trainingSummary?.macroF1 === "number" ? trainingSummary.macroF1 : null,
+      metadata: trainingSummary?.metadata && typeof trainingSummary.metadata === "object" ? trainingSummary.metadata : {},
+      report: trainingSummary?.report && typeof trainingSummary.report === "object" ? trainingSummary.report : {},
+      datasetId: exportSummary.datasetId
+    }
+  };
+}
+async function runTennisTrainingJobInBackground(jobId, actorUserId) {
+  activeTennisTrainingJobId = jobId;
+  await updateTennisTrainingRun(jobId, actorUserId, {
+    status: "running",
+    startedAt: /* @__PURE__ */ new Date(),
+    error: null
+  });
+  await mutateTennisTrainingState(actorUserId, (state) => {
+    const current = state.history.find((entry) => entry.jobId === jobId);
+    if (!current) return state;
+    return {
+      ...state,
+      currentJobId: jobId,
+      history: upsertTennisTrainingHistoryEntry(state.history, {
+        ...current,
+        status: "running",
+        startedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        error: null
+      })
+    };
+  });
+  try {
+    const result = await trainTennisMovementModel(jobId, actorUserId);
+    await updateTennisTrainingRun(jobId, actorUserId, {
+      status: "succeeded",
+      completedAt: /* @__PURE__ */ new Date(),
+      datasetId: result.trainingSummary.datasetId,
+      exportRows: result.exportSummary.rows,
+      trainRows: result.trainingSummary.trainRows,
+      testRows: result.trainingSummary.testRows,
+      macroF1: typeof result.trainingSummary.macroF1 === "number" ? result.trainingSummary.macroF1 : null,
+      metadata: result.trainingSummary.metadata,
+      report: result.trainingSummary.report,
+      modelOutputPath: result.trainingSummary.modelOut,
+      error: null
+    });
+    await mutateTennisTrainingState(actorUserId, (state) => {
+      const current = state.history.find((entry) => entry.jobId === jobId);
+      if (!current) return state;
+      return {
+        ...state,
+        currentJobId: null,
+        history: upsertTennisTrainingHistoryEntry(state.history, {
+          ...current,
+          status: "succeeded",
+          completedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          exportRows: result.exportSummary.rows,
+          trainRows: result.trainingSummary.trainRows,
+          testRows: result.trainingSummary.testRows,
+          macroF1: typeof result.trainingSummary.macroF1 === "number" ? result.trainingSummary.macroF1 : null,
+          error: null
+        })
+      };
+    });
+  } catch (error) {
+    await updateTennisTrainingRun(jobId, actorUserId, {
+      status: "failed",
+      completedAt: /* @__PURE__ */ new Date(),
+      error: error?.message || "Training failed"
+    });
+    await mutateTennisTrainingState(actorUserId, (state) => {
+      const current = state.history.find((entry) => entry.jobId === jobId);
+      if (!current) return state;
+      return {
+        ...state,
+        currentJobId: null,
+        history: upsertTennisTrainingHistoryEntry(state.history, {
+          ...current,
+          status: "failed",
+          completedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          error: error?.message || "Training failed"
+        })
+      };
+    });
+  } finally {
+    activeTennisTrainingJobId = null;
+    activeTennisTrainingPromise = null;
+  }
+}
+async function queueTennisTrainingJob(actorUserId) {
+  const status = await getTennisTrainingStatus();
+  if (status.currentJob && (status.currentJob.status === "queued" || status.currentJob.status === "running")) {
+    throw new Error("A tennis training job is already running.");
+  }
+  if (status.eligibleAnalysisCount < 1 || status.eligibleShotCount < 20) {
+    throw new Error("Need at least 1 annotated tennis analysis and 20 labeled shots before training.");
+  }
+  const jobId = randomUUID3();
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  await createTennisTrainingRun(jobId, actorUserId, {
+    status: "queued",
+    eligibleAnalysisCount: status.eligibleAnalysisCount,
+    eligibleShotCount: status.eligibleShotCount,
+    requestedAt: new Date(now),
+    requestedByUserId: actorUserId
+  });
+  await mutateTennisTrainingState(actorUserId, (state) => ({
+    currentJobId: jobId,
+    history: upsertTennisTrainingHistoryEntry(state.history, {
+      jobId,
+      status: "queued",
+      requestedAt: now,
+      startedAt: null,
+      completedAt: null,
+      requestedByUserId: actorUserId,
+      eligibleAnalysisCount: status.eligibleAnalysisCount,
+      eligibleShotCount: status.eligibleShotCount,
+      exportRows: null,
+      trainRows: null,
+      testRows: null,
+      macroF1: null,
+      error: null,
+      savedModelVersion: null,
+      savedAt: null,
+      versionDescription: null
+    })
+  }));
+  activeTennisTrainingPromise = runTennisTrainingJobInBackground(jobId, actorUserId);
+  return getTennisTrainingStatus();
+}
+async function saveCurrentTennisModelVersion(actorUserId, payload) {
+  const modelPath = resolveProjectPath("models", "tennis_movement_classifier.joblib");
+  const latestRun = await getLatestSuccessfulTennisTrainingRun();
+  const modelStats = await statIfExists(modelPath);
+  if (!modelStats || !latestRun) {
+    throw new Error("Train a tennis model before saving a version.");
+  }
+  const config = readModelRegistryConfig();
+  const modelVersion = String(payload?.modelVersion || "").trim() || incrementModelVersion(config.activeModelVersion);
+  const description = String(payload?.description || "").trim() || `Tennis classifier ${modelVersion}`;
+  const archivePaths = buildTennisModelArchivePaths(modelVersion);
+  const [existingVersion] = await db.select().from(tennisModelTrainingRuns).where(eq8(tennisModelTrainingRuns.savedModelVersion, modelVersion)).limit(1);
+  if (existingVersion || fs7.existsSync(archivePaths.modelPath)) {
+    throw new Error(`Model version ${modelVersion} already exists. Choose a new version before saving.`);
+  }
+  await fs7.promises.mkdir(TENNIS_MODEL_VERSION_ARCHIVE_DIR, { recursive: true });
+  await fs7.promises.copyFile(modelPath, archivePaths.modelPath);
+  const nextMetadata = {
+    ...latestRun.metadata && typeof latestRun.metadata === "object" ? latestRun.metadata : {},
+    modelVersion,
+    versionDescription: description,
+    savedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    modelArtifactPath: archivePaths.modelPath
+  };
+  await updateTennisTrainingRun(latestRun.jobId, actorUserId, {
+    savedModelVersion: modelVersion,
+    savedModelArtifactPath: archivePaths.modelPath,
+    savedAt: /* @__PURE__ */ new Date(),
+    versionDescription: description,
+    metadata: nextMetadata
+  });
+  await writeModelRegistryConfig({
+    activeModelVersion: modelVersion,
+    modelVersionChangeDescription: description,
+    evaluationDatasetManifestPath: "database://model-registry"
+  }, actorUserId);
+  await mutateTennisTrainingState(actorUserId, (state) => {
+    const latestSuccessful = state.history.find((entry) => entry.status === "succeeded");
+    if (!latestSuccessful) return state;
+    return {
+      ...state,
+      history: upsertTennisTrainingHistoryEntry(state.history, {
+        ...latestSuccessful,
+        savedModelVersion: modelVersion,
+        savedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        versionDescription: description
+      })
+    };
+  });
+  return getTennisTrainingStatus();
 }
 async function resolveUserDominantProfile(userId) {
   if (!userId) return null;
-  const [profile] = await db.select({ dominantProfile: users.dominantProfile }).from(users).where(eq5(users.id, userId)).limit(1);
+  const [profile] = await db.select({ dominantProfile: users.dominantProfile }).from(users).where(eq8(users.id, userId)).limit(1);
   return profile?.dominantProfile ?? null;
 }
 function parseNumberValue(value) {
@@ -5789,6 +8337,11 @@ function parseDateValue(value) {
   if (!value) return null;
   const date = new Date(String(value));
   return Number.isNaN(date.getTime()) ? null : date;
+}
+function parseUploadRecordedAt(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  return parseDateValue(raw);
 }
 function parseFpsValue(value) {
   const raw = String(value || "").trim();
@@ -5982,6 +8535,80 @@ function normalizeMovementToken(value) {
 function normalizeFilterToken(value) {
   return String(value || "").trim().toLowerCase().replace(/[_\s]+/g, "-").replace(/-+/g, "-");
 }
+function toFixedPercent(count, total) {
+  if (!Number.isFinite(count) || !Number.isFinite(total) || total <= 0) return 0;
+  return Number((count / total * 100).toFixed(1));
+}
+function normalizeTennisSessionType(value) {
+  return normalizeFilterToken(value) === "match-play" ? "match-play" : "practice";
+}
+function buildInsightDistribution(counts, total, labels) {
+  return labels.map((label) => ({
+    label,
+    count: Number(counts.get(label) || 0),
+    pct: toFixedPercent(Number(counts.get(label) || 0), total)
+  }));
+}
+function getPrimaryInsightLabel(labels) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const rawLabel of labels) {
+    const label = normalizeShotLabel(rawLabel);
+    if (!TENNIS_DATASET_INSIGHT_LABELS.includes(label)) {
+      continue;
+    }
+    counts.set(label, Number(counts.get(label) || 0) + 1);
+  }
+  const sorted = Array.from(counts.entries()).sort((left, right) => {
+    if (right[1] !== left[1]) return right[1] - left[1];
+    return TENNIS_DATASET_INSIGHT_LABELS.indexOf(left[0]) - TENNIS_DATASET_INSIGHT_LABELS.indexOf(right[0]);
+  });
+  return sorted[0]?.[0] || "unknown";
+}
+function numberOrNull2(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+function parseDateFilterBoundary(value, boundary) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const dateOnlyMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnlyMatch) {
+    const normalized = boundary === "start" ? `${raw}T00:00:00.000Z` : `${raw}T23:59:59.999Z`;
+    const parsed2 = new Date(normalized);
+    return Number.isNaN(parsed2.getTime()) ? null : parsed2;
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+function buildTennisDatasetInsightSuggestions(payload) {
+  const suggestions = [];
+  const practiceShare = payload.currentDataset.sessionTypeDistribution.find((item) => item.label === "practice")?.pct || 0;
+  const matchPlayShare = payload.currentDataset.sessionTypeDistribution.find((item) => item.label === "match-play")?.pct || 0;
+  if (practiceShare >= 70) {
+    suggestions.push("Current training pool is practice-heavy. Add more annotated match-play videos so the classifier sees live-point stroke variation.");
+  } else if (matchPlayShare >= 70) {
+    suggestions.push("Current training pool is match-play-heavy. Add a few focused drill videos to sharpen single-stroke examples.");
+  }
+  const underrepresentedVideoLabels = payload.currentDataset.videoDistribution.filter((item) => item.pct > 0 && item.pct < 15).map((item) => item.label);
+  if (underrepresentedVideoLabels.length > 0) {
+    suggestions.push(`Video coverage is thin for ${underrepresentedVideoLabels.join(", ")}. Prioritize new uploads there before the next retrain.`);
+  }
+  const underrepresentedShotLabels = payload.currentDataset.shotDistribution.filter((item) => item.pct > 0 && item.pct < 10).map((item) => item.label);
+  if (underrepresentedShotLabels.length > 0) {
+    suggestions.push(`Shot-level balance is light for ${underrepresentedShotLabels.join(", ")}. More labels in those classes should reduce class skew.`);
+  }
+  if (payload.activeModel?.macroF1 != null && payload.activeModel.macroF1 < 0.8) {
+    suggestions.push("Active model Macro F1 is below 80%. Rebalance the dataset, then retrain and compare per-label results before saving the next version.");
+  }
+  const weakestLabel = (payload.activeModel?.perLabel || []).filter((item) => item.f1 != null).sort((left, right) => Number(left.f1 || 0) - Number(right.f1 || 0))[0];
+  if (weakestLabel?.f1 != null && weakestLabel.f1 < 0.7) {
+    suggestions.push(`Per-label quality is weakest on ${weakestLabel.label}. Review annotation consistency there and add more examples before promoting another version.`);
+  }
+  if (suggestions.length === 0) {
+    suggestions.push("Dataset balance and active-model quality look reasonable. Keep adding fresh annotated videos and recheck after each saved version.");
+  }
+  return suggestions.slice(0, 4);
+}
 function readSubScoreValue(scoreOutputs, key) {
   if (!scoreOutputs || typeof scoreOutputs !== "object") return null;
   return readTacticalScoreValue(scoreOutputs, key);
@@ -6065,8 +8692,67 @@ function normalizeBalanceScoreForImprovedModel(value) {
   const n = Number(value);
   return n <= 10 ? n * 10 : n;
 }
-function buildImprovedTennisReportFromMetrics(detectedMovement, metricValuesRaw) {
+function normalizeTenOrHundredScoreForImprovedModel(value) {
+  if (!Number.isFinite(Number(value))) return null;
+  const n = Number(value);
+  return n <= 10 ? n * 10 : n;
+}
+function buildImprovedTacticalDetail(key, scoreRaw) {
+  const score = Number(scoreRaw);
+  const normalized = Number.isFinite(score) ? Number(Math.max(1, Math.min(10, score)).toFixed(1)) : 5.5;
+  if (key === "power") {
+    return {
+      key,
+      label: "Power",
+      score: normalized,
+      explanation: normalized >= 8 ? "Ball quality and body drive are creating strong pressure through the session." : normalized >= 6 ? "Power is present, but cleaner force transfer would raise penetration." : "Power output fades too often; body drive and acceleration need work."
+    };
+  }
+  if (key === "control") {
+    return {
+      key,
+      label: "Control",
+      score: normalized,
+      explanation: normalized >= 8 ? "You are controlling ball shape and depth well under live-play variation." : normalized >= 6 ? "Control is usable, but quality drops when tempo rises." : "Control is unstable and is leaking points through short or rushed execution."
+    };
+  }
+  if (key === "timing") {
+    return {
+      key,
+      label: "Timing",
+      score: normalized,
+      explanation: normalized >= 8 ? "Preparation and strike timing stay coordinated across the rally." : normalized >= 6 ? "Timing is mostly solid, but setup arrives late on some shots." : "Late preparation is forcing rushed contact and weaker transitions."
+    };
+  }
+  return {
+    key,
+    label: "Technique",
+    score: normalized,
+    explanation: normalized >= 8 ? "Your movement shapes and shot mechanics hold together well during play." : normalized >= 6 ? "Technique remains serviceable, though shape breaks down under pressure." : "Mechanical shape is inconsistent and needs better repeatability in live points."
+  };
+}
+function buildImprovedStrokeMix(aiDiagnosticsRaw) {
+  const aiDiagnostics = aiDiagnosticsRaw && typeof aiDiagnosticsRaw === "object" ? aiDiagnosticsRaw : {};
+  const countsRaw = aiDiagnostics.movementTypeCounts && typeof aiDiagnostics.movementTypeCounts === "object" ? aiDiagnostics.movementTypeCounts : {};
+  const strokes = ["forehand", "backhand", "serve", "volley"];
+  const rows = strokes.map((stroke) => ({
+    stroke,
+    count: Math.max(0, Math.trunc(Number(countsRaw[stroke] || 0)))
+  })).filter((item) => item.count > 0);
+  const total = rows.reduce((sum, item) => sum + item.count, 0);
+  if (total <= 0) return [];
+  return rows.map((item) => ({
+    stroke: item.stroke,
+    count: item.count,
+    sharePct: Number((item.count / total * 100).toFixed(1))
+  })).sort((a, b) => b.count - a.count);
+}
+function buildImprovedTennisReportFromMetrics(requestedSessionType, configKey, detectedMovement, metricValuesRaw, tacticalComponentsRaw, overallScoreRaw, aiDiagnosticsRaw) {
   const metricValues = metricValuesRaw && typeof metricValuesRaw === "object" ? metricValuesRaw : {};
+  const tacticalComponents = tacticalComponentsRaw && typeof tacticalComponentsRaw === "object" ? tacticalComponentsRaw : {};
+  const normalizedSessionType = String(requestedSessionType || "").trim().toLowerCase();
+  const normalizedConfigKey = String(configKey || "").trim().toLowerCase();
+  const sessionType = normalizedSessionType === "match-play" || normalizedConfigKey === "tennis-game" ? "match-play" : "practice";
   const detected = String(detectedMovement || "").toLowerCase().trim();
   const stroke = detected === "backhand" || detected === "serve" || detected === "volley" ? detected : "forehand";
   const stanceAngle = improvedPickMetric(metricValues, ["stanceAngle", "stance_angle"]);
@@ -6079,10 +8765,137 @@ function buildImprovedTennisReportFromMetrics(detectedMovement, metricValuesRaw)
   const swingPathAngle = improvedPickMetric(metricValues, ["swingPathAngle", "swing_path_angle", "trajectoryArc"]);
   const balanceScore = improvedPickMetric(metricValues, ["balanceScore", "balance_score"]);
   const balanceScoreForModel = normalizeBalanceScoreForImprovedModel(balanceScore);
+  const shotConsistency = normalizeTenOrHundredScoreForImprovedModel(
+    improvedPickMetric(metricValues, ["shotConsistency", "shot_consistency"])
+  );
+  const rhythmConsistency = normalizeTenOrHundredScoreForImprovedModel(
+    improvedPickMetric(metricValues, ["rhythmConsistency", "rhythm_consistency"])
+  );
+  const courtCoverage = improvedPickMetric(metricValues, ["courtCoverage", "court_coverage"]);
+  const recoverySpeed = improvedPickMetric(metricValues, ["recoverySpeed", "recovery_speed", "recoveryTime"]);
+  const shotVariety = improvedPickMetric(metricValues, ["shotVariety", "shot_variety"]);
+  const rallyLength = improvedPickMetric(metricValues, ["rallyLength", "rally_length"]);
   const splitStepTime = improvedPickMetric(metricValues, ["splitStepTime", "splitStepTiming", "split_step_time"]);
   const reactionTime = improvedPickMetric(metricValues, ["reactionTime", "reactionSpeed", "reaction_time"]);
   const recoveryTime = improvedPickMetric(metricValues, ["recoveryTime", "recoverySpeed", "recovery_time"]);
   const ballSpeed = improvedPickMetric(metricValues, ["ballSpeed", "avgBallSpeed", "ball_speed"]);
+  if (sessionType === "match-play") {
+    const balanceUnderLoad = improvedScoreFromUnit(
+      0.5 * improvedNorm(balanceScoreForModel, 55, 98) + 0.3 * improvedNorm(courtCoverage, 30, 98) + 0.2 * improvedNorm(recoverySpeed, 1.5, 6)
+    );
+    const contactQuality = improvedScoreFromUnit(
+      0.45 * improvedNorm(shotConsistency, 55, 98) + 0.35 * improvedNorm(ballSpeed, 40, 100) + 0.2 * improvedNorm(rhythmConsistency, 50, 95)
+    );
+    const strokeShape = improvedScoreFromUnit(
+      0.55 * improvedNorm(rhythmConsistency, 50, 95) + 0.45 * improvedNorm(shotVariety, 30, 95)
+    );
+    const forceTransfer = improvedScoreFromUnit(
+      0.35 * improvedNorm(hipRotationSpeed, 250, 1100) + 0.25 * improvedNorm(shoulderRotationSpeed, 300, 1200) + 0.2 * improvedNorm(ballSpeed, 40, 100) + 0.2 * improvedNorm(balanceScoreForModel, 55, 98)
+    );
+    const biomechanics2 = [
+      {
+        key: "balance-load",
+        label: "Balance Under Load",
+        score: balanceUnderLoad,
+        explanation: balanceUnderLoad >= 8 ? "You are staying organized and stable while moving through live-play demands." : balanceUnderLoad >= 6 ? "Balance holds up reasonably well, but body control drops at higher tempo." : "Stability under live pressure is inconsistent and is affecting shot quality."
+      },
+      {
+        key: "contact-quality",
+        label: "Contact Quality",
+        score: contactQuality,
+        explanation: contactQuality >= 8 ? "Contact quality is repeatable across rallies, giving you cleaner ball outcomes." : contactQuality >= 6 ? "Contact quality is workable, though it dips during faster exchanges." : "Inconsistent contact quality is limiting depth, pace, and repeatability."
+      },
+      {
+        key: "stroke-shape",
+        label: "Stroke Shape & Rhythm",
+        score: strokeShape,
+        explanation: strokeShape >= 8 ? "Your shapes and rhythm remain composed across a varied shot mix." : strokeShape >= 6 ? "Stroke shape is mostly stable, but rhythm breaks under rally stress." : "Stroke shape and rhythm drift too often during points."
+      },
+      {
+        key: "force-transfer",
+        label: "Force Transfer",
+        score: forceTransfer,
+        explanation: forceTransfer >= 8 ? "Body sequencing is turning movement into useful ball pressure consistently." : forceTransfer >= 6 ? "Force transfer is present, but some shots still rely too much on the arm." : "Energy transfer is inefficient and is capping reliable match-play pressure."
+      }
+    ];
+    const tactical = [
+      buildImprovedTacticalDetail("power", tacticalComponents.power),
+      buildImprovedTacticalDetail("control", tacticalComponents.control),
+      buildImprovedTacticalDetail("timing", tacticalComponents.timing),
+      buildImprovedTacticalDetail("technique", tacticalComponents.technique)
+    ];
+    const movement2 = [
+      {
+        key: "ready-base",
+        label: "Ready Base",
+        score: improvedScoreFromUnit(
+          0.5 * improvedNorm(balanceScoreForModel, 55, 98) + 0.5 * improvedNorm(rhythmConsistency, 50, 95)
+        ),
+        explanation: "How consistently you establish a usable base before the next ball."
+      },
+      {
+        key: "react-ball",
+        label: "React To Ball",
+        score: improvedScoreFromUnit(
+          0.6 * improvedNorm(courtCoverage, 30, 98) + 0.4 * improvedNorm(recoverySpeed, 1.5, 6)
+        ),
+        explanation: "How quickly your movement patterns turn recognition into usable court position."
+      },
+      {
+        key: "recover-neutral",
+        label: "Recover To Neutral",
+        score: improvedScoreFromUnit(
+          0.65 * improvedNorm(recoverySpeed, 1.5, 6) + 0.35 * improvedNorm(balanceScoreForModel, 55, 98)
+        ),
+        explanation: "How efficiently you reset after contact and prepare for the next ball."
+      },
+      {
+        key: "sustain-rally",
+        label: "Sustain Rally",
+        score: improvedScoreFromUnit(
+          0.55 * improvedNorm(rallyLength, 3, 12) + 0.45 * improvedNorm(shotConsistency, 55, 98)
+        ),
+        explanation: "How well your movement and shot quality hold up across longer exchanges."
+      },
+      {
+        key: "cover-space",
+        label: "Cover Space",
+        score: improvedScoreFromUnit(
+          0.7 * improvedNorm(courtCoverage, 30, 98) + 0.3 * improvedNorm(recoverySpeed, 1.5, 6)
+        ),
+        explanation: "How effectively you move into and out of the spaces the rally demands."
+      }
+    ];
+    const strokeMix = buildImprovedStrokeMix(aiDiagnosticsRaw);
+    const allItems = [...biomechanics2, ...tactical, ...movement2].sort((a, b) => b.score - a.score);
+    const strongest2 = allItems.slice(0, 3);
+    const weakest2 = [...allItems].reverse().slice(0, 3);
+    const storedOverallScore = Number(overallScoreRaw);
+    const overallScore2 = Number.isFinite(storedOverallScore) ? Math.max(0, Math.min(100, Math.round(storedOverallScore))) : Math.round(
+      improvedClamp(
+        (biomechanics2.reduce((sum, item) => sum + item.score, 0) / Math.max(biomechanics2.length, 1) * 0.3 + tactical.reduce((sum, item) => sum + item.score, 0) / Math.max(tactical.length, 1) * 0.4 + movement2.reduce((sum, item) => sum + item.score, 0) / Math.max(movement2.length, 1) * 0.3) * 10,
+        0,
+        100
+      )
+    );
+    const coachingTips2 = [
+      `${weakest2[0]?.label || "Control"}: make this the first match-play training priority.`,
+      `${weakest2[1]?.label || "Recover To Neutral"}: improve this with live-ball repetition and short-interval work.`,
+      strokeMix.length > 0 ? `${strokeMix[0].stroke.charAt(0).toUpperCase()}${strokeMix[0].stroke.slice(1)} made up ${strokeMix[0].sharePct}% of the session. Train that pattern first, then stabilize the weakest secondary pattern.` : "Use live-ball sequences that challenge recovery, spacing, and shot selection under pressure."
+    ];
+    return {
+      sessionType,
+      stroke: "match-play",
+      biomechanics: biomechanics2,
+      tactical,
+      movement: movement2,
+      strokeMix,
+      strengths: strongest2.map((item) => `${item.label} is a match-play strength (${item.score}/10).`),
+      improvementAreas: weakest2.map((item) => `${item.label} is the next match-play improvement area (${item.score}/10).`),
+      coachingTips: coachingTips2,
+      overallScore: overallScore2
+    };
+  }
   const balance = improvedScoreFromUnit(
     0.8 * improvedNorm(balanceScoreForModel, 55, 98) + 0.2 * improvedInvNorm(reactionTime, 180, 480)
   );
@@ -6206,9 +9019,12 @@ function buildImprovedTennisReportFromMetrics(detectedMovement, metricValuesRaw)
     stroke === "forehand" ? "Load on the outside leg earlier, then rotate hips before arm acceleration." : stroke === "backhand" ? "Initiate with shoulder turn and stabilize contact height through spacing." : stroke === "serve" ? "Increase knee load depth, then push up before full shoulder acceleration." : "Shorten backswing and keep contact in front for controlled volleys."
   ];
   return {
+    sessionType,
     stroke,
     biomechanics,
+    tactical: [],
     movement,
+    strokeMix: [],
     strengths: strongest.map((item) => `${item.label} is a strength (${item.score}/10).`),
     improvementAreas: weakest.map((item) => `${item.label} needs improvement (${item.score}/10).`),
     coachingTips,
@@ -6230,11 +9046,31 @@ function computeSummarySectionScores(row) {
     movement: parseStored("movement")
   };
 }
-var MODEL_EVALUATION_MODE_KEY = "modelEvaluationMode";
-function getModelEvaluationModeKey(userId) {
-  const uid = String(userId || "").trim();
-  if (!uid) return MODEL_EVALUATION_MODE_KEY;
-  return `${MODEL_EVALUATION_MODE_KEY}:${uid}`;
+var VIDEO_VALIDATION_MODE_KEY2 = "videoValidationMode";
+var ANALYSIS_FPS_MODE_KEY2 = "analysisFpsMode";
+function isAnalysisFpsMode2(value) {
+  return value === "3fps" || value === "6fps" || value === "12fps" || value === "15fps" || value === "24fps" || value === "30fps" || value === "full";
+}
+function isAnalysisFpsStep2(value) {
+  return value === "step1" || value === "step2" || value === "step3";
+}
+function coerceLowImpactStep2(value) {
+  if (isAnalysisFpsStep2(value)) return value;
+  if (isAnalysisFpsMode2(value)) {
+    if (value === "15fps") return "step2";
+    if (value === "12fps" || value === "6fps" || value === "3fps") return "step3";
+    return "step1";
+  }
+  return "step2";
+}
+function coerceHighImpactStep2(value) {
+  if (isAnalysisFpsStep2(value)) return value;
+  if (isAnalysisFpsMode2(value)) {
+    if (value === "15fps") return "step2";
+    if (value === "12fps" || value === "6fps" || value === "3fps") return "step3";
+    return "step1";
+  }
+  return "step1";
 }
 var SKELETON_CACHE_TTL_MS = 5 * 60 * 1e3;
 var SKELETON_CACHE_MAX_ENTRIES = 200;
@@ -6372,7 +9208,7 @@ function selectShotFramesByRange(shotIndex, startFrame, endFrame) {
 async function getSkeletonCacheEntry(video_id) {
   const cached = getCachedSkeletonEntry(video_id);
   if (cached) return cached;
-  const [row] = await db.select({ aiDiagnostics: metrics.aiDiagnostics }).from(metrics).where(eq5(metrics.analysisId, video_id)).limit(1);
+  const [row] = await db.select({ aiDiagnostics: metrics.aiDiagnostics }).from(metrics).where(eq8(metrics.analysisId, video_id)).limit(1);
   const diagnostics = row?.aiDiagnostics && typeof row.aiDiagnostics === "object" ? row.aiDiagnostics : null;
   if (!diagnostics) return null;
   const dataset = normalizeSkeletonDataset(diagnostics.skeletonData, video_id);
@@ -6423,86 +9259,165 @@ function applyDbRangesToConfig(config, rows) {
       metricsByKey.set(key, {
         ...existing,
         label: row.metricLabel || existing.label,
-        unit: row.unit || existing.unit,
-        optimalRange: [Number(row.optimalMin), Number(row.optimalMax)]
+        unit: normalizeMetricUnit(key, row.unit || existing.unit),
+        optimalRange: normalizeMetricRangeToTenScale(key, [Number(row.optimalMin), Number(row.optimalMax)])
       });
       continue;
     }
     metricsByKey.set(key, {
       key,
       label: row.metricLabel || key,
-      unit: row.unit || "",
+      unit: normalizeMetricUnit(key, row.unit || ""),
       icon: "analytics-outline",
       category: "technique",
       color: "#60A5FA",
       description: "Optimal range configured in database.",
-      optimalRange: [Number(row.optimalMin), Number(row.optimalMax)]
+      optimalRange: normalizeMetricRangeToTenScale(key, [Number(row.optimalMin), Number(row.optimalMax)])
     });
   }
-  const metrics2 = Array.from(metricsByKey.values()).map((metric) => {
+  const metrics3 = Array.from(metricsByKey.values()).map((metric) => {
     const row = byMetricKey.get(metric.key);
     if (!row) return metric;
     return {
       ...metric,
       label: row.metricLabel || metric.label,
-      unit: row.unit || metric.unit,
-      optimalRange: [Number(row.optimalMin), Number(row.optimalMax)]
+      unit: normalizeMetricUnit(metric.key, row.unit || metric.unit),
+      optimalRange: normalizeMetricRangeToTenScale(metric.key, [Number(row.optimalMin), Number(row.optimalMax)])
     };
   });
   return {
     ...config,
-    metrics: metrics2
+    metrics: metrics3
   };
 }
 async function fetchMetricRangeRows(filters = {}) {
   const conditions = [];
   if (filters.configKey) {
-    conditions.push(eq5(sportCategoryMetricRanges.configKey, String(filters.configKey).trim()));
+    conditions.push(eq8(sportCategoryMetricRanges.configKey, String(filters.configKey).trim()));
   }
   if (filters.metricKey) {
-    conditions.push(eq5(sportCategoryMetricRanges.metricKey, String(filters.metricKey).trim()));
+    conditions.push(eq8(sportCategoryMetricRanges.metricKey, String(filters.metricKey).trim()));
   }
   if (filters.sportName) {
     conditions.push(
-      sql4`lower(${sportCategoryMetricRanges.sportName}) = ${String(filters.sportName).trim().toLowerCase()}`
+      sql6`lower(${sportCategoryMetricRanges.sportName}) = ${String(filters.sportName).trim().toLowerCase()}`
     );
   }
   if (filters.movementName) {
     conditions.push(
-      sql4`lower(${sportCategoryMetricRanges.movementName}) = ${String(filters.movementName).trim().toLowerCase()}`
+      sql6`lower(${sportCategoryMetricRanges.movementName}) = ${String(filters.movementName).trim().toLowerCase()}`
     );
   }
   if (!filters.includeInactive) {
-    conditions.push(eq5(sportCategoryMetricRanges.isActive, true));
+    conditions.push(eq8(sportCategoryMetricRanges.isActive, true));
   }
-  const rows = await db.select().from(sportCategoryMetricRanges).where(conditions.length ? and3(...conditions) : void 0).orderBy(
-    asc(sportCategoryMetricRanges.configKey),
-    asc(sportCategoryMetricRanges.metricKey)
+  const rows = await db.select().from(sportCategoryMetricRanges).where(conditions.length ? and4(...conditions) : void 0).orderBy(
+    asc3(sportCategoryMetricRanges.configKey),
+    asc3(sportCategoryMetricRanges.metricKey)
   );
   return rows;
 }
-async function getModelEvaluationMode(userId) {
-  const scopedKey = getModelEvaluationModeKey(userId);
-  const [scopedSetting] = await db.select().from(appSettings).where(eq5(appSettings.key, scopedKey)).limit(1);
-  if (scopedSetting?.value && typeof scopedSetting.value === "object") {
-    return Boolean(scopedSetting.value.enabled);
-  }
-  const [legacySetting] = await db.select().from(appSettings).where(eq5(appSettings.key, MODEL_EVALUATION_MODE_KEY)).limit(1);
-  if (!legacySetting?.value || typeof legacySetting.value !== "object") return false;
-  return Boolean(legacySetting.value.enabled);
+function normalizeMetricRangeRow(row) {
+  const metricKey = String(row.metricKey || "").trim();
+  return {
+    ...row,
+    unit: normalizeMetricUnit(metricKey, row.unit),
+    optimalMin: normalizeMetricValueToTenScale(metricKey, Number(row.optimalMin)),
+    optimalMax: normalizeMetricValueToTenScale(metricKey, Number(row.optimalMax))
+  };
 }
-async function setModelEvaluationMode(enabled, userId, actorUserId) {
+async function getVideoValidationMode2(actorUserId) {
+  const [setting] = await db.select().from(appSettings).where(eq8(appSettings.key, VIDEO_VALIDATION_MODE_KEY2)).limit(1);
+  const rawMode = setting?.value && typeof setting.value === "object" ? setting.value.mode : null;
+  if (isVideoValidationMode(rawMode)) {
+    return rawMode;
+  }
+  const defaultMode = "disabled";
   await db.insert(appSettings).values({
-    key: getModelEvaluationModeKey(userId),
-    value: { enabled },
-    ...buildInsertAuditFields(actorUserId || userId)
+    key: VIDEO_VALIDATION_MODE_KEY2,
+    value: { mode: defaultMode },
+    ...buildInsertAuditFields(actorUserId || null)
+  }).onConflictDoNothing();
+  return defaultMode;
+}
+async function setVideoValidationMode(mode, actorUserId) {
+  await db.insert(appSettings).values({
+    key: VIDEO_VALIDATION_MODE_KEY2,
+    value: { mode },
+    ...buildInsertAuditFields(actorUserId || null)
   }).onConflictDoUpdate({
     target: appSettings.key,
     set: {
-      value: { enabled },
-      ...buildUpdateAuditFields(actorUserId || userId)
+      value: { mode },
+      ...buildUpdateAuditFields(actorUserId || null)
     }
   });
+}
+async function ensureVideoValidationModeSetting() {
+  await db.insert(appSettings).values({
+    key: VIDEO_VALIDATION_MODE_KEY2,
+    value: { mode: "disabled" },
+    ...buildInsertAuditFields(null)
+  }).onConflictDoNothing();
+}
+async function getAnalysisFpsSettings2(actorUserId) {
+  const [setting] = await db.select().from(appSettings).where(eq8(appSettings.key, ANALYSIS_FPS_MODE_KEY2)).limit(1);
+  const rawValue = setting?.value && typeof setting.value === "object" ? setting.value : null;
+  const lowImpactStep = coerceLowImpactStep2(rawValue?.lowImpactStep ?? rawValue?.lowImpactMode);
+  const highImpactStep = coerceHighImpactStep2(rawValue?.highImpactStep ?? rawValue?.highImpactMode);
+  const tennisAutoDetectUsesHighImpact = Boolean(rawValue?.tennisAutoDetectUsesHighImpact);
+  const tennisMatchPlayUsesHighImpact = Boolean(rawValue?.tennisMatchPlayUsesHighImpact);
+  if (setting && rawValue?.lowImpactStep === lowImpactStep && rawValue?.highImpactStep === highImpactStep && rawValue?.tennisAutoDetectUsesHighImpact === tennisAutoDetectUsesHighImpact && rawValue?.tennisMatchPlayUsesHighImpact === tennisMatchPlayUsesHighImpact) {
+    return {
+      lowImpactStep,
+      highImpactStep,
+      tennisAutoDetectUsesHighImpact,
+      tennisMatchPlayUsesHighImpact
+    };
+  }
+  const value = {
+    lowImpactStep,
+    highImpactStep,
+    tennisAutoDetectUsesHighImpact,
+    tennisMatchPlayUsesHighImpact
+  };
+  await db.insert(appSettings).values({
+    key: ANALYSIS_FPS_MODE_KEY2,
+    value,
+    ...buildInsertAuditFields(actorUserId || null)
+  }).onConflictDoUpdate({
+    target: appSettings.key,
+    set: {
+      value,
+      ...buildUpdateAuditFields(actorUserId || null)
+    }
+  });
+  return value;
+}
+async function setAnalysisFpsSettings(settings, actorUserId) {
+  await db.insert(appSettings).values({
+    key: ANALYSIS_FPS_MODE_KEY2,
+    value: settings,
+    ...buildInsertAuditFields(actorUserId || null)
+  }).onConflictDoUpdate({
+    target: appSettings.key,
+    set: {
+      value: settings,
+      ...buildUpdateAuditFields(actorUserId || null)
+    }
+  });
+}
+async function ensureAnalysisFpsSetting() {
+  await db.insert(appSettings).values({
+    key: ANALYSIS_FPS_MODE_KEY2,
+    value: {
+      lowImpactStep: "step2",
+      highImpactStep: "step1",
+      tennisAutoDetectUsesHighImpact: false,
+      tennisMatchPlayUsesHighImpact: false
+    },
+    ...buildInsertAuditFields(null)
+  }).onConflictDoNothing();
 }
 function getEvaluationMatch(analysis, map) {
   const evaluationVideoId = String(analysis.evaluationVideoId || "").trim();
@@ -6513,9 +9428,9 @@ function getEvaluationMatch(analysis, map) {
   }
   const keys = [
     sourceFilename,
-    sourceFilename ? `model_evaluation_datasets/dataset/${sourceFilename}` : "",
+    path4.basename(sourceFilename),
     videoFilename,
-    videoFilename ? `model_evaluation_datasets/dataset/${videoFilename}` : ""
+    path4.basename(videoFilename)
   ].filter(Boolean);
   for (const key of keys) {
     const match = map.get(key);
@@ -6533,13 +9448,13 @@ async function buildScoringModelDashboard(userId, isAdmin, movementFilterRaw, pl
   const discrepancyRows = isAdmin ? await db.select({
     discrepancy: analysisShotDiscrepancies,
     analysis: analyses
-  }).from(analysisShotDiscrepancies).innerJoin(analyses, eq5(analysisShotDiscrepancies.analysisId, analyses.id)).where(eq5(analysisShotDiscrepancies.modelVersion, modelConfig.activeModelVersion)) : await db.select({
+  }).from(analysisShotDiscrepancies).innerJoin(analyses, eq8(analysisShotDiscrepancies.analysisId, analyses.id)).where(eq8(analysisShotDiscrepancies.modelVersion, modelConfig.activeModelVersion)) : await db.select({
     discrepancy: analysisShotDiscrepancies,
     analysis: analyses
-  }).from(analysisShotDiscrepancies).innerJoin(analyses, eq5(analysisShotDiscrepancies.analysisId, analyses.id)).where(
-    and3(
-      eq5(analysisShotDiscrepancies.modelVersion, modelConfig.activeModelVersion),
-      eq5(analysisShotDiscrepancies.userId, userId)
+  }).from(analysisShotDiscrepancies).innerJoin(analyses, eq8(analysisShotDiscrepancies.analysisId, analyses.id)).where(
+    and4(
+      eq8(analysisShotDiscrepancies.modelVersion, modelConfig.activeModelVersion),
+      eq8(analysisShotDiscrepancies.userId, userId)
     )
   );
   const filteredRows = discrepancyRows.filter((row) => {
@@ -6672,13 +9587,13 @@ async function resolveSportAndMovementNames(analysis) {
   let sportName = "Tennis";
   let movementName = "auto-detect";
   if (analysis.sportId) {
-    const [sport] = await db.select().from(sports).where(eq5(sports.id, analysis.sportId));
+    const [sport] = await db.select().from(sports).where(eq8(sports.id, analysis.sportId));
     if (sport?.name) {
       sportName = sport.name;
     }
   }
   if (analysis.movementId) {
-    const [movement] = await db.select().from(sportMovements).where(eq5(sportMovements.id, analysis.movementId));
+    const [movement] = await db.select().from(sportMovements).where(eq8(sportMovements.id, analysis.movementId));
     if (movement?.name) {
       movementName = movement.name;
     }
@@ -6693,11 +9608,11 @@ async function attachVideoUrl(row) {
 }
 var AUDIT_METADATA_BACKFILL_KEY = "AUDIT_METADATA_BACKFILL_V1";
 async function ensureAuditMetadataBackfill() {
-  const [existing] = await db.select().from(appSettings).where(eq5(appSettings.key, AUDIT_METADATA_BACKFILL_KEY)).limit(1);
+  const [existing] = await db.select().from(appSettings).where(eq8(appSettings.key, AUDIT_METADATA_BACKFILL_KEY)).limit(1);
   if (existing) {
     return;
   }
-  await db.execute(sql4`
+  await db.execute(sql6`
     update users
     set
       updated_at = coalesce(updated_at, created_at, now()),
@@ -6707,7 +9622,7 @@ async function ensureAuditMetadataBackfill() {
        or created_by_user_id is null
        or updated_by_user_id is null
   `);
-  await db.execute(sql4`
+  await db.execute(sql6`
     update sports
     set
       created_at = coalesce(created_at, updated_at, now()),
@@ -6715,7 +9630,7 @@ async function ensureAuditMetadataBackfill() {
     where created_at is null
        or updated_at is null
   `);
-  await db.execute(sql4`
+  await db.execute(sql6`
     update sport_movements
     set
       created_at = coalesce(created_at, updated_at, now()),
@@ -6723,7 +9638,7 @@ async function ensureAuditMetadataBackfill() {
     where created_at is null
        or updated_at is null
   `);
-  await db.execute(sql4`
+  await db.execute(sql6`
     update analyses
     set
       created_by_user_id = coalesce(created_by_user_id, user_id),
@@ -6731,7 +9646,7 @@ async function ensureAuditMetadataBackfill() {
     where created_by_user_id is null
        or updated_by_user_id is null
   `);
-  await db.execute(sql4`
+  await db.execute(sql6`
     update metrics as m
     set
       updated_at = coalesce(m.updated_at, m.created_at, now()),
@@ -6745,7 +9660,7 @@ async function ensureAuditMetadataBackfill() {
         or m.updated_by_user_id is null
       )
   `);
-  await db.execute(sql4`
+  await db.execute(sql6`
     update coaching_insights as ci
     set
       updated_at = coalesce(ci.updated_at, ci.created_at, now()),
@@ -6759,7 +9674,7 @@ async function ensureAuditMetadataBackfill() {
         or ci.updated_by_user_id is null
       )
   `);
-  await db.execute(sql4`
+  await db.execute(sql6`
     update analysis_feedback
     set
       updated_at = coalesce(updated_at, created_at, now()),
@@ -6769,7 +9684,7 @@ async function ensureAuditMetadataBackfill() {
        or created_by_user_id is null
        or updated_by_user_id is null
   `);
-  await db.execute(sql4`
+  await db.execute(sql6`
     update analysis_shot_annotations
     set
       created_at = coalesce(created_at, updated_at, now()),
@@ -6781,7 +9696,7 @@ async function ensureAuditMetadataBackfill() {
        or created_by_user_id is null
        or updated_by_user_id is null
   `);
-  await db.execute(sql4`
+  await db.execute(sql6`
     update analysis_shot_discrepancies
     set
       created_at = coalesce(created_at, updated_at, now()),
@@ -6793,7 +9708,7 @@ async function ensureAuditMetadataBackfill() {
        or created_by_user_id is null
        or updated_by_user_id is null
   `);
-  await db.execute(sql4`
+  await db.execute(sql6`
     update app_settings
     set
       created_at = coalesce(created_at, updated_at, now()),
@@ -6801,31 +9716,7 @@ async function ensureAuditMetadataBackfill() {
     where created_at is null
        or updated_at is null
   `);
-  await db.execute(sql4`
-    update scoring_model_registry_entries
-    set
-      updated_at = coalesce(updated_at, created_at, now()),
-      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id)
-    where updated_at is null
-       or updated_by_user_id is null
-  `);
-  await db.execute(sql4`
-    update scoring_model_registry_dataset_metrics as dm
-    set
-      created_at = coalesce(dm.created_at, dm.updated_at, re.created_at, now()),
-      updated_at = coalesce(dm.updated_at, dm.created_at, re.updated_at, re.created_at, now()),
-      created_by_user_id = coalesce(dm.created_by_user_id, re.created_by_user_id),
-      updated_by_user_id = coalesce(dm.updated_by_user_id, dm.created_by_user_id, re.updated_by_user_id, re.created_by_user_id)
-    from scoring_model_registry_entries as re
-    where dm.registry_entry_id = re.id
-      and (
-        dm.created_at is null
-        or dm.updated_at is null
-        or dm.created_by_user_id is null
-        or dm.updated_by_user_id is null
-      )
-  `);
-  await db.execute(sql4`
+  await db.execute(sql6`
     update sport_category_metric_ranges
     set
       created_at = coalesce(created_at, updated_at, now()),
@@ -6856,11 +9747,11 @@ async function ensureAuditMetadataBackfill() {
 }
 async function refreshDiscrepancySnapshotsForAnalysis(analysisId) {
   const modelConfig = readModelRegistryConfig();
-  const [analysis] = await db.select().from(analyses).where(eq5(analyses.id, analysisId)).limit(1);
+  const [analysis] = await db.select().from(analyses).where(eq8(analyses.id, analysisId)).limit(1);
   if (!analysis) {
     return { refreshed: 0, skipped: 1 };
   }
-  const annotations = await db.select().from(analysisShotAnnotations).where(eq5(analysisShotAnnotations.analysisId, analysisId));
+  const annotations = await db.select().from(analysisShotAnnotations).where(eq8(analysisShotAnnotations.analysisId, analysisId));
   if (annotations.length === 0) {
     return { refreshed: 0, skipped: 0 };
   }
@@ -6921,35 +9812,67 @@ async function refreshDiscrepancySnapshotsForAnalysis(analysisId) {
   return { refreshed, skipped };
 }
 async function registerRoutes(app2) {
-  await db.execute(sql4`alter table users add column if not exists dominant_profile text`);
-  await db.execute(sql4`alter table users add column if not exists updated_at timestamp default now()`);
-  await db.execute(sql4`alter table users add column if not exists created_by_user_id varchar`);
-  await db.execute(sql4`alter table users add column if not exists updated_by_user_id varchar`);
-  await db.execute(sql4`alter table sports add column if not exists created_at timestamp default now()`);
-  await db.execute(sql4`alter table sports add column if not exists updated_at timestamp default now()`);
-  await db.execute(sql4`alter table sports add column if not exists created_by_user_id varchar`);
-  await db.execute(sql4`alter table sports add column if not exists updated_by_user_id varchar`);
-  await db.execute(sql4`alter table sport_movements add column if not exists created_at timestamp default now()`);
-  await db.execute(sql4`alter table sport_movements add column if not exists updated_at timestamp default now()`);
-  await db.execute(sql4`alter table sport_movements add column if not exists created_by_user_id varchar`);
-  await db.execute(sql4`alter table sport_movements add column if not exists updated_by_user_id varchar`);
-  await db.execute(sql4`alter table analyses add column if not exists created_by_user_id varchar`);
-  await db.execute(sql4`alter table analyses add column if not exists updated_by_user_id varchar`);
-  await db.execute(sql4`alter table metrics add column if not exists score_inputs jsonb`);
-  await db.execute(sql4`alter table metrics add column if not exists score_outputs jsonb`);
-  await db.execute(sql4`alter table metrics add column if not exists ai_diagnostics jsonb`);
-  await db.execute(sql4`alter table metrics add column if not exists updated_at timestamp default now()`);
-  await db.execute(sql4`alter table metrics add column if not exists created_by_user_id varchar`);
-  await db.execute(sql4`alter table metrics add column if not exists updated_by_user_id varchar`);
-  await db.execute(sql4`alter table coaching_insights add column if not exists updated_at timestamp default now()`);
-  await db.execute(sql4`alter table coaching_insights add column if not exists created_by_user_id varchar`);
-  await db.execute(sql4`alter table coaching_insights add column if not exists updated_by_user_id varchar`);
-  await db.execute(sql4`alter table analysis_feedback add column if not exists updated_at timestamp default now()`);
-  await db.execute(sql4`alter table analysis_feedback add column if not exists created_by_user_id varchar`);
-  await db.execute(sql4`alter table analysis_feedback add column if not exists updated_by_user_id varchar`);
-  await db.execute(sql4`alter table metrics drop column if exists tactical_scores`);
-  await db.execute(sql4`alter table metrics drop column if exists sub_scores`);
-  await db.execute(sql4`
+  await db.execute(sql6`alter table users add column if not exists dominant_profile text`);
+  await db.execute(sql6`alter table users add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql6`alter table users add column if not exists created_by_user_id varchar`);
+  await db.execute(sql6`alter table users add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql6`
+    update sport_category_metric_ranges
+    set
+      optimal_min = case
+        when metric_key in ('balanceScore', 'rhythmConsistency', 'shotConsistency') and optimal_min > 10
+          then round((optimal_min / 10.0)::numeric, 1)::real
+        else optimal_min
+      end,
+      optimal_max = case
+        when metric_key in ('balanceScore', 'rhythmConsistency', 'shotConsistency') and optimal_max > 10
+          then round((optimal_max / 10.0)::numeric, 1)::real
+        else optimal_max
+      end,
+      unit = case
+        when metric_key in ('balanceScore', 'rhythmConsistency', 'shotConsistency') then '/10'
+        else unit
+      end,
+      updated_at = now()
+    where metric_key in ('balanceScore', 'rhythmConsistency', 'shotConsistency')
+      and (optimal_min > 10 or optimal_max > 10 or unit <> '/10')
+  `);
+  await db.execute(sql6`alter table sports add column if not exists created_at timestamp default now()`);
+  await db.execute(sql6`alter table sports add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql6`alter table sports add column if not exists created_by_user_id varchar`);
+  await db.execute(sql6`alter table sports add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql6`alter table sports add column if not exists enabled boolean`);
+  await db.execute(sql6`
+    update sports
+    set enabled = case
+      when lower(name) = 'tennis' then true
+      else false
+    end
+    where enabled is null
+  `);
+  await db.execute(sql6`alter table sports alter column enabled set default false`);
+  await db.execute(sql6`update sports set enabled = true where lower(name) = 'tennis' and enabled is null`);
+  await db.execute(sql6`alter table sport_movements add column if not exists created_at timestamp default now()`);
+  await db.execute(sql6`alter table sport_movements add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql6`alter table sport_movements add column if not exists created_by_user_id varchar`);
+  await db.execute(sql6`alter table sport_movements add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql6`alter table analyses add column if not exists created_by_user_id varchar`);
+  await db.execute(sql6`alter table analyses add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql6`alter table metrics add column if not exists score_inputs jsonb`);
+  await db.execute(sql6`alter table metrics add column if not exists score_outputs jsonb`);
+  await db.execute(sql6`alter table metrics add column if not exists ai_diagnostics jsonb`);
+  await db.execute(sql6`alter table metrics add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql6`alter table metrics add column if not exists created_by_user_id varchar`);
+  await db.execute(sql6`alter table metrics add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql6`alter table coaching_insights add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql6`alter table coaching_insights add column if not exists created_by_user_id varchar`);
+  await db.execute(sql6`alter table coaching_insights add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql6`alter table analysis_feedback add column if not exists updated_at timestamp default now()`);
+  await db.execute(sql6`alter table analysis_feedback add column if not exists created_by_user_id varchar`);
+  await db.execute(sql6`alter table analysis_feedback add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql6`alter table metrics drop column if exists tactical_scores`);
+  await db.execute(sql6`alter table metrics drop column if exists sub_scores`);
+  await db.execute(sql6`
     create table if not exists analysis_shot_annotations (
       id varchar primary key default gen_random_uuid(),
       analysis_id varchar not null references analyses(id),
@@ -6964,13 +9887,13 @@ async function registerRoutes(app2) {
       ,updated_by_user_id varchar
     )
   `);
-  await db.execute(sql4`alter table analysis_shot_annotations add column if not exists created_by_user_id varchar`);
-  await db.execute(sql4`alter table analysis_shot_annotations add column if not exists updated_by_user_id varchar`);
-  await db.execute(sql4`
+  await db.execute(sql6`alter table analysis_shot_annotations add column if not exists created_by_user_id varchar`);
+  await db.execute(sql6`alter table analysis_shot_annotations add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql6`
     create unique index if not exists analysis_shot_annotations_analysis_user_uq
     on analysis_shot_annotations (analysis_id, user_id)
   `);
-  await db.execute(sql4`
+  await db.execute(sql6`
     create table if not exists analysis_shot_discrepancies (
       id varchar primary key default gen_random_uuid(),
       analysis_id varchar not null references analyses(id),
@@ -6991,13 +9914,13 @@ async function registerRoutes(app2) {
       updated_by_user_id varchar
     )
   `);
-  await db.execute(sql4`alter table analysis_shot_discrepancies add column if not exists created_by_user_id varchar`);
-  await db.execute(sql4`alter table analysis_shot_discrepancies add column if not exists updated_by_user_id varchar`);
-  await db.execute(sql4`
+  await db.execute(sql6`alter table analysis_shot_discrepancies add column if not exists created_by_user_id varchar`);
+  await db.execute(sql6`alter table analysis_shot_discrepancies add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql6`
     create unique index if not exists analysis_shot_discrepancies_analysis_user_uq
     on analysis_shot_discrepancies (analysis_id, user_id)
   `);
-  await db.execute(sql4`
+  await db.execute(sql6`
     create table if not exists app_settings (
       key varchar primary key,
       value jsonb not null,
@@ -7007,48 +9930,13 @@ async function registerRoutes(app2) {
       ,updated_by_user_id varchar
     )
   `);
-  await db.execute(sql4`alter table app_settings add column if not exists created_at timestamp default now()`);
-  await db.execute(sql4`alter table app_settings add column if not exists created_by_user_id varchar`);
-  await db.execute(sql4`alter table app_settings add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql6`alter table app_settings add column if not exists created_at timestamp default now()`);
+  await db.execute(sql6`alter table app_settings add column if not exists created_by_user_id varchar`);
+  await db.execute(sql6`alter table app_settings add column if not exists updated_by_user_id varchar`);
+  await ensureVideoValidationModeSetting();
+  await ensureAnalysisFpsSetting();
   await ensureVideoStorageModeSetting();
-  await db.execute(sql4`
-    create table if not exists scoring_model_registry_entries (
-      id varchar primary key default gen_random_uuid(),
-      model_version varchar not null,
-      model_version_description text not null,
-      movement_type text not null,
-      movement_detection_accuracy_pct real not null,
-      scoring_accuracy_pct real not null,
-      datasets_used jsonb not null default '[]'::jsonb,
-      manifest_model_version varchar not null default '0.1',
-      manifest_datasets jsonb not null default '[]'::jsonb,
-      created_by_user_id varchar references users(id),
-      updated_by_user_id varchar references users(id),
-      created_at timestamp not null default now(),
-      updated_at timestamp not null default now()
-    )
-  `);
-  await db.execute(sql4`alter table scoring_model_registry_entries add column if not exists updated_by_user_id varchar`);
-  await db.execute(sql4`alter table scoring_model_registry_entries add column if not exists updated_at timestamp default now()`);
-  await db.execute(sql4`
-    create table if not exists scoring_model_registry_dataset_metrics (
-      id varchar primary key default gen_random_uuid(),
-      registry_entry_id varchar not null references scoring_model_registry_entries(id),
-      dataset_name text not null,
-      movement_type text not null,
-      movement_detection_accuracy_pct real not null,
-      scoring_accuracy_pct real not null,
-      created_at timestamp not null default now(),
-      updated_at timestamp not null default now(),
-      created_by_user_id varchar,
-      updated_by_user_id varchar
-    )
-  `);
-  await db.execute(sql4`alter table scoring_model_registry_dataset_metrics add column if not exists created_at timestamp default now()`);
-  await db.execute(sql4`alter table scoring_model_registry_dataset_metrics add column if not exists updated_at timestamp default now()`);
-  await db.execute(sql4`alter table scoring_model_registry_dataset_metrics add column if not exists created_by_user_id varchar`);
-  await db.execute(sql4`alter table scoring_model_registry_dataset_metrics add column if not exists updated_by_user_id varchar`);
-  await db.execute(sql4`
+  await db.execute(sql6`
     create table if not exists sport_category_metric_ranges (
       id varchar primary key default gen_random_uuid(),
       sport_name text not null,
@@ -7067,42 +9955,173 @@ async function registerRoutes(app2) {
       updated_by_user_id varchar
     )
   `);
-  await db.execute(sql4`alter table sport_category_metric_ranges add column if not exists created_by_user_id varchar`);
-  await db.execute(sql4`alter table sport_category_metric_ranges add column if not exists updated_by_user_id varchar`);
-  await db.execute(sql4`
+  await db.execute(sql6`alter table sport_category_metric_ranges add column if not exists created_by_user_id varchar`);
+  await db.execute(sql6`alter table sport_category_metric_ranges add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql6`
     create unique index if not exists sport_category_metric_ranges_config_metric_uq
     on sport_category_metric_ranges (config_key, metric_key)
   `);
-  await db.execute(sql4`
+  await db.execute(sql6`
     create index if not exists sport_category_metric_ranges_sport_movement_idx
     on sport_category_metric_ranges (sport_name, movement_name, is_active)
   `);
-  await db.execute(sql4`alter table metrics add column if not exists model_version varchar not null default '0.1'`);
-  await db.execute(sql4`alter table analysis_shot_discrepancies add column if not exists model_version varchar not null default '0.1'`);
-  await db.execute(sql4`alter table scoring_model_registry_entries add column if not exists manifest_model_version varchar not null default '0.1'`);
-  await db.execute(sql4`alter table scoring_model_registry_entries add column if not exists manifest_datasets jsonb not null default '[]'::jsonb`);
-  await db.execute(sql4`alter table analyses add column if not exists captured_at timestamp`);
-  await db.execute(sql4`alter table analyses add column if not exists source_filename text`);
-  await db.execute(sql4`alter table analyses add column if not exists evaluation_video_id text`);
-  await db.execute(sql4`alter table analyses add column if not exists source_app text`);
-  await db.execute(sql4`alter table analyses add column if not exists video_duration_sec real`);
-  await db.execute(sql4`alter table analyses add column if not exists video_fps real`);
-  await db.execute(sql4`alter table analyses add column if not exists video_width real`);
-  await db.execute(sql4`alter table analyses add column if not exists video_height real`);
-  await db.execute(sql4`alter table analyses add column if not exists video_rotation real`);
-  await db.execute(sql4`alter table analyses add column if not exists video_codec text`);
-  await db.execute(sql4`alter table analyses add column if not exists video_content_hash text`);
-  await db.execute(sql4`alter table analyses add column if not exists video_bitrate_kbps real`);
-  await db.execute(sql4`alter table analyses add column if not exists file_size_bytes real`);
-  await db.execute(sql4`alter table analyses add column if not exists container_format text`);
-  await db.execute(sql4`alter table analyses add column if not exists gps_lat real`);
-  await db.execute(sql4`alter table analyses add column if not exists gps_lng real`);
-  await db.execute(sql4`alter table analyses add column if not exists gps_alt_m real`);
-  await db.execute(sql4`alter table analyses add column if not exists gps_speed_mps real`);
-  await db.execute(sql4`alter table analyses add column if not exists gps_heading_deg real`);
-  await db.execute(sql4`alter table analyses add column if not exists gps_accuracy_m real`);
-  await db.execute(sql4`alter table analyses add column if not exists gps_timestamp timestamp`);
-  await db.execute(sql4`alter table analyses add column if not exists gps_source text`);
+  await db.execute(sql6`alter table metrics add column if not exists model_version varchar not null default '0.1'`);
+  await db.execute(sql6`alter table analysis_shot_discrepancies add column if not exists model_version varchar not null default '0.1'`);
+  await db.execute(sql6`drop table if exists scoring_model_registry_dataset_metrics`);
+  await db.execute(sql6`drop table if exists scoring_model_registry_entries`);
+  await db.execute(sql6`
+    create table if not exists model_registry_versions (
+      id varchar primary key default gen_random_uuid(),
+      model_version varchar not null unique,
+      description text not null default '',
+      status varchar not null default 'draft',
+      activated_at timestamp,
+      activated_by_user_id varchar references users(id),
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar references users(id),
+      updated_by_user_id varchar references users(id)
+    )
+  `);
+  await db.execute(sql6`
+    create table if not exists model_registry_datasets (
+      id varchar primary key default gen_random_uuid(),
+      name text not null unique,
+      description text not null default '',
+      source text not null default 'manual-annotation',
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar references users(id),
+      updated_by_user_id varchar references users(id)
+    )
+  `);
+  await db.execute(sql6`
+    create table if not exists model_registry_dataset_items (
+      id varchar primary key default gen_random_uuid(),
+      dataset_id varchar not null references model_registry_datasets(id),
+      analysis_id varchar not null references analyses(id),
+      annotator_user_id varchar references users(id),
+      expected_movement text not null,
+      evaluation_video_id text,
+      source_filename text,
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar references users(id),
+      updated_by_user_id varchar references users(id)
+    )
+  `);
+  await db.execute(sql6`
+    create unique index if not exists model_registry_dataset_items_dataset_analysis_uq
+    on model_registry_dataset_items (dataset_id, analysis_id)
+  `);
+  await db.execute(sql6`
+    create index if not exists model_registry_dataset_items_analysis_idx
+    on model_registry_dataset_items (analysis_id)
+  `);
+  await db.execute(sql6`
+    create table if not exists tennis_training_datasets (
+      id varchar primary key default gen_random_uuid(),
+      sport_name text not null default 'tennis',
+      dataset_name text not null,
+      source text not null default 'manual-annotation',
+      analysis_count integer not null default 0,
+      row_count integer not null default 0,
+      notes text,
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar references users(id),
+      updated_by_user_id varchar references users(id)
+    )
+  `);
+  await db.execute(sql6`
+    create table if not exists tennis_training_dataset_rows (
+      id varchar primary key default gen_random_uuid(),
+      dataset_id varchar not null references tennis_training_datasets(id),
+      analysis_id varchar not null references analyses(id),
+      user_id varchar references users(id),
+      video_filename text not null,
+      shot_index integer not null,
+      group_key text not null,
+      label text not null,
+      heuristic_label text,
+      heuristic_confidence real,
+      heuristic_reasons jsonb not null default '[]'::jsonb,
+      feature_values jsonb not null default '{}'::jsonb,
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar references users(id),
+      updated_by_user_id varchar references users(id)
+    )
+  `);
+  await db.execute(sql6`
+    create index if not exists tennis_training_dataset_rows_dataset_idx
+    on tennis_training_dataset_rows (dataset_id, shot_index)
+  `);
+  await db.execute(sql6`
+    create table if not exists tennis_model_training_runs (
+      id varchar primary key default gen_random_uuid(),
+      job_id varchar not null unique,
+      sport_name text not null default 'tennis',
+      status varchar not null,
+      dataset_id varchar references tennis_training_datasets(id),
+      eligible_analysis_count integer not null default 0,
+      eligible_shot_count integer not null default 0,
+      export_rows integer,
+      train_rows integer,
+      test_rows integer,
+      macro_f1 real,
+      model_output_path text,
+      metadata jsonb,
+      report jsonb,
+      requested_at timestamp not null default now(),
+      started_at timestamp,
+      completed_at timestamp,
+      requested_by_user_id varchar references users(id),
+      saved_model_version varchar,
+      saved_model_artifact_path text,
+      saved_at timestamp,
+      version_description text,
+      error text,
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar references users(id),
+      updated_by_user_id varchar references users(id)
+    )
+  `);
+  await db.execute(sql6`
+    create index if not exists tennis_model_training_runs_sport_status_idx
+    on tennis_model_training_runs (sport_name, status, completed_at)
+  `);
+  await db.execute(sql6`alter table analyses add column if not exists captured_at timestamp`);
+  await db.execute(sql6`alter table analyses add column if not exists source_filename text`);
+  await db.execute(sql6`alter table analyses add column if not exists evaluation_video_id text`);
+  await db.execute(sql6`alter table analyses add column if not exists source_app text`);
+  await db.execute(sql6`alter table analyses add column if not exists video_duration_sec real`);
+  await db.execute(sql6`alter table analyses add column if not exists video_fps real`);
+  await db.execute(sql6`alter table analyses add column if not exists video_width real`);
+  await db.execute(sql6`alter table analyses add column if not exists video_height real`);
+  await db.execute(sql6`alter table analyses add column if not exists video_rotation real`);
+  await db.execute(sql6`alter table analyses add column if not exists video_codec text`);
+  await db.execute(sql6`alter table analyses add column if not exists video_content_hash text`);
+  await db.execute(sql6`alter table analyses add column if not exists video_bitrate_kbps real`);
+  await db.execute(sql6`alter table analyses add column if not exists file_size_bytes real`);
+  await db.execute(sql6`alter table analyses add column if not exists container_format text`);
+  await db.execute(sql6`alter table analyses add column if not exists gps_lat real`);
+  await db.execute(sql6`alter table analyses add column if not exists gps_lng real`);
+  await db.execute(sql6`alter table analyses add column if not exists gps_alt_m real`);
+  await db.execute(sql6`alter table analyses add column if not exists gps_speed_mps real`);
+  await db.execute(sql6`alter table analyses add column if not exists gps_heading_deg real`);
+  await db.execute(sql6`alter table analyses add column if not exists gps_accuracy_m real`);
+  await db.execute(sql6`alter table analyses add column if not exists gps_timestamp timestamp`);
+  await db.execute(sql6`alter table analyses add column if not exists gps_source text`);
+  await initializeModelRegistryCache();
+  await db.execute(sql6`
+    delete from app_settings
+    where key = 'modelEvaluationMode'
+       or key like 'modelEvaluationMode:%'
+  `);
+  await db.execute(sql6`alter table analyses add column if not exists requested_session_type text`);
+  await db.execute(sql6`alter table analyses add column if not exists requested_focus_key text`);
   await ensureAuditMetadataBackfill();
   const parseIntegerList = (value) => {
     if (!Array.isArray(value)) return [];
@@ -7117,24 +10136,24 @@ async function registerRoutes(app2) {
   };
   const markStaleProcessingAsFailed = async (userId) => {
     if (userId) {
-      await db.execute(sql4`
+      await db.execute(sql6`
         update analyses
         set status = 'failed',
             rejection_reason = 'Processing timed out. Please rerun Recalc. Metrics/Scores.',
             updated_at = now()
         where status = 'processing'
-          and updated_at < now() - interval '10 minutes'
+          and updated_at < now() - interval '60 minutes'
           and user_id = ${userId}
       `);
       return;
     }
-    await db.execute(sql4`
+    await db.execute(sql6`
       update analyses
       set status = 'failed',
           rejection_reason = 'Processing timed out. Please rerun Recalc. Metrics/Scores.',
           updated_at = now()
       where status = 'processing'
-        and updated_at < now() - interval '10 minutes'
+        and updated_at < now() - interval '60 minutes'
     `);
   };
   app2.get("/api/users", requireAuth, async (req, res) => {
@@ -7145,37 +10164,21 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: error.message });
     }
   });
-  app2.get("/api/model-evaluation/settings", requireAuth, async (req, res) => {
-    try {
-      const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
-      const isAdmin = currentUser?.role === "admin";
-      const enabled = await getModelEvaluationMode(userId);
-      const modelConfig = readModelRegistryConfig();
-      const manifest = readEvaluationDatasetManifest(modelConfig);
-      const totalVideos = manifest.datasets.reduce((sum, dataset) => sum + dataset.videos.length, 0);
-      res.json({
-        enabled,
-        isAdmin,
-        modelVersion: modelConfig.activeModelVersion,
-        modelVersionChangeDescription: modelConfig.modelVersionChangeDescription,
-        datasetCount: manifest.datasets.length,
-        totalVideos
-      });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
   app2.get("/api/model-registry/config", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const config = readModelRegistryConfig();
-      const manifestValidation = validateEvaluationDatasetManifest(config);
-      res.json({ ...config, manifestValidation });
+      const overview = getModelRegistryOverview();
+      res.json({
+        ...overview.config,
+        storage: overview.storage,
+        versions: overview.versions,
+        datasets: overview.datasets,
+        manifestValidation: overview.validation
+      });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -7183,26 +10186,28 @@ async function registerRoutes(app2) {
   app2.put("/api/model-registry/config", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
       const activeModelVersion = String(req.body?.activeModelVersion || "").trim();
       const modelVersionChangeDescription = String(req.body?.modelVersionChangeDescription || "").trim();
-      const evaluationDatasetManifestPath = String(req.body?.evaluationDatasetManifestPath || "").trim();
       if (!activeModelVersion) {
         return res.status(400).json({ error: "activeModelVersion is required" });
       }
-      if (!evaluationDatasetManifestPath) {
-        return res.status(400).json({ error: "evaluationDatasetManifestPath is required" });
-      }
-      const next = writeModelRegistryConfig({
+      const next = await writeModelRegistryConfig({
         activeModelVersion,
         modelVersionChangeDescription,
-        evaluationDatasetManifestPath
+        evaluationDatasetManifestPath: String(req.body?.evaluationDatasetManifestPath || "").trim() || "database://model-registry"
+      }, userId);
+      const overview = getModelRegistryOverview();
+      res.json({
+        ...next,
+        storage: overview.storage,
+        versions: overview.versions,
+        datasets: overview.datasets,
+        manifestValidation: overview.validation
       });
-      const manifestValidation = validateEvaluationDatasetManifest(next);
-      res.json({ ...next, manifestValidation });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -7210,7 +10215,7 @@ async function registerRoutes(app2) {
   app2.get("/api/model-registry/validate-manifest", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
@@ -7218,22 +10223,9 @@ async function registerRoutes(app2) {
       const validation = validateEvaluationDatasetManifest(config);
       res.json({
         config,
-        validation
+        validation,
+        datasets: getModelRegistryOverview().datasets
       });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-  app2.put("/api/model-evaluation/settings", requireAuth, async (req, res) => {
-    try {
-      const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
-      if (currentUser?.role !== "admin") {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-      const enabled = Boolean(req.body?.enabled);
-      await setModelEvaluationMode(enabled, userId, userId);
-      res.json({ enabled });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -7241,7 +10233,7 @@ async function registerRoutes(app2) {
   app2.get("/api/platform/storage-settings", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       if (!isAdmin) {
         return res.status(403).json({ error: "Admin access required" });
@@ -7254,10 +10246,166 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: error.message });
     }
   });
+  app2.get("/api/platform/pose-landmarker-settings", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      res.json({
+        model: await getPoseLandmarkerModel(userId),
+        isAdmin
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app2.put("/api/platform/pose-landmarker-settings", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const model = String(req.body?.model || "").trim().toLowerCase();
+      if (!isPoseLandmarkerModel(model)) {
+        return res.status(400).json({ error: "model must be one of lite, full, or heavy" });
+      }
+      await setPoseLandmarkerModel(model, userId);
+      res.json({ model });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app2.get("/api/platform/validation-settings", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      res.json({
+        mode: await getVideoValidationMode2(userId),
+        isAdmin
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app2.put("/api/platform/validation-settings", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const mode = String(req.body?.mode || "").trim().toLowerCase();
+      if (!isVideoValidationMode(mode)) {
+        return res.status(400).json({ error: "mode must be one of disabled, light, medium, or full" });
+      }
+      await setVideoValidationMode(mode, userId);
+      res.json({ mode });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app2.get("/api/platform/analysis-fps-settings", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const settings = await getAnalysisFpsSettings2(userId);
+      res.json({
+        ...settings,
+        isAdmin
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app2.put("/api/platform/analysis-fps-settings", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const lowImpactStep = String(req.body?.lowImpactStep ?? req.body?.lowImpactMode ?? "").trim().toLowerCase();
+      const highImpactStep = String(req.body?.highImpactStep ?? req.body?.highImpactMode ?? "").trim().toLowerCase();
+      const tennisAutoDetectUsesHighImpact = Boolean(req.body?.tennisAutoDetectUsesHighImpact);
+      const tennisMatchPlayUsesHighImpact = Boolean(req.body?.tennisMatchPlayUsesHighImpact);
+      if (!isAnalysisFpsStep2(lowImpactStep)) {
+        return res.status(400).json({ error: "lowImpactStep must be one of step1, step2, or step3" });
+      }
+      if (!isAnalysisFpsStep2(highImpactStep)) {
+        return res.status(400).json({ error: "highImpactStep must be one of step1, step2, or step3" });
+      }
+      const settings = {
+        lowImpactStep,
+        highImpactStep,
+        tennisAutoDetectUsesHighImpact,
+        tennisMatchPlayUsesHighImpact
+      };
+      await setAnalysisFpsSettings(settings, userId);
+      res.json(settings);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app2.get("/api/platform/sports-settings", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const allSports = await listSports({ includeDisabled: true });
+      res.json({
+        sports: allSports.map(mapSportForApi),
+        isAdmin
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app2.put("/api/platform/sports-settings/:sportId", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const enabled = Boolean(req.body?.enabled);
+      const sport = await getSportById(req.params.sportId);
+      if (!sport) {
+        return res.status(404).json({ error: "Sport not found" });
+      }
+      const allSports = await listSports({ includeDisabled: true });
+      const enabledCount = allSports.filter((item) => isSportEnabledRecord(item)).length;
+      if (!enabled && isSportEnabledRecord(sport) && enabledCount <= 1) {
+        return res.status(400).json({ error: "At least one sport must remain enabled" });
+      }
+      const [updatedSport] = await db.update(sports).set({
+        enabled,
+        isActive: enabled,
+        ...buildUpdateAuditFields(userId)
+      }).where(eq8(sports.id, sport.id)).returning();
+      res.json(mapSportForApi(updatedSport));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
   app2.put("/api/platform/storage-settings", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       if (!isAdmin) {
         return res.status(403).json({ error: "Admin access required" });
@@ -7275,7 +10423,7 @@ async function registerRoutes(app2) {
   app2.get("/api/scoring-model/dashboard", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const dashboard = await buildScoringModelDashboard(
         userId,
@@ -7283,385 +10431,87 @@ async function registerRoutes(app2) {
         String(req.query.movementName || ""),
         String(req.query.playerId || "")
       );
-      res.json({
-        ...dashboard,
-        modelEvaluationMode: await getModelEvaluationMode(userId)
-      });
+      res.json(dashboard);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
-  app2.post("/api/scoring-model/registry/save", requireAuth, async (req, res) => {
+  app2.get("/api/model-training/tennis", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
-      const isAdmin = currentUser?.role === "admin";
-      if (!isAdmin) {
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
+      if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const evaluationModeEnabled = await getModelEvaluationMode(userId);
-      if (!evaluationModeEnabled) {
-        return res.status(400).json({ error: "Model Evaluation Mode must be enabled" });
-      }
-      const dashboard = await buildScoringModelDashboard(
-        userId,
-        true,
-        String(req.body?.movementName || req.query.movementName || ""),
-        String(req.body?.playerId || req.query.playerId || "")
-      );
-      const configBeforeSave = readModelRegistryConfig();
-      const manifestBeforeSave = readEvaluationDatasetManifest(configBeforeSave);
-      const manifestModelVersion = String(
-        manifestBeforeSave.activeModelVersion || configBeforeSave.activeModelVersion || dashboard.modelVersion
-      ).trim();
-      const [entry] = await db.insert(scoringModelRegistryEntries).values({
-        modelVersion: dashboard.modelVersion,
-        modelVersionDescription: dashboard.modelVersionDescription,
-        movementType: dashboard.movementType,
-        movementDetectionAccuracyPct: dashboard.movementDetectionAccuracyPct,
-        scoringAccuracyPct: dashboard.scoringAccuracyPct,
-        datasetsUsed: dashboard.datasetsUsed,
-        manifestModelVersion,
-        manifestDatasets: manifestBeforeSave.datasets,
-        createdByUserId: userId,
-        updatedByUserId: userId,
-        ...buildInsertAuditFields(userId)
-      }).returning();
-      if (dashboard.datasetMetrics.length > 0) {
-        await db.insert(scoringModelRegistryDatasetMetrics).values(
-          dashboard.datasetMetrics.map((metric) => ({
-            registryEntryId: entry.id,
-            datasetName: metric.datasetName,
-            movementType: metric.movementType,
-            movementDetectionAccuracyPct: metric.movementDetectionAccuracyPct,
-            scoringAccuracyPct: metric.scoringAccuracyPct,
-            ...buildInsertAuditFields(userId)
-          }))
-        );
-      }
-      const nextModelVersion = incrementModelVersion(dashboard.modelVersion);
-      const nextConfig = writeModelRegistryConfig({
-        ...configBeforeSave,
-        activeModelVersion: nextModelVersion
-      });
-      updateManifestActiveModelVersion(nextModelVersion, nextConfig);
-      res.json({ id: entry.id, saved: true, nextModelVersion });
+      res.json(await getTennisTrainingStatus());
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
-  app2.get("/api/scoring-model/registry", requireAuth, async (req, res) => {
+  app2.get("/api/model-training/tennis/dataset-insights", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
-      const isAdmin = currentUser?.role === "admin";
-      if (!isAdmin) {
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
+      if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const entries = await db.select().from(scoringModelRegistryEntries).orderBy(desc3(scoringModelRegistryEntries.createdAt)).limit(100);
-      const entryIds = entries.map((entry) => entry.id);
-      const datasetMetrics = entryIds.length ? await db.select().from(scoringModelRegistryDatasetMetrics).where(inArray(scoringModelRegistryDatasetMetrics.registryEntryId, entryIds)) : [];
-      const metricsByEntry = /* @__PURE__ */ new Map();
-      for (const metric of datasetMetrics) {
-        const current = metricsByEntry.get(metric.registryEntryId) || [];
-        current.push(metric);
-        metricsByEntry.set(metric.registryEntryId, current);
-      }
-      const analysisRows = await db.select({
-        analysis: analyses
-      }).from(analyses).orderBy(desc3(analyses.createdAt));
-      const normalizeFilenameToken = (value) => {
-        return path5.basename(String(value || "").trim()).toLowerCase();
-      };
-      const selectedAnalysisIdsByEntry = /* @__PURE__ */ new Map();
-      const allSelectedAnalysisIds = /* @__PURE__ */ new Set();
-      for (const entry of entries) {
-        const manifestDatasets = Array.isArray(entry.manifestDatasets) ? entry.manifestDatasets : [];
-        const manifestVideos = manifestDatasets.flatMap((dataset) => {
-          const videos = Array.isArray(dataset?.videos) ? dataset.videos : [];
-          return videos.map((video) => ({
-            videoId: String(video?.videoId || "").trim(),
-            filename: String(video?.filename || "").trim()
-          }));
-        });
-        const selectedIds = /* @__PURE__ */ new Set();
-        for (const manifestVideo of manifestVideos) {
-          const manifestVideoId = manifestVideo.videoId;
-          const manifestFilenameBase = normalizeFilenameToken(manifestVideo.filename);
-          const match = analysisRows.find((row) => {
-            const analysisVideoId = String(row.analysis.evaluationVideoId || "").trim();
-            if (manifestVideoId && analysisVideoId && analysisVideoId === manifestVideoId) {
-              return true;
-            }
-            const sourceFilenameBase = normalizeFilenameToken(String(row.analysis.sourceFilename || ""));
-            const videoFilenameBase = normalizeFilenameToken(String(row.analysis.videoFilename || ""));
-            return !!manifestFilenameBase && (sourceFilenameBase === manifestFilenameBase || videoFilenameBase === manifestFilenameBase);
-          });
-          if (match?.analysis?.id) {
-            selectedIds.add(match.analysis.id);
-          }
-        }
-        const ids = Array.from(selectedIds);
-        selectedAnalysisIdsByEntry.set(entry.id, ids);
-        for (const id of ids) {
-          allSelectedAnalysisIds.add(id);
-        }
-      }
-      const selectedDiscrepancySnapshots = allSelectedAnalysisIds.size ? await db.select().from(analysisShotDiscrepancies).where(inArray(analysisShotDiscrepancies.analysisId, Array.from(allSelectedAnalysisIds))) : [];
-      const historyByAnalysisId = /* @__PURE__ */ new Map();
-      for (const snapshot of selectedDiscrepancySnapshots) {
-        const list = historyByAnalysisId.get(snapshot.analysisId) || [];
-        list.push(snapshot);
-        historyByAnalysisId.set(snapshot.analysisId, list);
-      }
-      for (const [analysisId, list] of historyByAnalysisId.entries()) {
-        historyByAnalysisId.set(
-          analysisId,
-          [...list].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-        );
-      }
-      const modelVersions = Array.from(
-        new Set(entries.map((entry) => String(entry.modelVersion || "").trim()).filter(Boolean))
-      );
-      const versionDiscrepancySnapshots = modelVersions.length ? await db.select().from(analysisShotDiscrepancies).where(inArray(analysisShotDiscrepancies.modelVersion, modelVersions)) : [];
-      const mismatchByVersion = /* @__PURE__ */ new Map();
-      for (const snapshot of versionDiscrepancySnapshots) {
-        const version = String(snapshot.modelVersion || "").trim();
-        if (!version) continue;
-        const current = mismatchByVersion.get(version) || { mismatches: 0, manualShots: 0 };
-        current.mismatches += Number(snapshot.mismatches || 0);
-        current.manualShots += Number(snapshot.manualShots || 0);
-        mismatchByVersion.set(version, current);
-      }
-      res.json(
-        entries.map((entry) => {
-          const targetVersion = String(entry.modelVersion || "").trim();
-          const selectedAnalysisIds = selectedAnalysisIdsByEntry.get(entry.id) || [];
-          let manifestManualShots = 0;
-          let manifestMismatches = 0;
-          for (const analysisId of selectedAnalysisIds) {
-            const history = historyByAnalysisId.get(analysisId) || [];
-            if (!history.length) continue;
-            const targetSnapshot = history.find(
-              (snapshot2) => String(snapshot2.modelVersion || "").trim() === targetVersion
-            );
-            const snapshot = targetSnapshot || history[0];
-            manifestManualShots += Number(snapshot.manualShots || 0);
-            manifestMismatches += Number(snapshot.mismatches || 0);
-          }
-          const manifestMismatchRatePct = manifestManualShots > 0 ? Number((manifestMismatches / manifestManualShots * 100).toFixed(1)) : null;
-          const versionWide = mismatchByVersion.get(targetVersion);
-          const versionMismatchRatePct = versionWide && versionWide.manualShots > 0 ? Number((versionWide.mismatches / versionWide.manualShots * 100).toFixed(1)) : null;
-          const fallbackMismatchRatePct = Number(
-            (100 - Number(entry.scoringAccuracyPct || 0)).toFixed(1)
-          );
-          const mismatchRatePct = manifestMismatchRatePct ?? versionMismatchRatePct ?? fallbackMismatchRatePct;
-          return {
-            ...entry,
-            mismatchRatePct: Math.max(0, Math.min(100, mismatchRatePct)),
-            datasetMetrics: metricsByEntry.get(entry.id) || []
-          };
-        })
-      );
+      res.json(await getTennisDatasetInsights({
+        playerId: req.query.playerId ? String(req.query.playerId) : null,
+        startDate: req.query.startDate ? String(req.query.startDate) : null,
+        endDate: req.query.endDate ? String(req.query.endDate) : null
+      }));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
-  app2.get("/api/scoring-model/registry/:id", requireAuth, async (req, res) => {
+  app2.post("/api/model-training/tennis/train", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
-      const isAdmin = currentUser?.role === "admin";
-      if (!isAdmin) {
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
+      if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const [entry] = await db.select().from(scoringModelRegistryEntries).where(eq5(scoringModelRegistryEntries.id, req.params.id)).limit(1);
-      if (!entry) {
-        return res.status(404).json({ error: "Registry entry not found" });
+      const status = await getTennisTrainingStatus();
+      if (status.currentJob && (status.currentJob.status === "queued" || status.currentJob.status === "running")) {
+        return res.status(409).json({ error: "A tennis training job is already running.", status });
       }
-      const datasetMetrics = await db.select().from(scoringModelRegistryDatasetMetrics).where(eq5(scoringModelRegistryDatasetMetrics.registryEntryId, entry.id));
-      const manifestDatasets = Array.isArray(entry.manifestDatasets) ? entry.manifestDatasets : [];
-      const manifestVideos = manifestDatasets.flatMap((dataset) => {
-        const datasetName = String(dataset?.name || "").trim();
-        const videos = Array.isArray(dataset?.videos) ? dataset.videos : [];
-        return videos.map((video) => ({
-          datasetName,
-          videoId: String(video?.videoId || "").trim(),
-          filename: String(video?.filename || "").trim(),
-          movementType: String(video?.movementType || "").trim()
-        }));
-      });
-      const analysisRows = await db.select({
-        analysis: analyses,
-        userName: users.name
-      }).from(analyses).leftJoin(users, eq5(analyses.userId, users.id)).orderBy(desc3(analyses.createdAt));
-      const normalizeFilenameToken = (value) => {
-        return path5.basename(String(value || "").trim()).toLowerCase();
-      };
-      const selectedByAnalysisId = /* @__PURE__ */ new Map();
-      for (const manifestVideo of manifestVideos) {
-        const manifestVideoId = manifestVideo.videoId;
-        const manifestFilename = manifestVideo.filename;
-        const manifestFilenameBase = normalizeFilenameToken(manifestFilename);
-        const match = analysisRows.find((row) => {
-          const analysisVideoId = String(row.analysis.evaluationVideoId || "").trim();
-          if (manifestVideoId && analysisVideoId && analysisVideoId === manifestVideoId) {
-            return true;
-          }
-          const sourceFilenameBase = normalizeFilenameToken(String(row.analysis.sourceFilename || ""));
-          const videoFilenameBase = normalizeFilenameToken(String(row.analysis.videoFilename || ""));
-          return !!manifestFilenameBase && (sourceFilenameBase === manifestFilenameBase || videoFilenameBase === manifestFilenameBase);
-        });
-        if (!match) continue;
-        if (!selectedByAnalysisId.has(match.analysis.id)) {
-          selectedByAnalysisId.set(match.analysis.id, {
-            analysis: match.analysis,
-            userName: match.userName || null,
-            movementType: manifestVideo.movementType
-          });
-        }
-      }
-      const selectedRows = [...selectedByAnalysisId.values()];
-      const selectedAnalysisIds = selectedRows.map((row) => row.analysis.id);
-      const discrepancyRows = selectedAnalysisIds.length ? await db.select().from(analysisShotDiscrepancies).where(inArray(analysisShotDiscrepancies.analysisId, selectedAnalysisIds)) : [];
-      const discrepancyHistoryByAnalysisId = /* @__PURE__ */ new Map();
-      for (const snapshot of discrepancyRows) {
-        const list = discrepancyHistoryByAnalysisId.get(snapshot.analysisId) || [];
-        list.push(snapshot);
-        discrepancyHistoryByAnalysisId.set(snapshot.analysisId, list);
-      }
-      for (const [analysisId, list] of discrepancyHistoryByAnalysisId.entries()) {
-        discrepancyHistoryByAnalysisId.set(
-          analysisId,
-          [...list].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-        );
-      }
-      const snapshotsByAnalysisId = /* @__PURE__ */ new Map();
-      for (const snapshot of discrepancyRows) {
-        const current = snapshotsByAnalysisId.get(snapshot.analysisId);
-        if (!current) {
-          snapshotsByAnalysisId.set(snapshot.analysisId, snapshot);
-          continue;
-        }
-        const currentIsTargetVersion = current.modelVersion === entry.modelVersion;
-        const nextIsTargetVersion = snapshot.modelVersion === entry.modelVersion;
-        if (!currentIsTargetVersion && nextIsTargetVersion) {
-          snapshotsByAnalysisId.set(snapshot.analysisId, snapshot);
-          continue;
-        }
-        if (currentIsTargetVersion && !nextIsTargetVersion) {
-          continue;
-        }
-        if (new Date(snapshot.updatedAt).getTime() > new Date(current.updatedAt).getTime()) {
-          snapshotsByAnalysisId.set(snapshot.analysisId, snapshot);
-        }
-      }
-      let filteredRows = selectedRows.map((row) => {
-        return {
-          analysis: row.analysis,
-          userName: row.userName,
-          movementType: row.movementType,
-          discrepancy: snapshotsByAnalysisId.get(row.analysis.id) || null
-        };
-      });
-      if (filteredRows.length === 0) {
-        const fallbackRows = await db.select({
-          discrepancy: analysisShotDiscrepancies,
-          analysis: analyses,
-          userName: users.name
-        }).from(analysisShotDiscrepancies).innerJoin(analyses, eq5(analysisShotDiscrepancies.analysisId, analyses.id)).leftJoin(users, eq5(analyses.userId, users.id)).where(eq5(analysisShotDiscrepancies.modelVersion, entry.modelVersion)).orderBy(
-          desc3(analysisShotDiscrepancies.mismatchRatePct),
-          desc3(analysisShotDiscrepancies.mismatches),
-          desc3(analysisShotDiscrepancies.updatedAt)
-        );
-        filteredRows = fallbackRows.map((row) => ({
-          analysis: row.analysis,
-          userName: row.userName || null,
-          movementType: row.discrepancy.movementName,
-          discrepancy: row.discrepancy
-        }));
-      }
-      const confusionMap = /* @__PURE__ */ new Map();
-      let totalManualShots = 0;
-      let totalMismatches = 0;
-      let videosWithDiscrepancy = 0;
-      const topVideos = filteredRows.map((row) => {
-        const manualShots = Number(row.discrepancy?.manualShots || 0);
-        const mismatches = Number(row.discrepancy?.mismatches || 0);
-        if (mismatches > 0) {
-          videosWithDiscrepancy += 1;
-        }
-        totalManualShots += manualShots;
-        totalMismatches += mismatches;
-        const confusionPairs = Array.isArray(row.discrepancy?.confusionPairs) ? row.discrepancy?.confusionPairs : [];
-        for (const pair of confusionPairs) {
-          const from = normalizeShotLabel(pair.from || "unknown");
-          const to = normalizeShotLabel(pair.to || "unknown");
-          const key = `${from}=>${to}`;
-          confusionMap.set(key, (confusionMap.get(key) || 0) + Number(pair.count || 0));
-        }
-        const createdAt = row.analysis.capturedAt || row.analysis.createdAt;
-        const snapshotHistory = discrepancyHistoryByAnalysisId.get(row.analysis.id) || [];
-        const currentModelVersion = String(row.discrepancy?.modelVersion || "").trim();
-        const previousSnapshot = snapshotHistory.find(
-          (snapshot) => String(snapshot.modelVersion || "").trim() !== currentModelVersion
-        );
-        const currentMismatchRatePct = Number(row.discrepancy?.mismatchRatePct || 0);
-        const previousMismatchRatePct = Number(previousSnapshot?.mismatchRatePct || 0);
-        const mismatchDeltaPct = previousSnapshot ? Number((currentMismatchRatePct - previousMismatchRatePct).toFixed(1)) : 0;
-        const isNewVideo = !previousSnapshot;
-        return {
-          analysisId: row.analysis.id,
-          videoName: row.analysis.videoFilename,
-          userName: row.userName || null,
-          createdAt: createdAt.toISOString(),
-          sportName: row.discrepancy?.sportName || "Tennis",
-          movementName: row.discrepancy?.movementName || row.movementType || row.analysis.detectedMovement || "unknown",
-          autoShots: Number(row.discrepancy?.autoShots || 0),
-          manualShots,
-          mismatches,
-          mismatchRatePct: currentMismatchRatePct,
-          mismatchDeltaPct,
-          isNewVideo
-        };
-      });
-      const labelConfusions = Array.from(confusionMap.entries()).map(([pair, count]) => {
-        const [from, to] = pair.split("=>");
-        return { from, to, count };
-      }).sort((a, b) => b.count - a.count).slice(0, 8);
-      const mismatchRatePct = Number(
-        (totalMismatches / Math.max(totalManualShots, 1) * 100).toFixed(1)
-      );
-      res.json({
-        ...entry,
-        datasetMetrics,
-        summary: {
-          videosAnnotated: filteredRows.length,
-          totalVideosConsidered: filteredRows.length,
-          videosWithDiscrepancy,
-          totalShots: totalManualShots,
-          totalManualShots,
-          totalMismatches,
-          mismatchRatePct
-        },
-        topVideos,
-        labelConfusions
-      });
+      const queuedStatus = await queueTennisTrainingJob(userId);
+      res.status(202).json(queuedStatus);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
-  app2.get("/api/sports", async (_req, res) => {
+  app2.post("/api/model-training/tennis/save-version", requireAuth, async (req, res) => {
     try {
-      const allSports = await db.select().from(sports).orderBy(asc(sports.sortOrder));
-      res.json(allSports);
+      const userId = req.session.userId;
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const status = await getTennisTrainingStatus();
+      if (status.currentJob && (status.currentJob.status === "queued" || status.currentJob.status === "running")) {
+        return res.status(409).json({ error: "Wait for the current tennis training job to finish before saving a version." });
+      }
+      res.json(await saveCurrentTennisModelVersion(userId, {
+        modelVersion: req.body?.modelVersion,
+        description: req.body?.description
+      }));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  app2.get("/api/sports", async (req, res) => {
+    try {
+      const includeDisabled = String(req.query.includeDisabled || "").trim().toLowerCase() === "true";
+      const allSports = await listSports({ includeDisabled });
+      res.json(allSports.map(mapSportForApi));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
   app2.get("/api/sports/:sportId/movements", async (req, res) => {
     try {
-      const movements = await db.select().from(sportMovements).where(eq5(sportMovements.sportId, req.params.sportId)).orderBy(asc(sportMovements.sortOrder));
+      const movements = await db.select().from(sportMovements).where(eq8(sportMovements.sportId, req.params.sportId)).orderBy(asc3(sportMovements.sortOrder));
       res.json(movements);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -7714,7 +10564,7 @@ async function registerRoutes(app2) {
         movementName: movementName || void 0,
         metricKey: metricKey || void 0
       });
-      res.json(rows);
+      res.json(rows.map(normalizeMetricRangeRow));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -7722,7 +10572,7 @@ async function registerRoutes(app2) {
   app2.put("/api/metric-optimal-ranges", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
@@ -7732,17 +10582,20 @@ async function registerRoutes(app2) {
       const movementName = String(req.body?.movementName || "").trim();
       const metricLabel = String(req.body?.metricLabel || metricKey).trim();
       const unit = String(req.body?.unit || "").trim();
-      const optimalMin = Number(req.body?.optimalMin);
-      const optimalMax = Number(req.body?.optimalMax);
+      const optimalMinRaw = Number(req.body?.optimalMin);
+      const optimalMaxRaw = Number(req.body?.optimalMax);
       const isActive = req.body?.isActive == null ? true : Boolean(req.body?.isActive);
       if (!configKey || !metricKey || !sportName || !movementName || !unit) {
         return res.status(400).json({
           error: "configKey, metricKey, sportName, movementName, and unit are required"
         });
       }
-      if (!Number.isFinite(optimalMin) || !Number.isFinite(optimalMax)) {
+      if (!Number.isFinite(optimalMinRaw) || !Number.isFinite(optimalMaxRaw)) {
         return res.status(400).json({ error: "optimalMin and optimalMax must be numbers" });
       }
+      const optimalMin = normalizeMetricValueToTenScale(metricKey, optimalMinRaw);
+      const optimalMax = normalizeMetricValueToTenScale(metricKey, optimalMaxRaw);
+      const normalizedUnit = normalizeMetricUnit(metricKey, unit);
       if (optimalMin > optimalMax) {
         return res.status(400).json({ error: "optimalMin cannot be greater than optimalMax" });
       }
@@ -7752,7 +10605,7 @@ async function registerRoutes(app2) {
         sportName,
         movementName,
         metricLabel,
-        unit,
+        unit: normalizedUnit,
         optimalMin,
         optimalMax,
         isActive,
@@ -7764,7 +10617,7 @@ async function registerRoutes(app2) {
           sportName,
           movementName,
           metricLabel,
-          unit,
+          unit: normalizedUnit,
           optimalMin,
           optimalMax,
           isActive,
@@ -7773,7 +10626,7 @@ async function registerRoutes(app2) {
         }
       });
       const rows = await fetchMetricRangeRows({ configKey, metricKey, includeInactive: true });
-      res.json(rows[0] || null);
+      res.json(rows[0] ? normalizeMetricRangeRow(rows[0]) : null);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -7781,7 +10634,7 @@ async function registerRoutes(app2) {
   app2.put("/api/metric-optimal-ranges/bulk", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
@@ -7798,19 +10651,22 @@ async function registerRoutes(app2) {
         const movementName = String(raw.movementName || "").trim();
         const metricLabel = String(raw.metricLabel || metricKey).trim();
         const unit = String(raw.unit || "").trim();
-        const optimalMin = Number(raw.optimalMin);
-        const optimalMax = Number(raw.optimalMax);
+        const optimalMinRaw = Number(raw.optimalMin);
+        const optimalMaxRaw = Number(raw.optimalMax);
         const isActive = raw.isActive == null ? true : Boolean(raw.isActive);
         if (!configKey || !metricKey || !sportName || !movementName || !unit) {
           return res.status(400).json({
             error: `Invalid item at index ${idx}: configKey, metricKey, sportName, movementName, and unit are required`
           });
         }
-        if (!Number.isFinite(optimalMin) || !Number.isFinite(optimalMax)) {
+        if (!Number.isFinite(optimalMinRaw) || !Number.isFinite(optimalMaxRaw)) {
           return res.status(400).json({
             error: `Invalid item at index ${idx}: optimalMin and optimalMax must be numbers`
           });
         }
+        const optimalMin = normalizeMetricValueToTenScale(metricKey, optimalMinRaw);
+        const optimalMax = normalizeMetricValueToTenScale(metricKey, optimalMaxRaw);
+        const normalizedUnit = normalizeMetricUnit(metricKey, unit);
         if (optimalMin > optimalMax) {
           return res.status(400).json({
             error: `Invalid item at index ${idx}: optimalMin cannot be greater than optimalMax`
@@ -7822,7 +10678,7 @@ async function registerRoutes(app2) {
           sportName,
           movementName,
           metricLabel,
-          unit,
+          unit: normalizedUnit,
           optimalMin,
           optimalMax,
           isActive
@@ -7858,13 +10714,13 @@ async function registerRoutes(app2) {
       }
       const uniqueConfigKeys = Array.from(new Set(items.map((item) => item.configKey)));
       const rows = await db.select().from(sportCategoryMetricRanges).where(
-        and3(
-          inArray(sportCategoryMetricRanges.configKey, uniqueConfigKeys),
-          eq5(sportCategoryMetricRanges.isActive, true)
+        and4(
+          inArray2(sportCategoryMetricRanges.configKey, uniqueConfigKeys),
+          eq8(sportCategoryMetricRanges.isActive, true)
         )
       ).orderBy(
-        asc(sportCategoryMetricRanges.configKey),
-        asc(sportCategoryMetricRanges.metricKey)
+        asc3(sportCategoryMetricRanges.configKey),
+        asc3(sportCategoryMetricRanges.metricKey)
       );
       res.json({
         updated: items.length,
@@ -7878,20 +10734,23 @@ async function registerRoutes(app2) {
   app2.post(
     "/api/upload",
     requireAuth,
+    (req, _res, next) => {
+      req.uploadStartMs = Date.now();
+      next();
+    },
     runVideoUploadMiddleware,
     async (req, res) => {
+      let finalPathToCleanup = null;
       try {
         if (!req.file) {
           return res.status(400).json({ error: "No video file provided" });
         }
         const storageMode = await getVideoStorageMode();
         const requesterUserId = req.session.userId;
-        const evaluationModeEnabled = await getModelEvaluationMode(requesterUserId);
-        const originalFilename = path5.basename(String(req.file.originalname || "")).trim();
         const targetUserIdRaw = String(req.body?.targetUserId || "").trim();
         let userId = requesterUserId;
         if (targetUserIdRaw) {
-          const [targetUser] = await db.select({ id: users.id }).from(users).where(eq5(users.id, targetUserIdRaw));
+          const [targetUser] = await db.select({ id: users.id }).from(users).where(eq8(users.id, targetUserIdRaw));
           if (!targetUser) {
             return res.status(400).json({ error: "Selected player not found" });
           }
@@ -7899,55 +10758,109 @@ async function registerRoutes(app2) {
         }
         const sportId = req.body?.sportId || null;
         const movementId = req.body?.movementId || null;
+        const requestedSessionTypeRaw = String(req.body?.requestedSessionType || "").trim().toLowerCase();
+        const requestedFocusKeyRaw = String(req.body?.requestedFocusKey || "").trim().toLowerCase();
+        const recordedAtRaw = String(req.body?.recordedAt || "").trim();
+        const recordedAtOverride = parseUploadRecordedAt(recordedAtRaw);
+        const requestedSessionType = requestedSessionTypeRaw === "practice" || requestedSessionTypeRaw === "match-play" ? requestedSessionTypeRaw : null;
+        const requestedFocusKey = requestedFocusKeyRaw === "auto-detect" || requestedFocusKeyRaw === "forehand" || requestedFocusKeyRaw === "backhand" || requestedFocusKeyRaw === "serve" || requestedFocusKeyRaw === "volley" || requestedFocusKeyRaw === "game" ? requestedFocusKeyRaw : null;
+        if (recordedAtRaw && !recordedAtOverride) {
+          return res.status(400).json({ error: "Invalid session date/time provided" });
+        }
+        if (recordedAtOverride && recordedAtOverride.getTime() > Date.now() + 6e4) {
+          return res.status(400).json({ error: "Session date/time cannot be in the future" });
+        }
         let resolvedSportId = null;
         let resolvedMovementId = null;
         let resolvedSportName = "";
         let resolvedMovementName = "";
         if (sportId) {
-          const [sport] = await db.select().from(sports).where(eq5(sports.id, sportId));
+          const sport = await getSportById(sportId);
           if (sport) {
+            if (!isSportEnabledRecord(sport)) {
+              return res.status(400).json({ error: `${sport.name} is not enabled yet.` });
+            }
             resolvedSportId = sport.id;
             resolvedSportName = sport.name;
           }
         }
         if (movementId) {
-          const [movement] = await db.select().from(sportMovements).where(eq5(sportMovements.id, movementId));
+          const [movement] = await db.select().from(sportMovements).where(eq8(sportMovements.id, movementId));
           if (movement && (!resolvedSportId || movement.sportId === resolvedSportId)) {
             resolvedMovementId = movement.id;
             resolvedMovementName = movement.name;
             if (!resolvedSportId) {
               resolvedSportId = movement.sportId;
-              const [movementSport] = await db.select().from(sports).where(eq5(sports.id, movement.sportId));
+              const movementSport = await getSportById(movement.sportId);
               if (movementSport) {
+                if (!isSportEnabledRecord(movementSport)) {
+                  return res.status(400).json({ error: `${movementSport.name} is not enabled yet.` });
+                }
                 resolvedSportName = movementSport.name;
               }
             }
           }
         }
-        const finalFilename = req.file.filename || `${randomUUID3().toUpperCase()}${path5.extname(req.file.originalname || "") || ".mp4"}`;
+        if (!resolvedSportId && !resolvedSportName) {
+          const enabledPrimarySport = await getEnabledPrimarySport();
+          if (enabledPrimarySport) {
+            resolvedSportId = enabledPrimarySport.id;
+            resolvedSportName = enabledPrimarySport.name;
+          }
+        }
+        const finalFilename = req.file.filename || `${randomUUID3().toUpperCase()}${path4.extname(req.file.originalname || "") || ".mp4"}`;
         const finalPath = storageMode === "r2" ? await storeVideoBuffer({
           buffer: req.file.buffer,
           contentType: req.file.mimetype,
           filename: finalFilename
         }) : req.file.path;
-        const sourceFilename = evaluationModeEnabled && originalFilename ? originalFilename : null;
+        finalPathToCleanup = finalPath;
+        const uploadStartedAtMs = Number(req.uploadStartMs);
+        const uploadCompletedAtMs = Date.now();
+        const sourceFilename = null;
         const evaluationVideoId = null;
         const extractedMetadata = await withLocalMediaFile(
           finalPath,
           finalFilename,
           async (localPath) => extractVideoMetadata(localPath)
         );
+        const uploadMetadata = recordedAtOverride ? { ...extractedMetadata, capturedAt: recordedAtOverride } : extractedMetadata;
+        if (resolvedSportName && !isPrimaryEnabledSportName(resolvedSportName)) {
+          await deleteStoredMedia(finalPathToCleanup);
+          finalPathToCleanup = null;
+          return res.status(400).json({ error: "Only tennis videos are allowed to be uploaded." });
+        }
         const analysis = await storage.createAnalysis(
           finalFilename,
           finalPath,
           userId,
           resolvedSportId,
           resolvedMovementId,
-          extractedMetadata,
+          requestedSessionType,
+          requestedFocusKey,
+          uploadMetadata,
           sourceFilename,
           evaluationVideoId,
           requesterUserId
         );
+        finalPathToCleanup = null;
+        try {
+          await seedUploadPipelineTiming(
+            analysis.id,
+            {
+              startedAt: Number.isFinite(uploadStartedAtMs) ? new Date(uploadStartedAtMs).toISOString() : null,
+              completedAt: new Date(uploadCompletedAtMs).toISOString(),
+              elapsedMs: Number.isFinite(uploadStartedAtMs) ? Math.max(uploadCompletedAtMs - uploadStartedAtMs, 0) : null
+            },
+            {
+              configKey: getConfigKey(resolvedSportName || "tennis", resolvedMovementName || "auto-detect"),
+              modelVersion: readModelRegistryConfig().activeModelVersion,
+              auditActorUserId: requesterUserId
+            }
+          );
+        } catch (timingError) {
+          console.warn("Failed to seed upload pipeline timing:", timingError);
+        }
         processAnalysis(analysis.id).catch(console.error);
         res.json({
           id: analysis.id,
@@ -7956,6 +10869,13 @@ async function registerRoutes(app2) {
         });
       } catch (error) {
         console.error("Upload error:", error);
+        if (finalPathToCleanup) {
+          try {
+            await deleteStoredMedia(finalPathToCleanup);
+          } catch (cleanupError) {
+            console.warn("Failed to clean up rejected upload:", cleanupError);
+          }
+        }
         res.status(500).json({ error: error.message || "Upload failed" });
       }
     }
@@ -7964,7 +10884,7 @@ async function registerRoutes(app2) {
     try {
       const userId = req.session.userId;
       const sportId = req.query.sportId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       await markStaleProcessingAsFailed(isAdmin ? void 0 : userId);
       const allAnalyses = isAdmin ? await storage.getAllAnalyses(null, sportId) : await storage.getAllAnalyses(userId, sportId);
@@ -7976,22 +10896,26 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/summary", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
-      const evaluationModeEnabled = isAdmin ? await getModelEvaluationMode(userId) : false;
-      const evaluationVideoMap = evaluationModeEnabled ? getEvaluationDatasetVideoMap(readModelRegistryConfig()) : null;
+      const includeAll = isAdmin && String(req.query.includeAll || "").trim().toLowerCase() === "true";
       await markStaleProcessingAsFailed(isAdmin ? void 0 : userId);
       const query = db.select({
         id: analyses.id,
         userId: analyses.userId,
         sportId: analyses.sportId,
         movementId: analyses.movementId,
+        requestedSessionType: analyses.requestedSessionType,
+        requestedFocusKey: analyses.requestedFocusKey,
+        sportName: sports.name,
+        movementName: sportMovements.name,
         videoFilename: analyses.videoFilename,
         sourceFilename: analyses.sourceFilename,
         evaluationVideoId: analyses.evaluationVideoId,
         videoPath: analyses.videoPath,
         status: analyses.status,
         detectedMovement: analyses.detectedMovement,
+        rejectionReason: analyses.rejectionReason,
         capturedAt: analyses.capturedAt,
         createdAt: analyses.createdAt,
         updatedAt: analyses.updatedAt,
@@ -8001,8 +10925,8 @@ async function registerRoutes(app2) {
         scoreOutputs: metrics.scoreOutputs,
         configKey: metrics.configKey,
         modelVersion: metrics.modelVersion
-      }).from(analyses).leftJoin(users, eq5(analyses.userId, users.id)).leftJoin(metrics, eq5(analyses.id, metrics.analysisId));
-      const rows = isAdmin ? await query.orderBy(sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`) : await query.where(eq5(analyses.userId, userId)).orderBy(sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`);
+      }).from(analyses).leftJoin(users, eq8(analyses.userId, users.id)).leftJoin(sports, eq8(analyses.sportId, sports.id)).leftJoin(sportMovements, eq8(analyses.movementId, sportMovements.id)).leftJoin(metrics, eq8(analyses.id, metrics.analysisId));
+      const rows = isAdmin ? await query.orderBy(sql6`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`) : await query.where(eq8(analyses.userId, userId)).orderBy(sql6`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`);
       const normalizedRows = rows.map((row) => {
         const normalized = normalizeScoreRow(row);
         return {
@@ -8012,9 +10936,8 @@ async function registerRoutes(app2) {
           })
         };
       });
-      if (evaluationVideoMap && isAdmin) {
-        const filteredRows = normalizedRows.filter((row) => getEvaluationMatch(row, evaluationVideoMap));
-        return res.json(await Promise.all(filteredRows.map((row) => attachVideoUrl(row))));
+      if (isAdmin && !includeAll) {
+        return res.json(await Promise.all(normalizedRows.map((row) => attachVideoUrl(row))));
       }
       res.json(await Promise.all(normalizedRows.map((row) => attachVideoUrl(row))));
     } catch (error) {
@@ -8024,7 +10947,7 @@ async function registerRoutes(app2) {
   app2.post("/api/coach/ask", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const question = String(req.body?.question || "").trim();
       const sportName = String(req.body?.sportName || "").trim();
@@ -8045,7 +10968,7 @@ async function registerRoutes(app2) {
         overallScore: metrics.overallScore,
         scoreOutputs: metrics.scoreOutputs,
         configKey: metrics.configKey
-      }).from(analyses).leftJoin(metrics, eq5(analyses.id, metrics.analysisId)).where(eq5(analyses.userId, targetPlayerId)).orderBy(sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`);
+      }).from(analyses).leftJoin(metrics, eq8(analyses.id, metrics.analysisId)).where(eq8(analyses.userId, targetPlayerId)).orderBy(sql6`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`);
       const sportFilter = normalizeFilterToken(sportName);
       const movementFilter = normalizeFilterToken(movementName);
       const filtered = rows.filter((row) => {
@@ -8140,13 +11063,13 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
-      const [analysisUser] = analysis.userId ? await db.select({ name: users.name }).from(users).where(eq5(users.id, analysis.userId)).limit(1) : [null];
+      const [analysisUser] = analysis.userId ? await db.select({ name: users.name }).from(users).where(eq8(users.id, analysis.userId)).limit(1) : [null];
       if (!isAdmin && analysis.userId !== userId) {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
@@ -8154,7 +11077,7 @@ async function registerRoutes(app2) {
       const insights = await storage.getCoachingInsights(req.params.id);
       let selectedMovementName = null;
       if (analysis.movementId) {
-        const [movement] = await db.select().from(sportMovements).where(eq5(sportMovements.id, analysis.movementId));
+        const [movement] = await db.select().from(sportMovements).where(eq8(sportMovements.id, analysis.movementId));
         if (movement) {
           selectedMovementName = movement.name;
         }
@@ -8179,7 +11102,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/score-inputs", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -8205,7 +11128,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/improved-tennis", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -8216,7 +11139,7 @@ async function registerRoutes(app2) {
       }
       let sportName = "tennis";
       if (analysis.sportId) {
-        const [sport] = await db.select().from(sports).where(eq5(sports.id, analysis.sportId));
+        const [sport] = await db.select().from(sports).where(eq8(sports.id, analysis.sportId));
         if (sport?.name) sportName = String(sport.name).toLowerCase();
       }
       if (sportName !== "tennis") {
@@ -8228,8 +11151,13 @@ async function registerRoutes(app2) {
         ...baseMetricValues
       };
       const report = buildImprovedTennisReportFromMetrics(
+        analysis.requestedSessionType,
+        metricsData?.configKey,
         analysis.detectedMovement,
-        inputMetrics
+        inputMetrics,
+        metricsData?.scoreOutputs && typeof metricsData.scoreOutputs === "object" ? metricsData.scoreOutputs?.tactical?.components : null,
+        metricsData?.overallScore,
+        metricsData?.aiDiagnostics
       );
       return res.json({
         analysisId: analysis.id,
@@ -8245,10 +11173,10 @@ async function registerRoutes(app2) {
   app2.get("/api/shot-annotations", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
-      const rows = isAdmin ? await db.select().from(analysisShotAnnotations).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(1e3) : await db.select().from(analysisShotAnnotations).where(eq5(analysisShotAnnotations.userId, userId)).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(300);
-      res.json(rows);
+      const rows = isAdmin ? await db.select().from(analysisShotAnnotations).orderBy(desc4(analysisShotAnnotations.updatedAt)).limit(1e3) : await db.select().from(analysisShotAnnotations).where(eq8(analysisShotAnnotations.userId, userId)).orderBy(desc4(analysisShotAnnotations.updatedAt)).limit(300);
+      res.json(rows.map(normalizeMetricRangeRow));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -8256,7 +11184,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/shot-annotation", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -8265,20 +11193,15 @@ async function registerRoutes(app2) {
       if (!isAdmin && analysis.userId !== userId) {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
-      const whereClause = isAdmin ? eq5(analysisShotAnnotations.analysisId, req.params.id) : and3(
-        eq5(analysisShotAnnotations.analysisId, req.params.id),
-        eq5(analysisShotAnnotations.userId, userId)
+      const whereClause = isAdmin ? eq8(analysisShotAnnotations.analysisId, req.params.id) : and4(
+        eq8(analysisShotAnnotations.analysisId, req.params.id),
+        eq8(analysisShotAnnotations.userId, userId)
       );
-      const [annotation] = await db.select().from(analysisShotAnnotations).where(whereClause).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(1);
+      const [annotation] = await db.select().from(analysisShotAnnotations).where(whereClause).orderBy(desc4(analysisShotAnnotations.updatedAt)).limit(1);
       if (!annotation) {
         return res.json(null);
       }
-      const evaluationVideoMap = getEvaluationDatasetVideoMap(readModelRegistryConfig());
-      const useForModelTraining = Boolean(getEvaluationMatch(analysis, evaluationVideoMap));
-      res.json({
-        ...annotation,
-        useForModelTraining
-      });
+      res.json(annotation);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -8286,7 +11209,7 @@ async function registerRoutes(app2) {
   app2.post("/api/analyses/:id/shot-annotation", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -8299,7 +11222,6 @@ async function registerRoutes(app2) {
       const orderedShotLabels = Array.isArray(req.body?.orderedShotLabels) ? req.body.orderedShotLabels.map((value) => String(value || "").trim()).filter(Boolean) : [];
       const usedForScoringShotIndexes = parseIntegerList(req.body?.usedForScoringShotIndexes);
       const notes = req.body?.notes ? String(req.body.notes) : null;
-      const useForModelTraining = isAdmin && Boolean(req.body?.useForModelTraining);
       if (!Number.isFinite(totalShotsNum) || totalShotsNum < 0) {
         return res.status(400).json({ error: "totalShots must be a non-negative number" });
       }
@@ -8309,9 +11231,9 @@ async function registerRoutes(app2) {
         });
       }
       const [existing] = await db.select().from(analysisShotAnnotations).where(
-        and3(
-          eq5(analysisShotAnnotations.analysisId, req.params.id),
-          eq5(analysisShotAnnotations.userId, userId)
+        and4(
+          eq8(analysisShotAnnotations.analysisId, req.params.id),
+          eq8(analysisShotAnnotations.userId, userId)
         )
       ).limit(1);
       if (existing) {
@@ -8321,7 +11243,7 @@ async function registerRoutes(app2) {
           usedForScoringShotIndexes,
           notes,
           ...buildUpdateAuditFields(userId)
-        }).where(eq5(analysisShotAnnotations.id, existing.id));
+        }).where(eq8(analysisShotAnnotations.id, existing.id));
       } else {
         await db.insert(analysisShotAnnotations).values({
           analysisId: req.params.id,
@@ -8334,49 +11256,40 @@ async function registerRoutes(app2) {
         });
       }
       const [saved] = await db.select().from(analysisShotAnnotations).where(
-        and3(
-          eq5(analysisShotAnnotations.analysisId, req.params.id),
-          eq5(analysisShotAnnotations.userId, userId)
+        and4(
+          eq8(analysisShotAnnotations.analysisId, req.params.id),
+          eq8(analysisShotAnnotations.userId, userId)
         )
-      ).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(1);
+      ).orderBy(desc4(analysisShotAnnotations.updatedAt)).limit(1);
       const { sportName, movementName } = await resolveSportAndMovementNames(analysis);
       const dominantProfile = await resolveUserDominantProfile(analysis.userId);
       const manualLabels = (saved?.orderedShotLabels || orderedShotLabels).map(
         (label) => normalizeShotLabel(label)
       );
-      if (isAdmin) {
-        const movementForManifest = String(
-          analysis.detectedMovement || movementName || "unknown"
-        ).trim().toLowerCase();
-        try {
-          const syncResult = useForModelTraining ? await withLocalMediaFile(
-            analysis.videoPath,
-            analysis.videoFilename,
-            async (localPath) => syncVideoForModelTuning({
-              sourceVideoPath: localPath,
-              sourceVideoFilename: analysis.videoFilename,
-              movementType: movementForManifest,
-              enabled: useForModelTraining,
-              videoId: analysis.evaluationVideoId || void 0
-            })
-          ) : syncVideoForModelTuning({
-            sourceVideoPath: analysis.videoPath,
-            sourceVideoFilename: analysis.videoFilename,
-            movementType: movementForManifest,
-            enabled: useForModelTraining,
-            videoId: analysis.evaluationVideoId || void 0
-          });
-          if (useForModelTraining && syncResult.videoId !== analysis.evaluationVideoId) {
-            await db.update(analyses).set({
-              evaluationVideoId: syncResult.videoId,
-              ...buildUpdateAuditFields(userId)
-            }).where(eq5(analyses.id, analysis.id));
-          }
-        } catch (manifestError) {
-          return res.status(500).json({
-            error: manifestError?.message || "Failed to sync evaluation dataset manifest for model tuning"
-          });
+      const movementForManifest = String(
+        analysis.detectedMovement || movementName || "unknown"
+      ).trim().toLowerCase();
+      try {
+        const syncResult = await syncVideoForModelTuning({
+          sourceVideoPath: analysis.videoPath,
+          sourceVideoFilename: analysis.videoFilename,
+          movementType: movementForManifest,
+          enabled: true,
+          videoId: analysis.evaluationVideoId || void 0,
+          analysisId: analysis.id,
+          annotatorUserId: userId,
+          actorUserId: userId
+        });
+        if (syncResult.videoId !== analysis.evaluationVideoId) {
+          await db.update(analyses).set({
+            evaluationVideoId: syncResult.videoId,
+            ...buildUpdateAuditFields(userId)
+          }).where(eq8(analyses.id, analysis.id));
         }
+      } catch (manifestError) {
+        return res.status(500).json({
+          error: manifestError?.message || "Failed to sync model training dataset state"
+        });
       }
       let discrepancySnapshotUpdated = false;
       try {
@@ -8434,7 +11347,6 @@ async function registerRoutes(app2) {
           usedForScoringShotIndexes,
           notes
         },
-        useForModelTraining,
         discrepancySnapshotUpdated
       });
     } catch (error) {
@@ -8444,7 +11356,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/shot-report", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -8459,11 +11371,11 @@ async function registerRoutes(app2) {
       let sportName = "tennis";
       let movementName = "auto-detect";
       if (analysis.sportId) {
-        const [sport] = await db.select().from(sports).where(eq5(sports.id, analysis.sportId));
+        const [sport] = await db.select().from(sports).where(eq8(sports.id, analysis.sportId));
         if (sport) sportName = sport.name;
       }
       if (analysis.movementId) {
-        const [movement] = await db.select().from(sportMovements).where(eq5(sportMovements.id, analysis.movementId));
+        const [movement] = await db.select().from(sportMovements).where(eq8(sportMovements.id, analysis.movementId));
         if (movement) movementName = movement.name;
       }
       const dominantProfile = await resolveUserDominantProfile(analysis.userId);
@@ -8479,14 +11391,14 @@ async function registerRoutes(app2) {
       );
       const diagnosticsDetected = String(diagnostics?.detectedMovement || "").trim();
       if (diagnosticsDetected && normalizeMovementToken(diagnosticsDetected) !== normalizeMovementToken(analysis.detectedMovement)) {
-        await db.update(analyses).set({ detectedMovement: diagnosticsDetected, updatedAt: /* @__PURE__ */ new Date() }).where(eq5(analyses.id, analysis.id));
+        await db.update(analyses).set({ detectedMovement: diagnosticsDetected, updatedAt: /* @__PURE__ */ new Date() }).where(eq8(analyses.id, analysis.id));
       }
       const [manualAnnotation] = await db.select().from(analysisShotAnnotations).where(
-        and3(
-          eq5(analysisShotAnnotations.analysisId, req.params.id),
-          eq5(analysisShotAnnotations.userId, userId)
+        and4(
+          eq8(analysisShotAnnotations.analysisId, req.params.id),
+          eq8(analysisShotAnnotations.userId, userId)
         )
-      ).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(1);
+      ).orderBy(desc4(analysisShotAnnotations.updatedAt)).limit(1);
       res.json({
         analysisId: req.params.id,
         totalShots: diagnostics?.shotsDetected ?? 0,
@@ -8501,7 +11413,7 @@ async function registerRoutes(app2) {
   app2.get("/api/discrepancy-summary", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const sportFilter = String(req.query.sportName || "").trim().toLowerCase();
       const movementFilter = normalizeMovementToken(req.query.movementName || "");
@@ -8513,12 +11425,12 @@ async function registerRoutes(app2) {
         sportName: sports.name,
         movementName: sportMovements.name,
         metricValues: metrics.metricValues
-      }).from(analyses).leftJoin(sports, eq5(analyses.sportId, sports.id)).leftJoin(sportMovements, eq5(analyses.movementId, sportMovements.id)).leftJoin(metrics, eq5(metrics.analysisId, analyses.id)) : await db.select({
+      }).from(analyses).leftJoin(sports, eq8(analyses.sportId, sports.id)).leftJoin(sportMovements, eq8(analyses.movementId, sportMovements.id)).leftJoin(metrics, eq8(metrics.analysisId, analyses.id)) : await db.select({
         analysis: analyses,
         sportName: sports.name,
         movementName: sportMovements.name,
         metricValues: metrics.metricValues
-      }).from(analyses).leftJoin(sports, eq5(analyses.sportId, sports.id)).leftJoin(sportMovements, eq5(analyses.movementId, sportMovements.id)).leftJoin(metrics, eq5(metrics.analysisId, analyses.id)).where(eq5(analyses.userId, userId));
+      }).from(analyses).leftJoin(sports, eq8(analyses.sportId, sports.id)).leftJoin(sportMovements, eq8(analyses.movementId, sportMovements.id)).leftJoin(metrics, eq8(metrics.analysisId, analyses.id)).where(eq8(analyses.userId, userId));
       const filteredAnalysesForRate = analysisRows.filter((row) => {
         if (row.analysis.status !== "completed") return false;
         if (applyPlayerFilter && row.analysis.userId !== playerFilter) return false;
@@ -8556,20 +11468,20 @@ async function registerRoutes(app2) {
       const rows = isAdmin ? await db.select({
         annotation: analysisShotAnnotations,
         analysis: analyses,
-        userName: sql4`(
+        userName: sql6`(
                 select u.name from users u where u.id = ${analyses.userId}
               )`,
         sportName: sports.name,
         movementName: sportMovements.name
-      }).from(analysisShotAnnotations).innerJoin(analyses, eq5(analysisShotAnnotations.analysisId, analyses.id)).leftJoin(sports, eq5(analyses.sportId, sports.id)).leftJoin(sportMovements, eq5(analyses.movementId, sportMovements.id)).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(200) : await db.select({
+      }).from(analysisShotAnnotations).innerJoin(analyses, eq8(analysisShotAnnotations.analysisId, analyses.id)).leftJoin(sports, eq8(analyses.sportId, sports.id)).leftJoin(sportMovements, eq8(analyses.movementId, sportMovements.id)).orderBy(desc4(analysisShotAnnotations.updatedAt)).limit(200) : await db.select({
         annotation: analysisShotAnnotations,
         analysis: analyses,
-        userName: sql4`(
+        userName: sql6`(
                 select u.name from users u where u.id = ${analyses.userId}
               )`,
         sportName: sports.name,
         movementName: sportMovements.name
-      }).from(analysisShotAnnotations).innerJoin(analyses, eq5(analysisShotAnnotations.analysisId, analyses.id)).leftJoin(sports, eq5(analyses.sportId, sports.id)).leftJoin(sportMovements, eq5(analyses.movementId, sportMovements.id)).where(eq5(analysisShotAnnotations.userId, userId)).orderBy(desc3(analysisShotAnnotations.updatedAt)).limit(30);
+      }).from(analysisShotAnnotations).innerJoin(analyses, eq8(analysisShotAnnotations.analysisId, analyses.id)).leftJoin(sports, eq8(analyses.sportId, sports.id)).leftJoin(sportMovements, eq8(analyses.movementId, sportMovements.id)).where(eq8(analysisShotAnnotations.userId, userId)).orderBy(desc4(analysisShotAnnotations.updatedAt)).limit(30);
       const filteredRows = rows.filter((row) => {
         if (applyPlayerFilter && row.analysis.userId !== playerFilter) return false;
         if (!sportFilter) return true;
@@ -8583,7 +11495,7 @@ async function registerRoutes(app2) {
         );
         return rowMovement === movementFilter;
       });
-      const existingSnapshots = isAdmin ? await db.select().from(analysisShotDiscrepancies) : await db.select().from(analysisShotDiscrepancies).where(eq5(analysisShotDiscrepancies.userId, userId));
+      const existingSnapshots = isAdmin ? await db.select().from(analysisShotDiscrepancies) : await db.select().from(analysisShotDiscrepancies).where(eq8(analysisShotDiscrepancies.userId, userId));
       const snapshotByAnalysisId = new Map(
         existingSnapshots.map((item) => [`${item.analysisId}:${item.userId}`, item])
       );
@@ -8647,9 +11559,9 @@ async function registerRoutes(app2) {
             }
           });
           const [fresh] = await db.select().from(analysisShotDiscrepancies).where(
-            and3(
-              eq5(analysisShotDiscrepancies.analysisId, analysis.id),
-              eq5(analysisShotDiscrepancies.userId, annotationOwnerId)
+            and4(
+              eq8(analysisShotDiscrepancies.analysisId, analysis.id),
+              eq8(analysisShotDiscrepancies.userId, annotationOwnerId)
             )
           ).limit(1);
           snapshot = fresh;
@@ -8747,7 +11659,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/diagnostics", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -8757,7 +11669,7 @@ async function registerRoutes(app2) {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
       const forceRefresh = String(req.query.refresh || "") === "1";
-      const [metricRow] = await db.select({ aiDiagnostics: metrics.aiDiagnostics }).from(metrics).where(eq5(metrics.analysisId, analysis.id)).limit(1);
+      const [metricRow] = await db.select({ aiDiagnostics: metrics.aiDiagnostics }).from(metrics).where(eq8(metrics.analysisId, analysis.id)).limit(1);
       const persistedDiagnostics = metricRow?.aiDiagnostics && typeof metricRow.aiDiagnostics === "object" ? metricRow.aiDiagnostics : null;
       if (persistedDiagnostics && !forceRefresh) {
         return res.json(persistedDiagnostics);
@@ -8768,11 +11680,11 @@ async function registerRoutes(app2) {
       let sportName = "tennis";
       let movementName = "auto-detect";
       if (analysis.sportId) {
-        const [sport] = await db.select().from(sports).where(eq5(sports.id, analysis.sportId));
+        const [sport] = await db.select().from(sports).where(eq8(sports.id, analysis.sportId));
         if (sport) sportName = sport.name;
       }
       if (analysis.movementId) {
-        const [movement] = await db.select().from(sportMovements).where(eq5(sportMovements.id, analysis.movementId));
+        const [movement] = await db.select().from(sportMovements).where(eq8(sportMovements.id, analysis.movementId));
         if (movement) movementName = movement.name;
       }
       const dominantProfile = await resolveUserDominantProfile(analysis.userId);
@@ -8786,13 +11698,24 @@ async function registerRoutes(app2) {
           dominantProfile
         )
       );
-      await db.update(metrics).set({ aiDiagnostics: diagnostics }).where(eq5(metrics.analysisId, analysis.id));
+      const refreshedDiagnostics = (() => {
+        const pipelineTiming = extractPipelineTiming(persistedDiagnostics);
+        const diagnosticsRecord = diagnostics && typeof diagnostics === "object" ? diagnostics : {};
+        const validationScreening = persistedDiagnostics && typeof persistedDiagnostics === "object" ? persistedDiagnostics.validationScreening : null;
+        const diagnosticsWithValidation = validationScreening == null ? diagnosticsRecord : {
+          ...diagnosticsRecord,
+          validationScreening
+        };
+        if (!pipelineTiming) return diagnosticsWithValidation;
+        return attachPipelineTiming(diagnosticsWithValidation, pipelineTiming);
+      })();
+      await db.update(metrics).set({ aiDiagnostics: refreshedDiagnostics }).where(eq8(metrics.analysisId, analysis.id));
       invalidateSkeletonCache(analysis.id);
       const diagnosticsDetected = String(diagnostics?.detectedMovement || "").trim();
       if (diagnosticsDetected && normalizeMovementToken(diagnosticsDetected) !== normalizeMovementToken(analysis.detectedMovement)) {
-        await db.update(analyses).set({ detectedMovement: diagnosticsDetected, updatedAt: /* @__PURE__ */ new Date() }).where(eq5(analyses.id, analysis.id));
+        await db.update(analyses).set({ detectedMovement: diagnosticsDetected, updatedAt: /* @__PURE__ */ new Date() }).where(eq8(analyses.id, analysis.id));
       }
-      res.json(diagnostics);
+      res.json(refreshedDiagnostics);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -8800,7 +11723,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/skeleton/shot/:shotId", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -8827,7 +11750,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/skeleton/shot/:shotId/playback", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -8854,7 +11777,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/skeleton/shot/:shotId/frame/:frameNumber", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -8883,7 +11806,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/ghost-correction/:shotId", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -8903,7 +11826,7 @@ async function registerRoutes(app2) {
       const [metricsRow] = await db.select({
         metricValues: metrics.metricValues,
         configKey: metrics.configKey
-      }).from(metrics).where(eq5(metrics.analysisId, analysis.id)).limit(1);
+      }).from(metrics).where(eq8(metrics.analysisId, analysis.id)).limit(1);
       if (!metricsRow) {
         return res.status(404).json({ error: "Metrics not found" });
       }
@@ -8961,7 +11884,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/video-metadata", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -8986,7 +11909,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/comparison", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -9023,7 +11946,7 @@ async function registerRoutes(app2) {
   app2.get("/api/analyses/:id/metric-trends", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const analysis = await storage.getAnalysis(req.params.id);
       if (!analysis) {
@@ -9049,17 +11972,17 @@ async function registerRoutes(app2) {
       const periodDays = periodMap[period];
       const baseDate = new Date(analysis.capturedAt || analysis.createdAt);
       const conditions = [
-        eq5(analyses.userId, analysis.userId),
-        eq5(analyses.status, "completed"),
-        eq5(metrics.configKey, metricsData.configKey),
-        sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) <= ${baseDate}`
+        eq8(analyses.userId, analysis.userId),
+        eq8(analyses.status, "completed"),
+        eq8(metrics.configKey, metricsData.configKey),
+        sql6`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) <= ${baseDate}`
       ];
       if (analysis.sportId) {
-        conditions.push(eq5(analyses.sportId, analysis.sportId));
+        conditions.push(eq8(analyses.sportId, analysis.sportId));
       }
       if (periodDays !== null) {
         const startDate = new Date(baseDate.getTime() - periodDays * 24 * 60 * 60 * 1e3);
-        conditions.push(sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) >= ${startDate}`);
+        conditions.push(sql6`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) >= ${startDate}`);
       }
       const rows = await db.select({
         analysisId: analyses.id,
@@ -9071,7 +11994,7 @@ async function registerRoutes(app2) {
         overallScore: metrics.overallScore,
         scoreOutputs: metrics.scoreOutputs,
         metricValues: metrics.metricValues
-      }).from(analyses).innerJoin(metrics, eq5(analyses.id, metrics.analysisId)).where(and3(...conditions)).orderBy(sql4`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) asc`);
+      }).from(analyses).innerJoin(metrics, eq8(analyses.id, metrics.analysisId)).where(and4(...conditions)).orderBy(sql6`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) asc`);
       const points = rows.map((row) => {
         const normalized = normalizeScoreRow(row);
         const sectionScores = computeSummarySectionScores({
@@ -9103,26 +12026,24 @@ async function registerRoutes(app2) {
   app2.post("/api/analyses/recalculate", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       await markStaleProcessingAsFailed(isAdmin ? void 0 : userId);
       const rawAnalyses = isAdmin ? await storage.getAllAnalyses(null) : await storage.getAllAnalyses(userId);
       const storageMode = await getVideoStorageMode();
-      const evaluationModeEnabled = await getModelEvaluationMode(userId);
-      const videoMap = evaluationModeEnabled && isAdmin ? getEvaluationDatasetVideoMap(readModelRegistryConfig()) : null;
-      const userAnalyses = videoMap ? rawAnalyses.filter((analysis) => getEvaluationMatch(analysis, videoMap)) : rawAnalyses;
+      const userAnalyses = rawAnalyses;
       const videoExts = /* @__PURE__ */ new Set([".mp4", ".mov", ".avi", ".webm", ".mkv", ".m4v"]);
       const collectUploadVideoFiles = (root) => {
         const collected = [];
         const walk = (dir) => {
           let entries = [];
           try {
-            entries = fs5.readdirSync(dir, { withFileTypes: true });
+            entries = fs7.readdirSync(dir, { withFileTypes: true });
           } catch {
             return;
           }
           for (const entry of entries) {
-            const fullPath = path5.join(dir, entry.name);
+            const fullPath = path4.join(dir, entry.name);
             if (entry.isDirectory()) {
               walk(fullPath);
               continue;
@@ -9130,12 +12051,12 @@ async function registerRoutes(app2) {
             if (!entry.isFile()) {
               continue;
             }
-            const ext = path5.extname(entry.name).toLowerCase();
+            const ext = path4.extname(entry.name).toLowerCase();
             if (!videoExts.has(ext)) {
               continue;
             }
             try {
-              const stats = fs5.statSync(fullPath);
+              const stats = fs7.statSync(fullPath);
               collected.push({
                 filename: entry.name,
                 fullPath,
@@ -9152,10 +12073,10 @@ async function registerRoutes(app2) {
       };
       const uploadFiles = collectUploadVideoFiles(uploadDir);
       const existingPaths = new Set(
-        userAnalyses.filter((analysis) => analysis.videoPath && isStoredMediaLocallyAccessible(analysis.videoPath)).map((analysis) => path5.resolve(analysis.videoPath))
+        userAnalyses.filter((analysis) => analysis.videoPath && isStoredMediaLocallyAccessible(analysis.videoPath)).map((analysis) => path4.resolve(analysis.videoPath))
       );
       const unassignedUploadFiles = new Map(
-        uploadFiles.filter((file) => !existingPaths.has(path5.resolve(file.fullPath))).map((file) => [path5.resolve(file.fullPath), file])
+        uploadFiles.filter((file) => !existingPaths.has(path4.resolve(file.fullPath))).map((file) => [path4.resolve(file.fullPath), file])
       );
       const runnableAnalyses = [];
       let autoRelinkedAnalyses = 0;
@@ -9169,28 +12090,28 @@ async function registerRoutes(app2) {
           skippedDetails.push({
             id: analysis.id,
             reason: "Video reference is missing from configured storage",
-            filename: path5.basename(analysis.videoFilename || "")
+            filename: path4.basename(analysis.videoFilename || "")
           });
           continue;
         }
-        const currentFilename = path5.basename(analysis.videoFilename || "");
+        const currentFilename = path4.basename(analysis.videoFilename || "");
         const exactNameCandidate = currentFilename ? [...unassignedUploadFiles.values()].find((f) => f.filename === currentFilename) : void 0;
-        if (exactNameCandidate && fs5.existsSync(exactNameCandidate.fullPath)) {
+        if (exactNameCandidate && fs7.existsSync(exactNameCandidate.fullPath)) {
           await db.update(analyses).set({
             videoFilename: exactNameCandidate.filename,
             videoPath: exactNameCandidate.fullPath,
             updatedAt: /* @__PURE__ */ new Date()
-          }).where(eq5(analyses.id, analysis.id));
+          }).where(eq8(analyses.id, analysis.id));
           runnableAnalyses.push({
             ...analysis,
             videoFilename: exactNameCandidate.filename,
             videoPath: exactNameCandidate.fullPath
           });
-          unassignedUploadFiles.delete(path5.resolve(exactNameCandidate.fullPath));
+          unassignedUploadFiles.delete(path4.resolve(exactNameCandidate.fullPath));
           autoRelinkedAnalyses += 1;
           continue;
         }
-        const originalExt = path5.extname(currentFilename).toLowerCase();
+        const originalExt = path4.extname(currentFilename).toLowerCase();
         let candidates = [...unassignedUploadFiles.values()].filter((file) => {
           if (!originalExt) return true;
           return file.ext === originalExt;
@@ -9223,8 +12144,8 @@ async function registerRoutes(app2) {
           videoFilename: bestCandidate.filename,
           videoPath: bestCandidate.fullPath,
           updatedAt: /* @__PURE__ */ new Date()
-        }).where(eq5(analyses.id, analysis.id));
-        unassignedUploadFiles.delete(path5.resolve(bestCandidate.fullPath));
+        }).where(eq8(analyses.id, analysis.id));
+        unassignedUploadFiles.delete(path4.resolve(bestCandidate.fullPath));
         runnableAnalyses.push({
           ...analysis,
           videoFilename: bestCandidate.filename,
@@ -9236,14 +12157,14 @@ async function registerRoutes(app2) {
       const annotationRows = ids.length ? await db.select({
         analysisId: analysisShotAnnotations.analysisId,
         userId: analysisShotAnnotations.userId
-      }).from(analysisShotAnnotations).where(inArray(analysisShotAnnotations.analysisId, ids)) : [];
+      }).from(analysisShotAnnotations).where(inArray2(analysisShotAnnotations.analysisId, ids)) : [];
       const analysesWithAnnotationsQueued = new Set(
         annotationRows.map((row) => row.analysisId)
       ).size;
       void (async () => {
         for (const id of ids) {
           try {
-            await processAnalysis(id);
+            await processAnalysis(id, { forceFreshDiagnostics: true });
             const snapshotResult = await refreshDiscrepancySnapshotsForAnalysis(id);
             if (snapshotResult.refreshed > 0 || snapshotResult.skipped > 0) {
               console.log(
@@ -9278,7 +12199,7 @@ async function registerRoutes(app2) {
       const filename = (req.body?.filename || "").toString().trim();
       const storageMode = await getVideoStorageMode();
       if (storageMode === "r2") {
-        return res.status(400).json({ error: "Relink is only available when VIDEO_STORAGE_MODE is filesystem" });
+        return res.status(400).json({ error: "Relink is only available when videoStorageMode is filesystem" });
       }
       if (!filename) {
         return res.status(400).json({ error: "filename is required" });
@@ -9287,37 +12208,28 @@ async function registerRoutes(app2) {
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
-      const evaluationModeEnabled = await getModelEvaluationMode(userId);
-      if (evaluationModeEnabled && isAdmin) {
-        const videoMap = getEvaluationDatasetVideoMap(readModelRegistryConfig());
-        if (!getEvaluationMatch(analysis, videoMap)) {
-          return res.status(400).json({
-            error: "Model Evaluation Mode is ON. Only evaluation dataset videos can be recalculated."
-          });
-        }
-      }
       if (!isAdmin && analysis.userId !== userId) {
         return res.status(403).json({ error: "You can only relink your own analyses" });
       }
-      const safeFilename = path5.basename(filename);
-      const relinkedPath = path5.join(uploadDir, safeFilename);
-      if (!fs5.existsSync(relinkedPath)) {
+      const safeFilename = path4.basename(filename);
+      const relinkedPath = path4.join(uploadDir, safeFilename);
+      if (!fs7.existsSync(relinkedPath)) {
         return res.status(404).json({ error: "File not found in uploads folder" });
       }
       await db.update(analyses).set({
         videoFilename: safeFilename,
         videoPath: relinkedPath,
         ...buildUpdateAuditFields(userId)
-      }).where(eq5(analyses.id, analysisId));
+      }).where(eq8(analyses.id, analysisId));
       const relinkAnnotationRows = await db.select({
         analysisId: analysisShotAnnotations.analysisId,
         userId: analysisShotAnnotations.userId
-      }).from(analysisShotAnnotations).where(eq5(analysisShotAnnotations.analysisId, analysisId));
+      }).from(analysisShotAnnotations).where(eq8(analysisShotAnnotations.analysisId, analysisId));
       void (async () => {
         try {
-          await processAnalysis(analysisId);
+          await processAnalysis(analysisId, { forceFreshDiagnostics: true });
           const snapshotResult = await refreshDiscrepancySnapshotsForAnalysis(analysisId);
           if (snapshotResult.refreshed > 0 || snapshotResult.skipped > 0) {
             console.log(
@@ -9339,12 +12251,50 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: error.message });
     }
   });
+  app2.post("/api/analyses/:id/retry", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const analysisId = req.params.id;
+      const analysis = await storage.getAnalysis(analysisId);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+      const [currentUser] = await db.select().from(users).where(eq8(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin && analysis.userId !== userId) {
+        return res.status(403).json({ error: "You can only retry your own analyses" });
+      }
+      if (analysis.status === "pending" || analysis.status === "processing") {
+        return res.status(409).json({ error: "Analysis is already processing" });
+      }
+      void (async () => {
+        try {
+          await processAnalysis(analysisId);
+          const snapshotResult = await refreshDiscrepancySnapshotsForAnalysis(analysisId);
+          if (snapshotResult.refreshed > 0 || snapshotResult.skipped > 0) {
+            console.log(
+              `Retry discrepancy refresh for ${analysisId}: refreshed=${snapshotResult.refreshed}, skipped=${snapshotResult.skipped}`
+            );
+          }
+        } catch (err) {
+          console.error(`Retry failed for ${analysisId}:`, err);
+        }
+      })();
+      res.json({
+        message: "Retry started",
+        analysisId,
+        status: "processing"
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
   app2.get("/api/analyses/:id/feedback", requireAuth, async (req, res) => {
     try {
       const [feedback] = await db.select().from(analysisFeedback).where(
-        and3(
-          eq5(analysisFeedback.analysisId, req.params.id),
-          eq5(analysisFeedback.userId, req.session.userId)
+        and4(
+          eq8(analysisFeedback.analysisId, req.params.id),
+          eq8(analysisFeedback.userId, req.session.userId)
         )
       ).limit(1);
       res.json(feedback || null);
@@ -9359,9 +12309,9 @@ async function registerRoutes(app2) {
         return res.status(400).json({ error: "Rating must be 'up' or 'down'" });
       }
       const existing = await db.select().from(analysisFeedback).where(
-        and3(
-          eq5(analysisFeedback.analysisId, req.params.id),
-          eq5(analysisFeedback.userId, req.session.userId)
+        and4(
+          eq8(analysisFeedback.analysisId, req.params.id),
+          eq8(analysisFeedback.userId, req.session.userId)
         )
       ).limit(1);
       if (existing.length > 0) {
@@ -9369,7 +12319,7 @@ async function registerRoutes(app2) {
           rating,
           comment: comment || null,
           ...buildUpdateAuditFields(req.session.userId)
-        }).where(eq5(analysisFeedback.id, existing[0].id));
+        }).where(eq8(analysisFeedback.id, existing[0].id));
       } else {
         await db.insert(analysisFeedback).values({
           analysisId: req.params.id,
@@ -9380,9 +12330,9 @@ async function registerRoutes(app2) {
         });
       }
       const [feedback] = await db.select().from(analysisFeedback).where(
-        and3(
-          eq5(analysisFeedback.analysisId, req.params.id),
-          eq5(analysisFeedback.userId, req.session.userId)
+        and4(
+          eq8(analysisFeedback.analysisId, req.params.id),
+          eq8(analysisFeedback.userId, req.session.userId)
         )
       ).limit(1);
       res.json(feedback);
@@ -9406,30 +12356,6 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: error.message });
     }
   });
-  app2.delete("/api/analyses", requireAuth, async (req, res) => {
-    try {
-      const userId = req.session.userId;
-      const [currentUser] = await db.select().from(users).where(eq5(users.id, userId));
-      if (currentUser?.role !== "admin") {
-        return res.status(403).json({ error: "Only admins can clear history" });
-      }
-      const allAnalyses = await storage.getAllAnalyses(null);
-      for (const analysis of allAnalyses) {
-        await deleteStoredMedia(analysis.videoPath);
-      }
-      await db.transaction(async (tx) => {
-        await tx.delete(coachingInsights);
-        await tx.delete(analysisFeedback);
-        await tx.delete(analysisShotAnnotations);
-        await tx.delete(metrics);
-        await tx.delete(analyses);
-        await tx.execute(sql4`delete from "session"`);
-      });
-      res.json({ message: "History cleared", deletedCount: allAnalyses.length });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
   const httpServer = createServer(app2);
   return httpServer;
 }
@@ -9441,6 +12367,7 @@ var SPORTS_DATA = [
     icon: "tennisball-outline",
     color: "#10B981",
     description: "Analyze your tennis strokes with AI-powered biomechanics",
+    enabled: true,
     sortOrder: 1,
     movements: [
       { name: "Forehand", description: "Forward stroke on dominant side", icon: "arrow-forward-circle-outline", sortOrder: 1 },
@@ -9455,6 +12382,7 @@ var SPORTS_DATA = [
     icon: "golf-outline",
     color: "#22D3EE",
     description: "Perfect your swing with precision motion analysis",
+    enabled: false,
     sortOrder: 2,
     movements: [
       { name: "Drive", description: "Long-distance tee shot", icon: "rocket-outline", sortOrder: 1 },
@@ -9469,6 +12397,7 @@ var SPORTS_DATA = [
     icon: "ellipse-outline",
     color: "#F59E0B",
     description: "Sharpen your pickleball technique with smart analysis",
+    enabled: false,
     sortOrder: 3,
     movements: [
       { name: "Dink", description: "Soft shot near the kitchen line", icon: "water-outline", sortOrder: 1 },
@@ -9483,6 +12412,7 @@ var SPORTS_DATA = [
     icon: "tablet-landscape-outline",
     color: "#8B5CF6",
     description: "Elevate your padel game with movement insights",
+    enabled: false,
     sortOrder: 4,
     movements: [
       { name: "Forehand", description: "Dominant side wall play", icon: "arrow-forward-circle-outline", sortOrder: 1 },
@@ -9497,6 +12427,7 @@ var SPORTS_DATA = [
     icon: "fitness-outline",
     color: "#EF4444",
     description: "Optimize your badminton strokes and footwork",
+    enabled: false,
     sortOrder: 5,
     movements: [
       { name: "Clear", description: "High deep shot to the baseline", icon: "arrow-up-circle-outline", sortOrder: 1 },
@@ -9511,6 +12442,7 @@ var SPORTS_DATA = [
     icon: "radio-button-off-outline",
     color: "#3B82F6",
     description: "Analyze your table tennis technique at high speed",
+    enabled: false,
     sortOrder: 6,
     movements: [
       { name: "Forehand", description: "Dominant side topspin drive", icon: "arrow-forward-circle-outline", sortOrder: 1 },
@@ -9533,6 +12465,8 @@ async function seedSports() {
       icon: sportData.icon,
       color: sportData.color,
       description: sportData.description,
+      enabled: sportData.enabled,
+      isActive: sportData.enabled,
       sortOrder: sportData.sortOrder,
       ...buildInsertAuditFields()
     }).returning();
@@ -9551,8 +12485,8 @@ async function seedSports() {
 }
 
 // server/index.ts
-import * as fs6 from "fs";
-import * as path6 from "path";
+import * as fs8 from "fs";
+import * as path5 from "path";
 var app = express();
 var log = console.log;
 function setupCors(app2) {
@@ -9596,7 +12530,7 @@ function setupBodyParsing(app2) {
 function setupRequestLogging(app2) {
   app2.use((req, res, next) => {
     const start = Date.now();
-    const path7 = req.path;
+    const path6 = req.path;
     let capturedJsonResponse = void 0;
     const originalResJson = res.json;
     res.json = function(bodyJson, ...args) {
@@ -9604,9 +12538,9 @@ function setupRequestLogging(app2) {
       return originalResJson.apply(res, [bodyJson, ...args]);
     };
     res.on("finish", () => {
-      if (!path7.startsWith("/api")) return;
+      if (!path6.startsWith("/api")) return;
       const duration = Date.now() - start;
-      let logLine = `${req.method} ${path7} ${res.statusCode} in ${duration}ms`;
+      let logLine = `${req.method} ${path6} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
@@ -9620,8 +12554,8 @@ function setupRequestLogging(app2) {
 }
 function getAppName() {
   try {
-    const appJsonPath = path6.resolve(process.cwd(), "app.json");
-    const appJsonContent = fs6.readFileSync(appJsonPath, "utf-8");
+    const appJsonPath = path5.resolve(PROJECT_ROOT, "app.json");
+    const appJsonContent = fs8.readFileSync(appJsonPath, "utf-8");
     const appJson = JSON.parse(appJsonContent);
     return appJson.expo?.name || "App Landing Page";
   } catch {
@@ -9629,19 +12563,19 @@ function getAppName() {
   }
 }
 function serveExpoManifest(platform, res) {
-  const manifestPath = path6.resolve(
-    process.cwd(),
+  const manifestPath = path5.resolve(
+    PROJECT_ROOT,
     "static-build",
     platform,
     "manifest.json"
   );
-  if (!fs6.existsSync(manifestPath)) {
+  if (!fs8.existsSync(manifestPath)) {
     return res.status(404).json({ error: `Manifest not found for platform: ${platform}` });
   }
   res.setHeader("expo-protocol-version", "1");
   res.setHeader("expo-sfv-version", "0");
   res.setHeader("content-type", "application/json");
-  const manifest = fs6.readFileSync(manifestPath, "utf-8");
+  const manifest = fs8.readFileSync(manifestPath, "utf-8");
   res.send(manifest);
 }
 function serveLandingPage({
@@ -9663,13 +12597,13 @@ function serveLandingPage({
   res.status(200).send(html);
 }
 function configureExpoAndLanding(app2) {
-  const templatePath = path6.resolve(
-    process.cwd(),
+  const templatePath = path5.resolve(
+    PROJECT_ROOT,
     "server",
     "templates",
     "landing-page.html"
   );
-  const landingPageTemplate = fs6.readFileSync(templatePath, "utf-8");
+  const landingPageTemplate = fs8.readFileSync(templatePath, "utf-8");
   const appName = getAppName();
   log("Serving static Expo files with dynamic manifest routing");
   app2.use((req, res, next) => {
@@ -9693,9 +12627,9 @@ function configureExpoAndLanding(app2) {
     }
     next();
   });
-  app2.use("/assets", express.static(path6.resolve(process.cwd(), "assets")));
-  app2.use("/uploads", express.static(path6.resolve(process.cwd(), "uploads")));
-  app2.use(express.static(path6.resolve(process.cwd(), "static-build")));
+  app2.use("/assets", express.static(path5.resolve(PROJECT_ROOT, "assets")));
+  app2.use("/uploads", express.static(path5.resolve(PROJECT_ROOT, "uploads")));
+  app2.use(express.static(path5.resolve(PROJECT_ROOT, "static-build")));
   log("Expo routing: Checking expo-platform header on / and /manifest");
 }
 function setupErrorHandler(app2) {
@@ -9716,8 +12650,8 @@ function setupErrorHandler(app2) {
   setupRequestLogging(app);
   await setupAuth(app);
   configureExpoAndLanding(app);
-  await seedSports();
   const server = await registerRoutes(app);
+  await seedSports();
   setupErrorHandler(app);
   const port = parseInt(process.env.PORT || "5000", 10);
   const host = process.env.HOST || "0.0.0.0";

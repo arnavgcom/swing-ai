@@ -401,6 +401,181 @@ function formatElapsedDuration(startedAtIso: string, nowMs: number): string | nu
   return `${seconds}s`;
 }
 
+function getAverageScore10(items: AnalysisSummary[]): number | null {
+  const scores = items
+    .map((item) => getSessionOverallScore10(item))
+    .filter((value): value is number => value != null);
+  if (!scores.length) return null;
+  return Number((scores.reduce((sum, value) => sum + value, 0) / scores.length).toFixed(1));
+}
+
+function getReviewPriority(item: AnalysisSummary, nowMs: number): number {
+  if (item.status === "rejected") return 0;
+  if (item.status === "failed") return 1;
+  if (item.status === "processing" || item.status === "pending") {
+    const startedAt = parseApiDate(getProcessingStartDate(item))?.getTime() ?? nowMs;
+    const elapsedMinutes = Math.max(nowMs - startedAt, 0) / 60000;
+    if (elapsedMinutes >= 20) return 2;
+    return 3;
+  }
+  return 4;
+}
+
+function getReviewStatusLabel(item: AnalysisSummary, nowMs: number): string {
+  if (item.status === "rejected") return "Rejected";
+  if (item.status === "failed") return "Failed";
+  if (item.status === "processing" || item.status === "pending") {
+    const elapsed = formatElapsedDuration(getProcessingStartDate(item), nowMs);
+    return elapsed ? `Running ${elapsed}` : "Running";
+  }
+  return toTitleCase(item.status);
+}
+
+function getReviewStatusTone(item: AnalysisSummary, nowMs: number): { bg: string; border: string; text: string } {
+  if (item.status === "rejected") {
+    return { bg: "#3F1114", border: "#7F1D1D", text: "#FCA5A5" };
+  }
+  if (item.status === "failed") {
+    return { bg: "#422006", border: "#92400E", text: "#FCD34D" };
+  }
+  if (item.status === "processing" || item.status === "pending") {
+    const startedAt = parseApiDate(getProcessingStartDate(item))?.getTime() ?? nowMs;
+    const elapsedMinutes = Math.max(nowMs - startedAt, 0) / 60000;
+    if (elapsedMinutes >= 20) {
+      return { bg: "#3F2A07", border: "#92400E", text: "#FBBF24" };
+    }
+    return { bg: "#0F2D42", border: "#1D4ED8", text: "#93C5FD" };
+  }
+  return { bg: "#052E1A", border: "#166534", text: "#86EFAC" };
+}
+
+function ReviewMetricCard({
+  label,
+  value,
+  helper,
+  icon,
+  color,
+}: {
+  label: string;
+  value: string;
+  helper: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  color: string;
+}) {
+  return (
+    <View style={styles.reviewMetricCard}>
+      <View style={[styles.reviewMetricIcon, { backgroundColor: `${color}20` }]}>
+        <Ionicons name={icon} size={16} color={color} />
+      </View>
+      <Text style={styles.reviewMetricLabel}>{label}</Text>
+      <Text style={[styles.reviewMetricValue, { color }]}>{value}</Text>
+      <Text style={styles.reviewMetricHelper}>{helper}</Text>
+    </View>
+  );
+}
+
+function AdminQueueItem({
+  item,
+  timeZone,
+  nowMs,
+}: {
+  item: AnalysisSummary;
+  timeZone?: string;
+  nowMs: number;
+}) {
+  const tone = getReviewStatusTone(item, nowMs);
+  const score = getSessionOverallScore10(item);
+  const movementLabel = toTitleCase((resolveAnalysisMovement(item) || "general").replace(/-/g, " "));
+  const playerLabel = String(item.userName || "Unknown").trim() || "Unknown";
+
+  return (
+    <Pressable
+      onPress={() =>
+        router.push({
+          pathname: "/analysis/[id]",
+          params: { id: item.id },
+        })
+      }
+      style={({ pressed }) => [styles.reviewQueueItem, { opacity: pressed ? 0.86 : 1 }]}
+    >
+      <View style={styles.reviewQueueTopRow}>
+        <View style={styles.reviewQueueMeta}>
+          <Text style={styles.reviewQueuePlayer} numberOfLines={1}>{playerLabel}</Text>
+          <Text style={styles.reviewQueueVideo} numberOfLines={1}>{item.videoFilename}</Text>
+        </View>
+        <View style={[styles.reviewQueueStatusPill, { backgroundColor: tone.bg, borderColor: tone.border }]}>
+          <Text style={[styles.reviewQueueStatusText, { color: tone.text }]}>
+            {getReviewStatusLabel(item, nowMs)}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.reviewQueueBottomRow}>
+        <View style={styles.reviewQueueTags}>
+          <View style={styles.reviewQueueTag}>
+            <Ionicons name="flash-outline" size={11} color="#94A3B8" />
+            <Text style={styles.reviewQueueTagText}>{movementLabel}</Text>
+          </View>
+          <View style={styles.reviewQueueTag}>
+            <Ionicons name="calendar-outline" size={11} color="#94A3B8" />
+            <Text style={styles.reviewQueueTagText}>
+              {formatMonthDayInTimeZone(getVideoDate(item), timeZone)}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.reviewQueueScoreText}>
+          {score != null ? `${score.toFixed(1)}` : "Open"}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function AdminPlayerPulseCard({
+  label,
+  averageScore,
+  sessionCount,
+  lastSessionLabel,
+  onPress,
+  isSelected,
+  accentColor,
+}: {
+  label: string;
+  averageScore: number | null;
+  sessionCount: number;
+  lastSessionLabel: string;
+  onPress: () => void;
+  isSelected: boolean;
+  accentColor: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.playerPulseCard,
+        isSelected && {
+          borderColor: `${accentColor}66`,
+          backgroundColor: `${accentColor}10`,
+        },
+        { opacity: pressed ? 0.88 : 1 },
+      ]}
+    >
+      <View style={styles.playerPulseTopRow}>
+        <Text style={styles.playerPulseName} numberOfLines={1}>{label}</Text>
+        {isSelected ? (
+          <View style={[styles.playerPulseSelectedBadge, { backgroundColor: `${accentColor}22` }]}>
+            <Text style={[styles.playerPulseSelectedText, { color: accentColor }]}>Scoped</Text>
+          </View>
+        ) : null}
+      </View>
+      <Text style={styles.playerPulseScore}>
+        {averageScore != null ? averageScore.toFixed(1) : "-"}
+      </Text>
+      <Text style={styles.playerPulseMeta}>{sessionCount} completed sessions</Text>
+      <Text style={styles.playerPulseSubtle}>Last session {lastSessionLabel}</Text>
+    </Pressable>
+  );
+}
+
 function formatSessionSearchDate(createdAt: string, timeZone?: string): string[] {
   const date = parseApiDate(createdAt);
   if (!date) return [createdAt];
@@ -1013,6 +1188,7 @@ export default function HistoryScreen() {
   const isAdmin = user?.role === "admin";
   const { selectedSport, selectedMovement } = useSport();
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("all");
+  const [showReviewDetails, setShowReviewDetails] = useState(false);
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
   const [selectedTrendSessions, setSelectedTrendSessions] = useState<TrendSessionWindow>(10);
   const [userList, setUserList] = useState<
@@ -1159,8 +1335,8 @@ export default function HistoryScreen() {
     refetch,
     isRefetching,
   } = useQuery({
-    queryKey: ["analyses-summary"],
-    queryFn: fetchAnalysesSummary,
+    queryKey: ["analyses-summary", isAdmin ? "include-all" : "default"],
+    queryFn: () => fetchAnalysesSummary({ includeAll: isAdmin }),
     refetchInterval: 5000,
     enabled: !!user,
     retry: false,
@@ -1298,6 +1474,7 @@ export default function HistoryScreen() {
     () => effectiveAnalyses.find((item) => item.id === activeBackgroundAnalysisId) ?? null,
     [activeBackgroundAnalysisId, effectiveAnalyses],
   );
+  const nowMs = Date.now();
 
   useEffect(() => {
     return () => {
@@ -1439,6 +1616,64 @@ export default function HistoryScreen() {
     visibleAnalyses?.filter(
       (a) => a.status === "processing" || a.status === "pending",
     ) || [];
+  const reviewQueue = useMemo(
+    () => visibleAnalyses
+      .filter((item) => item.status !== "completed")
+      .slice()
+      .sort((left, right) => {
+        const priorityDiff = getReviewPriority(left, nowMs) - getReviewPriority(right, nowMs);
+        if (priorityDiff !== 0) return priorityDiff;
+        return (parseApiDate(right.updatedAt)?.getTime() || 0) - (parseApiDate(left.updatedAt)?.getTime() || 0);
+      })
+      .slice(0, 4),
+    [nowMs, visibleAnalyses],
+  );
+  const attentionCount = useMemo(
+    () => visibleAnalyses.filter((item) => getReviewPriority(item, nowMs) <= 2).length,
+    [nowMs, visibleAnalyses],
+  );
+  const averageCompletedScore = useMemo(() => getAverageScore10(completed), [completed]);
+  const playerPulse = useMemo(() => {
+    if (!isAdmin) return [] as Array<{
+      playerId: string;
+      label: string;
+      averageScore: number | null;
+      sessionCount: number;
+      lastSessionAt: string;
+    }>;
+
+    const grouped = new Map<string, { label: string; items: AnalysisSummary[]; lastSessionAt: string }>();
+    filteredBySessionAndStroke.forEach((item) => {
+      if (item.status !== "completed" || !item.userId) return;
+      const key = item.userId;
+      const label = String(item.userName || "Unknown").trim() || "Unknown";
+      const existing = grouped.get(key);
+      const itemDate = getVideoDate(item);
+      if (!existing) {
+        grouped.set(key, { label, items: [item], lastSessionAt: itemDate });
+        return;
+      }
+      existing.items.push(item);
+      if ((parseApiDate(itemDate)?.getTime() || 0) > (parseApiDate(existing.lastSessionAt)?.getTime() || 0)) {
+        existing.lastSessionAt = itemDate;
+      }
+    });
+
+    return Array.from(grouped.entries())
+      .map(([playerId, value]) => ({
+        playerId,
+        label: value.label,
+        averageScore: getAverageScore10(value.items),
+        sessionCount: value.items.length,
+        lastSessionAt: value.lastSessionAt,
+      }))
+      .sort((left, right) => {
+        const scoreDiff = (right.averageScore ?? -1) - (left.averageScore ?? -1);
+        if (Math.abs(scoreDiff) > 1e-6) return scoreDiff;
+        return right.sessionCount - left.sessionCount;
+      })
+      .slice(0, 3);
+  }, [filteredBySessionAndStroke, isAdmin]);
 
   const trendSliceCount =
     selectedTrendSessions === "all"
@@ -1478,6 +1713,9 @@ export default function HistoryScreen() {
   const playerFilterLabel = isAdmin
     ? selectedPlayerLabel
     : user?.name || "Player";
+  const reviewSummaryLabel = isAdmin
+    ? `${reviewQueue.length} priority ${reviewQueue.length === 1 ? "item" : "items"} in scope`
+    : `${completed.length} completed ${completed.length === 1 ? "session" : "sessions"} in scope`;
 
   const deltaByAnalysisId = useMemo(() => {
     const completedByTimeAsc = visibleAnalyses
@@ -1537,7 +1775,12 @@ export default function HistoryScreen() {
   const listHeader = (
     <View>
       <View style={styles.headerSection}>
-        <Text style={styles.title}>Track Progress</Text>
+        <Text style={styles.title}>{isAdmin ? "Review Operations" : "Track Progress"}</Text>
+        <Text style={styles.subtitle}>
+          {isAdmin
+            ? "Watch incoming sessions, spot blocked analyses, and jump into the next review item fast."
+            : "Review recent sessions, compare your scores, and keep momentum between uploads."}
+        </Text>
       </View>
 
       <View style={styles.searchWrap}>
@@ -1610,6 +1853,126 @@ export default function HistoryScreen() {
         ) : null}
       </View>
 
+      <View style={styles.compactReviewSummaryCard}>
+        <View style={styles.compactReviewSummaryHeader}>
+          <View style={styles.compactReviewSummaryCopy}>
+            <Text style={styles.compactReviewSummaryTitle}>{isAdmin ? "Review now" : "Progress now"}</Text>
+            <Text style={styles.compactReviewSummarySubtitle}>{reviewSummaryLabel}</Text>
+          </View>
+          <Pressable
+            onPress={() => setShowReviewDetails((current) => !current)}
+            style={({ pressed }) => [styles.compactReviewSummaryToggle, { borderColor: `${historyHighlightColor}55`, opacity: pressed ? 0.84 : 1 }]}
+          >
+            <Text style={[styles.compactReviewSummaryToggleText, { color: historyHighlightColor }]}>
+              {showReviewDetails ? "Hide details" : "Show details"}
+            </Text>
+            <Ionicons name={showReviewDetails ? "chevron-up" : "chevron-down"} size={15} color={historyHighlightColor} />
+          </Pressable>
+        </View>
+        <View style={styles.compactReviewSummaryMetrics}>
+          <View style={styles.compactReviewSummaryMetric}>
+            <Text style={styles.compactReviewSummaryMetricLabel}>{isAdmin ? "Attention" : "In progress"}</Text>
+            <Text style={styles.compactReviewSummaryMetricValue}>{String(isAdmin ? attentionCount : processing.length)}</Text>
+          </View>
+          <View style={styles.compactReviewSummaryMetric}>
+            <Text style={styles.compactReviewSummaryMetricLabel}>{isAdmin ? "Completed" : "Average"}</Text>
+            <Text style={styles.compactReviewSummaryMetricValue}>
+              {isAdmin
+                ? String(completed.length)
+                : averageCompletedScore != null
+                  ? averageCompletedScore.toFixed(1)
+                  : "-"}
+            </Text>
+          </View>
+          <View style={styles.compactReviewSummaryMetric}>
+            <Text style={styles.compactReviewSummaryMetricLabel}>Total</Text>
+            <Text style={styles.compactReviewSummaryMetricValue}>{String(totalAnalyses)}</Text>
+          </View>
+        </View>
+      </View>
+
+      {showReviewDetails && isAdmin ? (
+        <View style={styles.adminOverviewSection}>
+          <View style={styles.adminMetricGrid}>
+            <ReviewMetricCard
+              label="Sessions in scope"
+              value={String(totalAnalyses)}
+              helper={selectedPlayerId === "all" ? "Across visible players" : "For the selected player"}
+              icon="albums-outline"
+              color="#60A5FA"
+            />
+            <ReviewMetricCard
+              label="Needs attention"
+              value={String(attentionCount)}
+              helper={attentionCount > 0 ? "Rejected, failed, or delayed runs" : "Nothing urgent right now"}
+              icon="alert-circle-outline"
+              color={attentionCount > 0 ? "#FBBF24" : "#34D399"}
+            />
+            <ReviewMetricCard
+              label="Average score"
+              value={averageCompletedScore != null ? averageCompletedScore.toFixed(1) : "-"}
+              helper={completed.length > 0 ? `${completed.length} completed sessions` : "Waiting for completed sessions"}
+              icon="stats-chart-outline"
+              color="#34D399"
+            />
+          </View>
+
+          <View style={styles.adminSectionCard}>
+            <View style={styles.adminSectionHeaderRow}>
+              <View>
+                <Text style={styles.adminSectionTitle}>Priority Queue</Text>
+                <Text style={styles.adminSectionSubtitle}>Open the next sessions that need review or intervention.</Text>
+              </View>
+              {reviewQueue.length > 0 ? (
+                <Text style={styles.adminSectionCount}>{reviewQueue.length}</Text>
+              ) : null}
+            </View>
+            {reviewQueue.length > 0 ? (
+              <View style={styles.reviewQueueList}>
+                {reviewQueue.map((item) => (
+                  <AdminQueueItem
+                    key={item.id}
+                    item={item}
+                    nowMs={nowMs}
+                    timeZone={profileTimeZone}
+                  />
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.adminEmptyText}>No blocked or in-flight sessions match the current scope.</Text>
+            )}
+          </View>
+
+          <View style={styles.adminSectionCard}>
+            <View style={styles.adminSectionHeaderRow}>
+              <View>
+                <Text style={styles.adminSectionTitle}>Player Pulse</Text>
+                <Text style={styles.adminSectionSubtitle}>Quickly scope the players with the most recent completed sessions.</Text>
+              </View>
+            </View>
+            {playerPulse.length > 0 ? (
+              <View style={styles.playerPulseList}>
+                {playerPulse.map((entry) => (
+                  <AdminPlayerPulseCard
+                    key={entry.playerId}
+                    label={entry.label}
+                    averageScore={entry.averageScore}
+                    sessionCount={entry.sessionCount}
+                    lastSessionLabel={formatMonthDayInTimeZone(entry.lastSessionAt, profileTimeZone)}
+                    accentColor={historyHighlightColor}
+                    isSelected={selectedPlayerId === entry.playerId}
+                    onPress={() => setSelectedPlayerId(entry.playerId)}
+                  />
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.adminEmptyText}>Completed sessions will show player pulse cards here.</Text>
+            )}
+          </View>
+        </View>
+      ) : null}
+
+      {showReviewDetails ? (
       <View style={styles.filterSection}>
         <View style={styles.filterGroup}>
           <View style={styles.filterHeaderRow}>
@@ -1686,6 +2049,7 @@ export default function HistoryScreen() {
           </View>
         </View>
       </View>
+      ) : null}
 
       {isAdmin && showPlayerDropdown && (
         <Modal
@@ -1742,7 +2106,7 @@ export default function HistoryScreen() {
         </Modal>
       )}
 
-      {trendScores.length > 1 && (
+      {showReviewDetails && trendScores.length > 1 && (
         <View style={styles.trendCard}>
           <View style={styles.trendCardGradient}>
             <View style={styles.trendHeaderRow}>
@@ -1782,6 +2146,7 @@ export default function HistoryScreen() {
         </View>
       )}
 
+      {showReviewDetails ? (
       <View style={styles.statsRow}>
         {[
           {
@@ -1817,10 +2182,11 @@ export default function HistoryScreen() {
           </View>
         ))}
       </View>
+      ) : null}
 
       {filteredAnalyses.length > 0 && (
         <View style={styles.recentHeaderRow}>
-          <Text style={styles.recentTitle}>Recent Sessions</Text>
+          <Text style={styles.recentTitle}>{isAdmin ? "Sessions to Review" : "Recent Sessions"}</Text>
         </View>
       )}
     </View>
@@ -1934,7 +2300,9 @@ export default function HistoryScreen() {
                   ? "No sessions match your search"
                   : hasHistoryFilters
                     ? "No sessions match the selected session and stroke filters"
-                    : "Upload and analyze videos to see them here"}
+                    : isAdmin
+                      ? "Uploads, retries, and review items will appear here as analyses arrive"
+                      : "Upload and analyze videos to see them here"}
               </Text>
             </View>
           }
@@ -1954,6 +2322,14 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
+  },
+  subtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+    maxWidth: 620,
   },
   topControlsRow: {
     flexDirection: "row",
@@ -2061,6 +2437,279 @@ const styles = StyleSheet.create({
   subcategoryBadgeText: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
+  },
+  compactReviewSummaryCard: {
+    gap: 12,
+    marginBottom: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#2A2A5040",
+    backgroundColor: "#15152D",
+    padding: 14,
+  },
+  compactReviewSummaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  compactReviewSummaryCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  compactReviewSummaryTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
+  },
+  compactReviewSummarySubtitle: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  compactReviewSummaryToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: "#0F172A",
+  },
+  compactReviewSummaryToggleText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  compactReviewSummaryMetrics: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  compactReviewSummaryMetric: {
+    flex: 1,
+    gap: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#101426",
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  compactReviewSummaryMetricLabel: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+    color: "#94A3B8",
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+  },
+  compactReviewSummaryMetricValue: {
+    fontSize: 20,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+  },
+  adminOverviewSection: {
+    gap: 14,
+    marginBottom: 16,
+  },
+  adminMetricGrid: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  reviewMetricCard: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#2A2A5040",
+    backgroundColor: "#15152D",
+    padding: 14,
+    gap: 6,
+  },
+  reviewMetricIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reviewMetricLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: "#94A3B8",
+  },
+  reviewMetricValue: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+  },
+  reviewMetricHelper: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontFamily: "Inter_400Regular",
+    color: "#64748B",
+  },
+  adminSectionCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#2A2A5040",
+    backgroundColor: "#15152D",
+    padding: 14,
+    gap: 12,
+  },
+  adminSectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  adminSectionTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
+  },
+  adminSectionSubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  adminSectionCount: {
+    minWidth: 28,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#0F172A",
+    color: "#E2E8F0",
+    textAlign: "center" as const,
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+  },
+  reviewQueueList: {
+    gap: 10,
+  },
+  reviewQueueItem: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#101426",
+    padding: 12,
+    gap: 10,
+  },
+  reviewQueueTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  reviewQueueMeta: {
+    flex: 1,
+    gap: 2,
+  },
+  reviewQueuePlayer: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
+  },
+  reviewQueueVideo: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "#94A3B8",
+  },
+  reviewQueueStatusPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  reviewQueueStatusText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+  },
+  reviewQueueBottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  reviewQueueTags: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    flex: 1,
+  },
+  reviewQueueTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#0A0F1F",
+    borderWidth: 1,
+    borderColor: "#1E293B",
+  },
+  reviewQueueTagText: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: "#CBD5E1",
+  },
+  reviewQueueScoreText: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+  },
+  playerPulseList: {
+    gap: 10,
+  },
+  playerPulseCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#2A2A5060",
+    backgroundColor: "#101426",
+    padding: 12,
+    gap: 4,
+  },
+  playerPulseTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  playerPulseName: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: "#F8FAFC",
+  },
+  playerPulseSelectedBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  playerPulseSelectedText: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+  },
+  playerPulseScore: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+  },
+  playerPulseMeta: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: "#CBD5E1",
+  },
+  playerPulseSubtle: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: "#64748B",
+  },
+  adminEmptyText: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "Inter_400Regular",
+    color: "#64748B",
   },
   loadingWrap: {
     flex: 1,
