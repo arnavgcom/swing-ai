@@ -47,11 +47,9 @@ export default function ManualAnnotationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
 
   const [manualShotLabels, setManualShotLabels] = useState<string[]>([]);
   const [activeShotDropdownIndex, setActiveShotDropdownIndex] = useState<number | null>(null);
-  const [useForModelTraining, setUseForModelTraining] = useState(false);
 
   const { data: detail } = useQuery({
     queryKey: ["analysis", id],
@@ -92,9 +90,6 @@ export default function ManualAnnotationScreen() {
       );
     }
 
-    if (typeof shotAnnotation?.useForModelTraining === "boolean") {
-      setUseForModelTraining(shotAnnotation.useForModelTraining);
-    }
   }, [diagnostics?.shotSegments, shotAnnotation]);
 
   const movementTypeOptions = useMemo(() => {
@@ -126,13 +121,13 @@ export default function ManualAnnotationScreen() {
       totalShots: number;
       orderedShotLabels: string[];
       usedForScoringShotIndexes: number[];
-      useForModelTraining?: boolean;
     }) => saveAnalysisShotAnnotation(id!, payload),
     onSuccess: async (saved) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["analysis", id, "shot-annotation"] }),
         queryClient.invalidateQueries({ queryKey: ["discrepancy-summary"] }),
         queryClient.invalidateQueries({ queryKey: ["scoring-model-dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["tennis-model-training-status"] }),
       ]);
       queryClient.setQueryData(["analysis", id, "shot-annotation"], saved);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -159,7 +154,6 @@ export default function ManualAnnotationScreen() {
       totalShots,
       orderedShotLabels,
       usedForScoringShotIndexes: Array.from({ length: totalShots }, (_value, index) => index + 1),
-      useForModelTraining: isAdmin ? useForModelTraining : undefined,
     });
   };
 
@@ -248,18 +242,6 @@ export default function ManualAnnotationScreen() {
             </GlassCard>
           );
         })}
-
-        {isAdmin ? (
-          <Pressable
-            onPress={() => setUseForModelTraining((prev) => !prev)}
-            style={({ pressed }) => [styles.trainingToggleRow, { opacity: pressed ? 0.85 : 1 }]}
-          >
-            <View style={[styles.trainingCheckbox, useForModelTraining && styles.trainingCheckboxChecked]}>
-              {useForModelTraining ? <Ionicons name="checkmark" size={13} color="#6C5CE7" /> : null}
-            </View>
-            <Text style={styles.trainingToggleText}>Use for Model Training/Tuning</Text>
-          </Pressable>
-        ) : null}
 
         <Pressable
           onPress={handleSave}
@@ -363,33 +345,6 @@ const styles = StyleSheet.create({
     backgroundColor: `${ds.color.accent}20`,
   },
   dropdownOptionText: { fontSize: 12, fontFamily: "Inter_500Medium", color: ds.color.textSecondary },
-  trainingToggleRow: {
-    marginTop: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderWidth: 1,
-    borderColor: ds.color.glassBorder,
-    borderRadius: ds.radius.sm,
-    backgroundColor: ds.color.bgElevated,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-  },
-  trainingCheckbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: ds.color.textTertiary,
-    backgroundColor: ds.color.bg,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  trainingCheckboxChecked: {
-    borderColor: ds.color.accent,
-    backgroundColor: `${ds.color.accent}24`,
-  },
-  trainingToggleText: { fontSize: 12, fontFamily: "Inter_500Medium", color: ds.color.textSecondary },
   saveButton: {
     marginTop: 10,
     borderRadius: ds.radius.sm,

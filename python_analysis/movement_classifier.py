@@ -751,7 +751,20 @@ def _build_tennis_key_features(features: Dict[str, Any]) -> Dict[str, Any]:
         "dominant_wrist_median_offset": float(features.get("dominant_wrist_median_offset", 0.0)),
         "dominant_wrist_opposite_ratio": float(features.get("dominant_wrist_opposite_ratio", 0.0)),
         "dominant_wrist_same_ratio": float(features.get("dominant_wrist_same_ratio", 0.0)),
+        "dominant_wrist_mean_speed": float(features.get("dominant_wrist_mean_speed", 0.0)),
+        "dominant_wrist_speed_std": float(features.get("dominant_wrist_speed_std", 0.0)),
+        "dominant_wrist_speed_p90": float(features.get("dominant_wrist_speed_p90", 0.0)),
+        "dominant_wrist_accel_p90": float(features.get("dominant_wrist_accel_p90", 0.0)),
+        "peak_speed_frame_ratio": float(features.get("peak_speed_frame_ratio", 0.0)),
+        "dominant_wrist_horizontal_range_ratio": float(features.get("dominant_wrist_horizontal_range_ratio", 0.0)),
+        "dominant_wrist_vertical_range_ratio": float(features.get("dominant_wrist_vertical_range_ratio", 0.0)),
+        "wrist_height_range": float(features.get("wrist_height_range", 0.0)),
+        "peak_wrist_height_frame_ratio": float(features.get("peak_wrist_height_frame_ratio", 0.0)),
+        "contact_height_std": float(features.get("contact_height_std", 0.0)),
         "shoulder_rotation_delta_deg": float(features.get("shoulder_rotation_delta_deg", 0.0)),
+        "shoulder_rotation_range_deg": float(features.get("shoulder_rotation_range_deg", 0.0)),
+        "shoulder_rotation_std_deg": float(features.get("shoulder_rotation_std_deg", 0.0)),
+        "dominant_wrist_offset_std": float(features.get("dominant_wrist_offset_std", 0.0)),
     }
 
 
@@ -1081,6 +1094,10 @@ def _extract_features(
     shoulder_angles = []
     wrist_heights = []
     contact_heights = []
+    right_wrist_rel_heights = []
+    left_wrist_rel_heights = []
+    right_contact_heights = []
+    left_contact_heights = []
     right_vis_count = 0
     left_vis_count = 0
 
@@ -1143,6 +1160,14 @@ def _extract_features(
             wrist_heights.append(rel_height)
             contact_heights.append(wrist["y"] / frame_height)
 
+        if rw and rs and rw.get("visibility", 0) > 0.4 and rs.get("visibility", 0) > 0.4:
+            right_wrist_rel_heights.append((rs["y"] - rw["y"]) / frame_height)
+            right_contact_heights.append(rw["y"] / frame_height)
+
+        if lw and ls and lw.get("visibility", 0) > 0.4 and ls.get("visibility", 0) > 0.4:
+            left_wrist_rel_heights.append((ls["y"] - lw["y"]) / frame_height)
+            left_contact_heights.append(lw["y"] / frame_height)
+
     max_rw_speed = max(right_wrist_speeds) if right_wrist_speeds else 0
     max_lw_speed = max(left_wrist_speeds) if left_wrist_speeds else 0
     max_wrist_speed = max(max_rw_speed, max_lw_speed)
@@ -1175,6 +1200,11 @@ def _extract_features(
 
     is_cross_body = _detect_cross_body(pose_data, frame_width, dominant_side)
 
+    dominant_positions = right_wrist_positions if dominant_side == "right" else left_wrist_positions
+    dominant_speeds = right_wrist_speeds if dominant_side == "right" else left_wrist_speeds
+    dominant_rel_heights = right_wrist_rel_heights if dominant_side == "right" else left_wrist_rel_heights
+    dominant_contact_heights = right_contact_heights if dominant_side == "right" else left_contact_heights
+
     dominant_offsets = right_wrist_offsets if dominant_side == "right" else left_wrist_offsets
     dominant_wrist_median_offset = float(np.median(dominant_offsets)) if dominant_offsets else 0.0
     if dominant_side == "right":
@@ -1195,6 +1225,44 @@ def _extract_features(
             float(sum(1 for o in dominant_offsets if o < -0.12)) / len(dominant_offsets)
             if dominant_offsets else 0.0
         )
+
+    dominant_wrist_mean_speed = float(np.mean(dominant_speeds)) if dominant_speeds else 0.0
+    dominant_wrist_speed_std = float(np.std(dominant_speeds)) if dominant_speeds else 0.0
+    dominant_wrist_speed_p90 = float(np.percentile(dominant_speeds, 90)) if dominant_speeds else 0.0
+    if len(dominant_speeds) >= 2:
+        dominant_accels = np.abs(np.diff(dominant_speeds)) / max(dt, 1e-6)
+        dominant_wrist_accel_p90 = float(np.percentile(dominant_accels, 90))
+    else:
+        dominant_wrist_accel_p90 = 0.0
+
+    peak_speed_frame_ratio = (
+        float(np.argmax(dominant_speeds)) / float(max(len(dominant_speeds) - 1, 1))
+        if dominant_speeds else 0.0
+    )
+
+    dominant_wrist_horizontal_range_ratio = 0.0
+    dominant_wrist_vertical_range_ratio = 0.0
+    if dominant_positions:
+        dominant_xs = [point[0] for point in dominant_positions]
+        dominant_ys = [point[1] for point in dominant_positions]
+        dominant_wrist_horizontal_range_ratio = (max(dominant_xs) - min(dominant_xs)) / max(frame_width, 1)
+        dominant_wrist_vertical_range_ratio = (max(dominant_ys) - min(dominant_ys)) / max(frame_height, 1)
+
+    wrist_height_range = (
+        float(max(dominant_rel_heights) - min(dominant_rel_heights))
+        if dominant_rel_heights else 0.0
+    )
+    peak_wrist_height_frame_ratio = (
+        float(np.argmax(dominant_rel_heights)) / float(max(len(dominant_rel_heights) - 1, 1))
+        if dominant_rel_heights else 0.0
+    )
+    contact_height_std = float(np.std(dominant_contact_heights)) if dominant_contact_heights else 0.0
+    shoulder_rotation_range_deg = (
+        float(max(shoulder_angles) - min(shoulder_angles))
+        if shoulder_angles else 0.0
+    )
+    shoulder_rotation_std_deg = float(np.std(shoulder_angles)) if shoulder_angles else 0.0
+    dominant_wrist_offset_std = float(np.std(dominant_offsets)) if dominant_offsets else 0.0
 
     is_downward_motion = False
     if wrist_heights and len(wrist_heights) > 5:
@@ -1228,7 +1296,20 @@ def _extract_features(
         "dominant_wrist_median_offset": dominant_wrist_median_offset,
         "dominant_wrist_opposite_ratio": dominant_wrist_opposite_ratio,
         "dominant_wrist_same_ratio": dominant_wrist_same_ratio,
+        "dominant_wrist_mean_speed": dominant_wrist_mean_speed,
+        "dominant_wrist_speed_std": dominant_wrist_speed_std,
+        "dominant_wrist_speed_p90": dominant_wrist_speed_p90,
+        "dominant_wrist_accel_p90": dominant_wrist_accel_p90,
+        "peak_speed_frame_ratio": peak_speed_frame_ratio,
+        "dominant_wrist_horizontal_range_ratio": dominant_wrist_horizontal_range_ratio,
+        "dominant_wrist_vertical_range_ratio": dominant_wrist_vertical_range_ratio,
+        "wrist_height_range": wrist_height_range,
+        "peak_wrist_height_frame_ratio": peak_wrist_height_frame_ratio,
+        "contact_height_std": contact_height_std,
         "shoulder_rotation_delta_deg": shoulder_rotation_delta_deg,
+        "shoulder_rotation_range_deg": shoulder_rotation_range_deg,
+        "shoulder_rotation_std_deg": shoulder_rotation_std_deg,
+        "dominant_wrist_offset_std": dominant_wrist_offset_std,
         "max_rw_speed": max_rw_speed,
         "max_lw_speed": max_lw_speed,
     }

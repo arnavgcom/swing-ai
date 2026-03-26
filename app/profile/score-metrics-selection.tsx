@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,7 +11,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -54,6 +54,12 @@ type SportOption = {
   id: string;
   name: string;
   enabled: boolean;
+};
+
+type SelectionDraftPayload = {
+  selectedSportKey: string;
+  selectedScoreSections: string[];
+  selectedMetricKeys: string[];
 };
 
 const formatMetricLabelFromKey = (metricKey: string): string => {
@@ -107,8 +113,10 @@ const toSportPreferenceKey = (sportName?: string | null): string =>
 
 export default function ScoreMetricsSelectionScreen() {
   const insets = useSafeAreaInsets();
+  const { returnTo: rawReturnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const { user, refreshUser } = useAuth();
   const { selectedSport } = useSport();
+  const returnTo = Array.isArray(rawReturnTo) ? rawReturnTo[0] : rawReturnTo;
 
   const [showScoreSectionPicker, setShowScoreSectionPicker] = useState(false);
   const [showMetricPicker, setShowMetricPicker] = useState(false);
@@ -119,6 +127,11 @@ export default function ScoreMetricsSelectionScreen() {
   const [sports, setSports] = useState<SportOption[]>([]);
   const [selectedSportName, setSelectedSportName] = useState<string>(selectedSport?.name || "");
   const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [selectionHydratedKey, setSelectionHydratedKey] = useState<string>("");
+  const lastSavedSelectionRef = useRef<SelectionDraftPayload | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeConfigKey = useMemo(
     () => buildConfigKey(selectedSportName, null),
@@ -231,17 +244,16 @@ export default function ScoreMetricsSelectionScreen() {
       ? scopedSections
       : fallbackSections;
 
-    setSelectedScoreSections(
+    const normalizedSections =
       baseSections.length > 0
         ? Array.from(new Set(baseSections.map(mapLegacySectionLabel)))
-        : SCORE_SECTION_OPTIONS,
-    );
+        : SCORE_SECTION_OPTIONS;
 
     const scopedMetrics = selectedSportKey ? metricMap[selectedSportKey] : null;
     const fallbackMetrics = Array.isArray(user?.selectedMetricKeys) ? user.selectedMetricKeys : [];
     const baseMetrics = Array.isArray(scopedMetrics) ? scopedMetrics : fallbackMetrics;
 
-    setSelectedMetricKeys(
+    const normalizedMetrics =
       baseMetrics.length > 0
         ? Array.from(
             new Set(
@@ -250,9 +262,32 @@ export default function ScoreMetricsSelectionScreen() {
                 .filter((item) => item.length > 0),
             ),
           )
-        : DEFAULT_SELECTED_METRIC_SELECTION_KEYS,
-    );
+        : DEFAULT_SELECTED_METRIC_SELECTION_KEYS;
+
+    lastSavedSelectionRef.current = selectedSportKey
+      ? {
+          selectedSportKey,
+          selectedScoreSections: normalizedSections,
+          selectedMetricKeys: normalizedMetrics,
+        }
+      : null;
+
+    setSelectedScoreSections(normalizedSections);
+    setSelectedMetricKeys(normalizedMetrics);
+    setSelectionHydratedKey(selectedSportKey || "");
+    setSaveState("saved");
   }, [selectedSportKey, user]);
+
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+      if (autoSaveResetTimerRef.current) {
+        clearTimeout(autoSaveResetTimerRef.current);
+      }
+    };
+  }, []);
 
   const toggleScoreSection = (label: string) => {
     setSelectedScoreSections((prev) =>
@@ -266,25 +301,25 @@ export default function ScoreMetricsSelectionScreen() {
     );
   };
 
-  const saveSelection = async () => {
+  const saveSelection = async (payload: SelectionDraftPayload) => {
     if (!user) {
       Alert.alert("Error", "User session not found.");
-      return;
+      return false;
     }
-    if (!selectedSportKey) {
+    if (!payload.selectedSportKey) {
       Alert.alert("Select sport", "Please select a sport first.");
-      return;
+      return false;
     }
     setSaving(true);
+    setSaveState("saving");
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const scoreSectionsToPersist = Array.from(
-        new Set(selectedScoreSections.filter((item) => SCORE_SECTION_OPTIONS.includes(item))),
+        new Set(payload.selectedScoreSections.filter((item) => SCORE_SECTION_OPTIONS.includes(item))),
       );
       const allowedMetricKeys = new Set(metricOptions.map((item) => item.key));
       const metricKeysToPersist = Array.from(
         new Set(
-          selectedMetricKeys
+          payload.selectedMetricKeys
             .map((item) => normalizeMetricSelectionKey(item))
             .filter((item) => item.length > 0)
             .filter((item) => allowedMetricKeys.has(item)),
@@ -302,19 +337,107 @@ export default function ScoreMetricsSelectionScreen() {
         country: user.country ?? "",
         dominantProfile: dominantProfileValue,
         role: String(user.role || "").trim().toLowerCase() === "admin" ? "admin" : "player",
-        selectedSportKey,
+        selectedSportKey: payload.selectedSportKey,
         selectedScoreSections: scoreSectionsToPersist,
         selectedMetricKeys: metricKeysToPersist,
       });
       await refreshUser();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.back();
+      lastSavedSelectionRef.current = {
+        selectedSportKey: payload.selectedSportKey,
+        selectedScoreSections: scoreSectionsToPersist,
+        selectedMetricKeys: metricKeysToPersist,
+      };
+      setSaveState("saved");
+      if (autoSaveResetTimerRef.current) {
+        clearTimeout(autoSaveResetTimerRef.current);
+      }
+      autoSaveResetTimerRef.current = setTimeout(() => {
+        setSaveState("idle");
+      }, 1400);
+      return true;
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Failed to save score and metric selection.";
+      setSaveState("error");
       Alert.alert("Error", reason);
+      return false;
     } finally {
       setSaving(false);
     }
+  };
+
+  useEffect(() => {
+    if (!selectedSportKey || selectionHydratedKey !== selectedSportKey) {
+      return;
+    }
+
+    const nextPayload: SelectionDraftPayload = {
+      selectedSportKey,
+      selectedScoreSections: Array.from(
+        new Set(selectedScoreSections.filter((item) => SCORE_SECTION_OPTIONS.includes(item))),
+      ),
+      selectedMetricKeys: Array.from(
+        new Set(
+          selectedMetricKeys
+            .map((item) => normalizeMetricSelectionKey(item))
+            .filter((item) => item.length > 0),
+        ),
+      ),
+    };
+
+    const previousPayload = lastSavedSelectionRef.current;
+    const isUnchanged = Boolean(
+      previousPayload
+      && previousPayload.selectedSportKey === nextPayload.selectedSportKey
+      && previousPayload.selectedScoreSections.length === nextPayload.selectedScoreSections.length
+      && previousPayload.selectedMetricKeys.length === nextPayload.selectedMetricKeys.length
+      && previousPayload.selectedScoreSections.every((value, index) => value === nextPayload.selectedScoreSections[index])
+      && previousPayload.selectedMetricKeys.every((value, index) => value === nextPayload.selectedMetricKeys[index]),
+    );
+
+    if (isUnchanged) {
+      return;
+    }
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      void saveSelection(nextPayload);
+    }, 700);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [metricOptions, selectedMetricKeys, selectedScoreSections, selectedSportKey, selectionHydratedKey]);
+
+  const saveStatusLabel = saveState === "saving"
+    ? "Saving"
+    : saveState === "saved"
+      ? "Saved"
+      : saveState === "error"
+        ? "Retry needed"
+        : "Auto-save";
+
+  const saveStatusTone = saveState === "error"
+    ? styles.statusPillError
+    : saveState === "saved"
+      ? styles.statusPillSuccess
+      : styles.statusPillNeutral;
+
+  const handleBack = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (typeof router.canGoBack === "function" && router.canGoBack()) {
+      router.back();
+      return;
+    }
+    if (returnTo && returnTo !== "/profile") {
+      router.replace(returnTo as any);
+      return;
+    }
+    router.replace("/profile");
   };
 
   return (
@@ -326,115 +449,108 @@ export default function ScoreMetricsSelectionScreen() {
 
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.back();
-          }}
+          onPress={handleBack}
           style={styles.backButton}
           testID="score-metrics-back"
         >
           <Ionicons name="chevron-back" size={24} color="#F8FAFC" />
         </Pressable>
         <Text style={styles.headerTitle}>Score/Metrics Selection</Text>
-        <View style={{ width: 40 }} />
+        <View style={[styles.statusPill, saveStatusTone]}>
+          <Text style={styles.statusPillText}>{saveStatusLabel}</Text>
+        </View>
       </View>
 
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 30 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.fieldWrapper}>
-          <Text style={styles.fieldLabel}>Sport</Text>
-          <Pressable
-            onPress={() => setShowSportPicker(true)}
-            style={styles.fieldInput}
-            testID="field-selected-sport"
-          >
-            <Ionicons name="football-outline" size={18} color="#6C5CE7" />
-            <Text style={[styles.dropdownText, !selectedSportName && styles.dropdownPlaceholder]}>
-              {selectedSportName || "Select sport"}
-            </Text>
-            <Ionicons name="chevron-down" size={16} color="#64748B" />
-          </Pressable>
-        </View>
-
-        <View style={styles.fieldWrapper}>
-          <Text style={styles.fieldLabel}>Performance Score Sections</Text>
-          <Pressable
-            onPress={() => setShowScoreSectionPicker(true)}
-            style={styles.fieldInput}
-            testID="field-score-sections"
-          >
-            <Ionicons name="layers-outline" size={18} color="#6C5CE7" />
-            <Text style={[styles.dropdownText, selectedScoreSections.length === 0 && styles.dropdownPlaceholder]}>
-              {selectedScoreSections.length > 0
-                ? `${selectedScoreSections.length} selected`
-                : "Select score sections"}
-            </Text>
-            <Ionicons name="chevron-down" size={16} color="#64748B" />
-          </Pressable>
-          {selectedScoreSections.length > 0 ? (
-            <View style={styles.chipRow}>
-              {selectedScoreSections.map((item) => (
-                <View key={item} style={styles.chip}>
-                  <Text style={styles.chipText}>{item}</Text>
-                </View>
-              ))}
+        <View style={styles.sectionGroup}>
+          <Text style={styles.sectionLabel}>Sport</Text>
+          <View style={styles.sectionCard}>
+            <View style={styles.fieldWrapper}>
+              <Text style={styles.fieldLabel}>Active Sport</Text>
+              <Pressable
+                onPress={() => setShowSportPicker(true)}
+                style={styles.fieldInput}
+                testID="field-selected-sport"
+              >
+                <Ionicons name="football-outline" size={18} color="#6C5CE7" />
+                <Text style={[styles.dropdownText, !selectedSportName && styles.dropdownPlaceholder]}>
+                  {selectedSportName || "Select sport"}
+                </Text>
+                <Ionicons name="chevron-down" size={16} color="#64748B" />
+              </Pressable>
             </View>
-          ) : null}
-        </View>
-
-        <View style={styles.fieldWrapper}>
-          <Text style={styles.fieldLabel}>Selected Metrics</Text>
-          <Text style={styles.fieldHint}>
-            {activeConfigKey
-              ? `Using ${activeConfigKey} metrics`
-              : "Using default metric list"}
-          </Text>
-          <Pressable
-            onPress={() => setShowMetricPicker(true)}
-            style={styles.fieldInput}
-            testID="field-selected-metrics"
-          >
-            <Ionicons name="options-outline" size={18} color="#6C5CE7" />
-            <Text style={[styles.dropdownText, selectedMetricKeys.length === 0 && styles.dropdownPlaceholder]}>
-              {selectedMetricKeys.length > 0
-                ? `${selectedMetricKeys.length} selected`
-                : `Select metrics (${metricOptions.length} available)`}
-            </Text>
-            <Ionicons name="chevron-down" size={16} color="#64748B" />
-          </Pressable>
-          {sortedSelectedMetricKeys.length > 0 ? (
-            <View style={styles.chipRow}>
-              {sortedSelectedMetricKeys.map((item) => (
-                <View key={item} style={styles.chip}>
-                  <Text style={styles.chipText}>{metricLabelByKey[item] || formatMetricLabelFromKey(item)}</Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-        </View>
-
-        <Pressable
-          onPress={saveSelection}
-          disabled={saving}
-          style={({ pressed }) => [
-            styles.saveButton,
-            { transform: [{ scale: pressed ? 0.97 : 1 }], opacity: saving ? 0.7 : 1 },
-          ]}
-          testID="save-score-metrics-selection"
-        >
-          <View style={styles.saveContent}>
-            {saving ? (
-              <ActivityIndicator size="small" color="#6C5CE7" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={20} color="#6C5CE7" />
-                <Text style={styles.saveText}>Save</Text>
-              </>
-            )}
           </View>
-        </Pressable>
+        </View>
+
+        <View style={styles.sectionGroup}>
+          <Text style={styles.sectionLabel}>Scoring</Text>
+          <View style={styles.sectionCard}>
+            <View style={styles.fieldWrapper}>
+              <Text style={styles.fieldLabel}>Performance Score Sections</Text>
+              <Pressable
+                onPress={() => setShowScoreSectionPicker(true)}
+                style={styles.fieldInput}
+                testID="field-score-sections"
+              >
+                <Ionicons name="layers-outline" size={18} color="#6C5CE7" />
+                <Text style={[styles.dropdownText, selectedScoreSections.length === 0 && styles.dropdownPlaceholder]}>
+                  {selectedScoreSections.length > 0
+                    ? `${selectedScoreSections.length} selected`
+                    : "Select score sections"}
+                </Text>
+                <Ionicons name="chevron-down" size={16} color="#64748B" />
+              </Pressable>
+              {selectedScoreSections.length > 0 ? (
+                <View style={styles.chipRow}>
+                  {selectedScoreSections.map((item) => (
+                    <View key={item} style={styles.chip}>
+                      <Text style={styles.chipText}>{item}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.sectionGroup}>
+          <Text style={styles.sectionLabel}>Metrics</Text>
+          <View style={styles.sectionCard}>
+            <View style={styles.fieldWrapper}>
+              <Text style={styles.fieldLabel}>Selected Metrics</Text>
+              <Text style={styles.fieldHint}>
+                {activeConfigKey
+                  ? `Using ${activeConfigKey} metrics`
+                  : "Using default metric list"}
+              </Text>
+              <Pressable
+                onPress={() => setShowMetricPicker(true)}
+                style={styles.fieldInput}
+                testID="field-selected-metrics"
+              >
+                <Ionicons name="options-outline" size={18} color="#6C5CE7" />
+                <Text style={[styles.dropdownText, selectedMetricKeys.length === 0 && styles.dropdownPlaceholder]}>
+                  {selectedMetricKeys.length > 0
+                    ? `${selectedMetricKeys.length} selected`
+                    : `Select metrics (${metricOptions.length} available)`}
+                </Text>
+                <Ionicons name="chevron-down" size={16} color="#64748B" />
+              </Pressable>
+              {sortedSelectedMetricKeys.length > 0 ? (
+                <View style={styles.chipRow}>
+                  {sortedSelectedMetricKeys.map((item) => (
+                    <View key={item} style={styles.chip}>
+                      <Text style={styles.chipText}>{metricLabelByKey[item] || formatMetricLabelFromKey(item)}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          </View>
+        </View>
       </ScrollView>
 
       <PickerModal
@@ -581,10 +697,55 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
   },
+  statusPill: {
+    minWidth: 74,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  statusPillNeutral: {
+    backgroundColor: "#1A1A36",
+    borderColor: "#2A2A50",
+  },
+  statusPillSuccess: {
+    backgroundColor: "#052E1A",
+    borderColor: "#166534",
+  },
+  statusPillError: {
+    backgroundColor: "#3F1114",
+    borderColor: "#7F1D1D",
+  },
+  statusPillText: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    color: "#F8FAFC",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
   scroll: {
     paddingHorizontal: 20,
     paddingTop: 24,
-    gap: 16,
+  },
+  sectionGroup: {
+    gap: 10,
+    marginBottom: 22,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#94A3B8",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  sectionCard: {
+    backgroundColor: "#131328",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#2A2A50",
+    padding: 14,
   },
   fieldWrapper: {
     gap: 6,
@@ -642,28 +803,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_500Medium",
     color: "#A29BFE",
-  },
-  saveButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#6C5CE740",
-    backgroundColor: "#6C5CE720",
-    borderRadius: 14,
-    marginTop: 10,
-  },
-  saveContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 16,
-  },
-  saveText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: "#6C5CE7",
   },
   modalOverlay: {
     flex: 1,

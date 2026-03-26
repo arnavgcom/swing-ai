@@ -2,6 +2,7 @@ import { fetch } from "expo/fetch";
 import { File } from "expo-file-system";
 import { Platform } from "react-native";
 import { getApiUrl } from "./query-client";
+import type { PoseLandmarkerModel } from "@shared/pose-landmarker";
 import type { PipelineTiming } from "@shared/pipeline-timing";
 import type { ValidationScreeningSnapshot, VideoValidationMode } from "@shared/video-validation";
 
@@ -82,15 +83,6 @@ export interface ScoreInputsResponse {
   scoreInputs: MetricsResponse["scoreInputs"] | null;
 }
 
-export interface ModelEvaluationSettingsResponse {
-  enabled: boolean;
-  isAdmin: boolean;
-  modelVersion: string;
-  modelVersionChangeDescription: string;
-  datasetCount: number;
-  totalVideos: number;
-}
-
 export interface VideoStorageSettingsResponse {
   mode: "filesystem" | "r2";
   isAdmin: boolean;
@@ -111,6 +103,29 @@ export interface AnalysisFpsSettingsResponse {
   isAdmin: boolean;
 }
 
+export interface PoseLandmarkerSettingsResponse {
+  model: PoseLandmarkerModel;
+  isAdmin: boolean;
+}
+
+export interface DriveMovementClassificationModelOptionResponse {
+  key: string;
+  label: string;
+  description: string;
+  badge?: string;
+  modelVersion?: string | null;
+}
+
+export interface DriveMovementClassificationModelSettingsResponse {
+  selectedModelKey: string;
+  options: DriveMovementClassificationModelOptionResponse[];
+  isAdmin: boolean;
+}
+
+export interface ClassificationModelOptionResponse extends DriveMovementClassificationModelOptionResponse {}
+
+export interface ClassificationModelSettingsResponse extends DriveMovementClassificationModelSettingsResponse {}
+
 export interface SportAvailabilityResponse {
   id: string;
   name: string;
@@ -130,7 +145,6 @@ export interface ScoringModelDashboardResponse {
   scoringAccuracyPct: number;
   totalVideosConsidered: number;
   datasetsUsed: string[];
-  modelEvaluationMode: boolean;
   datasetMetrics: Array<{
     datasetName: string;
     movementType: string;
@@ -139,34 +153,118 @@ export interface ScoringModelDashboardResponse {
   }>;
 }
 
-export interface ScoringModelRegistryEntryResponse {
-  id: string;
-  modelVersion: string;
-  modelVersionDescription: string;
-  movementType: string;
-  movementDetectionAccuracyPct: number;
-  scoringAccuracyPct: number;
-  mismatchRatePct: number;
-  datasetsUsed: string[];
-  manifestModelVersion: string;
-  manifestDatasets: Array<{
-    name: string;
-    videos: Array<{
-      videoId: string;
-      filename: string;
-      movementType: string;
+export interface TennisModelTrainingHistoryEntryResponse {
+  jobId: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  requestedAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  requestedByUserId?: string | null;
+  eligibleAnalysisCount: number;
+  eligibleShotCount: number;
+  exportRows?: number | null;
+  trainRows?: number | null;
+  testRows?: number | null;
+  macroF1?: number | null;
+  error?: string | null;
+  savedModelVersion?: string | null;
+  savedAt?: string | null;
+  versionDescription?: string | null;
+}
+
+export interface TennisModelTrainingStatusResponse {
+  sport: "tennis";
+  eligibleAnalysisCount: number;
+  eligibleShotCount: number;
+  trainedModelAvailable: boolean;
+  activeVersion: string;
+  activeVersionDescription: string;
+  draftVersion: string;
+  latestTraining: {
+    modelVersion: string;
+    trainedAt: string;
+    trainRows: number;
+    testRows: number;
+    datasetPath: string;
+    macroF1?: number | null;
+  } | null;
+  currentJob: TennisModelTrainingHistoryEntryResponse | null;
+  history: TennisModelTrainingHistoryEntryResponse[];
+}
+
+export type TennisModelTrainingRunResponse = TennisModelTrainingStatusResponse;
+
+export type TennisModelVersionSaveResponse = TennisModelTrainingStatusResponse;
+
+export interface TennisDatasetInsightsResponse {
+  sport: "tennis";
+  currentVersion: string;
+  currentVersionDescription: string;
+  filters: {
+    playerId: string | null;
+    startDate: string | null;
+    endDate: string | null;
+  };
+  currentDataset: {
+    eligibleVideoCount: number;
+    eligibleShotCount: number;
+    videoDistribution: Array<{
+      label: string;
+      count: number;
+      pct: number;
     }>;
+    shotDistribution: Array<{
+      label: string;
+  modelTrend: Array<{
+    modelVersion: string;
+    trainedAt: string;
+    savedAt: string | null;
+    macroF1: number | null;
+    accuracy: number | null;
+    trainRows: number;
+    testRows: number;
+    isActiveModelVersion: boolean;
+    versionStatus: string;
+    versionDescription: string;
   }>;
-  createdByUserId: string | null;
-  createdAt: string;
-  datasetMetrics: Array<{
-    id: string;
-    registryEntryId: string;
-    datasetName: string;
-    movementType: string;
-    movementDetectionAccuracyPct: number;
-    scoringAccuracyPct: number;
-  }>;
+      count: number;
+      pct: number;
+    }>;
+    sessionTypeDistribution: Array<{
+      label: "practice" | "match-play";
+      count: number;
+      pct: number;
+    }>;
+  };
+  activeModel: null | {
+    modelVersion: string;
+    trainedAt: string;
+    trainRows: number;
+    testRows: number;
+    datasetAnalysisCount: number;
+    datasetShotCount: number;
+    macroF1: number | null;
+    accuracy: number | null;
+    perLabel: Array<{
+      label: string;
+      precision: number | null;
+      recall: number | null;
+      f1: number | null;
+      support: number;
+    }>;
+    confusionMatrix: {
+      labels: string[];
+      rows: Array<{
+        actual: string;
+        counts: Array<{
+          predicted: string;
+          count: number;
+          pct: number;
+        }>;
+      }>;
+    };
+  };
+  suggestions: string[];
 }
 
 export interface ManifestValidationResponse {
@@ -174,14 +272,38 @@ export interface ManifestValidationResponse {
   datasetCount: number;
   totalVideos: number;
   duplicateFilenames: string[];
+  duplicateVideoIds?: string[];
   errors: string[];
   warnings: string[];
+}
+
+export interface ModelRegistryVersionResponse {
+  id: string;
+  modelVersion: string;
+  description: string;
+  status: string;
+  activatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ModelRegistryDatasetResponse {
+  id: string;
+  name: string;
+  description: string;
+  source: string;
+  videoCount: number;
+  movementTypes: string[];
+  updatedAt: string;
 }
 
 export interface ModelRegistryConfigResponse {
   activeModelVersion: string;
   modelVersionChangeDescription: string;
   evaluationDatasetManifestPath: string;
+  storage: "database";
+  versions: ModelRegistryVersionResponse[];
+  datasets: ModelRegistryDatasetResponse[];
   manifestValidation: ManifestValidationResponse;
 }
 
@@ -386,37 +508,6 @@ export interface FrameSkeletonResponse {
   };
 }
 
-export interface ScoringModelRegistryEntryDetailResponse extends ScoringModelRegistryEntryResponse {
-  summary: {
-    videosAnnotated: number;
-    totalVideosConsidered?: number;
-    videosWithDiscrepancy?: number;
-    totalShots?: number;
-    totalManualShots: number;
-    totalMismatches: number;
-    mismatchRatePct: number;
-  };
-  topVideos: Array<{
-    analysisId: string;
-    videoName: string;
-    userName?: string | null;
-    createdAt: string;
-    sportName: string;
-    movementName: string;
-    autoShots: number;
-    manualShots: number;
-    mismatches: number;
-    mismatchRatePct: number;
-    mismatchDeltaPct?: number;
-    isNewVideo?: boolean;
-  }>;
-  labelConfusions: Array<{
-    from: string;
-    to: string;
-    count: number;
-  }>;
-}
-
 export interface VideoMetadataResponse {
   capturedAt?: string | null;
   gpsLat?: number | null;
@@ -445,7 +536,6 @@ export interface AnalysisShotAnnotationResponse {
   orderedShotLabels: string[];
   usedForScoringShotIndexes: number[];
   notes: string | null;
-  useForModelTraining?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -600,9 +690,14 @@ export interface AnalysisSummary extends AnalysisResponse {
   modelVersion?: string | null;
 }
 
-export async function fetchAnalysesSummary(): Promise<AnalysisSummary[]> {
+export async function fetchAnalysesSummary(options?: { includeAll?: boolean }): Promise<AnalysisSummary[]> {
   const baseUrl = getApiUrl();
-  const res = await fetch(`${baseUrl}api/analyses/summary`, {
+  const params = new URLSearchParams();
+  if (options?.includeAll) {
+    params.set("includeAll", "true");
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`${baseUrl}api/analyses/summary${query}`, {
     credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to fetch analyses summary");
@@ -801,7 +896,6 @@ export async function saveAnalysisShotAnnotation(
     orderedShotLabels: string[];
     usedForScoringShotIndexes: number[];
     notes?: string;
-    useForModelTraining?: boolean;
   },
 ): Promise<AnalysisShotAnnotationResponse> {
   const baseUrl = getApiUrl();
@@ -831,29 +925,6 @@ export async function fetchShotReport(id: string): Promise<ShotReportResponse> {
     credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to fetch shot report");
-  return res.json();
-}
-
-export async function fetchModelEvaluationSettings(): Promise<ModelEvaluationSettingsResponse> {
-  const baseUrl = getApiUrl();
-  const res = await fetch(`${baseUrl}api/model-evaluation/settings`, {
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error("Failed to fetch model evaluation settings");
-  return res.json();
-}
-
-export async function updateModelEvaluationSettings(
-  enabled: boolean,
-): Promise<{ enabled: boolean }> {
-  const baseUrl = getApiUrl();
-  const res = await fetch(`${baseUrl}api/model-evaluation/settings`, {
-    method: "PUT",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled }),
-  });
-  if (!res.ok) throw new Error("Failed to update model evaluation settings");
   return res.json();
 }
 
@@ -900,6 +971,82 @@ export async function updateVideoValidationSettings(
     body: JSON.stringify({ mode }),
   });
   if (!res.ok) throw new Error("Failed to update video validation settings");
+  return res.json();
+}
+
+export async function fetchPoseLandmarkerSettings(): Promise<PoseLandmarkerSettingsResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/pose-landmarker-settings`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch pose landmarker settings");
+  return res.json();
+}
+
+export async function fetchDriveMovementClassificationModelSettings(): Promise<DriveMovementClassificationModelSettingsResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/drive-movement-classification-model-settings`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch drive movement classification model settings");
+  return res.json();
+}
+
+export async function updateDriveMovementClassificationModelSettings(
+  modelKey: string,
+): Promise<{ modelKey: string }> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/drive-movement-classification-model-settings`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ modelKey }),
+  });
+  if (!res.ok) throw new Error("Failed to update drive movement classification model settings");
+  return res.json();
+}
+
+export async function updateDriveMovementClassificationModelOptions(
+  options: DriveMovementClassificationModelOptionResponse[],
+): Promise<{ options: DriveMovementClassificationModelOptionResponse[] }> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/drive-movement-classification-model-settings/options`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ options }),
+  });
+  if (!res.ok) throw new Error("Failed to update drive movement classification model options");
+  return res.json();
+}
+
+export async function fetchClassificationModelSettings(): Promise<ClassificationModelSettingsResponse> {
+  return fetchDriveMovementClassificationModelSettings();
+}
+
+export async function updateClassificationModelSettings(
+  modelKey: string,
+): Promise<{ modelKey: string }> {
+  return updateDriveMovementClassificationModelSettings(modelKey);
+}
+
+export async function updateClassificationModelOptions(
+  options: ClassificationModelOptionResponse[],
+): Promise<{ options: ClassificationModelOptionResponse[] }> {
+  return updateDriveMovementClassificationModelOptions(options);
+}
+
+export async function updatePoseLandmarkerSettings(
+  model: PoseLandmarkerModel,
+): Promise<{ model: PoseLandmarkerModel }> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/pose-landmarker-settings`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model }),
+  });
+  if (!res.ok) throw new Error("Failed to update pose landmarker settings");
   return res.json();
 }
 
@@ -986,41 +1133,74 @@ export async function fetchScoringModelDashboard(
   return res.json();
 }
 
-export async function saveScoringModelRegistrySnapshot(
-  movementName?: string | null,
-  playerId?: string,
-): Promise<{ id: string; saved: boolean; nextModelVersion?: string }> {
+export async function fetchTennisModelTrainingStatus(): Promise<TennisModelTrainingStatusResponse> {
   const baseUrl = getApiUrl();
-  const res = await fetch(`${baseUrl}api/scoring-model/registry/save`, {
-    method: "POST",
+  const res = await fetch(`${baseUrl}api/model-training/tennis`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ movementName, playerId }),
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    throw new Error(payload?.error || "Failed to save scoring model registry snapshot");
+    throw new Error(payload?.error || "Failed to fetch tennis model training status");
   }
   return res.json();
 }
 
-export async function fetchScoringModelRegistry(): Promise<ScoringModelRegistryEntryResponse[]> {
+export async function fetchTennisDatasetInsights(options?: {
+  playerId?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+}): Promise<TennisDatasetInsightsResponse> {
   const baseUrl = getApiUrl();
-  const res = await fetch(`${baseUrl}api/scoring-model/registry`, {
+  const params = new URLSearchParams();
+  if (options?.playerId) {
+    params.set("playerId", options.playerId);
+  }
+  if (options?.startDate) {
+    params.set("startDate", options.startDate);
+  }
+  if (options?.endDate) {
+    params.set("endDate", options.endDate);
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`${baseUrl}api/model-training/tennis/dataset-insights${query}`, {
     credentials: "include",
   });
-  if (!res.ok) throw new Error("Failed to fetch scoring model registry");
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(payload?.error || "Failed to fetch tennis dataset insights");
+  }
   return res.json();
 }
 
-export async function fetchScoringModelRegistryEntry(
-  id: string,
-): Promise<ScoringModelRegistryEntryDetailResponse> {
+export async function triggerTennisModelTraining(): Promise<TennisModelTrainingRunResponse> {
   const baseUrl = getApiUrl();
-  const res = await fetch(`${baseUrl}api/scoring-model/registry/${id}`, {
+  const res = await fetch(`${baseUrl}api/model-training/tennis/train`, {
+    method: "POST",
     credentials: "include",
+    headers: { "Content-Type": "application/json" },
   });
-  if (!res.ok) throw new Error("Failed to fetch scoring model registry entry");
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(payload?.error || "Failed to train tennis movement model");
+  }
+  return res.json();
+}
+
+export async function saveTennisModelVersion(payload?: {
+  modelVersion?: string;
+  description?: string;
+}): Promise<TennisModelVersionSaveResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/model-training/tennis/save-version`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+  if (!res.ok) {
+    const payloadErr = await res.json().catch(() => null);
+    throw new Error(payloadErr?.error || "Failed to save tennis model version");
+  }
   return res.json();
 }
 
@@ -1059,6 +1239,7 @@ export async function validateModelRegistryManifest(): Promise<{
     evaluationDatasetManifestPath: string;
   };
   validation: ManifestValidationResponse;
+  datasets: ModelRegistryDatasetResponse[];
 }> {
   const baseUrl = getApiUrl();
   const res = await fetch(`${baseUrl}api/model-registry/validate-manifest`, {

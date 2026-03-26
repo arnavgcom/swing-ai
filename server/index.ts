@@ -3,6 +3,7 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupAuth } from "./auth";
+import { getModelArtifactStorageLogDetails } from "./model-artifact-storage";
 import { seedSports } from "./seed-sports";
 import * as fs from "fs";
 import * as path from "path";
@@ -239,6 +240,11 @@ function setupErrorHandler(app: express.Application) {
   const server = await registerRoutes(app);
 
   await seedSports();
+
+  const artifactStorage = await getModelArtifactStorageLogDetails();
+  log(
+    `model artifact storage configured: mode=${artifactStorage.mode} bucket=${artifactStorage.bucket || "(unset)"} prefix=${artifactStorage.prefix}`,
+  );
 
   setupErrorHandler(app);
 

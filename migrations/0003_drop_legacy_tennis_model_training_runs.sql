@@ -1,0 +1,1 @@
+drop table if exists tennis_model_training_runs;

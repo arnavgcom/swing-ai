@@ -21,7 +21,7 @@ import { router } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
-import { fetchModelEvaluationSettings, uploadVideo, type AnalysisSummary } from "@/lib/api";
+import { uploadVideo, type AnalysisSummary } from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
@@ -190,7 +190,6 @@ export default function UploadScreen() {
   >([]);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
-  const [modelEvaluationMode, setModelEvaluationMode] = useState(false);
   const [recordedAtOverride, setRecordedAtOverride] = useState<Date | null>(null);
   const [showRecordedAtModal, setShowRecordedAtModal] = useState(false);
   const [recordedAtDraft, setRecordedAtDraft] = useState<Date>(new Date());
@@ -244,7 +243,6 @@ export default function UploadScreen() {
       setUserList([]);
       setSelectedPlayerId("");
       setShowPlayerDropdown(false);
-      setModelEvaluationMode(false);
       return () => {
         active = false;
       };
@@ -299,17 +297,6 @@ export default function UploadScreen() {
         }
       })();
     }
-
-    (async () => {
-      try {
-        const settings = await fetchModelEvaluationSettings();
-        if (!active) return;
-        setModelEvaluationMode(Boolean(settings.enabled));
-      } catch {
-        if (!active) return;
-        setModelEvaluationMode(false);
-      }
-    })();
 
     return () => {
       active = false;
@@ -447,10 +434,7 @@ export default function UploadScreen() {
     const { date, time } = getTimestampParts(new Date());
     const originalName = (asset.fileName || asset.name || "").trim();
     const extension = getFileExtension(originalName, asset.uri);
-    const generatedFileName = `${fullNameToken}-${sportToken}-${categoryToken}-${date}-${time}.${extension}`;
-    const finalFileName = modelEvaluationMode && originalName
-      ? originalName
-      : generatedFileName;
+    const finalFileName = `${fullNameToken}-${sportToken}-${categoryToken}-${date}-${time}.${extension}`;
 
     setSelectedVideo({
       uri: asset.uri,
@@ -460,7 +444,7 @@ export default function UploadScreen() {
     });
     setUploadProgressPct(null);
     setRecordedAtOverride(null);
-  }, [modelEvaluationMode, selectedMovementName, selectedPlayerId, selectedSport?.name, tennisSport?.name, user?.email, user?.id, user?.name, userList]);
+  }, [selectedMovementName, selectedPlayerId, selectedSport?.name, tennisSport?.name, user?.email, user?.id, user?.name, userList]);
 
   const handleVideoResult = (result: ImagePicker.ImagePickerResult) => {
     console.warn("launchVideoLibrary result", {

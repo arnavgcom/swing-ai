@@ -1,7 +1,8 @@
-import type { Express, Request, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
-import { execFile } from "child_process";
+import { execFile, spawn } from "child_process";
 import { randomUUID } from "crypto";
+import type { Stats } from "node:fs";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -18,14 +19,16 @@ import {
   analysisShotAnnotations,
   analysisShotDiscrepancies,
   appSettings,
-  scoringModelRegistryEntries,
-  scoringModelRegistryDatasetMetrics,
+  modelTrainingJobs,
+  modelTrainingDatasets,
+  modelTrainingState,
   analyses,
   metrics,
   coachingInsights,
 } from "@shared/schema";
 import { eq, asc, and, desc, inArray, sql } from "drizzle-orm";
 import {
+  getConfigKey,
   getSportConfig,
   getAllConfigs,
   type MetricDefinition,
@@ -39,12 +42,15 @@ import {
 import { attachPipelineTiming, extractPipelineTiming } from "@shared/pipeline-timing";
 import {
   getEvaluationDatasetVideoMap,
+  getModelRegistryOverview,
+  initializeModelRegistryCache,
+  ensureDraftModelVersion,
   incrementModelVersion,
   isMovementMatch,
+  listModelRegistryVersions,
   readEvaluationDatasetManifest,
   readModelRegistryConfig,
   syncVideoForModelTuning,
-  updateManifestActiveModelVersion,
   validateEvaluationDatasetManifest,
   writeModelRegistryConfig,
 } from "./model-registry";
@@ -56,8 +62,10 @@ import {
   copyStoredMediaToPath,
   deleteStoredMedia,
   ensureVideoStorageModeSetting,
+  getStoredMediaLocalPath,
   getVideoStorageMode,
   isStoredMediaLocallyAccessible,
+  normalizeStoredVideoPath,
   resolveMediaUrl,
   setVideoStorageMode,
   storeVideoBuffer,
@@ -65,6 +73,7 @@ import {
 } from "./media-storage";
 import { PROJECT_ROOT, resolveProjectPath } from "./env";
 import { isVideoValidationMode, type VideoValidationMode } from "@shared/video-validation";
+import { isPoseLandmarkerModel } from "@shared/pose-landmarker";
 import {
   getEnabledPrimarySport,
   getSportById,
@@ -73,6 +82,15 @@ import {
   listSports,
   mapSportForApi,
 } from "./sport-availability";
+import { getPoseLandmarkerModel, getPoseLandmarkerPythonEnv, setPoseLandmarkerModel } from "./pose-landmarker-settings";
+import { exportTennisTrainingDatasetSnapshot } from "./tennis-training-storage";
+import {
+  getDriveMovementClassificationModelPythonEnv,
+  getDriveMovementClassificationModelSettings,
+  setDriveMovementClassificationModelOptions,
+  setDriveMovementClassificationModelSelection,
+} from "./classification-model-settings";
+import { publishClassificationModelArtifacts } from "./model-artifact-storage";
 
 const uploadDir = resolveProjectPath("uploads");
 if (!fs.existsSync(uploadDir)) {
@@ -121,7 +139,7 @@ const uploadToMemory = multer({
   },
 });
 
-async function runVideoUploadMiddleware(req: Request, res: Response, next: Express.NextFunction) {
+async function runVideoUploadMiddleware(req: Request, res: Response, next: NextFunction) {
   try {
     const mode = await getVideoStorageMode();
     const middleware = mode === "r2" ? uploadToMemory.single("video") : uploadToFilesystem.single("video");
@@ -165,8 +183,12 @@ function runPythonDiagnostics(
   movementName: string,
   dominantProfile?: string | null,
 ): Promise<any> {
-  return new Promise((resolve, reject) => {
+  return (async () => {
     const pythonExecutable = resolvePythonExecutable();
+    const [poseLandmarkerEnv, classificationModelEnv] = await Promise.all([
+      getPoseLandmarkerPythonEnv(),
+      getDriveMovementClassificationModelPythonEnv(),
+    ]);
 
     const args = [
       "-m",
@@ -183,35 +205,1003 @@ function runPythonDiagnostics(
       args.push("--dominant-profile", dominant);
     }
 
+    return new Promise((resolve, reject) => {
+      execFile(
+        pythonExecutable,
+        args,
+        {
+          cwd: PROJECT_ROOT,
+          env: { ...process.env, ...poseLandmarkerEnv, ...classificationModelEnv },
+          timeout: 120000,
+          maxBuffer: 10 * 1024 * 1024,
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            if (stderr) console.error("Python diagnostics stderr:", stderr);
+            reject(new Error(`Python diagnostics failed: ${error.message}`));
+            return;
+          }
+
+          try {
+            const result = JSON.parse(stdout.trim());
+            if (result?.error) {
+              reject(new Error(result.error));
+              return;
+            }
+            resolve(result);
+          } catch {
+            if (stderr) console.error("Python diagnostics stderr:", stderr);
+            reject(new Error("Failed to parse diagnostics results"));
+          }
+        },
+      );
+    });
+  })();
+}
+
+type TennisTrainingMetadata = {
+  modelVersion?: string;
+  trainedAt?: string;
+  datasetPath?: string;
+  trainRows?: number;
+  testRows?: number;
+  versionDescription?: string;
+  savedAt?: string;
+};
+
+type TennisTrainingHistoryEntry = {
+  jobId: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  requestedAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  requestedByUserId?: string | null;
+  eligibleAnalysisCount: number;
+  eligibleShotCount: number;
+  exportRows?: number | null;
+  trainRows?: number | null;
+  testRows?: number | null;
+  macroF1?: number | null;
+  error?: string | null;
+  savedModelVersion?: string | null;
+  savedAt?: string | null;
+  versionDescription?: string | null;
+};
+
+type TennisTrainingState = {
+  currentJobId: string | null;
+  history: TennisTrainingHistoryEntry[];
+};
+
+type TennisDatasetInsightDistribution = {
+  label: string;
+  count: number;
+  pct: number;
+};
+
+type TennisDatasetInsightSessionDistribution = {
+  label: "practice" | "match-play";
+  count: number;
+  pct: number;
+};
+
+const TENNIS_DATASET_INSIGHT_LABELS = ["forehand", "backhand", "serve", "volley"] as const;
+
+const TENNIS_MOVEMENT_MODEL_FAMILY = "movement-classifier";
+const TENNIS_MODEL_VERSION_ARCHIVE_DIR = resolveProjectPath("models", "versions");
+const MAX_TENNIS_TRAINING_HISTORY = 20;
+
+let activeTennisTrainingJobId: string | null = null;
+let activeTennisTrainingPromise: Promise<void> | null = null;
+
+function runNodeJsonScript(scriptRelativePath: string, env?: NodeJS.ProcessEnv): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const scriptPath = resolveProjectPath(scriptRelativePath);
     execFile(
-      pythonExecutable,
-      args,
+      process.execPath,
+      [scriptPath],
       {
         cwd: PROJECT_ROOT,
-        timeout: 120000,
+        env: { ...process.env, ...env },
+        timeout: 600000,
         maxBuffer: 10 * 1024 * 1024,
       },
       (error, stdout, stderr) => {
         if (error) {
-          if (stderr) console.error("Python diagnostics stderr:", stderr);
-          reject(new Error(`Python diagnostics failed: ${error.message}`));
+          if (stderr) console.error(`Node script stderr (${scriptRelativePath}):`, stderr);
+          reject(new Error(`Failed to run ${scriptRelativePath}: ${error.message}`));
           return;
         }
 
         try {
-          const result = JSON.parse(stdout.trim());
-          if (result?.error) {
-            reject(new Error(result.error));
-            return;
-          }
-          resolve(result);
+          resolve(JSON.parse(String(stdout || "").trim()));
         } catch {
-          if (stderr) console.error("Python diagnostics stderr:", stderr);
-          reject(new Error("Failed to parse diagnostics results"));
+          if (stderr) console.error(`Node script stderr (${scriptRelativePath}):`, stderr);
+          reject(new Error(`Failed to parse ${scriptRelativePath} output`));
         }
       },
     );
   });
+}
+
+function runPythonJsonModule(moduleName: string, args: string[]): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const pythonExecutable = resolvePythonExecutable();
+    execFile(
+      pythonExecutable,
+      ["-m", moduleName, ...args],
+      {
+        cwd: PROJECT_ROOT,
+        env: process.env,
+        timeout: 900000,
+        maxBuffer: 10 * 1024 * 1024,
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          if (stderr) console.error(`Python module stderr (${moduleName}):`, stderr);
+          reject(new Error(`Failed to run ${moduleName}: ${error.message}`));
+          return;
+        }
+
+        try {
+          resolve(JSON.parse(String(stdout || "").trim()));
+        } catch {
+          if (stderr) console.error(`Python module stderr (${moduleName}):`, stderr);
+          reject(new Error(`Failed to parse ${moduleName} output`));
+        }
+      },
+    );
+  });
+}
+
+function runPythonJsonModuleWithInput(
+  moduleName: string,
+  args: string[],
+  input: string,
+  env?: NodeJS.ProcessEnv,
+): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const pythonExecutable = resolvePythonExecutable();
+    const child = spawn(pythonExecutable, ["-m", moduleName, ...args], {
+      cwd: PROJECT_ROOT,
+      env: { ...process.env, ...env },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += String(chunk || "");
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += String(chunk || "");
+    });
+
+    child.on("error", (error) => {
+      reject(new Error(`Failed to run ${moduleName}: ${error.message}`));
+    });
+
+    child.on("close", (code) => {
+      if (code !== 0) {
+        if (stderr) console.error(`Python module stderr (${moduleName}):`, stderr);
+        reject(new Error(`Failed to run ${moduleName}: exit code ${code}`));
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(String(stdout || "").trim()));
+      } catch {
+        if (stderr) console.error(`Python module stderr (${moduleName}):`, stderr);
+        reject(new Error(`Failed to parse ${moduleName} output`));
+      }
+    });
+
+    child.stdin.write(input);
+    child.stdin.end();
+  });
+}
+
+async function readOptionalJsonFile<T>(filePath: string): Promise<T | null> {
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(await fs.promises.readFile(filePath, "utf8")) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function statIfExists(filePath: string): Promise<Stats | null> {
+  try {
+    return await fs.promises.stat(filePath);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeTennisTrainingHistoryEntry(value: unknown): TennisTrainingHistoryEntry | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const jobId = String(row.jobId || "").trim();
+  const status = String(row.status || "").trim();
+  const requestedAt = String(row.requestedAt || "").trim();
+  if (!jobId || !requestedAt) return null;
+  if (status !== "queued" && status !== "running" && status !== "succeeded" && status !== "failed") {
+    return null;
+  }
+
+  const numOrNull = (input: unknown): number | null => {
+    const parsed = Number(input);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  return {
+    jobId,
+    status,
+    requestedAt,
+    startedAt: row.startedAt ? String(row.startedAt) : null,
+    completedAt: row.completedAt ? String(row.completedAt) : null,
+    requestedByUserId: row.requestedByUserId ? String(row.requestedByUserId) : null,
+    eligibleAnalysisCount: Number(row.eligibleAnalysisCount || 0),
+    eligibleShotCount: Number(row.eligibleShotCount || 0),
+    exportRows: numOrNull(row.exportRows),
+    trainRows: numOrNull(row.trainRows),
+    testRows: numOrNull(row.testRows),
+    macroF1: numOrNull(row.macroF1),
+    error: row.error ? String(row.error) : null,
+    savedModelVersion: row.savedModelVersion ? String(row.savedModelVersion) : null,
+    savedAt: row.savedAt ? String(row.savedAt) : null,
+    versionDescription: row.versionDescription ? String(row.versionDescription) : null,
+  };
+}
+
+function buildTrainingScope() {
+  return {
+    sportName: "tennis",
+    modelFamily: TENNIS_MOVEMENT_MODEL_FAMILY,
+  } as const;
+}
+
+function mapTrainingJobRowToHistoryEntry(row: typeof modelTrainingJobs.$inferSelect): TennisTrainingHistoryEntry {
+  const normalized = normalizeTennisTrainingHistoryEntry({
+    jobId: row.jobId,
+    status: row.status,
+    requestedAt: row.requestedAt?.toISOString(),
+    startedAt: row.startedAt?.toISOString() || null,
+    completedAt: row.completedAt?.toISOString() || null,
+    requestedByUserId: row.requestedByUserId || null,
+    eligibleAnalysisCount: row.eligibleAnalysisCount,
+    eligibleShotCount: row.eligibleShotCount,
+    exportRows: row.exportRows,
+    trainRows: row.trainRows,
+    testRows: row.testRows,
+    macroF1: row.macroF1,
+    error: row.error || null,
+    savedModelVersion: row.savedModelVersion || null,
+    savedAt: row.savedAt?.toISOString() || null,
+    versionDescription: row.versionDescription || null,
+  });
+  if (!normalized) {
+    throw new Error(`Invalid model training job row for ${row.jobId}`);
+  }
+  return normalized;
+}
+
+async function getModelTrainingScopeState() {
+  const scope = buildTrainingScope();
+  const [row] = await db
+    .select()
+    .from(modelTrainingState)
+    .where(
+      and(
+        eq(modelTrainingState.sportName, scope.sportName),
+        eq(modelTrainingState.modelFamily, scope.modelFamily),
+      ),
+    )
+    .limit(1);
+  return row || null;
+}
+
+async function setModelTrainingScopeCurrentJobId(
+  currentJobId: string | null,
+  actorUserId?: string | null,
+): Promise<void> {
+  const scope = buildTrainingScope();
+  await db
+    .insert(modelTrainingState)
+    .values({
+      ...scope,
+      currentJobId,
+      ...buildInsertAuditFields(actorUserId || null),
+    })
+    .onConflictDoUpdate({
+      target: [modelTrainingState.sportName, modelTrainingState.modelFamily],
+      set: {
+        currentJobId,
+        ...buildUpdateAuditFields(actorUserId || null),
+      },
+    });
+}
+
+async function listTrainingHistoryRows(limit = MAX_TENNIS_TRAINING_HISTORY) {
+  const scope = buildTrainingScope();
+  return db
+    .select()
+    .from(modelTrainingJobs)
+    .where(
+      and(
+        eq(modelTrainingJobs.sportName, scope.sportName),
+        eq(modelTrainingJobs.modelFamily, scope.modelFamily),
+      ),
+    )
+    .orderBy(desc(modelTrainingJobs.requestedAt), desc(modelTrainingJobs.updatedAt))
+    .limit(limit);
+}
+
+async function readTrainingState(): Promise<TennisTrainingState> {
+  const [scopeState, historyRows] = await Promise.all([
+    getModelTrainingScopeState(),
+    listTrainingHistoryRows(),
+  ]);
+  const history = historyRows.map(mapTrainingJobRowToHistoryEntry);
+  const fallbackCurrent = history.find((entry) => entry.status === "queued" || entry.status === "running") || null;
+  const currentJobIdRaw = String(scopeState?.currentJobId || fallbackCurrent?.jobId || "").trim();
+  const currentJobId = history.some((entry) => entry.jobId === currentJobIdRaw && (entry.status === "queued" || entry.status === "running"))
+    ? currentJobIdRaw
+    : null;
+  const current = currentJobId
+    ? history.find((entry) => entry.jobId === currentJobId) || null
+    : null;
+
+  if (current && (current.status === "queued" || current.status === "running") && activeTennisTrainingJobId !== current.jobId) {
+    await updateModelTrainingJob(current.jobId, null, {
+      status: "failed",
+      completedAt: new Date(),
+      error: "Training job was interrupted before completion.",
+    });
+    await setModelTrainingScopeCurrentJobId(null, null);
+    const repairedHistoryRows = await listTrainingHistoryRows();
+    return {
+      currentJobId: null,
+      history: repairedHistoryRows.map(mapTrainingJobRowToHistoryEntry),
+    };
+  }
+
+  if (!scopeState?.currentJobId && currentJobId) {
+    await setModelTrainingScopeCurrentJobId(currentJobId, null);
+  }
+
+  return { currentJobId, history };
+}
+
+function buildTennisModelArchivePaths(modelVersion: string) {
+  const safeVersion = String(modelVersion || "").trim().replace(/[^0-9A-Za-z._-]+/g, "_");
+  const normalizedVersion = safeVersion.toLowerCase().startsWith("v") ? safeVersion : `v${safeVersion}`;
+  return {
+    modelPath: path.join(TENNIS_MODEL_VERSION_ARCHIVE_DIR, `tennis_movement_classifier_${normalizedVersion}.joblib`),
+  };
+}
+
+async function createModelTrainingJob(
+  jobId: string,
+  actorUserId: string,
+  payload: {
+    status: "queued" | "running" | "succeeded" | "failed";
+    eligibleAnalysisCount: number;
+    eligibleShotCount: number;
+    requestedAt?: Date;
+    startedAt?: Date | null;
+    completedAt?: Date | null;
+    requestedByUserId?: string | null;
+  },
+): Promise<void> {
+  await db.insert(modelTrainingJobs).values({
+    jobId,
+    modelFamily: TENNIS_MOVEMENT_MODEL_FAMILY,
+    sportName: "tennis",
+    status: payload.status,
+    eligibleAnalysisCount: payload.eligibleAnalysisCount,
+    eligibleShotCount: payload.eligibleShotCount,
+    requestedAt: payload.requestedAt || new Date(),
+    startedAt: payload.startedAt || null,
+    completedAt: payload.completedAt || null,
+    requestedByUserId: payload.requestedByUserId || actorUserId,
+    ...buildInsertAuditFields(actorUserId),
+  });
+}
+
+async function updateModelTrainingJob(
+  jobId: string,
+  actorUserId: string | null | undefined,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const updates: Record<string, unknown> = {
+    ...patch,
+    ...buildUpdateAuditFields(actorUserId || null),
+  };
+  Object.keys(updates).forEach((key) => {
+    if (updates[key] === undefined) delete updates[key];
+  });
+
+  await db
+    .update(modelTrainingJobs)
+    .set(updates)
+    .where(eq(modelTrainingJobs.jobId, jobId));
+}
+
+async function getLatestSuccessfulTrainingJob() {
+  const [row] = await db
+    .select()
+    .from(modelTrainingJobs)
+    .where(
+      and(
+        eq(modelTrainingJobs.sportName, "tennis"),
+        eq(modelTrainingJobs.modelFamily, TENNIS_MOVEMENT_MODEL_FAMILY),
+        eq(modelTrainingJobs.status, "succeeded"),
+      ),
+    )
+    .orderBy(desc(modelTrainingJobs.completedAt), desc(modelTrainingJobs.updatedAt))
+    .limit(1);
+  return row || null;
+}
+
+async function getTennisTrainingStatus() {
+  const modelPath = resolveProjectPath("models", "tennis_movement_classifier.joblib");
+  const config = readModelRegistryConfig();
+  const trainingState = await readTrainingState();
+
+  const [countsResult, latestRun, modelStats] = await Promise.all([
+    db.execute(sql`
+      with latest_annotations as (
+        select distinct on (ann.analysis_id)
+          ann.analysis_id,
+          ann.ordered_shot_labels
+        from analysis_shot_annotations ann
+        order by ann.analysis_id, ann.updated_at desc
+      )
+      select
+        count(*)::int as eligible_analysis_count,
+        coalesce(
+          sum(
+            case
+              when jsonb_typeof(la.ordered_shot_labels) = 'array' then jsonb_array_length(la.ordered_shot_labels)
+              else 0
+            end
+          ),
+          0
+        )::int as eligible_shot_count
+      from analyses a
+      inner join metrics m on m.analysis_id = a.id
+      inner join latest_annotations la on la.analysis_id = a.id
+      where a.status = 'completed'
+        and m.ai_diagnostics is not null
+        and lower(coalesce(m.config_key, '')) like 'tennis-%'
+    `),
+    getLatestSuccessfulTrainingJob(),
+    statIfExists(modelPath),
+  ]);
+
+  const row = Array.isArray((countsResult as any).rows) ? (countsResult as any).rows[0] : null;
+  const metadata = latestRun?.metadata && typeof latestRun.metadata === "object"
+    ? latestRun.metadata as Record<string, unknown>
+    : null;
+  const report = latestRun?.report && typeof latestRun.report === "object"
+    ? latestRun.report as { classificationReport?: Record<string, Record<string, number>> }
+    : null;
+  const macroF1Raw = report?.classificationReport?.["macro avg"]?.["f1-score"];
+  const macroF1 = typeof macroF1Raw === "number" ? macroF1Raw : null;
+  const latestTraining = latestRun && metadata
+    ? {
+        modelVersion: String(latestRun.savedModelVersion || metadata.modelVersion || config.activeModelVersion),
+        trainedAt: String(metadata.trainedAt || latestRun.completedAt?.toISOString() || (modelStats?.mtime?.toISOString() || "")),
+        trainRows: Number(latestRun.trainRows || metadata.trainRows || 0),
+        testRows: Number(latestRun.testRows || metadata.testRows || 0),
+        datasetPath: String(metadata.datasetPath || `database://tennis-training-datasets/${latestRun.datasetId || "latest"}`),
+        macroF1,
+      }
+    : null;
+
+  return {
+    sport: "tennis" as const,
+    eligibleAnalysisCount: Number(row?.eligible_analysis_count || 0),
+    eligibleShotCount: Number(row?.eligible_shot_count || 0),
+    trainedModelAvailable: Boolean(modelStats && latestRun),
+    latestTraining,
+    activeVersion: config.activeModelVersion,
+    activeVersionDescription: config.modelVersionChangeDescription,
+    draftVersion: incrementModelVersion(config.activeModelVersion),
+    currentJob: trainingState.currentJobId
+      ? trainingState.history.find((entry) => entry.jobId === trainingState.currentJobId) || null
+      : null,
+    history: trainingState.history,
+  };
+}
+
+async function getTennisDatasetInsights(params?: {
+  playerId?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+}) {
+  const config = readModelRegistryConfig();
+  const playerId = String(params?.playerId || "").trim() || null;
+  let startDate = parseDateFilterBoundary(params?.startDate, "start");
+  let endDate = parseDateFilterBoundary(params?.endDate, "end");
+  if (startDate && endDate && startDate.getTime() > endDate.getTime()) {
+    const swappedStart = endDate;
+    endDate = startDate;
+    startDate = swappedStart;
+  }
+
+  const datasetWhereClauses = [
+    sql`a.status = 'completed'`,
+    sql`m.ai_diagnostics is not null`,
+    sql`lower(coalesce(m.config_key, '')) like 'tennis-%'`,
+  ];
+  if (playerId) {
+    datasetWhereClauses.push(sql`a.user_id = ${playerId}`);
+  }
+  if (startDate) {
+    datasetWhereClauses.push(sql`coalesce(a.captured_at, a.created_at) >= ${startDate.toISOString()}`);
+  }
+  if (endDate) {
+    datasetWhereClauses.push(sql`coalesce(a.captured_at, a.created_at) <= ${endDate.toISOString()}`);
+  }
+
+  const [eligibleResult, activeRun, trendRuns] = await Promise.all([
+    db.execute(sql`
+      with latest_annotations as (
+        select distinct on (ann.analysis_id)
+          ann.analysis_id,
+          ann.ordered_shot_labels
+        from analysis_shot_annotations ann
+        order by ann.analysis_id, ann.updated_at desc
+      )
+      select
+        a.id as analysis_id,
+        a.requested_session_type,
+        a.video_filename,
+        la.ordered_shot_labels
+      from analyses a
+      inner join metrics m on m.analysis_id = a.id
+      inner join latest_annotations la on la.analysis_id = a.id
+      where ${sql.join(datasetWhereClauses, sql` and `)}
+      order by a.created_at desc
+    `),
+    db
+      .select()
+      .from(modelTrainingJobs)
+      .where(
+        and(
+          eq(modelTrainingJobs.sportName, "tennis"),
+          eq(modelTrainingJobs.modelFamily, TENNIS_MOVEMENT_MODEL_FAMILY),
+          eq(modelTrainingJobs.status, "succeeded"),
+          eq(modelTrainingJobs.savedModelVersion, config.activeModelVersion),
+        ),
+      )
+      .orderBy(
+        desc(modelTrainingJobs.savedAt),
+        desc(modelTrainingJobs.completedAt),
+        desc(modelTrainingJobs.updatedAt),
+      )
+      .limit(1)
+      .then((rows) => rows[0] || null),
+    db
+      .select()
+      .from(modelTrainingJobs)
+      .where(
+        and(
+          eq(modelTrainingJobs.sportName, "tennis"),
+          eq(modelTrainingJobs.modelFamily, TENNIS_MOVEMENT_MODEL_FAMILY),
+          eq(modelTrainingJobs.status, "succeeded"),
+          sql`${modelTrainingJobs.savedModelVersion} is not null`,
+        ),
+      )
+      .orderBy(
+        desc(modelTrainingJobs.savedAt),
+        desc(modelTrainingJobs.completedAt),
+        desc(modelTrainingJobs.updatedAt),
+      )
+      .limit(12),
+  ]);
+
+  const eligibleRows = Array.isArray((eligibleResult as any).rows) ? (eligibleResult as any).rows : [];
+  const videoCounts = new Map<string, number>();
+  const shotCounts = new Map<string, number>();
+  const sessionCounts = new Map<"practice" | "match-play", number>();
+  let eligibleShotCount = 0;
+
+  for (const row of eligibleRows) {
+    const rawLabels = Array.isArray(row.ordered_shot_labels) ? row.ordered_shot_labels : [];
+    const normalizedLabels = rawLabels
+      .map((value: unknown) => normalizeShotLabel(value))
+      .filter((value: string) => TENNIS_DATASET_INSIGHT_LABELS.includes(value as typeof TENNIS_DATASET_INSIGHT_LABELS[number]));
+
+    for (const label of normalizedLabels) {
+      shotCounts.set(label, Number(shotCounts.get(label) || 0) + 1);
+    }
+    eligibleShotCount += normalizedLabels.length;
+
+    const primaryLabel = getPrimaryInsightLabel(normalizedLabels);
+    if (primaryLabel !== "unknown") {
+      videoCounts.set(primaryLabel, Number(videoCounts.get(primaryLabel) || 0) + 1);
+    }
+
+    const sessionType = normalizeTennisSessionType(row.requested_session_type);
+    sessionCounts.set(sessionType, Number(sessionCounts.get(sessionType) || 0) + 1);
+  }
+
+  const currentDataset = {
+    eligibleVideoCount: eligibleRows.length,
+    eligibleShotCount,
+    videoDistribution: buildInsightDistribution(videoCounts, eligibleRows.length, TENNIS_DATASET_INSIGHT_LABELS),
+    shotDistribution: buildInsightDistribution(shotCounts, eligibleShotCount, TENNIS_DATASET_INSIGHT_LABELS),
+    sessionTypeDistribution: (["practice", "match-play"] as const).map((label) => ({
+      label,
+      count: Number(sessionCounts.get(label) || 0),
+      pct: toFixedPercent(Number(sessionCounts.get(label) || 0), eligibleRows.length),
+    })),
+  };
+
+  let activeModel: {
+    modelVersion: string;
+    trainedAt: string;
+    trainRows: number;
+    testRows: number;
+    datasetAnalysisCount: number;
+    datasetShotCount: number;
+    macroF1: number | null;
+    accuracy: number | null;
+    perLabel: Array<{
+      label: string;
+      precision: number | null;
+      recall: number | null;
+      f1: number | null;
+      support: number;
+    }>;
+    confusionMatrix: {
+      labels: string[];
+      rows: Array<{
+        actual: string;
+        counts: Array<{
+          predicted: string;
+          count: number;
+          pct: number;
+        }>;
+      }>;
+    };
+  } | null = null;
+
+  if (activeRun) {
+    const report = activeRun.report && typeof activeRun.report === "object"
+      ? activeRun.report as Record<string, unknown>
+      : {};
+    const classificationReport = report.classificationReport && typeof report.classificationReport === "object"
+      ? report.classificationReport as Record<string, Record<string, unknown> | unknown>
+      : {};
+    const rawLabels = Array.isArray(report.labels)
+      ? (report.labels as unknown[]).map((item) => normalizeShotLabel(item))
+      : [];
+    const labelIndex = new Map<string, number>();
+    rawLabels.forEach((label, index) => labelIndex.set(label, index));
+    const matrix = Array.isArray(report.confusionMatrix)
+      ? report.confusionMatrix as unknown[]
+      : [];
+    const accuracyFromReport = numberOrNull(classificationReport.accuracy);
+    const dataset = activeRun.datasetId
+      ? await db
+          .select()
+          .from(modelTrainingDatasets)
+          .where(eq(modelTrainingDatasets.id, activeRun.datasetId))
+          .limit(1)
+          .then((rows) => rows[0] || null)
+      : null;
+
+    const perLabel = TENNIS_DATASET_INSIGHT_LABELS.map((label) => {
+      const metricsForLabel = classificationReport[label] && typeof classificationReport[label] === "object"
+        ? classificationReport[label] as Record<string, unknown>
+        : {};
+      const rowIndex = labelIndex.get(label);
+      const rowValues = rowIndex != null && Array.isArray(matrix[rowIndex])
+        ? matrix[rowIndex] as unknown[]
+        : [];
+      const supportFromMatrix = rowValues.reduce<number>((sum, value) => sum + Number(value || 0), 0);
+      return {
+        label,
+        precision: numberOrNull(metricsForLabel.precision),
+        recall: numberOrNull(metricsForLabel.recall),
+        f1: numberOrNull(metricsForLabel["f1-score"]),
+        support: Number(numberOrNull(metricsForLabel.support) ?? supportFromMatrix ?? 0),
+      };
+    });
+
+    const confusionLabels = [...TENNIS_DATASET_INSIGHT_LABELS];
+    const confusionRows = confusionLabels.map((actual) => {
+      const actualIndex = labelIndex.get(actual);
+      const actualRow = actualIndex != null && Array.isArray(matrix[actualIndex])
+        ? matrix[actualIndex] as unknown[]
+        : [];
+      const rowTotal = confusionLabels.reduce((sum, predicted) => {
+        const predictedIndex = labelIndex.get(predicted);
+        return sum + Number(predictedIndex != null ? actualRow[predictedIndex] || 0 : 0);
+      }, 0);
+      return {
+        actual,
+        counts: confusionLabels.map((predicted) => {
+          const predictedIndex = labelIndex.get(predicted);
+          const count = Number(predictedIndex != null ? actualRow[predictedIndex] || 0 : 0);
+          return {
+            predicted,
+            count,
+            pct: toFixedPercent(count, rowTotal),
+          };
+        }),
+      };
+    });
+
+    const matrixTotal = confusionRows.reduce(
+      (total, row) => total + row.counts.reduce((sum, cell) => sum + cell.count, 0),
+      0,
+    );
+    const matrixCorrect = confusionRows.reduce(
+      (total, row) => total + (row.counts.find((cell) => cell.predicted === row.actual)?.count || 0),
+      0,
+    );
+
+    activeModel = {
+      modelVersion: String(activeRun.savedModelVersion || config.activeModelVersion),
+      trainedAt: String(
+        activeRun.savedAt?.toISOString()
+          || activeRun.completedAt?.toISOString()
+          || activeRun.requestedAt.toISOString(),
+      ),
+      trainRows: Number(activeRun.trainRows || 0),
+      testRows: Number(activeRun.testRows || 0),
+      datasetAnalysisCount: Number(dataset?.analysisCount || 0),
+      datasetShotCount: Number(dataset?.rowCount || 0),
+      macroF1: numberOrNull(activeRun.macroF1),
+      accuracy: accuracyFromReport ?? (matrixTotal > 0 ? Number((matrixCorrect / matrixTotal).toFixed(4)) : null),
+      perLabel,
+      confusionMatrix: {
+        labels: confusionLabels,
+        rows: confusionRows,
+      },
+    };
+  }
+
+  const versionsByNumber = new Map(
+    listModelRegistryVersions().map((version) => [version.modelVersion, version]),
+  );
+  const modelTrend = trendRuns
+    .slice()
+    .reverse()
+    .map((run) => {
+      const runReport = run.report && typeof run.report === "object"
+        ? run.report as Record<string, unknown>
+        : {};
+      const trendClassificationReport = runReport.classificationReport && typeof runReport.classificationReport === "object"
+        ? runReport.classificationReport as Record<string, unknown>
+        : {};
+      const versionMeta = versionsByNumber.get(String(run.savedModelVersion || ""));
+      return {
+        modelVersion: String(run.savedModelVersion || run.jobId),
+        trainedAt: String(run.completedAt?.toISOString() || run.requestedAt.toISOString()),
+        savedAt: run.savedAt?.toISOString() || null,
+        macroF1: numberOrNull(run.macroF1),
+        accuracy: numberOrNull(trendClassificationReport.accuracy),
+        trainRows: Number(run.trainRows || 0),
+        testRows: Number(run.testRows || 0),
+        isActiveModelVersion: versionMeta?.status === "active",
+        versionStatus: versionMeta?.status || "archived",
+        versionDescription: versionMeta?.description || String(run.versionDescription || ""),
+      };
+    });
+
+  return {
+    sport: "tennis" as const,
+    currentVersion: config.activeModelVersion,
+    currentVersionDescription: config.modelVersionChangeDescription,
+    filters: {
+      playerId,
+      startDate: startDate?.toISOString() || null,
+      endDate: endDate?.toISOString() || null,
+    },
+    currentDataset,
+    activeModel,
+    modelTrend,
+    suggestions: buildTennisDatasetInsightSuggestions({
+      currentDataset,
+      activeModel: activeModel
+        ? {
+            macroF1: activeModel.macroF1,
+            perLabel: activeModel.perLabel.map((item) => ({ label: item.label, f1: item.f1 })),
+          }
+        : null,
+    }),
+  };
+}
+
+async function trainTennisMovementModel(jobId: string, actorUserId: string) {
+  const exportSummary = await exportTennisTrainingDatasetSnapshot({
+    actorUserId,
+    datasetName: `tennis-training-${jobId}`,
+    notes: `Generated for job ${jobId}`,
+  });
+  const trainingSummary = await runPythonJsonModuleWithInput(
+    "python_analysis.train_tennis_movement_model",
+    ["--dataset-json-stdin"],
+    JSON.stringify({
+      datasetId: exportSummary.datasetId,
+      datasetPath: exportSummary.outputPath,
+      rows: exportSummary.samples,
+    }),
+  );
+  const status = await getTennisTrainingStatus();
+  return {
+    ...status,
+    exportSummary: {
+      outputPath: String(exportSummary?.outputPath || ""),
+      rows: Number(exportSummary?.rows || 0),
+      analyses: Number(exportSummary?.analyses || 0),
+    },
+    trainingSummary: {
+      modelOut: String(trainingSummary?.modelOut || ""),
+      trainRows: Number(trainingSummary?.trainRows || 0),
+      testRows: Number(trainingSummary?.testRows || 0),
+      labels:
+        trainingSummary?.labels && typeof trainingSummary.labels === "object"
+          ? trainingSummary.labels as Record<string, number>
+          : {},
+      macroF1: typeof trainingSummary?.macroF1 === "number" ? trainingSummary.macroF1 : null,
+      metadata:
+        trainingSummary?.metadata && typeof trainingSummary.metadata === "object"
+          ? trainingSummary.metadata as Record<string, unknown>
+          : {},
+      report:
+        trainingSummary?.report && typeof trainingSummary.report === "object"
+          ? trainingSummary.report as Record<string, unknown>
+          : {},
+      datasetId: exportSummary.datasetId,
+    },
+  };
+}
+
+async function runTennisTrainingJobInBackground(jobId: string, actorUserId: string): Promise<void> {
+  activeTennisTrainingJobId = jobId;
+  await updateModelTrainingJob(jobId, actorUserId, {
+    status: "running",
+    startedAt: new Date(),
+    error: null,
+  });
+  await setModelTrainingScopeCurrentJobId(jobId, actorUserId);
+
+  try {
+    const result = await trainTennisMovementModel(jobId, actorUserId);
+    await updateModelTrainingJob(jobId, actorUserId, {
+      status: "succeeded",
+      completedAt: new Date(),
+      datasetId: result.trainingSummary.datasetId,
+      exportRows: result.exportSummary.rows,
+      trainRows: result.trainingSummary.trainRows,
+      testRows: result.trainingSummary.testRows,
+      macroF1: typeof result.trainingSummary.macroF1 === "number" ? result.trainingSummary.macroF1 : null,
+      metadata: result.trainingSummary.metadata,
+      report: result.trainingSummary.report,
+      modelOutputPath: result.trainingSummary.modelOut,
+      error: null,
+    });
+    await setModelTrainingScopeCurrentJobId(null, actorUserId);
+  } catch (error: any) {
+    await updateModelTrainingJob(jobId, actorUserId, {
+      status: "failed",
+      completedAt: new Date(),
+      error: error?.message || "Training failed",
+    });
+    await setModelTrainingScopeCurrentJobId(null, actorUserId);
+  } finally {
+    activeTennisTrainingJobId = null;
+    activeTennisTrainingPromise = null;
+  }
+}
+
+async function queueTennisTrainingJob(actorUserId: string) {
+  const status = await getTennisTrainingStatus();
+  if (status.currentJob && (status.currentJob.status === "queued" || status.currentJob.status === "running")) {
+    throw new Error("A tennis training job is already running.");
+  }
+  if (status.eligibleAnalysisCount < 1 || status.eligibleShotCount < 20) {
+    throw new Error("Need at least 1 annotated tennis analysis and 20 labeled shots before training.");
+  }
+
+  const jobId = randomUUID();
+  const now = new Date().toISOString();
+  await createModelTrainingJob(jobId, actorUserId, {
+    status: "queued",
+    eligibleAnalysisCount: status.eligibleAnalysisCount,
+    eligibleShotCount: status.eligibleShotCount,
+    requestedAt: new Date(now),
+    requestedByUserId: actorUserId,
+  });
+  await setModelTrainingScopeCurrentJobId(jobId, actorUserId);
+
+  activeTennisTrainingPromise = runTennisTrainingJobInBackground(jobId, actorUserId);
+  return getTennisTrainingStatus();
+}
+
+async function saveCurrentTennisModelVersion(
+  actorUserId: string,
+  payload?: { modelVersion?: string; description?: string },
+) {
+  const modelPath = resolveProjectPath("models", "tennis_movement_classifier.joblib");
+  const latestRun = await getLatestSuccessfulTrainingJob();
+  const modelStats = await statIfExists(modelPath);
+
+  if (!modelStats || !latestRun) {
+    throw new Error("Train a tennis model before saving a version.");
+  }
+
+  const config = readModelRegistryConfig();
+  const modelVersion = String(payload?.modelVersion || "").trim() || incrementModelVersion(config.activeModelVersion);
+  const description = String(payload?.description || "").trim() || `Tennis classifier ${modelVersion}`;
+  const archivePaths = buildTennisModelArchivePaths(modelVersion);
+
+  const [existingVersion] = await db
+    .select()
+    .from(modelTrainingJobs)
+    .where(
+      and(
+        eq(modelTrainingJobs.sportName, "tennis"),
+        eq(modelTrainingJobs.modelFamily, TENNIS_MOVEMENT_MODEL_FAMILY),
+        eq(modelTrainingJobs.savedModelVersion, modelVersion),
+      ),
+    )
+    .limit(1);
+  if (existingVersion || fs.existsSync(archivePaths.modelPath)) {
+    throw new Error(`Model version ${modelVersion} already exists. Choose a new version before saving.`);
+  }
+
+  await fs.promises.mkdir(TENNIS_MODEL_VERSION_ARCHIVE_DIR, { recursive: true });
+  await fs.promises.copyFile(modelPath, archivePaths.modelPath);
+  const artifactInfo = await publishClassificationModelArtifacts({
+    modelVersion,
+    activeModelPath: modelPath,
+    versionModelPath: archivePaths.modelPath,
+  });
+
+  const nextMetadata = {
+    ...(latestRun.metadata && typeof latestRun.metadata === "object" ? latestRun.metadata as Record<string, unknown> : {}),
+    modelVersion,
+    versionDescription: description,
+    savedAt: new Date().toISOString(),
+    modelArtifactPath: artifactInfo.primaryReference,
+    modelArtifacts: {
+      classification: {
+        storageMode: artifactInfo.storageMode,
+        localVersionPath: artifactInfo.localVersionPath,
+        localActivePath: artifactInfo.localActivePath,
+        ...(artifactInfo.versionR2Key ? { versionR2Key: artifactInfo.versionR2Key } : {}),
+        ...(artifactInfo.versionR2Reference ? { versionR2Reference: artifactInfo.versionR2Reference } : {}),
+        ...(artifactInfo.activeR2Key ? { activeR2Key: artifactInfo.activeR2Key } : {}),
+        ...(artifactInfo.activeR2Reference ? { activeR2Reference: artifactInfo.activeR2Reference } : {}),
+      },
+    },
+  };
+
+  await updateModelTrainingJob(latestRun.jobId, actorUserId, {
+    savedModelVersion: modelVersion,
+    savedModelArtifactPath: artifactInfo.primaryReference,
+    savedAt: new Date(),
+    versionDescription: description,
+    metadata: nextMetadata,
+  });
+
+  await writeModelRegistryConfig({
+    activeModelVersion: modelVersion,
+    modelVersionChangeDescription: description,
+    evaluationDatasetManifestPath: "database://model-registry",
+  }, actorUserId);
+
+  return getTennisTrainingStatus();
 }
 
 async function resolveUserDominantProfile(userId?: string | null): Promise<string | null> {
@@ -463,6 +1453,125 @@ function normalizeFilterToken(value: unknown): string {
     .toLowerCase()
     .replace(/[_\s]+/g, "-")
     .replace(/-+/g, "-");
+}
+
+function toFixedPercent(count: number, total: number): number {
+  if (!Number.isFinite(count) || !Number.isFinite(total) || total <= 0) return 0;
+  return Number(((count / total) * 100).toFixed(1));
+}
+
+function normalizeTennisSessionType(value: unknown): "practice" | "match-play" {
+  return normalizeFilterToken(value) === "match-play" ? "match-play" : "practice";
+}
+
+function buildInsightDistribution(
+  counts: Map<string, number>,
+  total: number,
+  labels: readonly string[],
+): TennisDatasetInsightDistribution[] {
+  return labels.map((label) => ({
+    label,
+    count: Number(counts.get(label) || 0),
+    pct: toFixedPercent(Number(counts.get(label) || 0), total),
+  }));
+}
+
+function getPrimaryInsightLabel(labels: string[]): string {
+  const counts = new Map<string, number>();
+  for (const rawLabel of labels) {
+    const label = normalizeShotLabel(rawLabel);
+    if (!TENNIS_DATASET_INSIGHT_LABELS.includes(label as typeof TENNIS_DATASET_INSIGHT_LABELS[number])) {
+      continue;
+    }
+    counts.set(label, Number(counts.get(label) || 0) + 1);
+  }
+
+  const sorted = Array.from(counts.entries()).sort((left, right) => {
+    if (right[1] !== left[1]) return right[1] - left[1];
+    return TENNIS_DATASET_INSIGHT_LABELS.indexOf(left[0] as typeof TENNIS_DATASET_INSIGHT_LABELS[number])
+      - TENNIS_DATASET_INSIGHT_LABELS.indexOf(right[0] as typeof TENNIS_DATASET_INSIGHT_LABELS[number]);
+  });
+
+  return sorted[0]?.[0] || "unknown";
+}
+
+function numberOrNull(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseDateFilterBoundary(value: unknown, boundary: "start" | "end"): Date | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const dateOnlyMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnlyMatch) {
+    const normalized = boundary === "start"
+      ? `${raw}T00:00:00.000Z`
+      : `${raw}T23:59:59.999Z`;
+    const parsed = new Date(normalized);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getRouteParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? String(value[0] || "") : String(value || "");
+}
+
+function buildTennisDatasetInsightSuggestions(payload: {
+  currentDataset: {
+    videoDistribution: TennisDatasetInsightDistribution[];
+    shotDistribution: TennisDatasetInsightDistribution[];
+    sessionTypeDistribution: TennisDatasetInsightSessionDistribution[];
+  };
+  activeModel: null | {
+    macroF1: number | null;
+    perLabel: Array<{ label: string; f1: number | null }>;
+  };
+}): string[] {
+  const suggestions: string[] = [];
+  const practiceShare = payload.currentDataset.sessionTypeDistribution.find((item) => item.label === "practice")?.pct || 0;
+  const matchPlayShare = payload.currentDataset.sessionTypeDistribution.find((item) => item.label === "match-play")?.pct || 0;
+
+  if (practiceShare >= 70) {
+    suggestions.push("Current training pool is practice-heavy. Add more annotated match-play videos so the classifier sees live-point stroke variation.");
+  } else if (matchPlayShare >= 70) {
+    suggestions.push("Current training pool is match-play-heavy. Add a few focused drill videos to sharpen single-stroke examples.");
+  }
+
+  const underrepresentedVideoLabels = payload.currentDataset.videoDistribution
+    .filter((item) => item.pct > 0 && item.pct < 15)
+    .map((item) => item.label);
+  if (underrepresentedVideoLabels.length > 0) {
+    suggestions.push(`Video coverage is thin for ${underrepresentedVideoLabels.join(", ")}. Prioritize new uploads there before the next retrain.`);
+  }
+
+  const underrepresentedShotLabels = payload.currentDataset.shotDistribution
+    .filter((item) => item.pct > 0 && item.pct < 10)
+    .map((item) => item.label);
+  if (underrepresentedShotLabels.length > 0) {
+    suggestions.push(`Shot-level balance is light for ${underrepresentedShotLabels.join(", ")}. More labels in those classes should reduce class skew.`);
+  }
+
+  if (payload.activeModel?.macroF1 != null && payload.activeModel.macroF1 < 0.8) {
+    suggestions.push("Active model Macro F1 is below 80%. Rebalance the dataset, then retrain and compare per-label results before saving the next version.");
+  }
+
+  const weakestLabel = (payload.activeModel?.perLabel || [])
+    .filter((item) => item.f1 != null)
+    .sort((left, right) => Number(left.f1 || 0) - Number(right.f1 || 0))[0];
+  if (weakestLabel?.f1 != null && weakestLabel.f1 < 0.7) {
+    suggestions.push(`Per-label quality is weakest on ${weakestLabel.label}. Review annotation consistency there and add more examples before promoting another version.`);
+  }
+
+  if (suggestions.length === 0) {
+    suggestions.push("Dataset balance and active-model quality look reasonable. Keep adding fresh annotated videos and recheck after each saved version.");
+  }
+
+  return suggestions.slice(0, 4);
 }
 
 function readSubScoreValue(scoreOutputs: unknown, key: string): number | null {
@@ -1175,7 +2284,6 @@ function computeSummarySectionScores(
   };
 }
 
-const MODEL_EVALUATION_MODE_KEY = "modelEvaluationMode";
 const VIDEO_VALIDATION_MODE_KEY = "videoValidationMode";
 const ANALYSIS_FPS_MODE_KEY = "analysisFpsMode";
 
@@ -1221,12 +2329,6 @@ function coerceHighImpactStep(value: unknown): AnalysisFpsStep {
     return "step1";
   }
   return "step1";
-}
-
-function getModelEvaluationModeKey(userId?: string): string {
-  const uid = String(userId || "").trim();
-  if (!uid) return MODEL_EVALUATION_MODE_KEY;
-  return `${MODEL_EVALUATION_MODE_KEY}:${uid}`;
 }
 
 type SkeletonLandmark = {
@@ -1635,46 +2737,6 @@ type ScoringModelDashboard = {
   datasetMetrics: ScoringModelDatasetMetric[];
 };
 
-async function getModelEvaluationMode(userId?: string): Promise<boolean> {
-  const scopedKey = getModelEvaluationModeKey(userId);
-  const [scopedSetting] = await db
-    .select()
-    .from(appSettings)
-    .where(eq(appSettings.key, scopedKey))
-    .limit(1);
-
-  if (scopedSetting?.value && typeof scopedSetting.value === "object") {
-    return Boolean((scopedSetting.value as Record<string, unknown>).enabled);
-  }
-
-  // Backward compatibility with legacy global key.
-  const [legacySetting] = await db
-    .select()
-    .from(appSettings)
-    .where(eq(appSettings.key, MODEL_EVALUATION_MODE_KEY))
-    .limit(1);
-
-  if (!legacySetting?.value || typeof legacySetting.value !== "object") return false;
-  return Boolean((legacySetting.value as Record<string, unknown>).enabled);
-}
-
-async function setModelEvaluationMode(enabled: boolean, userId?: string, actorUserId?: string | null): Promise<void> {
-  await db
-    .insert(appSettings)
-    .values({
-      key: getModelEvaluationModeKey(userId),
-      value: { enabled },
-      ...buildInsertAuditFields(actorUserId || userId),
-    })
-    .onConflictDoUpdate({
-      target: appSettings.key,
-      set: {
-        value: { enabled },
-        ...buildUpdateAuditFields(actorUserId || userId),
-      },
-    });
-}
-
 async function getVideoValidationMode(actorUserId?: string | null): Promise<VideoValidationMode> {
   const [setting] = await db
     .select()
@@ -1841,9 +2903,9 @@ function getEvaluationMatch(
 
   const keys = [
     sourceFilename,
-    sourceFilename ? `model_evaluation_datasets/dataset/${sourceFilename}` : "",
+    path.basename(sourceFilename),
     videoFilename,
-    videoFilename ? `model_evaluation_datasets/dataset/${videoFilename}` : "",
+    path.basename(videoFilename),
   ].filter(Boolean);
 
   for (const key of keys) {
@@ -2226,32 +3288,6 @@ async function ensureAuditMetadataBackfill(): Promise<void> {
   `);
 
   await db.execute(sql`
-    update scoring_model_registry_entries
-    set
-      updated_at = coalesce(updated_at, created_at, now()),
-      updated_by_user_id = coalesce(updated_by_user_id, created_by_user_id)
-    where updated_at is null
-       or updated_by_user_id is null
-  `);
-
-  await db.execute(sql`
-    update scoring_model_registry_dataset_metrics as dm
-    set
-      created_at = coalesce(dm.created_at, dm.updated_at, re.created_at, now()),
-      updated_at = coalesce(dm.updated_at, dm.created_at, re.updated_at, re.created_at, now()),
-      created_by_user_id = coalesce(dm.created_by_user_id, re.created_by_user_id),
-      updated_by_user_id = coalesce(dm.updated_by_user_id, dm.created_by_user_id, re.updated_by_user_id, re.created_by_user_id)
-    from scoring_model_registry_entries as re
-    where dm.registry_entry_id = re.id
-      and (
-        dm.created_at is null
-        or dm.updated_at is null
-        or dm.created_by_user_id is null
-        or dm.updated_by_user_id is null
-      )
-  `);
-
-  await db.execute(sql`
     update sport_category_metric_ranges
     set
       created_at = coalesce(created_at, updated_at, now()),
@@ -2517,47 +3553,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await ensureVideoStorageModeSetting();
 
   await db.execute(sql`
-    create table if not exists scoring_model_registry_entries (
-      id varchar primary key default gen_random_uuid(),
-      model_version varchar not null,
-      model_version_description text not null,
-      movement_type text not null,
-      movement_detection_accuracy_pct real not null,
-      scoring_accuracy_pct real not null,
-      datasets_used jsonb not null default '[]'::jsonb,
-      manifest_model_version varchar not null default '0.1',
-      manifest_datasets jsonb not null default '[]'::jsonb,
-      created_by_user_id varchar references users(id),
-      updated_by_user_id varchar references users(id),
-      created_at timestamp not null default now(),
-      updated_at timestamp not null default now()
-    )
-  `);
-
-  await db.execute(sql`alter table scoring_model_registry_entries add column if not exists updated_by_user_id varchar`);
-  await db.execute(sql`alter table scoring_model_registry_entries add column if not exists updated_at timestamp default now()`);
-
-  await db.execute(sql`
-    create table if not exists scoring_model_registry_dataset_metrics (
-      id varchar primary key default gen_random_uuid(),
-      registry_entry_id varchar not null references scoring_model_registry_entries(id),
-      dataset_name text not null,
-      movement_type text not null,
-      movement_detection_accuracy_pct real not null,
-      scoring_accuracy_pct real not null,
-      created_at timestamp not null default now(),
-      updated_at timestamp not null default now(),
-      created_by_user_id varchar,
-      updated_by_user_id varchar
-    )
-  `);
-
-  await db.execute(sql`alter table scoring_model_registry_dataset_metrics add column if not exists created_at timestamp default now()`);
-  await db.execute(sql`alter table scoring_model_registry_dataset_metrics add column if not exists updated_at timestamp default now()`);
-  await db.execute(sql`alter table scoring_model_registry_dataset_metrics add column if not exists created_by_user_id varchar`);
-  await db.execute(sql`alter table scoring_model_registry_dataset_metrics add column if not exists updated_by_user_id varchar`);
-
-  await db.execute(sql`
     create table if not exists sport_category_metric_ranges (
       id varchar primary key default gen_random_uuid(),
       sport_name text not null,
@@ -2592,8 +3587,357 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   await db.execute(sql`alter table metrics add column if not exists model_version varchar not null default '0.1'`);
   await db.execute(sql`alter table analysis_shot_discrepancies add column if not exists model_version varchar not null default '0.1'`);
-  await db.execute(sql`alter table scoring_model_registry_entries add column if not exists manifest_model_version varchar not null default '0.1'`);
-  await db.execute(sql`alter table scoring_model_registry_entries add column if not exists manifest_datasets jsonb not null default '[]'::jsonb`);
+  await db.execute(sql`drop table if exists scoring_model_registry_dataset_metrics`);
+  await db.execute(sql`drop table if exists scoring_model_registry_entries`);
+
+  await db.execute(sql`
+    create table if not exists model_registry_versions (
+      id varchar primary key default gen_random_uuid(),
+      model_version varchar not null unique,
+      description text not null default '',
+      status varchar not null default 'draft',
+      activated_at timestamp,
+      activated_by_user_id varchar references users(id),
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar references users(id),
+      updated_by_user_id varchar references users(id)
+    )
+  `);
+
+  await db.execute(sql`
+    create table if not exists model_registry_datasets (
+      id varchar primary key default gen_random_uuid(),
+      name text not null unique,
+      description text not null default '',
+      source text not null default 'manual-annotation',
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar references users(id),
+      updated_by_user_id varchar references users(id)
+    )
+  `);
+
+  await db.execute(sql`
+    create table if not exists model_registry_dataset_items (
+      id varchar primary key default gen_random_uuid(),
+      dataset_id varchar not null references model_registry_datasets(id),
+      analysis_id varchar not null references analyses(id),
+      annotator_user_id varchar references users(id),
+      expected_movement text not null,
+      evaluation_video_id text,
+      source_filename text,
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar references users(id),
+      updated_by_user_id varchar references users(id)
+    )
+  `);
+
+  await db.execute(sql`
+    create unique index if not exists model_registry_dataset_items_dataset_analysis_uq
+    on model_registry_dataset_items (dataset_id, analysis_id)
+  `);
+
+  await db.execute(sql`
+    create index if not exists model_registry_dataset_items_analysis_idx
+    on model_registry_dataset_items (analysis_id)
+  `);
+
+  await db.execute(sql`
+    create table if not exists model_training_datasets (
+      id varchar primary key default gen_random_uuid(),
+      model_family text not null,
+      sport_name text not null default 'tennis',
+      dataset_name text not null,
+      source text not null default 'manual-annotation',
+      analysis_count integer not null default 0,
+      row_count integer not null default 0,
+      notes text,
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar references users(id),
+      updated_by_user_id varchar references users(id)
+    )
+  `);
+
+  await db.execute(sql`
+    create table if not exists model_training_dataset_rows (
+      id varchar primary key default gen_random_uuid(),
+      dataset_id varchar not null references model_training_datasets(id),
+      analysis_id varchar not null references analyses(id),
+      user_id varchar references users(id),
+      video_filename text not null,
+      shot_index integer not null,
+      group_key text not null,
+      label text not null,
+      heuristic_label text,
+      heuristic_confidence real,
+      heuristic_reasons jsonb not null default '[]'::jsonb,
+      feature_values jsonb not null default '{}'::jsonb,
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar references users(id),
+      updated_by_user_id varchar references users(id)
+    )
+  `);
+
+  await db.execute(sql`
+    create index if not exists model_training_dataset_rows_dataset_idx
+    on model_training_dataset_rows (dataset_id, shot_index)
+  `);
+
+  await db.execute(sql`
+    do $$
+    begin
+      if to_regclass('public.tennis_training_datasets') is not null then
+        insert into model_training_datasets (
+          id,
+          model_family,
+          sport_name,
+          dataset_name,
+          source,
+          analysis_count,
+          row_count,
+          notes,
+          created_at,
+          updated_at,
+          created_by_user_id,
+          updated_by_user_id
+        )
+        select
+          legacy.id,
+          'movement-classifier',
+          legacy.sport_name,
+          legacy.dataset_name,
+          legacy.source,
+          legacy.analysis_count,
+          legacy.row_count,
+          legacy.notes,
+          legacy.created_at,
+          legacy.updated_at,
+          legacy.created_by_user_id,
+          legacy.updated_by_user_id
+        from tennis_training_datasets legacy
+        where not exists (
+          select 1
+          from model_training_datasets datasets
+          where datasets.id = legacy.id
+        );
+      end if;
+    end $$;
+  `);
+
+  await db.execute(sql`
+    do $$
+    begin
+      if to_regclass('public.tennis_training_dataset_rows') is not null then
+        insert into model_training_dataset_rows (
+          id,
+          dataset_id,
+          analysis_id,
+          user_id,
+          video_filename,
+          shot_index,
+          group_key,
+          label,
+          heuristic_label,
+          heuristic_confidence,
+          heuristic_reasons,
+          feature_values,
+          created_at,
+          updated_at,
+          created_by_user_id,
+          updated_by_user_id
+        )
+        select
+          legacy.id,
+          legacy.dataset_id,
+          legacy.analysis_id,
+          legacy.user_id,
+          legacy.video_filename,
+          legacy.shot_index,
+          legacy.group_key,
+          legacy.label,
+          legacy.heuristic_label,
+          legacy.heuristic_confidence,
+          legacy.heuristic_reasons,
+          legacy.feature_values,
+          legacy.created_at,
+          legacy.updated_at,
+          legacy.created_by_user_id,
+          legacy.updated_by_user_id
+        from tennis_training_dataset_rows legacy
+        where not exists (
+          select 1
+          from model_training_dataset_rows rows
+          where rows.id = legacy.id
+        );
+      end if;
+    end $$;
+  `);
+
+  await db.execute(sql`
+    create table if not exists model_training_jobs (
+      id varchar primary key default gen_random_uuid(),
+      job_id varchar not null unique,
+      model_family text not null,
+      sport_name text not null default 'tennis',
+      status varchar not null,
+      dataset_id text,
+      eligible_analysis_count integer not null default 0,
+      eligible_shot_count integer not null default 0,
+      export_rows integer,
+      train_rows integer,
+      test_rows integer,
+      macro_f1 real,
+      model_output_path text,
+      metadata jsonb,
+      report jsonb,
+      requested_at timestamp not null default now(),
+      started_at timestamp,
+      completed_at timestamp,
+      requested_by_user_id varchar references users(id),
+      saved_model_version varchar,
+      saved_model_artifact_path text,
+      saved_at timestamp,
+      version_description text,
+      error text,
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar references users(id),
+      updated_by_user_id varchar references users(id)
+    )
+  `);
+
+  await db.execute(sql`
+    create index if not exists model_training_jobs_family_sport_status_idx
+    on model_training_jobs (model_family, sport_name, status, completed_at)
+  `);
+
+  await db.execute(sql`
+    create table if not exists model_training_state (
+      id varchar primary key default gen_random_uuid(),
+      model_family text not null,
+      sport_name text not null default 'tennis',
+      current_job_id varchar,
+      created_at timestamp not null default now(),
+      updated_at timestamp not null default now(),
+      created_by_user_id varchar references users(id),
+      updated_by_user_id varchar references users(id)
+    )
+  `);
+
+  await db.execute(sql`
+    create unique index if not exists model_training_state_scope_idx
+    on model_training_state (sport_name, model_family)
+  `);
+
+  await db.execute(sql`
+    do $$
+    begin
+      if to_regclass('public.tennis_model_training_runs') is not null then
+        insert into model_training_jobs (
+          id,
+          job_id,
+          model_family,
+          sport_name,
+          status,
+          dataset_id,
+          eligible_analysis_count,
+          eligible_shot_count,
+          export_rows,
+          train_rows,
+          test_rows,
+          macro_f1,
+          model_output_path,
+          metadata,
+          report,
+          requested_at,
+          started_at,
+          completed_at,
+          requested_by_user_id,
+          saved_model_version,
+          saved_model_artifact_path,
+          saved_at,
+          version_description,
+          error,
+          created_at,
+          updated_at,
+          created_by_user_id,
+          updated_by_user_id
+        )
+        select
+          legacy.id,
+          legacy.job_id,
+          'movement-classifier',
+          legacy.sport_name,
+          legacy.status,
+          legacy.dataset_id::text,
+          legacy.eligible_analysis_count,
+          legacy.eligible_shot_count,
+          legacy.export_rows,
+          legacy.train_rows,
+          legacy.test_rows,
+          legacy.macro_f1,
+          legacy.model_output_path,
+          legacy.metadata,
+          legacy.report,
+          legacy.requested_at,
+          legacy.started_at,
+          legacy.completed_at,
+          legacy.requested_by_user_id,
+          legacy.saved_model_version,
+          legacy.saved_model_artifact_path,
+          legacy.saved_at,
+          legacy.version_description,
+          legacy.error,
+          legacy.created_at,
+          legacy.updated_at,
+          legacy.created_by_user_id,
+          legacy.updated_by_user_id
+        from tennis_model_training_runs legacy
+        where not exists (
+          select 1
+          from model_training_jobs jobs
+          where jobs.job_id = legacy.job_id
+        );
+      end if;
+    end $$;
+  `);
+
+  await db.execute(sql`
+    insert into model_training_state (
+      model_family,
+      sport_name,
+      current_job_id,
+      created_at,
+      updated_at,
+      created_by_user_id,
+      updated_by_user_id
+    )
+    select
+      'movement-classifier',
+      'tennis',
+      nullif(app_settings.value->>'currentJobId', ''),
+      now(),
+      now(),
+      app_settings.created_by_user_id,
+      app_settings.updated_by_user_id
+    from app_settings
+    where app_settings.key = 'tennisModelTrainingState'
+      and not exists (
+        select 1
+        from model_training_state state
+        where state.sport_name = 'tennis'
+          and state.model_family = 'movement-classifier'
+      )
+  `);
+
+  await db.execute(sql`
+    delete from app_settings
+    where key = 'tennisModelTrainingState'
+  `);
 
   await db.execute(sql`alter table analyses add column if not exists captured_at timestamp`);
   await db.execute(sql`alter table analyses add column if not exists source_filename text`);
@@ -2617,6 +3961,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`alter table analyses add column if not exists gps_accuracy_m real`);
   await db.execute(sql`alter table analyses add column if not exists gps_timestamp timestamp`);
   await db.execute(sql`alter table analyses add column if not exists gps_source text`);
+
+  await initializeModelRegistryCache();
+  await db.execute(sql`
+    delete from app_settings
+    where key = 'modelEvaluationMode'
+       or key like 'modelEvaluationMode:%'
+  `);
   await db.execute(sql`alter table analyses add column if not exists requested_session_type text`);
   await db.execute(sql`alter table analyses add column if not exists requested_focus_key text`);
 
@@ -2671,29 +4022,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/model-evaluation/settings", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const userId = req.session.userId!;
-      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
-      const isAdmin = currentUser?.role === "admin";
-      const enabled = await getModelEvaluationMode(userId);
-      const modelConfig = readModelRegistryConfig();
-      const manifest = readEvaluationDatasetManifest(modelConfig);
-      const totalVideos = manifest.datasets.reduce((sum, dataset) => sum + dataset.videos.length, 0);
-
-      res.json({
-        enabled,
-        isAdmin,
-        modelVersion: modelConfig.activeModelVersion,
-        modelVersionChangeDescription: modelConfig.modelVersionChangeDescription,
-        datasetCount: manifest.datasets.length,
-        totalVideos,
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   app.get("/api/model-registry/config", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
@@ -2702,9 +4030,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Admin access required" });
       }
 
-      const config = readModelRegistryConfig();
-      const manifestValidation = validateEvaluationDatasetManifest(config);
-      res.json({ ...config, manifestValidation });
+      const overview = getModelRegistryOverview();
+      res.json({
+        ...overview.config,
+        storage: overview.storage,
+        versions: overview.versions,
+        datasets: overview.datasets,
+        manifestValidation: overview.validation,
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -2720,22 +4053,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const activeModelVersion = String(req.body?.activeModelVersion || "").trim();
       const modelVersionChangeDescription = String(req.body?.modelVersionChangeDescription || "").trim();
-      const evaluationDatasetManifestPath = String(req.body?.evaluationDatasetManifestPath || "").trim();
-
       if (!activeModelVersion) {
         return res.status(400).json({ error: "activeModelVersion is required" });
       }
-      if (!evaluationDatasetManifestPath) {
-        return res.status(400).json({ error: "evaluationDatasetManifestPath is required" });
-      }
 
-      const next = writeModelRegistryConfig({
+      const next = await writeModelRegistryConfig({
         activeModelVersion,
         modelVersionChangeDescription,
-        evaluationDatasetManifestPath,
+        evaluationDatasetManifestPath:
+          String(req.body?.evaluationDatasetManifestPath || "").trim() || "database://model-registry",
+      }, userId);
+      const overview = getModelRegistryOverview();
+      res.json({
+        ...next,
+        storage: overview.storage,
+        versions: overview.versions,
+        datasets: overview.datasets,
+        manifestValidation: overview.validation,
       });
-      const manifestValidation = validateEvaluationDatasetManifest(next);
-      res.json({ ...next, manifestValidation });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -2754,23 +4089,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         config,
         validation,
+        datasets: getModelRegistryOverview().datasets,
       });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.put("/api/model-evaluation/settings", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const userId = req.session.userId!;
-      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
-      if (currentUser?.role !== "admin") {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-
-      const enabled = Boolean(req.body?.enabled);
-      await setModelEvaluationMode(enabled, userId, userId);
-      res.json({ enabled });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -2789,6 +4109,115 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mode: await getVideoStorageMode(),
         isAdmin,
       });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/platform/pose-landmarker-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      res.json({
+        model: await getPoseLandmarkerModel(userId),
+        isAdmin,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  const handleDriveMovementClassificationModelSettingsGet = async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      const isAdmin = currentUser?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const settings = await getDriveMovementClassificationModelSettings(userId);
+      res.json({
+        ...settings,
+        isAdmin,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+  app.get("/api/platform/drive-movement-classification-model-settings", requireAuth, handleDriveMovementClassificationModelSettingsGet);
+  app.get("/api/platform/classification-model-settings", requireAuth, handleDriveMovementClassificationModelSettingsGet);
+
+  const handleDriveMovementClassificationModelSettingsPut = async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const modelKey = String(req.body?.modelKey || "").trim();
+      if (!modelKey) {
+        return res.status(400).json({ error: "modelKey is required" });
+      }
+
+      await setDriveMovementClassificationModelSelection(modelKey, userId);
+      res.json({ modelKey });
+    } catch (error: any) {
+      if (String(error?.message || "") === "Unknown drive movement classification model") {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+  app.put("/api/platform/drive-movement-classification-model-settings", requireAuth, handleDriveMovementClassificationModelSettingsPut);
+  app.put("/api/platform/classification-model-settings", requireAuth, handleDriveMovementClassificationModelSettingsPut);
+
+  const handleDriveMovementClassificationModelOptionsPut = async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const rawOptions = Array.isArray(req.body?.options) ? req.body.options : null;
+      if (!rawOptions) {
+        return res.status(400).json({ error: "options must be an array" });
+      }
+
+      const options = await setDriveMovementClassificationModelOptions(rawOptions, userId);
+      res.json({ options });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+  app.put("/api/platform/drive-movement-classification-model-settings/options", requireAuth, handleDriveMovementClassificationModelOptionsPut);
+  app.put("/api/platform/classification-model-settings/options", requireAuth, handleDriveMovementClassificationModelOptionsPut);
+
+  app.put("/api/platform/pose-landmarker-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const model = String(req.body?.model || "").trim().toLowerCase();
+      if (!isPoseLandmarkerModel(model)) {
+        return res.status(400).json({ error: "model must be one of lite, full, or heavy" });
+      }
+
+      await setPoseLandmarkerModel(model, userId);
+      res.json({ model });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -2913,7 +4342,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const enabled = Boolean(req.body?.enabled);
-      const sport = await getSportById(req.params.sportId);
+  const sportId = getRouteParam(req.params.sportId);
+  const sport = await getSportById(sportId);
       if (!sport) {
         return res.status(404).json({ error: "Sport not found" });
       }
@@ -2974,516 +4404,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
         String(req.query.playerId || ""),
       );
 
-      res.json({
-        ...dashboard,
-        modelEvaluationMode: await getModelEvaluationMode(userId),
-      });
+      res.json(dashboard);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/scoring-model/registry/save", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/model-training/tennis", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
-      const isAdmin = currentUser?.role === "admin";
-      if (!isAdmin) {
+      if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
 
-      const evaluationModeEnabled = await getModelEvaluationMode(userId);
-      if (!evaluationModeEnabled) {
-        return res.status(400).json({ error: "Model Evaluation Mode must be enabled" });
-      }
-
-      const dashboard = await buildScoringModelDashboard(
-        userId,
-        true,
-        String(req.body?.movementName || req.query.movementName || ""),
-        String(req.body?.playerId || req.query.playerId || ""),
-      );
-      const configBeforeSave = readModelRegistryConfig();
-      const manifestBeforeSave = readEvaluationDatasetManifest(configBeforeSave);
-      const manifestModelVersion = String(
-        manifestBeforeSave.activeModelVersion || configBeforeSave.activeModelVersion || dashboard.modelVersion,
-      ).trim();
-
-      const [entry] = await db
-        .insert(scoringModelRegistryEntries)
-        .values({
-          modelVersion: dashboard.modelVersion,
-          modelVersionDescription: dashboard.modelVersionDescription,
-          movementType: dashboard.movementType,
-          movementDetectionAccuracyPct: dashboard.movementDetectionAccuracyPct,
-          scoringAccuracyPct: dashboard.scoringAccuracyPct,
-          datasetsUsed: dashboard.datasetsUsed,
-          manifestModelVersion,
-          manifestDatasets: manifestBeforeSave.datasets,
-          createdByUserId: userId,
-          updatedByUserId: userId,
-          ...buildInsertAuditFields(userId),
-        })
-        .returning();
-
-      if (dashboard.datasetMetrics.length > 0) {
-        await db.insert(scoringModelRegistryDatasetMetrics).values(
-          dashboard.datasetMetrics.map((metric) => ({
-            registryEntryId: entry.id,
-            datasetName: metric.datasetName,
-            movementType: metric.movementType,
-            movementDetectionAccuracyPct: metric.movementDetectionAccuracyPct,
-            scoringAccuracyPct: metric.scoringAccuracyPct,
-            ...buildInsertAuditFields(userId),
-          })),
-        );
-      }
-
-      const nextModelVersion = incrementModelVersion(dashboard.modelVersion);
-      const nextConfig = writeModelRegistryConfig({
-        ...configBeforeSave,
-        activeModelVersion: nextModelVersion,
-      });
-      updateManifestActiveModelVersion(nextModelVersion, nextConfig);
-
-      res.json({ id: entry.id, saved: true, nextModelVersion });
+      res.json(await getTennisTrainingStatus());
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/scoring-model/registry", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/model-training/tennis/dataset-insights", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
-      const isAdmin = currentUser?.role === "admin";
-
-      if (!isAdmin) {
+      if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
 
-      const entries = await db
-        .select()
-        .from(scoringModelRegistryEntries)
-        .orderBy(desc(scoringModelRegistryEntries.createdAt))
-        .limit(100);
-
-      const entryIds = entries.map((entry) => entry.id);
-      const datasetMetrics = entryIds.length
-        ? await db
-            .select()
-            .from(scoringModelRegistryDatasetMetrics)
-            .where(inArray(scoringModelRegistryDatasetMetrics.registryEntryId, entryIds))
-        : [];
-
-      const metricsByEntry = new Map<string, typeof datasetMetrics>();
-      for (const metric of datasetMetrics) {
-        const current = metricsByEntry.get(metric.registryEntryId) || [];
-        current.push(metric);
-        metricsByEntry.set(metric.registryEntryId, current);
-      }
-
-      const analysisRows = await db
-        .select({
-          analysis: analyses,
-        })
-        .from(analyses)
-        .orderBy(desc(analyses.createdAt));
-
-      const normalizeFilenameToken = (value: string): string => {
-        return path.basename(String(value || "").trim()).toLowerCase();
-      };
-
-      const selectedAnalysisIdsByEntry = new Map<string, string[]>();
-      const allSelectedAnalysisIds = new Set<string>();
-
-      for (const entry of entries) {
-        const manifestDatasets = Array.isArray(entry.manifestDatasets)
-          ? entry.manifestDatasets
-          : [];
-
-        const manifestVideos = manifestDatasets.flatMap((dataset: any) => {
-          const videos = Array.isArray(dataset?.videos) ? dataset.videos : [];
-          return videos.map((video: any) => ({
-            videoId: String(video?.videoId || "").trim(),
-            filename: String(video?.filename || "").trim(),
-          }));
-        });
-
-        const selectedIds = new Set<string>();
-        for (const manifestVideo of manifestVideos) {
-          const manifestVideoId = manifestVideo.videoId;
-          const manifestFilenameBase = normalizeFilenameToken(manifestVideo.filename);
-
-          const match = analysisRows.find((row) => {
-            const analysisVideoId = String(row.analysis.evaluationVideoId || "").trim();
-            if (manifestVideoId && analysisVideoId && analysisVideoId === manifestVideoId) {
-              return true;
-            }
-
-            const sourceFilenameBase = normalizeFilenameToken(String(row.analysis.sourceFilename || ""));
-            const videoFilenameBase = normalizeFilenameToken(String(row.analysis.videoFilename || ""));
-
-            return (
-              !!manifestFilenameBase
-              && (sourceFilenameBase === manifestFilenameBase || videoFilenameBase === manifestFilenameBase)
-            );
-          });
-
-          if (match?.analysis?.id) {
-            selectedIds.add(match.analysis.id);
-          }
-        }
-
-        const ids = Array.from(selectedIds);
-        selectedAnalysisIdsByEntry.set(entry.id, ids);
-        for (const id of ids) {
-          allSelectedAnalysisIds.add(id);
-        }
-      }
-
-      const selectedDiscrepancySnapshots = allSelectedAnalysisIds.size
-        ? await db
-            .select()
-            .from(analysisShotDiscrepancies)
-            .where(inArray(analysisShotDiscrepancies.analysisId, Array.from(allSelectedAnalysisIds)))
-        : [];
-
-      const historyByAnalysisId = new Map<string, Array<typeof analysisShotDiscrepancies.$inferSelect>>();
-      for (const snapshot of selectedDiscrepancySnapshots) {
-        const list = historyByAnalysisId.get(snapshot.analysisId) || [];
-        list.push(snapshot);
-        historyByAnalysisId.set(snapshot.analysisId, list);
-      }
-      for (const [analysisId, list] of historyByAnalysisId.entries()) {
-        historyByAnalysisId.set(
-          analysisId,
-          [...list].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
-        );
-      }
-
-      const modelVersions = Array.from(
-        new Set(entries.map((entry) => String(entry.modelVersion || "").trim()).filter(Boolean)),
-      );
-
-      const versionDiscrepancySnapshots = modelVersions.length
-        ? await db
-            .select()
-            .from(analysisShotDiscrepancies)
-            .where(inArray(analysisShotDiscrepancies.modelVersion, modelVersions))
-        : [];
-
-      const mismatchByVersion = new Map<string, { mismatches: number; manualShots: number }>();
-      for (const snapshot of versionDiscrepancySnapshots) {
-        const version = String(snapshot.modelVersion || "").trim();
-        if (!version) continue;
-        const current = mismatchByVersion.get(version) || { mismatches: 0, manualShots: 0 };
-        current.mismatches += Number(snapshot.mismatches || 0);
-        current.manualShots += Number(snapshot.manualShots || 0);
-        mismatchByVersion.set(version, current);
-      }
-
-      res.json(
-        entries.map((entry) => {
-          const targetVersion = String(entry.modelVersion || "").trim();
-          const selectedAnalysisIds = selectedAnalysisIdsByEntry.get(entry.id) || [];
-
-          let manifestManualShots = 0;
-          let manifestMismatches = 0;
-
-          for (const analysisId of selectedAnalysisIds) {
-            const history = historyByAnalysisId.get(analysisId) || [];
-            if (!history.length) continue;
-            const targetSnapshot = history.find(
-              (snapshot) => String(snapshot.modelVersion || "").trim() === targetVersion,
-            );
-            const snapshot = targetSnapshot || history[0];
-            manifestManualShots += Number(snapshot.manualShots || 0);
-            manifestMismatches += Number(snapshot.mismatches || 0);
-          }
-
-          const manifestMismatchRatePct = manifestManualShots > 0
-            ? Number(((manifestMismatches / manifestManualShots) * 100).toFixed(1))
-            : null;
-
-          const versionWide = mismatchByVersion.get(targetVersion);
-          const versionMismatchRatePct = versionWide && versionWide.manualShots > 0
-            ? Number(((versionWide.mismatches / versionWide.manualShots) * 100).toFixed(1))
-            : null;
-
-          const fallbackMismatchRatePct = Number(
-            (100 - Number(entry.scoringAccuracyPct || 0)).toFixed(1),
-          );
-
-          const mismatchRatePct =
-            manifestMismatchRatePct
-            ?? versionMismatchRatePct
-            ?? fallbackMismatchRatePct;
-
-          return {
-            ...entry,
-            mismatchRatePct: Math.max(0, Math.min(100, mismatchRatePct)),
-            datasetMetrics: metricsByEntry.get(entry.id) || [],
-          };
-        }),
-      );
+      res.json(await getTennisDatasetInsights({
+        playerId: req.query.playerId ? String(req.query.playerId) : null,
+        startDate: req.query.startDate ? String(req.query.startDate) : null,
+        endDate: req.query.endDate ? String(req.query.endDate) : null,
+      }));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/scoring-model/registry/:id", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/model-training/tennis/train", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
-      const isAdmin = currentUser?.role === "admin";
-
-      if (!isAdmin) {
+      if (currentUser?.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
       }
 
-      const [entry] = await db
-        .select()
-        .from(scoringModelRegistryEntries)
-        .where(eq(scoringModelRegistryEntries.id, req.params.id))
-        .limit(1);
-
-      if (!entry) {
-        return res.status(404).json({ error: "Registry entry not found" });
+      const status = await getTennisTrainingStatus();
+      if (status.currentJob && (status.currentJob.status === "queued" || status.currentJob.status === "running")) {
+        return res.status(409).json({ error: "A tennis training job is already running.", status });
       }
 
-      const datasetMetrics = await db
-        .select()
-        .from(scoringModelRegistryDatasetMetrics)
-        .where(eq(scoringModelRegistryDatasetMetrics.registryEntryId, entry.id));
+      const queuedStatus = await queueTennisTrainingJob(userId);
+      res.status(202).json(queuedStatus);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
 
-      const manifestDatasets = Array.isArray(entry.manifestDatasets)
-        ? entry.manifestDatasets
-        : [];
-      const manifestVideos = manifestDatasets.flatMap((dataset: any) => {
-        const datasetName = String(dataset?.name || "").trim();
-        const videos = Array.isArray(dataset?.videos) ? dataset.videos : [];
-        return videos.map((video: any) => ({
-          datasetName,
-          videoId: String(video?.videoId || "").trim(),
-          filename: String(video?.filename || "").trim(),
-          movementType: String(video?.movementType || "").trim(),
-        }));
-      });
-
-      const analysisRows = await db
-        .select({
-          analysis: analyses,
-          userName: users.name,
-        })
-        .from(analyses)
-        .leftJoin(users, eq(analyses.userId, users.id))
-        .orderBy(desc(analyses.createdAt));
-
-      const normalizeFilenameToken = (value: string): string => {
-        return path.basename(String(value || "").trim()).toLowerCase();
-      };
-
-      const selectedByAnalysisId = new Map<string, {
-        analysis: typeof analyses.$inferSelect;
-        userName: string | null;
-        movementType: string;
-      }>();
-
-      for (const manifestVideo of manifestVideos) {
-        const manifestVideoId = manifestVideo.videoId;
-        const manifestFilename = manifestVideo.filename;
-        const manifestFilenameBase = normalizeFilenameToken(manifestFilename);
-
-        const match = analysisRows.find((row) => {
-          const analysisVideoId = String(row.analysis.evaluationVideoId || "").trim();
-          if (manifestVideoId && analysisVideoId && analysisVideoId === manifestVideoId) {
-            return true;
-          }
-
-          const sourceFilenameBase = normalizeFilenameToken(String(row.analysis.sourceFilename || ""));
-          const videoFilenameBase = normalizeFilenameToken(String(row.analysis.videoFilename || ""));
-
-          return (
-            !!manifestFilenameBase
-            && (sourceFilenameBase === manifestFilenameBase || videoFilenameBase === manifestFilenameBase)
-          );
-        });
-
-        if (!match) continue;
-
-        if (!selectedByAnalysisId.has(match.analysis.id)) {
-          selectedByAnalysisId.set(match.analysis.id, {
-            analysis: match.analysis,
-            userName: match.userName || null,
-            movementType: manifestVideo.movementType,
-          });
-        }
+  app.post("/api/model-training/tennis/save-version", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
       }
 
-      const selectedRows = [...selectedByAnalysisId.values()];
-      const selectedAnalysisIds = selectedRows.map((row) => row.analysis.id);
-
-      const discrepancyRows = selectedAnalysisIds.length
-        ? await db
-            .select()
-            .from(analysisShotDiscrepancies)
-            .where(inArray(analysisShotDiscrepancies.analysisId, selectedAnalysisIds))
-        : [];
-
-      const discrepancyHistoryByAnalysisId = new Map<string, Array<typeof analysisShotDiscrepancies.$inferSelect>>();
-      for (const snapshot of discrepancyRows) {
-        const list = discrepancyHistoryByAnalysisId.get(snapshot.analysisId) || [];
-        list.push(snapshot);
-        discrepancyHistoryByAnalysisId.set(snapshot.analysisId, list);
-      }
-      for (const [analysisId, list] of discrepancyHistoryByAnalysisId.entries()) {
-        discrepancyHistoryByAnalysisId.set(
-          analysisId,
-          [...list].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
-        );
+      const status = await getTennisTrainingStatus();
+      if (status.currentJob && (status.currentJob.status === "queued" || status.currentJob.status === "running")) {
+        return res.status(409).json({ error: "Wait for the current tennis training job to finish before saving a version." });
       }
 
-      const snapshotsByAnalysisId = new Map<string, typeof analysisShotDiscrepancies.$inferSelect>();
-      for (const snapshot of discrepancyRows) {
-        const current = snapshotsByAnalysisId.get(snapshot.analysisId);
-        if (!current) {
-          snapshotsByAnalysisId.set(snapshot.analysisId, snapshot);
-          continue;
-        }
-
-        const currentIsTargetVersion = current.modelVersion === entry.modelVersion;
-        const nextIsTargetVersion = snapshot.modelVersion === entry.modelVersion;
-
-        if (!currentIsTargetVersion && nextIsTargetVersion) {
-          snapshotsByAnalysisId.set(snapshot.analysisId, snapshot);
-          continue;
-        }
-
-        if (currentIsTargetVersion && !nextIsTargetVersion) {
-          continue;
-        }
-
-        if (new Date(snapshot.updatedAt).getTime() > new Date(current.updatedAt).getTime()) {
-          snapshotsByAnalysisId.set(snapshot.analysisId, snapshot);
-        }
-      }
-
-      let filteredRows = selectedRows.map((row) => {
-        return {
-          analysis: row.analysis,
-          userName: row.userName,
-          movementType: row.movementType,
-          discrepancy: snapshotsByAnalysisId.get(row.analysis.id) || null,
-        };
-      });
-
-      if (filteredRows.length === 0) {
-        const fallbackRows = await db
-          .select({
-            discrepancy: analysisShotDiscrepancies,
-            analysis: analyses,
-            userName: users.name,
-          })
-          .from(analysisShotDiscrepancies)
-          .innerJoin(analyses, eq(analysisShotDiscrepancies.analysisId, analyses.id))
-          .leftJoin(users, eq(analyses.userId, users.id))
-          .where(eq(analysisShotDiscrepancies.modelVersion, entry.modelVersion))
-          .orderBy(
-            desc(analysisShotDiscrepancies.mismatchRatePct),
-            desc(analysisShotDiscrepancies.mismatches),
-            desc(analysisShotDiscrepancies.updatedAt),
-          );
-
-        filteredRows = fallbackRows.map((row) => ({
-          analysis: row.analysis,
-          userName: row.userName || null,
-          movementType: row.discrepancy.movementName,
-          discrepancy: row.discrepancy,
-        }));
-      }
-
-      const confusionMap = new Map<string, number>();
-      let totalManualShots = 0;
-      let totalMismatches = 0;
-      let videosWithDiscrepancy = 0;
-
-      const topVideos = filteredRows.map((row) => {
-        const manualShots = Number(row.discrepancy?.manualShots || 0);
-        const mismatches = Number(row.discrepancy?.mismatches || 0);
-        if (mismatches > 0) {
-          videosWithDiscrepancy += 1;
-        }
-
-        totalManualShots += manualShots;
-        totalMismatches += mismatches;
-
-        const confusionPairs = Array.isArray(row.discrepancy?.confusionPairs)
-          ? row.discrepancy?.confusionPairs
-          : [];
-        for (const pair of confusionPairs as Array<{ from?: string; to?: string; count?: number }>) {
-          const from = normalizeShotLabel(pair.from || "unknown");
-          const to = normalizeShotLabel(pair.to || "unknown");
-          const key = `${from}=>${to}`;
-          confusionMap.set(key, (confusionMap.get(key) || 0) + Number(pair.count || 0));
-        }
-
-        const createdAt = row.analysis.capturedAt || row.analysis.createdAt;
-        const snapshotHistory = discrepancyHistoryByAnalysisId.get(row.analysis.id) || [];
-        const currentModelVersion = String(row.discrepancy?.modelVersion || "").trim();
-        const previousSnapshot = snapshotHistory.find(
-          (snapshot) => String(snapshot.modelVersion || "").trim() !== currentModelVersion,
-        );
-        const currentMismatchRatePct = Number(row.discrepancy?.mismatchRatePct || 0);
-        const previousMismatchRatePct = Number(previousSnapshot?.mismatchRatePct || 0);
-        const mismatchDeltaPct = previousSnapshot
-          ? Number((currentMismatchRatePct - previousMismatchRatePct).toFixed(1))
-          : 0;
-        const isNewVideo = !previousSnapshot;
-
-        return {
-          analysisId: row.analysis.id,
-          videoName: row.analysis.videoFilename,
-          userName: row.userName || null,
-          createdAt: createdAt.toISOString(),
-          sportName: row.discrepancy?.sportName || "Tennis",
-          movementName: row.discrepancy?.movementName || row.movementType || row.analysis.detectedMovement || "unknown",
-          autoShots: Number(row.discrepancy?.autoShots || 0),
-          manualShots,
-          mismatches,
-          mismatchRatePct: currentMismatchRatePct,
-          mismatchDeltaPct,
-          isNewVideo,
-        };
-      });
-
-      const labelConfusions = Array.from(confusionMap.entries())
-        .map(([pair, count]) => {
-          const [from, to] = pair.split("=>");
-          return { from, to, count };
-        })
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 8);
-
-      const mismatchRatePct = Number(
-        ((totalMismatches / Math.max(totalManualShots, 1)) * 100).toFixed(1),
-      );
-
-      res.json({
-        ...entry,
-        datasetMetrics,
-        summary: {
-          videosAnnotated: filteredRows.length,
-          totalVideosConsidered: filteredRows.length,
-          videosWithDiscrepancy,
-          totalShots: totalManualShots,
-          totalManualShots,
-          totalMismatches,
-          mismatchRatePct,
-        },
-        topVideos,
-        labelConfusions,
-      });
+      res.json(await saveCurrentTennisModelVersion(userId, {
+        modelVersion: req.body?.modelVersion,
+        description: req.body?.description,
+      }));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -3501,10 +4496,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/sports/:sportId/movements", async (req: Request, res: Response) => {
     try {
+      const sportId = getRouteParam(req.params.sportId);
       const movements = await db
         .select()
         .from(sportMovements)
-        .where(eq(sportMovements.sportId, req.params.sportId))
+        .where(eq(sportMovements.sportId, sportId))
         .orderBy(asc(sportMovements.sortOrder));
       res.json(movements);
     } catch (error: any) {
@@ -3539,13 +4535,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/sport-configs/:configKey", async (req: Request, res: Response) => {
     try {
-      const config = getSportConfig(req.params.configKey);
+      const configKey = getRouteParam(req.params.configKey);
+      const config = getSportConfig(configKey);
       if (!config) {
         return res.status(404).json({ error: "Sport config not found" });
       }
 
       const rangeRows = await fetchMetricRangeRows({
-        configKey: req.params.configKey,
+        configKey,
       });
 
       res.json(applyDbRangesToConfig(config, rangeRows));
@@ -3797,9 +4794,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const requesterUserId = req.session.userId!;
 
-        const evaluationModeEnabled = await getModelEvaluationMode(requesterUserId);
-        const originalFilename = path.basename(String(req.file.originalname || "")).trim();
-
         const targetUserIdRaw = String(req.body?.targetUserId || "").trim();
         let userId = requesterUserId;
         if (targetUserIdRaw) {
@@ -3894,13 +4888,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               contentType: req.file.mimetype,
               filename: finalFilename,
             })
-          : req.file.path;
+          : (normalizeStoredVideoPath(req.file.path) || finalFilename);
         finalPathToCleanup = finalPath;
         const uploadStartedAtMs = Number((req as Request & { uploadStartMs?: number }).uploadStartMs);
         const uploadCompletedAtMs = Date.now();
-        const sourceFilename = evaluationModeEnabled && originalFilename
-          ? originalFilename
-          : null;
+        const sourceFilename = null;
         const evaluationVideoId = null;
 
         const extractedMetadata = await withLocalMediaFile(finalPath, finalFilename, async (localPath) =>
@@ -3998,10 +4990,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
-      const evaluationModeEnabled = isAdmin ? await getModelEvaluationMode(userId) : false;
-      const evaluationVideoMap = evaluationModeEnabled
-        ? getEvaluationDatasetVideoMap(readModelRegistryConfig())
-        : null;
+      const includeAll = isAdmin && String(req.query.includeAll || "").trim().toLowerCase() === "true";
 
       await markStaleProcessingAsFailed(isAdmin ? undefined : userId);
 
@@ -4054,9 +5043,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
-      if (evaluationVideoMap && isAdmin) {
-        const filteredRows = normalizedRows.filter((row) => getEvaluationMatch(row, evaluationVideoMap));
-        return res.json(await Promise.all(filteredRows.map((row) => attachVideoUrl(row))));
+      if (isAdmin && !includeAll) {
+        return res.json(await Promise.all(normalizedRows.map((row) => attachVideoUrl(row))));
       }
 
       res.json(await Promise.all(normalizedRows.map((row) => attachVideoUrl(row))));
@@ -4240,11 +5228,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analyses/:id", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
 
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -4261,8 +5250,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
 
-      const metricsData = await storage.getMetrics(req.params.id);
-      const insights = await storage.getCoachingInsights(req.params.id);
+      const metricsData = await storage.getMetrics(analysisId);
+      const insights = await storage.getCoachingInsights(analysisId);
 
       let selectedMovementName: string | null = null;
       if (analysis.movementId) {
@@ -4298,11 +5287,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analyses/:id/score-inputs", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
 
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -4311,13 +5301,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
 
-      const metricsData = await storage.getMetrics(req.params.id);
+      const metricsData = await storage.getMetrics(analysisId);
       if (!metricsData) {
         return res.status(404).json({ error: "Metrics not found for analysis" });
       }
 
       return res.json({
-        analysisId: req.params.id,
+        analysisId,
         configKey: metricsData.configKey || null,
         modelVersion: metricsData.modelVersion || null,
         scoreInputs: (metricsData as any).scoreInputs || null,
@@ -4329,11 +5319,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analyses/:id/improved-tennis", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
 
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -4352,7 +5343,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Improved analysis is available for Tennis only" });
       }
 
-      const metricsData = await storage.getMetrics(req.params.id);
+      const metricsData = await storage.getMetrics(analysisId);
+
+      const tacticalComponents = metricsData?.scoreOutputs && typeof metricsData.scoreOutputs === "object"
+        ? ((metricsData.scoreOutputs as Record<string, unknown>).tactical as Record<string, unknown> | undefined)?.components ?? null
+        : null;
 
       const baseMetricValues = (metricsData?.metricValues || {}) as Record<string, unknown>;
       const inputMetrics = {
@@ -4364,9 +5359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metricsData?.configKey,
         analysis.detectedMovement,
         inputMetrics,
-        metricsData?.scoreOutputs && typeof metricsData.scoreOutputs === "object"
-          ? (metricsData.scoreOutputs as Record<string, unknown>)?.tactical?.components
-          : null,
+        tacticalComponents,
         metricsData?.overallScore,
         metricsData?.aiDiagnostics,
       );
@@ -4402,7 +5395,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .orderBy(desc(analysisShotAnnotations.updatedAt))
             .limit(300);
 
-      res.json(rows.map(normalizeMetricRangeRow));
+      res.json(rows);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -4410,11 +5403,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analyses/:id/shot-annotation", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
 
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -4424,9 +5418,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const whereClause = isAdmin
-        ? eq(analysisShotAnnotations.analysisId, req.params.id)
+        ? eq(analysisShotAnnotations.analysisId, analysisId)
         : and(
-            eq(analysisShotAnnotations.analysisId, req.params.id),
+            eq(analysisShotAnnotations.analysisId, analysisId),
             eq(analysisShotAnnotations.userId, userId),
           );
 
@@ -4441,13 +5435,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(null);
       }
 
-      const evaluationVideoMap = getEvaluationDatasetVideoMap(readModelRegistryConfig());
-      const useForModelTraining = Boolean(getEvaluationMatch(analysis, evaluationVideoMap));
-
-      res.json({
-        ...annotation,
-        useForModelTraining,
-      });
+      res.json(annotation);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -4455,11 +5443,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/analyses/:id/shot-annotation", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
 
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -4474,7 +5463,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : [];
       const usedForScoringShotIndexes = parseIntegerList(req.body?.usedForScoringShotIndexes);
       const notes = req.body?.notes ? String(req.body.notes) : null;
-      const useForModelTraining = isAdmin && Boolean(req.body?.useForModelTraining);
 
       if (!Number.isFinite(totalShotsNum) || totalShotsNum < 0) {
         return res.status(400).json({ error: "totalShots must be a non-negative number" });
@@ -4491,7 +5479,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(analysisShotAnnotations)
         .where(
           and(
-            eq(analysisShotAnnotations.analysisId, req.params.id),
+            eq(analysisShotAnnotations.analysisId, analysisId),
             eq(analysisShotAnnotations.userId, userId),
           ),
         )
@@ -4510,7 +5498,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(eq(analysisShotAnnotations.id, existing.id));
       } else {
         await db.insert(analysisShotAnnotations).values({
-          analysisId: req.params.id,
+          analysisId,
           userId,
           totalShots: Math.trunc(totalShotsNum),
           orderedShotLabels,
@@ -4525,7 +5513,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(analysisShotAnnotations)
         .where(
           and(
-            eq(analysisShotAnnotations.analysisId, req.params.id),
+            eq(analysisShotAnnotations.analysisId, analysisId),
             eq(analysisShotAnnotations.userId, userId),
           ),
         )
@@ -4539,51 +5527,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         normalizeShotLabel(label),
       );
 
-      if (isAdmin) {
-        const movementForManifest = String(
-          analysis.detectedMovement || movementName || "unknown",
-        )
-          .trim()
-          .toLowerCase();
+      const movementForManifest = String(
+        analysis.detectedMovement || movementName || "unknown",
+      )
+        .trim()
+        .toLowerCase();
 
-        try {
-          const syncResult = useForModelTraining
-            ? await withLocalMediaFile(
-                analysis.videoPath,
-                analysis.videoFilename,
-                async (localPath) =>
-                  syncVideoForModelTuning({
-                    sourceVideoPath: localPath,
-                    sourceVideoFilename: analysis.videoFilename,
-                    movementType: movementForManifest,
-                    enabled: useForModelTraining,
-                    videoId: analysis.evaluationVideoId || undefined,
-                  }),
-              )
-            : syncVideoForModelTuning({
-                sourceVideoPath: analysis.videoPath,
-                sourceVideoFilename: analysis.videoFilename,
-                movementType: movementForManifest,
-                enabled: useForModelTraining,
-                videoId: analysis.evaluationVideoId || undefined,
-              });
+      try {
+        const syncResult = await syncVideoForModelTuning({
+          sourceVideoPath: analysis.videoPath,
+          sourceVideoFilename: analysis.videoFilename,
+          movementType: movementForManifest,
+          enabled: true,
+          videoId: analysis.evaluationVideoId || undefined,
+          analysisId: analysis.id,
+          annotatorUserId: userId,
+          actorUserId: userId,
+        });
 
-          if (useForModelTraining && syncResult.videoId !== analysis.evaluationVideoId) {
-            await db
-              .update(analyses)
-              .set({
-                evaluationVideoId: syncResult.videoId,
-                ...buildUpdateAuditFields(userId),
-              })
-              .where(eq(analyses.id, analysis.id));
-          }
-        } catch (manifestError: any) {
-          return res.status(500).json({
-            error:
-              manifestError?.message ||
-              "Failed to sync evaluation dataset manifest for model tuning",
-          });
+        if (syncResult.videoId !== analysis.evaluationVideoId) {
+          await db
+            .update(analyses)
+            .set({
+              evaluationVideoId: syncResult.videoId,
+              ...buildUpdateAuditFields(userId),
+            })
+            .where(eq(analyses.id, analysis.id));
         }
+      } catch (manifestError: any) {
+        return res.status(500).json({
+          error:
+            manifestError?.message ||
+            "Failed to sync model training dataset state",
+        });
       }
 
       let discrepancySnapshotUpdated = false;
@@ -4647,7 +5623,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           usedForScoringShotIndexes,
           notes,
         }),
-        useForModelTraining,
         discrepancySnapshotUpdated,
       });
     } catch (error: any) {
@@ -4657,11 +5632,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analyses/:id/shot-report", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
 
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -4715,7 +5691,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(analysisShotAnnotations)
         .where(
           and(
-            eq(analysisShotAnnotations.analysisId, req.params.id),
+            eq(analysisShotAnnotations.analysisId, analysisId),
             eq(analysisShotAnnotations.userId, userId),
           ),
         )
@@ -4723,7 +5699,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(1);
 
       res.json({
-        analysisId: req.params.id,
+        analysisId,
         totalShots: diagnostics?.shotsDetected ?? 0,
         shots: diagnostics?.shotSegments ?? [],
         shotsUsedForScoring: diagnostics?.shotSegments?.filter((s: any) => s.includedForScoring) ?? [],
@@ -5077,11 +6053,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analyses/:id/diagnostics", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
 
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -5179,11 +6156,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analyses/:id/skeleton/shot/:shotId", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
 
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -5213,11 +6191,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analyses/:id/skeleton/shot/:shotId/playback", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
 
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -5247,11 +6226,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analyses/:id/skeleton/shot/:shotId/frame/:frameNumber", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
 
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -5282,11 +6262,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analyses/:id/ghost-correction/:shotId", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
 
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -5384,11 +6365,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analyses/:id/video-metadata", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
 
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -5414,11 +6396,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analyses/:id/comparison", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
 
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -5427,7 +6410,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
 
-      const metricsData = await storage.getMetrics(req.params.id);
+      const metricsData = await storage.getMetrics(analysisId);
 
       const periodMap: Record<string, number | null> = {
         "7d": 7,
@@ -5458,11 +6441,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analyses/:id/metric-trends", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
 
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -5471,7 +6455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "You can only access your own analyses" });
       }
 
-      const metricsData = await storage.getMetrics(req.params.id);
+      const metricsData = await storage.getMetrics(analysisId);
       if (!metricsData) {
         return res.json({ period: "30d", points: [] });
       }
@@ -5490,11 +6474,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const baseDate = new Date(analysis.capturedAt || analysis.createdAt);
       const conditions = [
-        eq(analyses.userId, analysis.userId),
         eq(analyses.status, "completed"),
         eq(metrics.configKey, metricsData.configKey),
         sql`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) <= ${baseDate}`,
       ];
+
+      if (analysis.userId) {
+        conditions.push(eq(analyses.userId, analysis.userId));
+      }
 
       if (analysis.sportId) {
         conditions.push(eq(analyses.sportId, analysis.sportId));
@@ -5572,14 +6559,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? await storage.getAllAnalyses(null)
         : await storage.getAllAnalyses(userId);
       const storageMode = await getVideoStorageMode();
-      const evaluationModeEnabled = await getModelEvaluationMode(userId);
-      const videoMap = evaluationModeEnabled
-        && isAdmin
-        ? getEvaluationDatasetVideoMap(readModelRegistryConfig())
-        : null;
-      const userAnalyses = videoMap
-        ? rawAnalyses.filter((analysis) => getEvaluationMatch(analysis, videoMap))
-        : rawAnalyses;
+      const userAnalyses = rawAnalyses;
 
       type UploadCandidate = {
         filename: string;
@@ -5638,7 +6618,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingPaths = new Set(
         userAnalyses
           .filter((analysis) => analysis.videoPath && isStoredMediaLocallyAccessible(analysis.videoPath))
-          .map((analysis) => path.resolve(analysis.videoPath)),
+          .map((analysis) => getStoredMediaLocalPath(analysis.videoPath))
+          .filter((localPath): localPath is string => Boolean(localPath))
+          .map((localPath) => path.resolve(localPath)),
       );
 
       const unassignedUploadFiles = new Map(
@@ -5672,11 +6654,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : undefined;
 
         if (exactNameCandidate && fs.existsSync(exactNameCandidate.fullPath)) {
+          const normalizedVideoPath = normalizeStoredVideoPath(exactNameCandidate.fullPath) || exactNameCandidate.filename;
           await db
             .update(analyses)
             .set({
               videoFilename: exactNameCandidate.filename,
-              videoPath: exactNameCandidate.fullPath,
+              videoPath: normalizedVideoPath,
               updatedAt: new Date(),
             })
             .where(eq(analyses.id, analysis.id));
@@ -5684,7 +6667,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           runnableAnalyses.push({
             ...analysis,
             videoFilename: exactNameCandidate.filename,
-            videoPath: exactNameCandidate.fullPath,
+            videoPath: normalizedVideoPath,
           });
           unassignedUploadFiles.delete(path.resolve(exactNameCandidate.fullPath));
           autoRelinkedAnalyses += 1;
@@ -5727,11 +6710,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           continue;
         }
 
+        const normalizedVideoPath = normalizeStoredVideoPath(bestCandidate.fullPath) || bestCandidate.filename;
+
         await db
           .update(analyses)
           .set({
             videoFilename: bestCandidate.filename,
-            videoPath: bestCandidate.fullPath,
+            videoPath: normalizedVideoPath,
             updatedAt: new Date(),
           })
           .where(eq(analyses.id, analysis.id));
@@ -5740,7 +6725,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         runnableAnalyses.push({
           ...analysis,
           videoFilename: bestCandidate.filename,
-          videoPath: bestCandidate.fullPath,
+          videoPath: normalizedVideoPath,
         });
         autoRelinkedAnalyses += 1;
       }
@@ -5762,7 +6747,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       void (async () => {
         for (const id of ids) {
           try {
-            await processAnalysis(id);
+            await processAnalysis(id, { forceFreshDiagnostics: true });
             const snapshotResult = await refreshDiscrepancySnapshotsForAnalysis(id);
             if (snapshotResult.refreshed > 0 || snapshotResult.skipped > 0) {
               console.log(
@@ -5795,7 +6780,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/analyses/:id/relink-and-recalculate", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const analysisId = req.params.id;
+      const analysisId = getRouteParam(req.params.id);
       const filename = (req.body?.filename || "").toString().trim();
       const storageMode = await getVideoStorageMode();
 
@@ -5814,21 +6799,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
-      const evaluationModeEnabled = await getModelEvaluationMode(userId);
-      if (evaluationModeEnabled && isAdmin) {
-        const videoMap = getEvaluationDatasetVideoMap(readModelRegistryConfig());
-        if (!getEvaluationMatch(analysis, videoMap)) {
-          return res.status(400).json({
-            error: "Model Evaluation Mode is ON. Only evaluation dataset videos can be recalculated.",
-          });
-        }
-      }
       if (!isAdmin && analysis.userId !== userId) {
         return res.status(403).json({ error: "You can only relink your own analyses" });
       }
 
       const safeFilename = path.basename(filename);
       const relinkedPath = path.join(uploadDir, safeFilename);
+      const normalizedVideoPath = normalizeStoredVideoPath(relinkedPath) || safeFilename;
 
       if (!fs.existsSync(relinkedPath)) {
         return res.status(404).json({ error: "File not found in uploads folder" });
@@ -5838,7 +6815,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .update(analyses)
         .set({
           videoFilename: safeFilename,
-          videoPath: relinkedPath,
+          videoPath: normalizedVideoPath,
           ...buildUpdateAuditFields(userId),
         })
         .where(eq(analyses.id, analysisId));
@@ -5853,7 +6830,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       void (async () => {
         try {
-          await processAnalysis(analysisId);
+          await processAnalysis(analysisId, { forceFreshDiagnostics: true });
           const snapshotResult = await refreshDiscrepancySnapshotsForAnalysis(analysisId);
           if (snapshotResult.refreshed > 0 || snapshotResult.skipped > 0) {
             console.log(
@@ -5880,7 +6857,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/analyses/:id/retry", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const analysisId = req.params.id;
+      const analysisId = getRouteParam(req.params.id);
 
       const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
@@ -5889,15 +6866,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
-      const evaluationModeEnabled = await getModelEvaluationMode(userId);
-      if (evaluationModeEnabled && isAdmin) {
-        const videoMap = getEvaluationDatasetVideoMap(readModelRegistryConfig());
-        if (!getEvaluationMatch(analysis, videoMap)) {
-          return res.status(400).json({
-            error: "Model Evaluation Mode is ON. Only evaluation dataset videos can be recalculated.",
-          });
-        }
-      }
 
       if (!isAdmin && analysis.userId !== userId) {
         return res.status(403).json({ error: "You can only retry your own analyses" });
@@ -5933,12 +6901,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analyses/:id/feedback", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const [feedback] = await db
         .select()
         .from(analysisFeedback)
         .where(
           and(
-            eq(analysisFeedback.analysisId, req.params.id),
+            eq(analysisFeedback.analysisId, analysisId),
             eq(analysisFeedback.userId, req.session.userId!),
           ),
         )
@@ -5951,6 +6920,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/analyses/:id/feedback", requireAuth, async (req: Request, res: Response) => {
     try {
+      const analysisId = getRouteParam(req.params.id);
       const { rating, comment } = req.body;
       if (!rating || !["up", "down"].includes(rating)) {
         return res.status(400).json({ error: "Rating must be 'up' or 'down'" });
@@ -5961,7 +6931,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(analysisFeedback)
         .where(
           and(
-            eq(analysisFeedback.analysisId, req.params.id),
+            eq(analysisFeedback.analysisId, analysisId),
             eq(analysisFeedback.userId, req.session.userId!),
           ),
         )
@@ -5978,7 +6948,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(eq(analysisFeedback.id, existing[0].id));
       } else {
         await db.insert(analysisFeedback).values({
-          analysisId: req.params.id,
+          analysisId,
           userId: req.session.userId!,
           rating,
           comment: comment || null,
@@ -5991,7 +6961,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(analysisFeedback)
         .where(
           and(
-            eq(analysisFeedback.analysisId, req.params.id),
+            eq(analysisFeedback.analysisId, analysisId),
             eq(analysisFeedback.userId, req.session.userId!),
           ),
         )
@@ -6004,7 +6974,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/analyses/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const analysis = await storage.getAnalysis(req.params.id);
+      const analysisId = getRouteParam(req.params.id);
+      const analysis = await storage.getAnalysis(analysisId);
       if (!analysis) {
         return res.status(404).json({ error: "Analysis not found" });
       }
@@ -6015,37 +6986,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await deleteStoredMedia(analysis.videoPath);
 
-      await storage.deleteAnalysis(req.params.id);
+      await storage.deleteAnalysis(analysisId);
       res.json({ message: "Analysis deleted" });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.delete("/api/analyses", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const userId = req.session.userId!;
-      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
-      if (currentUser?.role !== "admin") {
-        return res.status(403).json({ error: "Only admins can clear history" });
-      }
-
-      const allAnalyses = await storage.getAllAnalyses(null);
-
-      for (const analysis of allAnalyses) {
-        await deleteStoredMedia(analysis.videoPath);
-      }
-
-      await db.transaction(async (tx) => {
-        await tx.delete(coachingInsights);
-        await tx.delete(analysisFeedback);
-        await tx.delete(analysisShotAnnotations);
-        await tx.delete(metrics);
-        await tx.delete(analyses);
-        await tx.execute(sql`delete from "session"`);
-      });
-
-      res.json({ message: "History cleared", deletedCount: allAnalyses.length });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

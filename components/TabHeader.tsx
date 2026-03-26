@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Pressable, Image, StyleSheet, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, usePathname } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/lib/auth-context";
@@ -16,6 +16,7 @@ type TabHeaderProps = {
 
 export function TabHeader({ rightContent }: TabHeaderProps) {
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
   const { user } = useAuth();
   const { selectedSport } = useSport();
   const sc = sportColors[selectedSport?.name || ""] || { primary: "#6C5CE7", gradient: "#5A4BD1" };
@@ -29,7 +30,10 @@ export function TabHeader({ rightContent }: TabHeaderProps) {
       <Pressable
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/profile");
+          router.push({
+            pathname: "/profile",
+            params: pathname ? { returnTo: pathname } : undefined,
+          });
         }}
         style={[
           styles.iconCircle,

@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -23,10 +23,25 @@ const normalizeRole = (value?: string | null): "admin" | "player" => {
 
 export default function SportsSettingsScreen() {
   const insets = useSafeAreaInsets();
+  const { returnTo: rawReturnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const { user } = useAuth();
   const canUseAdminApis = normalizeRole(user?.role) === "admin";
   const [sports, setSports] = useState<SportAvailabilityResponse[]>([]);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const returnTo = Array.isArray(rawReturnTo) ? rawReturnTo[0] : rawReturnTo;
+
+  const handleBack = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (typeof router.canGoBack === "function" && router.canGoBack()) {
+      router.back();
+      return;
+    }
+    if (returnTo && returnTo !== "/profile") {
+      router.replace(returnTo as any);
+      return;
+    }
+    router.replace("/profile");
+  };
 
   useEffect(() => {
     if (!canUseAdminApis) {
@@ -76,10 +91,7 @@ export default function SportsSettingsScreen() {
 
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}> 
         <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.back();
-          }}
+          onPress={handleBack}
           style={styles.backButton}
         >
           <Ionicons name="chevron-back" size={24} color="#F8FAFC" />

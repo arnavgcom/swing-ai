@@ -582,7 +582,6 @@ export default function AnalysisDetailScreen() {
   const [manualSavedVisible, setManualSavedVisible] = useState(false);
   const [manualSaveMessage, setManualSaveMessage] = useState("Saved");
   const [manualAnnotationDone, setManualAnnotationDone] = useState(false);
-  const [useForModelTraining, setUseForModelTraining] = useState(false);
   const [showAllTechnical, setShowAllTechnical] = useState(false);
   const [showAllTactical, setShowAllTactical] = useState(false);
   const [showAllMovement, setShowAllMovement] = useState(false);
@@ -939,13 +938,13 @@ export default function AnalysisDetailScreen() {
       orderedShotLabels: string[];
       usedForScoringShotIndexes: number[];
       notes?: string;
-      useForModelTraining?: boolean;
     }) => saveAnalysisShotAnnotation(id!, payload),
     onSuccess: async (saved) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["analysis", id, "shot-annotation"] }),
         queryClient.invalidateQueries({ queryKey: ["discrepancy-summary"] }),
         queryClient.invalidateQueries({ queryKey: ["scoring-model-dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["tennis-model-training-status"] }),
       ]);
       queryClient.setQueryData(["analysis", id, "shot-annotation"], saved);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -990,7 +989,6 @@ export default function AnalysisDetailScreen() {
     setManualShotLabels([]);
     setActiveShotDropdownIndex(null);
     setManualAnnotationDone(false);
-    setUseForModelTraining(false);
   }, [id]);
 
   useEffect(() => {
@@ -1002,9 +1000,6 @@ export default function AnalysisDetailScreen() {
       setManualAnnotationDone(true);
     }
 
-    if (typeof shotAnnotation?.useForModelTraining === "boolean") {
-      setUseForModelTraining(shotAnnotation.useForModelTraining);
-    }
   }, [shotAnnotation]);
 
   useEffect(() => {
@@ -1141,15 +1136,12 @@ export default function AnalysisDetailScreen() {
         { length: totalShots },
         (_value, index) => index + 1,
       ),
-      useForModelTraining: isAdmin ? useForModelTraining : undefined,
     });
   }, [
     diagnostics?.shotSegments,
-    isAdmin,
     manualShotLabels,
     shotAnnotation?.orderedShotLabels,
     shotAnnotationMutation,
-    useForModelTraining,
   ]);
 
   const handleAddManualShot = useCallback(() => {

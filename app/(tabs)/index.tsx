@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Modal,
+  TextInput,
 } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
@@ -28,11 +29,13 @@ import { sportColors } from "@/constants/colors";
 import {
   fetchAnalysesSummary,
   fetchDiscrepancySummary,
+  fetchMyShotAnnotations,
   fetchScoringModelDashboard,
-  fetchScoringModelRegistry,
-  saveScoringModelRegistrySnapshot,
+  fetchTennisModelTrainingStatus,
+  saveTennisModelVersion,
+  triggerTennisModelTraining,
 } from "@/lib/api";
-import type { AnalysisSummary } from "@/lib/api";
+import type { AnalysisSummary, TennisModelTrainingStatusResponse } from "@/lib/api";
 import {
   DEFAULT_SESSION_TYPE_FILTERS,
   filterAnalysesBySessionAndStroke,
@@ -630,7 +633,6 @@ export default function DashboardScreen() {
   const [selectedTrendMetric, setSelectedTrendMetric] = React.useState<string>(PLAYER_TREND_FILTERS[0].key);
   const [selectedTrendSessions, setSelectedTrendSessions] = React.useState<TrendSessionWindow>(10);
   const [selectedPlanMinutes, setSelectedPlanMinutes] = React.useState<PlanDuration>(20);
-  const [showAllRegistryEntries, setShowAllRegistryEntries] = React.useState(false);
   const [userList, setUserList] = React.useState<Array<{id:string,name:string,email:string,role:string}>>([]);
   const [selectedPlayerId, setSelectedPlayerId] = React.useState<string>("all");
   const [showPlayerDropdown, setShowPlayerDropdown] = React.useState(false);
@@ -638,6 +640,8 @@ export default function DashboardScreen() {
     DEFAULT_SESSION_TYPE_FILTERS,
   );
   const [selectedStroke, setSelectedStroke] = React.useState<StrokeTypeFilter | null>(null);
+  const [tennisDraftVersionInput, setTennisDraftVersionInput] = React.useState("");
+  const [tennisDraftDescriptionInput, setTennisDraftDescriptionInput] = React.useState("");
   const [registrySaveToast, setRegistrySaveToast] = React.useState<{
     visible: boolean;
     message: string;
@@ -766,6 +770,18 @@ export default function DashboardScreen() {
   });
 
   const {
+    data: shotAnnotations,
+    isLoading: shotAnnotationsLoading,
+    refetch: refetchShotAnnotations,
+    isRefetching: shotAnnotationsRefetching,
+  } = useQuery({
+    queryKey: ["shot-annotations", isAdmin ? selectedPlayerId : user?.id || "self"],
+    queryFn: fetchMyShotAnnotations,
+    enabled: !!user && isAdmin,
+    retry: false,
+  });
+
+  const {
     data: scoringModel,
     isLoading: scoringModelLoading,
     refetch: refetchScoringModelDashboard,
@@ -786,73 +802,103 @@ export default function DashboardScreen() {
   });
 
   const {
-    data: scoringModelRegistry,
-    isLoading: scoringModelRegistryLoading,
-    isError: scoringModelRegistryIsError,
-    refetch: refetchScoringModelRegistry,
-    isRefetching: scoringModelRegistryRefetching,
+    data: tennisTrainingStatus,
+    isLoading: tennisTrainingStatusLoading,
+    refetch: refetchTennisTrainingStatus,
+    isRefetching: tennisTrainingStatusRefetching,
   } = useQuery({
-    queryKey: ["scoring-model-registry"],
-    queryFn: fetchScoringModelRegistry,
+    queryKey: ["tennis-model-training-status"],
+    queryFn: fetchTennisModelTrainingStatus,
     enabled: !!user && isAdmin,
+    refetchInterval: (query) => {
+      const currentJob = query.state.data?.currentJob;
+      return currentJob && (currentJob.status === "queued" || currentJob.status === "running") ? 2500 : false;
+    },
     retry: false,
   });
 
-  const scoringModelRegistryTrend = React.useMemo(() => {
-    const source = scoringModelRegistry || [];
-    const bucket = new Map<string, { md: number; sc: number; mismatch: number; count: number }>();
-    for (const entry of source) {
-      const key = entry.modelVersion;
-      const current = bucket.get(key) || { md: 0, sc: 0, mismatch: 0, count: 0 };
-      current.md += Number(entry.movementDetectionAccuracyPct || 0);
-      current.sc += Number(entry.scoringAccuracyPct || 0);
-      current.mismatch += Number(entry.mismatchRatePct || 0);
-      current.count += 1;
-      bucket.set(key, current);
-    }
+  React.useEffect(() => {
+    const nextDraftVersion = tennisTrainingStatus?.draftVersion || "";
+    const nextDescription = nextDraftVersion ? `Tennis classifier ${nextDraftVersion}` : "";
+    setTennisDraftVersionInput((current) => (current.trim() ? current : nextDraftVersion));
+    setTennisDraftDescriptionInput((current) => (current.trim() ? current : nextDescription));
+  }, [tennisTrainingStatus?.draftVersion]);
 
-    return Array.from(bucket.entries())
-      .map(([modelVersion, values]) => ({
-        modelVersion,
-        movementDetectionAccuracyPct: values.count ? Number((values.md / values.count).toFixed(1)) : 0,
-        scoringAccuracyPct: values.count ? Number((values.sc / values.count).toFixed(1)) : 0,
-        mismatchRatePct: values.count ? Number((values.mismatch / values.count).toFixed(1)) : 0,
-      }))
-      .sort((a, b) => a.modelVersion.localeCompare(b.modelVersion, undefined, { numeric: true }));
-  }, [scoringModelRegistry]);
+  const tennisTrainingTrend = React.useMemo(() => {
+    return (tennisTrainingStatus?.history || [])
+      .filter((entry) => entry.status === "succeeded" && typeof entry.macroF1 === "number")
+      .slice()
+      .reverse();
+  }, [tennisTrainingStatus?.history]);
 
-  const saveRegistryMutation = useMutation({
-    onMutate: () => {
+  const tennisTrainingMutation = useMutation({
+    mutationFn: triggerTennisModelTraining,
+    onSuccess: async (result: TennisModelTrainingStatusResponse) => {
+      await refetchTennisTrainingStatus();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setRegistrySaveToast({
+        visible: true,
+        message: `Tennis training queued${result.currentJob ? ` (${result.currentJob.jobId.slice(0, 8)})` : ""}.`,
+        tone: "success",
+      });
       if (registryToastTimerRef.current) {
         clearTimeout(registryToastTimerRef.current);
       }
-      setRegistrySaveToast({ visible: true, message: "Saving...", tone: "info" });
-    },
-    mutationFn: () =>
-      saveScoringModelRegistrySnapshot(
-        selectedMovement?.name,
-        isAdmin ? selectedPlayerId : user?.id,
-      ),
-    onSuccess: async () => {
-      await Promise.all([
-        refetchScoringModelDashboard(),
-        refetchScoringModelRegistry(),
-      ]);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setRegistrySaveToast({ visible: true, message: "Saved", tone: "success" });
       registryToastTimerRef.current = setTimeout(() => {
         setRegistrySaveToast((prev) => ({ ...prev, visible: false }));
-      }, 1600);
+      }, 2200);
     },
     onError: (error: Error) => {
       setRegistrySaveToast({
         visible: true,
-        message: error.message || "Failed to save",
+        message: error.message || "Training failed",
         tone: "error",
       });
+      if (registryToastTimerRef.current) {
+        clearTimeout(registryToastTimerRef.current);
+      }
       registryToastTimerRef.current = setTimeout(() => {
         setRegistrySaveToast((prev) => ({ ...prev, visible: false }));
-      }, 2200);
+      }, 2600);
+    },
+  });
+
+  const saveTennisVersionMutation = useMutation({
+    mutationFn: () => saveTennisModelVersion({
+      modelVersion: tennisDraftVersionInput.trim() || tennisTrainingStatus?.draftVersion,
+      description:
+        tennisDraftDescriptionInput.trim() ||
+        `Tennis classifier ${tennisDraftVersionInput.trim() || tennisTrainingStatus?.draftVersion || ""}`.trim(),
+    }),
+    onSuccess: async (result: TennisModelTrainingStatusResponse) => {
+      await refetchTennisTrainingStatus();
+      setTennisDraftVersionInput(result.draftVersion || "");
+      setTennisDraftDescriptionInput(result.draftVersion ? `Tennis classifier ${result.draftVersion}` : "");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setRegistrySaveToast({
+        visible: true,
+        message: `Saved tennis model version ${result.activeVersion}.`,
+        tone: "success",
+      });
+      if (registryToastTimerRef.current) {
+        clearTimeout(registryToastTimerRef.current);
+      }
+      registryToastTimerRef.current = setTimeout(() => {
+        setRegistrySaveToast((prev) => ({ ...prev, visible: false }));
+      }, 2400);
+    },
+    onError: (error: Error) => {
+      setRegistrySaveToast({
+        visible: true,
+        message: error.message || "Failed to save version",
+        tone: "error",
+      });
+      if (registryToastTimerRef.current) {
+        clearTimeout(registryToastTimerRef.current);
+      }
+      registryToastTimerRef.current = setTimeout(() => {
+        setRegistrySaveToast((prev) => ({ ...prev, visible: false }));
+      }, 2600);
     },
   });
 
@@ -1016,6 +1062,31 @@ export default function DashboardScreen() {
     selectedTrendSessions,
   ]);
 
+  const missingAnnotationAnalyses = React.useMemo(() => {
+    if (!isAdmin) return [];
+
+    const annotatedAnalysisIds = new Set((shotAnnotations || []).map((item) => item.analysisId));
+
+    return filteredAnalyses
+      .filter((analysis) => analysis.status === "completed" && !annotatedAnalysisIds.has(analysis.id))
+      .slice()
+      .sort((a, b) => {
+        const aTime = parseApiDate(a.capturedAt || a.createdAt)?.getTime() || 0;
+        const bTime = parseApiDate(b.capturedAt || b.createdAt)?.getTime() || 0;
+        return bTime - aTime;
+      });
+  }, [filteredAnalyses, isAdmin, shotAnnotations]);
+
+  const adminCompletedUploadCount = React.useMemo(
+    () => filteredAnalyses.filter((analysis) => analysis.status === "completed").length,
+    [filteredAnalyses],
+  );
+
+  const adminAnnotatedUploadCount = React.useMemo(
+    () => Math.max(0, adminCompletedUploadCount - missingAnnotationAnalyses.length),
+    [adminCompletedUploadCount, missingAnnotationAnalyses.length],
+  );
+
   const selectedPlayerLabel =
     selectedPlayerId === "all"
       ? "All"
@@ -1037,12 +1108,13 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scroll}
         refreshControl={
           <RefreshControl
-            refreshing={isRefetching || discrepancyRefetching || scoringModelRegistryRefetching}
+            refreshing={isRefetching || discrepancyRefetching || tennisTrainingStatusRefetching || shotAnnotationsRefetching}
             onRefresh={() => {
               refetch();
               if (isAdmin) {
                 refetchDiscrepancy();
-                refetchScoringModelRegistry();
+                refetchTennisTrainingStatus();
+                refetchShotAnnotations();
               }
             }}
             tintColor="#6C5CE7"
@@ -1228,6 +1300,80 @@ export default function DashboardScreen() {
           </View>
         ) : (
           <>
+            {isAdmin && (shotAnnotationsLoading || missingAnnotationAnalyses.length > 0) && (
+              <View style={styles.discrepancyCard}>
+                <View style={styles.discrepancyHeader}>
+                  <Text style={styles.discrepancyTitle}>Completed Uploads Missing Manual Labels</Text>
+                  {!shotAnnotationsLoading && missingAnnotationAnalyses.length > 0 ? (
+                    <View
+                      style={[
+                        styles.discrepancyRateBadge,
+                        { backgroundColor: "#3F2A07", borderColor: "#92400E" },
+                      ]}
+                    >
+                      <Text style={[styles.discrepancyRateText, { color: ds.color.warning }]}> 
+                        {missingAnnotationAnalyses.length} pending
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                <Text style={styles.discrepancyStateText}>
+                  These completed uploads are excluded from discrepancy and training cards until a manual shot annotation is saved.
+                </Text>
+
+                {shotAnnotationsLoading ? (
+                  <Text style={styles.discrepancyStateText}>Checking annotation coverage…</Text>
+                ) : (
+                  <View style={styles.discrepancyList}>
+                    {missingAnnotationAnalyses.slice(0, 10).map((analysis) => (
+                      <Pressable
+                        key={analysis.id}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          router.push({
+                            pathname: "/analysis/[id]",
+                            params: { id: analysis.id },
+                          });
+                        }}
+                        style={({ pressed }) => [styles.discrepancyRow, { opacity: pressed ? 0.82 : 1 }]}
+                      >
+                        <View style={styles.discrepancyRowLeft}>
+                          <View style={styles.discrepancyTopLine}>
+                            <Text style={styles.discrepancyVideoName} numberOfLines={1}>
+                              {analysis.userName || "Player"}
+                            </Text>
+                          </View>
+                          <Text style={styles.discrepancyMeta} numberOfLines={1}>
+                            {`${String(analysis.sportName || "Sport")} • ${formatLabel(analysis.detectedMovement || analysis.movementName || "general")}`}
+                          </Text>
+                          <Text style={styles.discrepancyMetaSecondary} numberOfLines={1}>
+                            {analysis.videoFilename}
+                          </Text>
+                          <Text style={styles.discrepancyMetaSecondary}>
+                            {formatDateTime(analysis.capturedAt || analysis.createdAt, profileTimeZone)}
+                          </Text>
+                          <Text style={styles.registryEntrySubText}>
+                            Analysis ID: {analysis.id}
+                          </Text>
+                        </View>
+                        <View style={styles.discrepancyRowRight}>
+                          <View
+                            style={[
+                              styles.discrepancyRateBadge,
+                              { backgroundColor: "#3F2A07", borderColor: "#92400E" },
+                            ]}
+                          >
+                            <Text style={[styles.discrepancyRateText, { color: ds.color.warning }]}>Needs labels</Text>
+                          </View>
+                        </View>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+
             {isAdmin && (discrepancyLoading || discrepancyIsError || !!discrepancy) && (
               <View style={styles.discrepancyCard}>
                 <View style={styles.discrepancyHeader}>
@@ -1259,27 +1405,6 @@ export default function DashboardScreen() {
                       Movement: {formatMovementBadgeLabel(selectedMovement?.name || scoringModel.movementType)}
                     </Text>
                   </View>
-                ) : null}
-
-                {isAdmin && scoringModel?.modelEvaluationMode ? (
-                  <Pressable
-                    onPress={() => saveRegistryMutation.mutate()}
-                    disabled={saveRegistryMutation.isPending}
-                    style={({ pressed }) => [
-                      styles.scoringSaveButton,
-                      { borderColor: `${sc.primary}55` },
-                      {
-                        opacity: pressed || saveRegistryMutation.isPending ? 0.6 : 1,
-                      },
-                    ]}
-                  >
-                    {saveRegistryMutation.isPending ? (
-                      <ActivityIndicator size="small" color={sc.primary} />
-                    ) : (
-                      <Ionicons name="save-outline" size={16} color={sc.primary} />
-                    )}
-                    <Text style={[styles.scoringSaveText, { color: sc.primary }]}>Save To Scoring Model Registry</Text>
-                  </Pressable>
                 ) : null}
 
                 {discrepancyLoading && (
@@ -1368,68 +1493,221 @@ export default function DashboardScreen() {
 
             {isAdmin && (
               <View style={styles.registryCard}>
-                <Text style={styles.registryTitle}>Model History</Text>
-                {scoringModelRegistryLoading && (
-                  <Text style={styles.discrepancyStateText}>Loading registry snapshots…</Text>
-                )}
+                <View style={styles.discrepancyHeader}>
+                  <Text style={styles.registryTitle}>Tennis Model Training</Text>
+                  {tennisTrainingStatus?.currentJob ? (
+                    <View style={[styles.discrepancyRateBadge, { backgroundColor: "#3F2A07", borderColor: "#92400E" }]}> 
+                      <Text style={[styles.discrepancyRateText, { color: ds.color.warning }]}>
+                        {tennisTrainingStatus.currentJob.status === "queued" ? "Queued" : "Running"}
+                      </Text>
+                    </View>
+                  ) : tennisTrainingStatus?.trainedModelAvailable ? (
+                    <View style={[styles.discrepancyRateBadge, { backgroundColor: "#052E1A", borderColor: "#166534" }]}>
+                      <Text style={[styles.discrepancyRateText, { color: ds.color.success }]}>Model ready</Text>
+                    </View>
+                  ) : null}
+                </View>
 
-                {scoringModelRegistryIsError && (
-                  <Text style={styles.discrepancyStateText}>Failed to load registry snapshots. Pull to refresh.</Text>
-                )}
+                <Text style={styles.discrepancyStateText}>
+                  Uses all completed tennis uploads that already have manual shot annotations.
+                </Text>
 
-                {!scoringModelRegistryLoading && !scoringModelRegistryIsError && (scoringModelRegistry || []).length === 0 && (
-                  <Text style={styles.discrepancyStateText}>No registry snapshots saved yet.</Text>
-                )}
-
-                {scoringModelRegistryTrend.length > 0 && (
-                  <View style={styles.registryTrendCard}>
-                    <Text style={styles.registryTrendTitle}>Version Trend</Text>
-                    <ModelRegistryTrendLineChart points={scoringModelRegistryTrend} />
+                <View style={styles.trainingStatsRow}>
+                  <View style={styles.trainingStatCard}>
+                    <Text style={styles.trainingStatValue}>
+                      {String(adminCompletedUploadCount)}
+                    </Text>
+                    <Text style={styles.trainingStatLabel}>Completed uploads</Text>
                   </View>
-                )}
+                  <View style={styles.trainingStatCard}>
+                    <Text style={styles.trainingStatValue}>
+                      {shotAnnotationsLoading ? "..." : String(adminAnnotatedUploadCount)}
+                    </Text>
+                    <Text style={styles.trainingStatLabel}>Annotated videos</Text>
+                  </View>
+                  <View style={styles.trainingStatCard}>
+                    <Text style={styles.trainingStatValue}>
+                      {shotAnnotationsLoading ? "..." : String(missingAnnotationAnalyses.length)}
+                    </Text>
+                    <Text style={styles.trainingStatLabel}>Missing labels</Text>
+                  </View>
+                </View>
 
-                {(showAllRegistryEntries ? (scoringModelRegistry || []) : (scoringModelRegistry || []).slice(0, 5)).map((entry) => (
+                <View style={styles.trainingStatsRow}>
+                  <View style={styles.trainingStatCard}>
+                    <Text style={styles.trainingStatValue}>
+                      {tennisTrainingStatusLoading ? "..." : String(tennisTrainingStatus?.eligibleAnalysisCount ?? 0)}
+                    </Text>
+                    <Text style={styles.trainingStatLabel}>Training-eligible videos</Text>
+                  </View>
+                  <View style={styles.trainingStatCard}>
+                    <Text style={styles.trainingStatValue}>
+                      {tennisTrainingStatusLoading ? "..." : String(tennisTrainingStatus?.eligibleShotCount ?? 0)}
+                    </Text>
+                    <Text style={styles.trainingStatLabel}>Labeled shots</Text>
+                  </View>
+                </View>
+
+                <View style={styles.modelMetaCard}>
+                  <Text style={styles.modelMetaText}>Active version: {tennisTrainingStatus?.activeVersion || "0.1"}</Text>
+                  <Text style={styles.modelMetaText}>Next save version: {tennisTrainingStatus?.draftVersion || "0.2"}</Text>
+                </View>
+
+                <View style={styles.modelMetaCard}>
+                  <Text style={styles.trainingFormLabel}>Version to save</Text>
+                  <TextInput
+                    value={tennisDraftVersionInput}
+                    onChangeText={setTennisDraftVersionInput}
+                    placeholder={tennisTrainingStatus?.draftVersion || "0.2"}
+                    placeholderTextColor={ds.color.textTertiary}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={styles.trainingFormInput}
+                  />
+                  <Text style={styles.trainingFormLabel}>Version description</Text>
+                  <TextInput
+                    value={tennisDraftDescriptionInput}
+                    onChangeText={setTennisDraftDescriptionInput}
+                    placeholder={tennisTrainingStatus?.draftVersion ? `Tennis classifier ${tennisTrainingStatus.draftVersion}` : "Describe this model version"}
+                    placeholderTextColor={ds.color.textTertiary}
+                    autoCorrect={false}
+                    multiline
+                    style={[styles.trainingFormInput, styles.trainingFormInputMultiline]}
+                  />
+                </View>
+
+                {tennisTrainingStatus?.latestTraining ? (
+                  <View style={styles.modelMetaCard}>
+                    <Text style={styles.modelMetaText}>
+                      Last trained {formatDateTime(tennisTrainingStatus.latestTraining.trainedAt, profileTimeZone)}
+                    </Text>
+                    <Text style={styles.modelMetaText}>
+                      Split: {tennisTrainingStatus.latestTraining.trainRows} train / {tennisTrainingStatus.latestTraining.testRows} test
+                    </Text>
+                    {typeof tennisTrainingStatus.latestTraining.macroF1 === "number" ? (
+                      <Text style={styles.modelMetaText}>
+                        Macro F1: {(tennisTrainingStatus.latestTraining.macroF1 * 100).toFixed(1)}%
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {tennisTrainingStatus?.currentJob ? (
+                  <View style={styles.modelMetaCard}>
+                    <Text style={styles.modelMetaText}>
+                      Current job: {tennisTrainingStatus.currentJob.status === "queued" ? "Queued" : "Running"}
+                    </Text>
+                    <Text style={styles.modelMetaText}>
+                      Requested {formatDateTime(tennisTrainingStatus.currentJob.requestedAt, profileTimeZone)}
+                    </Text>
+                    {tennisTrainingStatus.currentJob.startedAt ? (
+                      <Text style={styles.modelMetaText}>
+                        Started {formatDateTime(tennisTrainingStatus.currentJob.startedAt, profileTimeZone)}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                <View style={styles.trainingActionRow}>
                   <Pressable
-                    key={entry.id}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      router.push({ pathname: "/model-version/[id]", params: { id: entry.id } });
-                    }}
-                    style={({ pressed }) => [styles.registryEntryCard, { opacity: pressed ? 0.78 : 1 }]}
+                    onPress={() => tennisTrainingMutation.mutate()}
+                    disabled={tennisTrainingMutation.isPending || Boolean(tennisTrainingStatus?.currentJob) || (tennisTrainingStatus?.eligibleShotCount ?? 0) < 20}
+                    style={({ pressed }) => [
+                      styles.scoringSaveButton,
+                      styles.trainingActionButton,
+                      { borderColor: `${sc.primary}55` },
+                      {
+                        opacity:
+                          pressed || tennisTrainingMutation.isPending || Boolean(tennisTrainingStatus?.currentJob) || (tennisTrainingStatus?.eligibleShotCount ?? 0) < 20
+                            ? 0.6
+                            : 1,
+                      },
+                    ]}
                   >
-                    <View style={styles.registryEntryHeader}>
-                      <Text style={styles.registryEntryVersionText}>Model {entry.modelVersion}</Text>
-                      {(() => {
-                        const palette = getMismatchPalette(Number(entry.mismatchRatePct || 0));
-                        return (
+                    {tennisTrainingMutation.isPending ? (
+                      <ActivityIndicator size="small" color={sc.primary} />
+                    ) : (
+                      <Ionicons name="rocket-outline" size={16} color={sc.primary} />
+                    )}
+                    <Text style={[styles.scoringSaveText, { color: sc.primary }]}>Train Tennis Classifier</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => saveTennisVersionMutation.mutate()}
+                    disabled={saveTennisVersionMutation.isPending || Boolean(tennisTrainingStatus?.currentJob) || !tennisTrainingStatus?.trainedModelAvailable}
+                    style={({ pressed }) => [
+                      styles.scoringSaveButton,
+                      styles.trainingActionButton,
+                      { borderColor: `${sc.primary}55` },
+                      {
+                        opacity:
+                          pressed || saveTennisVersionMutation.isPending || Boolean(tennisTrainingStatus?.currentJob) || !tennisTrainingStatus?.trainedModelAvailable
+                            ? 0.6
+                            : 1,
+                      },
+                    ]}
+                  >
+                    {saveTennisVersionMutation.isPending ? (
+                      <ActivityIndicator size="small" color={sc.primary} />
+                    ) : (
+                      <Ionicons name="save-outline" size={16} color={sc.primary} />
+                    )}
+                    <Text style={[styles.scoringSaveText, { color: sc.primary }]}>Save Model Version</Text>
+                  </Pressable>
+                </View>
+
+                {(tennisTrainingStatus?.eligibleShotCount ?? 0) < 20 ? (
+                  <Text style={styles.discrepancyStateText}>
+                    At least 20 labeled shots are required before training can start.
+                  </Text>
+                ) : null}
+
+                {tennisTrainingTrend.length > 0 ? (
+                  <View style={styles.registryTrendCard}>
+                    <Text style={styles.registryTrendTitle}>Training Trend</Text>
+                    {tennisTrainingTrend.slice(-5).map((entry) => (
+                      <View key={entry.jobId} style={styles.registryTrendRow}>
+                        <Text style={styles.registryTrendVersionText}>
+                          {entry.savedModelVersion || formatDateTime(entry.requestedAt, profileTimeZone)}
+                        </Text>
+                        <View style={styles.registryTrendBarTrack}>
                           <View
                             style={[
-                              styles.discrepancyRateBadge,
-                              { backgroundColor: palette.bg, borderColor: palette.border },
+                              styles.registryTrendBarFillScoring,
+                              { width: `${Math.max(2, Math.min(100, Number(entry.macroF1 || 0) * 100))}%` },
                             ]}
-                          >
-                            <Text style={[styles.discrepancyRateText, { color: palette.text }]}> 
-                              Mismatch {Number(entry.mismatchRatePct || 0).toFixed(1)}%
-                            </Text>
-                          </View>
-                        );
-                      })()}
-                    </View>
-                    <Text style={styles.registryEntryDateText}>{formatDateTime(entry.createdAt, profileTimeZone)}</Text>
-                    {String(entry.movementType || "").trim().toLowerCase() !== "all" ? (
-                      <Text style={styles.registryEntryMetaText}>Movement: {entry.movementType}</Text>
-                    ) : null}
-                  </Pressable>
-                ))}
-
-                {!showAllRegistryEntries && (scoringModelRegistry || []).length > 5 ? (
-                  <Pressable
-                    onPress={() => setShowAllRegistryEntries(true)}
-                    style={({ pressed }) => [styles.registryMoreButton, { opacity: pressed ? 0.78 : 1 }]}
-                  >
-                    <Text style={styles.registryMoreText}>.. More ..</Text>
-                  </Pressable>
+                          />
+                        </View>
+                        <Text style={styles.registryTrendValueText}>
+                          Macro F1 {typeof entry.macroF1 === "number" ? `${(entry.macroF1 * 100).toFixed(1)}%` : "-"}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
                 ) : null}
+
+                {(tennisTrainingStatus?.history || []).slice(0, 3).map((entry) => (
+                  <View key={entry.jobId} style={styles.registryEntryCard}>
+                    <View style={styles.registryEntryHeader}>
+                      <Text style={styles.registryEntryVersionText}>
+                        {entry.savedModelVersion ? `Saved ${entry.savedModelVersion}` : `Job ${entry.jobId.slice(0, 8)}`}
+                      </Text>
+                      <View style={styles.discrepancyRateBadge}>
+                        <Text style={styles.discrepancyRateText}>{entry.status}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.registryEntryDateText}>{formatDateTime(entry.requestedAt, profileTimeZone)}</Text>
+                    {typeof entry.macroF1 === "number" ? (
+                      <Text style={styles.registryEntryMetaText}>Macro F1 {(entry.macroF1 * 100).toFixed(1)}%</Text>
+                    ) : null}
+                    {entry.savedModelVersion ? (
+                      <Text style={styles.registryEntryMetaText}>Version saved as {entry.savedModelVersion}</Text>
+                    ) : null}
+                    {entry.error ? (
+                      <Text style={styles.registryEntrySubText}>{entry.error}</Text>
+                    ) : null}
+                  </View>
+                ))}
               </View>
             )}
 
@@ -1938,6 +2216,28 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: ds.color.textSecondary,
   },
+  trainingFormLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: ds.color.textTertiary,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  trainingFormInput: {
+    borderRadius: ds.radius.sm,
+    borderWidth: 1,
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.bg,
+    color: ds.color.textPrimary,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  trainingFormInputMultiline: {
+    minHeight: 72,
+    textAlignVertical: "top",
+  },
   modelMetaSubText: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
@@ -2105,6 +2405,37 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
     color: ds.color.textPrimary,
+  },
+  trainingStatsRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  trainingActionRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  trainingActionButton: {
+    flex: 1,
+  },
+  trainingStatCard: {
+    flex: 1,
+    borderRadius: ds.radius.sm,
+    borderWidth: 1,
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.bgElevated,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  trainingStatValue: {
+    fontSize: 24,
+    fontFamily: "Inter_800ExtraBold",
+    color: ds.color.textPrimary,
+  },
+  trainingStatLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: ds.color.textTertiary,
   },
   registrySubtitle: {
     fontSize: 12,

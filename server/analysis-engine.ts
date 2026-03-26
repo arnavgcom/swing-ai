@@ -37,6 +37,8 @@ import {
   validateTennisVideoUpload,
 } from "./tennis-upload-validation";
 import { getEnabledPrimarySport, getSportById, isSportEnabledRecord } from "./sport-availability";
+import { getDriveMovementClassificationModelPythonEnv } from "./classification-model-settings";
+import { getPoseLandmarkerPythonEnv } from "./pose-landmarker-settings";
 
 interface PythonResult {
   configKey: string;
@@ -1070,113 +1072,129 @@ function runPythonAnalysis(
   onProgress?: (event: PipelineProgressEvent) => Promise<void> | void,
 ): Promise<PythonResult> {
   return new Promise((resolve, reject) => {
-    const pythonExecutable = resolvePythonExecutable();
+    void (async () => {
+      const pythonExecutable = resolvePythonExecutable();
+      const [poseEnv, classificationModelEnv] = await Promise.all([
+        getPoseLandmarkerPythonEnv(),
+        getDriveMovementClassificationModelPythonEnv(),
+      ]);
 
-    const args = [
-      "-m",
-      "python_analysis.run_analysis",
-      videoPath,
-      "--sport",
-      sportName.toLowerCase(),
-      "--movement",
-      movementName.toLowerCase().replace(/\s+/g, "-"),
-      "--validation-mode",
-      validationMode,
-      "--analysis-fps-mode",
-      analysisFpsSnapshot.effectiveStep,
-      "--low-impact-fps-step",
-      analysisFpsSnapshot.lowImpactStep,
-      "--high-impact-fps-step",
-      analysisFpsSnapshot.highImpactStep,
-      "--tennis-auto-detect-uses-high-impact",
-      String(analysisFpsSnapshot.tennisAutoDetectUsesHighImpact),
-      "--tennis-match-play-uses-high-impact",
-      String(analysisFpsSnapshot.tennisMatchPlayUsesHighImpact),
-      "--analysis-fps-routing-reason",
-      analysisFpsSnapshot.routingReason,
-      "--metric-computation-mode",
-      metricComputationMode,
-    ];
+      const args = [
+        "-m",
+        "python_analysis.run_analysis",
+        videoPath,
+        "--sport",
+        sportName.toLowerCase(),
+        "--movement",
+        movementName.toLowerCase().replace(/\s+/g, "-"),
+        "--validation-mode",
+        validationMode,
+        "--analysis-fps-mode",
+        analysisFpsSnapshot.effectiveStep,
+        "--low-impact-fps-step",
+        analysisFpsSnapshot.lowImpactStep,
+        "--high-impact-fps-step",
+        analysisFpsSnapshot.highImpactStep,
+        "--tennis-auto-detect-uses-high-impact",
+        String(analysisFpsSnapshot.tennisAutoDetectUsesHighImpact),
+        "--tennis-match-play-uses-high-impact",
+        String(analysisFpsSnapshot.tennisMatchPlayUsesHighImpact),
+        "--analysis-fps-routing-reason",
+        analysisFpsSnapshot.routingReason,
+        "--metric-computation-mode",
+        metricComputationMode,
+      ];
 
-    const dominant = String(dominantProfile || "").trim().toLowerCase();
-    if (dominant === "right" || dominant === "left") {
-      args.push("--dominant-profile", dominant);
-    }
-
-    const child = spawn(pythonExecutable, args, {
-      cwd: PROJECT_ROOT,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    let stderr = "";
-    let stderrBuffer = "";
-    let progressChain = Promise.resolve();
-    let settled = false;
-
-    const timeoutHandle = setTimeout(() => {
-      if (settled) return;
-      child.kill("SIGKILL");
-    }, 3600000);
-
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-
-    child.stderr.on("data", (chunk) => {
-      const text = chunk.toString();
-      stderr += text;
-      stderrBuffer += text;
-
-      const lines = stderrBuffer.split(/\r?\n/);
-      stderrBuffer = lines.pop() || "";
-      for (const line of lines) {
-        const event = parsePipelineProgressLine(line);
-        if (!event || !onProgress) continue;
-        progressChain = progressChain
-          .then(() => Promise.resolve(onProgress(event)))
-          .catch((error) => {
-            console.warn("Pipeline progress update failed:", error);
-          });
-      }
-    });
-
-    child.on("error", (error) => {
-      clearTimeout(timeoutHandle);
-      settled = true;
-      reject(new Error(`Python analysis failed: ${error.message}`));
-    });
-
-    child.on("close", async (code, signal) => {
-      clearTimeout(timeoutHandle);
-      await progressChain;
-      if (settled) return;
-      settled = true;
-
-      if (stderrBuffer) {
-        stderr += stderrBuffer;
+      const dominant = String(dominantProfile || "").trim().toLowerCase();
+      if (dominant === "right" || dominant === "left") {
+        args.push("--dominant-profile", dominant);
       }
 
-      if (code !== 0) {
-        const suffix = signal ? ` (signal: ${signal})` : "";
-        console.error("Python analysis error:", `exit code ${code}${suffix}`);
-        if (stderr) console.error("Python stderr:", stderr);
-        reject(new Error(`Python analysis failed: exit code ${code ?? "unknown"}${suffix}`));
-        return;
-      }
+      const child = spawn(pythonExecutable, args, {
+        cwd: PROJECT_ROOT,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, ...poseEnv, ...classificationModelEnv },
+      });
 
-      try {
-        const result = JSON.parse(stdout.trim());
-        if (result.error) {
-          reject(new Error(result.error));
+      let stdout = "";
+      let stderr = "";
+      let stderrBuffer = "";
+      let progressChain = Promise.resolve();
+      let settled = false;
+
+      const timeoutHandle = setTimeout(() => {
+        if (settled) return;
+        child.kill("SIGKILL");
+      }, 3600000);
+
+      child.stdout.on("data", (chunk) => {
+        stdout += chunk.toString();
+      });
+
+      child.stderr.on("data", (chunk) => {
+        const text = chunk.toString();
+        stderr += text;
+        stderrBuffer += text;
+
+        const lines = stderrBuffer.split(/\r?\n/);
+        stderrBuffer = lines.pop() || "";
+        for (const line of lines) {
+          const event = parsePipelineProgressLine(line);
+          if (!event || !onProgress) continue;
+          progressChain = progressChain
+            .then(() => Promise.resolve(onProgress(event)))
+            .catch((error) => {
+              console.warn("Pipeline progress update failed:", error);
+            });
+        }
+      });
+
+      child.on("error", (error) => {
+        clearTimeout(timeoutHandle);
+        settled = true;
+        reject(new Error(`Python analysis failed: ${error.message}`));
+      });
+
+      child.on("close", async (code, signal) => {
+        clearTimeout(timeoutHandle);
+        if (settled) return;
+        settled = true;
+
+        if (stderrBuffer) {
+          stderr += `${stderr.endsWith("\n") || !stderr ? "" : "\n"}${stderrBuffer}`;
+        }
+
+        try {
+          await progressChain;
+        } catch {
+          // Ignore progress propagation errors.
+        }
+
+        if (signal) {
+          reject(new Error(`Python analysis terminated by signal ${signal}`));
           return;
         }
-        resolve(result as PythonResult);
-      } catch {
-        console.error("Failed to parse Python output:", stdout);
-        if (stderr) console.error("Python stderr:", stderr);
-        reject(new Error("Failed to parse analysis results"));
-      }
+
+        if (code !== 0) {
+          if (stderr) console.error("Python analysis stderr:", stderr);
+          reject(new Error(`Python analysis failed with exit code ${code}`));
+          return;
+        }
+
+        try {
+          const result = JSON.parse(stdout.trim()) as PythonResult;
+          if (result.error) {
+            reject(new Error(result.error));
+            return;
+          }
+          resolve(result);
+        } catch {
+          if (stderr) console.error("Python analysis stderr:", stderr);
+          reject(new Error("Failed to parse analysis results"));
+        }
+      });
+    })().catch((error: Error) => {
+      reject(error);
     });
   });
 }
@@ -1188,14 +1206,15 @@ function runPythonMetricEnrichment(
 ): Promise<PythonMetricEnrichmentResult> {
   return new Promise((resolve, reject) => {
     const pythonExecutable = resolvePythonExecutable();
+
     const args = [
       "-m",
       "python_analysis.run_metric_enrichment",
       videoPath,
-      "--analysis-artifact",
-      analysisArtifactPath,
       "--config-key",
       configKey,
+      "--analysis-artifact",
+      analysisArtifactPath,
     ];
 
     const child = spawn(pythonExecutable, args, {
@@ -1264,66 +1283,24 @@ async function backfillAnalysisEnrichment(args: {
   modelVersion?: string | null;
   auditActorUserId?: string | null;
 }): Promise<void> {
-  let pipelineTiming: PipelineTiming | null = null;
+  const enrichmentStartedAt = Date.now();
+  let pipelineTiming: PipelineTiming | null = await persistPipelineTimingUpdate(
+    args.analysisId,
+    {
+      stageKey: "diagnostics",
+      status: "running",
+      startedAt: new Date(enrichmentStartedAt).toISOString(),
+    },
+    {
+      configKey: args.configKey,
+      modelVersion: args.modelVersion,
+      auditActorUserId: args.auditActorUserId,
+    },
+  );
 
   try {
-    pipelineTiming = await persistPipelineTimingUpdate(
-      args.analysisId,
-      {
-        stageKey: "diagnostics",
-        status: "running",
-        startedAt: new Date().toISOString(),
-      },
-      {
-        configKey: args.configKey,
-        modelVersion: args.modelVersion,
-        auditActorUserId: args.auditActorUserId,
-      },
-    );
-
-    const enrichmentStartedAt = Date.now();
-    let diagnosticsPayload: AiDiagnosticsPayload | null = null;
-    let metricEnrichmentPayload: PythonMetricEnrichmentResult | null = null;
-    let diagnosticsError: Error | null = null;
-    let metricEnrichmentError: Error | null = null;
-    const shouldRunMetricEnrichment = Boolean(
-      args.analysisArtifactPath
-      && args.configKey
-      && (ASYNC_METRIC_ENRICHMENT_KEYS_BY_CONFIG[args.configKey] || []).length > 0,
-    );
-
-    await Promise.all([
-      runPythonDiagnostics(
-        args.videoPath,
-        args.sportName,
-        args.movementName,
-        args.dominantProfile,
-        args.analysisArtifactPath,
-      )
-        .then((payload) => {
-          diagnosticsPayload = payload;
-        })
-        .catch((error) => {
-          diagnosticsError = error instanceof Error ? error : new Error(String(error));
-        }),
-      shouldRunMetricEnrichment
-        ? runPythonMetricEnrichment(
-          args.videoPath,
-          args.configKey as string,
-          args.analysisArtifactPath as string,
-        )
-          .then((payload) => {
-            metricEnrichmentPayload = payload;
-          })
-          .catch((error) => {
-            metricEnrichmentError = error instanceof Error ? error : new Error(String(error));
-          })
-        : Promise.resolve(),
-    ]);
-
     const [analysisRow] = await db
       .select({
-        id: analyses.id,
         userId: analyses.userId,
         detectedMovement: analyses.detectedMovement,
       })
@@ -1345,6 +1322,44 @@ async function backfillAnalysisEnrichment(args: {
       .where(eq(metrics.analysisId, args.analysisId))
       .orderBy(desc(metrics.createdAt))
       .limit(1);
+
+    const configKey = metricRow?.configKey || args.configKey || DEFAULT_PIPELINE_CONFIG_KEY;
+    const analysisArtifactPath = String(args.analysisArtifactPath || "").trim();
+    const shouldRunMetricEnrichment = Boolean(
+      analysisArtifactPath
+      && metricRow
+      && hasPendingAsyncMetricEnrichment(
+        configKey,
+        (metricRow.metricValues as Record<string, unknown> | null) || {},
+      ),
+    );
+
+    const [diagnosticsResult, metricEnrichmentResult] = await Promise.allSettled([
+      runPythonDiagnostics(
+        args.videoPath,
+        args.sportName,
+        args.movementName,
+        args.dominantProfile,
+        args.analysisArtifactPath,
+      ),
+      shouldRunMetricEnrichment
+        ? runPythonMetricEnrichment(args.videoPath, configKey, analysisArtifactPath)
+        : Promise.resolve(null),
+    ]);
+
+    const diagnosticsPayload = diagnosticsResult.status === "fulfilled"
+      ? diagnosticsResult.value
+      : null;
+    const diagnosticsError = diagnosticsResult.status === "rejected"
+      ? diagnosticsResult.reason
+      : null;
+    const metricEnrichmentPayload = metricEnrichmentResult.status === "fulfilled"
+      ? metricEnrichmentResult.value
+      : null;
+    const metricEnrichmentError = metricEnrichmentResult.status === "rejected"
+      ? metricEnrichmentResult.reason
+      : null;
+
     const existingDiagnosticsRecord = metricRow?.aiDiagnostics && typeof metricRow.aiDiagnostics === "object"
       ? (metricRow.aiDiagnostics as Record<string, unknown>)
       : {};
@@ -1400,9 +1415,8 @@ async function backfillAnalysisEnrichment(args: {
       return;
     }
 
-    const configKey = metricRow.configKey || args.configKey || DEFAULT_PIPELINE_CONFIG_KEY;
-    const metricEnrichmentResult = metricEnrichmentPayload as PythonMetricEnrichmentResult | null;
-    const enrichedMetricValues = (metricEnrichmentResult?.metricValues || {}) as Record<string, unknown>;
+    const metricEnrichmentResultValue = metricEnrichmentPayload as PythonMetricEnrichmentResult | null;
+    const enrichedMetricValues = (metricEnrichmentResultValue?.metricValues || {}) as Record<string, unknown>;
     const mergedMetricValuesRaw: Record<string, unknown> = {
       ...(((metricRow.metricValues as Record<string, unknown> | null) || {})),
       ...enrichedMetricValues,
@@ -1470,14 +1484,14 @@ async function backfillAnalysisEnrichment(args: {
         `Metric enrichment failed for analysis ${args.analysisId}: ${metricEnrichmentFailureMessage}`,
       );
     }
-  } catch (diagnosticsError: any) {
+  } catch (error: any) {
     await persistPipelineTimingUpdate(
       args.analysisId,
       {
         stageKey: "diagnostics",
         status: "failed",
         completedAt: new Date().toISOString(),
-        note: diagnosticsError?.message || String(diagnosticsError),
+        note: error?.message || String(error),
       },
       {
         configKey: args.configKey,
@@ -1487,7 +1501,7 @@ async function backfillAnalysisEnrichment(args: {
       },
     );
     console.warn(
-      `Diagnostics generation failed for analysis ${args.analysisId}: ${diagnosticsError?.message || diagnosticsError}`,
+      `Diagnostics generation failed for analysis ${args.analysisId}: ${error?.message || error}`,
     );
   } finally {
     const artifactPath = String(args.analysisArtifactPath || "").trim();
@@ -1593,82 +1607,101 @@ function runPythonDiagnostics(
   analysisArtifactPath?: string | null,
 ): Promise<AiDiagnosticsPayload> {
   return new Promise((resolve, reject) => {
-    const pythonExecutable = resolvePythonExecutable();
+    void (async () => {
+      const pythonExecutable = resolvePythonExecutable();
+      const [poseEnv, classificationModelEnv] = await Promise.all([
+        getPoseLandmarkerPythonEnv(),
+        getDriveMovementClassificationModelPythonEnv(),
+      ]);
 
-    const args = [
-      "-m",
-      "python_analysis.run_diagnostics",
-      videoPath,
-      "--sport",
-      sportName.toLowerCase(),
-      "--movement",
-      movementName.toLowerCase().replace(/\s+/g, "-"),
-    ];
+      const args = [
+        "-m",
+        "python_analysis.run_diagnostics",
+        videoPath,
+        "--sport",
+        sportName.toLowerCase(),
+        "--movement",
+        movementName.toLowerCase().replace(/\s+/g, "-"),
+      ];
 
-    const dominant = String(dominantProfile || "").trim().toLowerCase();
-    if (dominant === "right" || dominant === "left") {
-      args.push("--dominant-profile", dominant);
-    }
-    if (analysisArtifactPath) {
-      args.push("--analysis-artifact", analysisArtifactPath);
-    }
-
-    const child = spawn(pythonExecutable, args, {
-      cwd: PROJECT_ROOT,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-
-    const timeoutHandle = setTimeout(() => {
-      if (settled) return;
-      child.kill("SIGKILL");
-    }, 3600000);
-
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    child.on("error", (error) => {
-      clearTimeout(timeoutHandle);
-      settled = true;
-      reject(new Error(`Python diagnostics failed: ${error.message}`));
-    });
-
-    child.on("close", (code, signal) => {
-      clearTimeout(timeoutHandle);
-      if (settled) return;
-      settled = true;
-
-      if (code !== 0) {
-        if (stderr) console.error("Python diagnostics stderr:", stderr);
-        const suffix = signal ? ` (signal: ${signal})` : "";
-        reject(new Error(`Python diagnostics failed: exit code ${code ?? "unknown"}${suffix}`));
-        return;
+      const dominant = String(dominantProfile || "").trim().toLowerCase();
+      if (dominant === "right" || dominant === "left") {
+        args.push("--dominant-profile", dominant);
       }
 
-      try {
-        const result = JSON.parse(stdout.trim());
-        if (result?.error) {
-          reject(new Error(result.error));
+      if (analysisArtifactPath) {
+        args.push("--analysis-artifact", analysisArtifactPath);
+      }
+
+      const child = spawn(pythonExecutable, args, {
+        cwd: PROJECT_ROOT,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, ...poseEnv, ...classificationModelEnv },
+      });
+
+      let stdout = "";
+      let stderr = "";
+      let settled = false;
+
+      const timeoutHandle = setTimeout(() => {
+        if (settled) return;
+        child.kill("SIGKILL");
+      }, 3600000);
+
+      child.stdout.on("data", (chunk) => {
+        stdout += chunk.toString();
+      });
+
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+
+      child.on("error", (error) => {
+        clearTimeout(timeoutHandle);
+        settled = true;
+        reject(new Error(`Python diagnostics failed: ${error.message}`));
+      });
+
+      child.on("close", (code, signal) => {
+        clearTimeout(timeoutHandle);
+        if (settled) return;
+        settled = true;
+
+        if (signal) {
+          reject(new Error(`Python diagnostics terminated by signal ${signal}`));
           return;
         }
-        resolve(result as AiDiagnosticsPayload);
-      } catch {
-        if (stderr) console.error("Python diagnostics stderr:", stderr);
-        reject(new Error("Failed to parse diagnostics results"));
-      }
+
+        if (code !== 0) {
+          if (stderr) console.error("Python diagnostics stderr:", stderr);
+          reject(new Error(`Python diagnostics failed with exit code ${code}`));
+          return;
+        }
+
+        try {
+          const result = JSON.parse(stdout.trim());
+          if (result?.error) {
+            reject(new Error(result.error));
+            return;
+          }
+          resolve(result as AiDiagnosticsPayload);
+        } catch {
+          if (stderr) console.error("Python diagnostics stderr:", stderr);
+          reject(new Error("Failed to parse diagnostics results"));
+        }
+      });
+    })().catch((error: Error) => {
+      reject(error);
     });
   });
 }
 
-export async function processAnalysis(analysisId: string): Promise<void> {
+export async function processAnalysis(
+  analysisId: string,
+  options?: {
+    forceFreshDiagnostics?: boolean;
+  },
+): Promise<void> {
   let pipelineTiming: PipelineTiming | null = null;
   try {
     await db
@@ -1803,10 +1836,12 @@ export async function processAnalysis(analysisId: string): Promise<void> {
         });
       };
 
-      const reusablePayload = await findReusableAnalysisPayload(
-        analysis,
-        modelRegistryConfig.activeModelVersion,
-      );
+      const reusablePayload = options?.forceFreshDiagnostics
+        ? null
+        : await findReusableAnalysisPayload(
+          analysis,
+          modelRegistryConfig.activeModelVersion,
+        );
       if (reusablePayload) {
         const needsDiagnosticsBackfill = !hasAllRequiredUploadDiagnosticsMetrics(
           normalizeMetricValuesForPersistence(

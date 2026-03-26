@@ -98,6 +98,15 @@ function getR2Prefix(kind: MediaKind): string {
     : normalizeKeyPrefix(process.env.R2_PLAYER_VIDEO_FOLDER || process.env.R2_PLAYER_VIDEO || "video", "video");
 }
 
+function isRelativeStorageKey(value: string): boolean {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  if (path.isAbsolute(raw)) return false;
+  if (raw.startsWith("/")) return false;
+  if (/^[a-z]+:\/\//i.test(raw)) return false;
+  return true;
+}
+
 function buildR2Key(kind: MediaKind, filename: string): string {
   return `${getR2Prefix(kind)}/${String(filename || "").replace(/^\/+/, "")}`;
 }
@@ -119,6 +128,10 @@ function getFilesystemPublicPath(storedPath: string): string | null {
   const raw = String(storedPath || "").trim();
   if (!raw) return null;
 
+  if (isRelativeStorageKey(raw)) {
+    return `/uploads/${toPosixPath(raw.replace(/^\/+/, ""))}`;
+  }
+
   if (raw.startsWith("/uploads/")) {
     return raw;
   }
@@ -139,6 +152,10 @@ function getFilesystemLocalPath(storedPath: string): string | null {
   const raw = String(storedPath || "").trim();
   if (!raw) return null;
 
+  if (isRelativeStorageKey(raw)) {
+    return path.join(uploadsRoot, raw.replace(/^\/+/, ""));
+  }
+
   if (path.isAbsolute(raw)) {
     return raw;
   }
@@ -149,6 +166,60 @@ function getFilesystemLocalPath(storedPath: string): string | null {
   }
 
   return null;
+}
+
+function getNormalizedVideoStorageKey(storedPath: string | null | undefined): string | null {
+  const raw = String(storedPath || "").trim();
+  if (!raw) return null;
+
+  if (isRelativeStorageKey(raw)) {
+    return raw.replace(/^\/+/, "");
+  }
+
+  const r2Key = parseR2Reference(raw);
+  if (r2Key) {
+    const videoPrefix = `${getR2Prefix("video")}/`;
+    if (r2Key.startsWith(videoPrefix)) {
+      return r2Key.slice(videoPrefix.length).replace(/^\/+/, "") || null;
+    }
+    return null;
+  }
+
+  const filesystemPublicPath = getFilesystemPublicPath(raw);
+  if (filesystemPublicPath?.startsWith("/uploads/")) {
+    return filesystemPublicPath.replace(/^\/uploads\/?/, "").replace(/^\/+/, "") || null;
+  }
+
+  const filesystemLocalPath = getFilesystemLocalPath(raw);
+  if (filesystemLocalPath) {
+    const relative = path.relative(uploadsRoot, filesystemLocalPath);
+    if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) {
+      return toPosixPath(relative).replace(/^\/+/, "") || null;
+    }
+  }
+
+  return null;
+}
+
+function getCurrentVideoR2Key(storedPath: string, treatRelativeKeyAsR2 = false): string | null {
+  const raw = String(storedPath || "").trim();
+  if (!raw) return null;
+
+  const legacyKey = parseR2Reference(raw);
+  if (legacyKey) {
+    return legacyKey;
+  }
+
+  if (!treatRelativeKeyAsR2) {
+    return null;
+  }
+
+  const normalizedKey = getNormalizedVideoStorageKey(raw);
+  if (!normalizedKey) {
+    return null;
+  }
+
+  return buildR2Key("video", normalizedKey);
 }
 
 async function downloadR2ObjectToFile(key: string, targetPath: string): Promise<void> {
@@ -317,7 +388,7 @@ export async function storeVideoBuffer(params: {
   if (mode === "filesystem") {
     const targetPath = buildFilesystemVideoPath(params.filename);
     fs.writeFileSync(targetPath, params.buffer);
-    return targetPath;
+    return params.filename;
   }
 
   const key = buildR2Key("video", params.filename);
@@ -327,7 +398,7 @@ export async function storeVideoBuffer(params: {
     Body: params.buffer,
     ContentType: params.contentType || "application/octet-stream",
   }));
-  return toR2Reference(key);
+  return params.filename;
 }
 
 export async function resolveMediaUrl(storedPath: string | null | undefined): Promise<string | null> {
@@ -338,7 +409,8 @@ export async function resolveMediaUrl(storedPath: string | null | undefined): Pr
     return raw;
   }
 
-  const r2Key = parseR2Reference(raw);
+  const storageMode = await getVideoStorageMode();
+  const r2Key = getCurrentVideoR2Key(raw, storageMode === "r2");
   if (r2Key) {
     return getSignedUrl(
       getR2Client(),
@@ -363,7 +435,8 @@ export async function withLocalMediaFile<T>(
     throw new Error("Media path is empty");
   }
 
-  const r2Key = parseR2Reference(raw);
+  const storageMode = await getVideoStorageMode();
+  const r2Key = getCurrentVideoR2Key(raw, storageMode === "r2");
   if (!r2Key) {
     const localPath = getFilesystemLocalPath(raw);
     if (!localPath || !fs.existsSync(localPath)) {
@@ -402,7 +475,8 @@ export async function deleteStoredMedia(storedPath: string | null | undefined): 
   const raw = String(storedPath || "").trim();
   if (!raw) return;
 
-  const r2Key = parseR2Reference(raw);
+  const storageMode = await getVideoStorageMode();
+  const r2Key = getCurrentVideoR2Key(raw, storageMode === "r2");
   if (r2Key) {
     await getR2Client().send(new DeleteObjectCommand({
       Bucket: getR2Bucket(),
@@ -424,4 +498,12 @@ export async function deleteStoredMedia(storedPath: string | null | undefined): 
 export function isStoredMediaLocallyAccessible(storedPath: string | null | undefined): boolean {
   const localPath = getFilesystemLocalPath(String(storedPath || ""));
   return Boolean(localPath && fs.existsSync(localPath));
+}
+
+export function normalizeStoredVideoPath(storedPath: string | null | undefined): string | null {
+  return getNormalizedVideoStorageKey(storedPath);
+}
+
+export function getStoredMediaLocalPath(storedPath: string | null | undefined): string | null {
+  return getFilesystemLocalPath(String(storedPath || ""));
 }

@@ -11,21 +11,38 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getApiUrl } from "@/lib/query-client";
 import { fetch } from "expo/fetch";
 import { ds } from "@/constants/design-system";
 import { GlassCard } from "@/components/ui/GlassCard";
 
 export default function AddPlayerScreen() {
+  const insets = useSafeAreaInsets();
+  const { returnTo: rawReturnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const [newPlayerEmail, setNewPlayerEmail] = useState("");
   const [newPlayerName, setNewPlayerName] = useState("");
   const [newPlayerPassword, setNewPlayerPassword] = useState("");
   const [creatingPlayer, setCreatingPlayer] = useState(false);
   const [createPlayerError, setCreatePlayerError] = useState("");
+  const returnTo = Array.isArray(rawReturnTo) ? rawReturnTo[0] : rawReturnTo;
+
+  const handleBack = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (typeof router.canGoBack === "function" && router.canGoBack()) {
+      router.back();
+      return;
+    }
+    if (returnTo && returnTo !== "/profile") {
+      router.replace(returnTo as any);
+      return;
+    }
+    router.replace("/profile");
+  };
 
   const handleCreatePlayer = async () => {
     setCreatePlayerError("");
@@ -61,7 +78,7 @@ export default function AddPlayerScreen() {
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("Player Created", "New player profile created successfully.");
-      router.back();
+      handleBack();
     } catch {
       setCreatePlayerError("Failed to create player");
     } finally {
@@ -73,12 +90,9 @@ export default function AddPlayerScreen() {
     <View style={styles.container}>
       <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
 
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}> 
         <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.back();
-          }}
+          onPress={handleBack}
           style={({ pressed }) => [styles.backButton, { opacity: pressed ? 0.75 : 1 }]}
         >
           <Ionicons name="chevron-back" size={22} color="#F8FAFC" />
@@ -89,81 +103,96 @@ export default function AddPlayerScreen() {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.fieldWrapper}>
-            <Text style={styles.fieldLabel}>Email</Text>
-            <GlassCard style={styles.fieldInput}>
-              <Ionicons name="mail-outline" size={18} color="#6C5CE7" />
-              <TextInput
-                value={newPlayerEmail}
-                onChangeText={(text) => {
-                  setNewPlayerEmail(text);
-                  if (createPlayerError) setCreatePlayerError("");
-                }}
-                placeholder="player@email.com"
-                placeholderTextColor="#4A4A6A"
-                style={styles.textInput}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </GlassCard>
-          </View>
-
-          <View style={styles.fieldWrapper}>
-            <Text style={styles.fieldLabel}>Full Name</Text>
-            <GlassCard style={styles.fieldInput}>
-              <Ionicons name="person-outline" size={18} color="#6C5CE7" />
-              <TextInput
-                value={newPlayerName}
-                onChangeText={(text) => {
-                  setNewPlayerName(text);
-                  if (createPlayerError) setCreatePlayerError("");
-                }}
-                placeholder="Player Name"
-                placeholderTextColor="#4A4A6A"
-                style={styles.textInput}
-                autoCapitalize="words"
-                autoCorrect={false}
-              />
-            </GlassCard>
-          </View>
-
-          <View style={styles.fieldWrapper}>
-            <Text style={styles.fieldLabel}>Password</Text>
-            <GlassCard style={styles.fieldInput}>
-              <Ionicons name="lock-closed-outline" size={18} color="#6C5CE7" />
-              <TextInput
-                value={newPlayerPassword}
-                onChangeText={(text) => {
-                  setNewPlayerPassword(text);
-                  if (createPlayerError) setCreatePlayerError("");
-                }}
-                placeholder="At least 6 characters"
-                placeholderTextColor="#4A4A6A"
-                style={styles.textInput}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </GlassCard>
-          </View>
-
-          {createPlayerError ? <Text style={styles.errorText}>{createPlayerError}</Text> : null}
-
-          <Pressable
-            onPress={handleCreatePlayer}
-            disabled={creatingPlayer}
-            style={({ pressed }) => [styles.saveButton, { opacity: pressed || creatingPlayer ? 0.75 : 1 }]}
-          >
-            {creatingPlayer ? (
-              <ActivityIndicator size="small" color="#6C5CE7" />
-            ) : (
-              <View style={styles.saveContent}>
-                <Ionicons name="checkmark-circle" size={20} color="#6C5CE7" />
-                <Text style={styles.saveText}>Add Player</Text>
+          <View style={styles.sectionGroup}>
+            <Text style={styles.sectionLabel}>Identity</Text>
+            <GlassCard style={styles.sectionCard}>
+              <View style={styles.fieldWrapper}>
+                <Text style={styles.fieldLabel}>Email</Text>
+                <GlassCard style={styles.fieldInput}>
+                  <Ionicons name="mail-outline" size={18} color="#6C5CE7" />
+                  <TextInput
+                    value={newPlayerEmail}
+                    onChangeText={(text) => {
+                      setNewPlayerEmail(text);
+                      if (createPlayerError) setCreatePlayerError("");
+                    }}
+                    placeholder="player@email.com"
+                    placeholderTextColor="#4A4A6A"
+                    style={styles.textInput}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </GlassCard>
               </View>
-            )}
-          </Pressable>
+
+              <View style={styles.fieldWrapper}>
+                <Text style={styles.fieldLabel}>Full Name</Text>
+                <GlassCard style={styles.fieldInput}>
+                  <Ionicons name="person-outline" size={18} color="#6C5CE7" />
+                  <TextInput
+                    value={newPlayerName}
+                    onChangeText={(text) => {
+                      setNewPlayerName(text);
+                      if (createPlayerError) setCreatePlayerError("");
+                    }}
+                    placeholder="Player Name"
+                    placeholderTextColor="#4A4A6A"
+                    style={styles.textInput}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                  />
+                </GlassCard>
+              </View>
+            </GlassCard>
+          </View>
+
+          <View style={styles.sectionGroup}>
+            <Text style={styles.sectionLabel}>Security</Text>
+            <GlassCard style={styles.sectionCard}>
+              <View style={styles.fieldWrapper}>
+                <Text style={styles.fieldLabel}>Password</Text>
+                <GlassCard style={styles.fieldInput}>
+                  <Ionicons name="lock-closed-outline" size={18} color="#6C5CE7" />
+                  <TextInput
+                    value={newPlayerPassword}
+                    onChangeText={(text) => {
+                      setNewPlayerPassword(text);
+                      if (createPlayerError) setCreatePlayerError("");
+                    }}
+                    placeholder="At least 6 characters"
+                    placeholderTextColor="#4A4A6A"
+                    style={styles.textInput}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </GlassCard>
+              </View>
+            </GlassCard>
+          </View>
+
+          <View style={styles.sectionGroup}>
+            <Text style={styles.sectionLabel}>Action</Text>
+            <GlassCard style={styles.sectionCard}>
+              {createPlayerError ? <Text style={styles.errorText}>{createPlayerError}</Text> : null}
+
+              <Pressable
+                onPress={handleCreatePlayer}
+                disabled={creatingPlayer}
+                style={({ pressed }) => [styles.saveButton, { opacity: pressed || creatingPlayer ? 0.75 : 1 }]}
+              >
+                {creatingPlayer ? (
+                  <ActivityIndicator size="small" color="#6C5CE7" />
+                ) : (
+                  <View style={styles.saveContent}>
+                    <Ionicons name="checkmark-circle" size={20} color="#6C5CE7" />
+                    <Text style={styles.saveText}>Add Player</Text>
+                  </View>
+                )}
+              </Pressable>
+            </GlassCard>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -173,12 +202,13 @@ export default function AddPlayerScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: ds.color.bg },
   header: {
-    marginTop: 52,
     paddingHorizontal: ds.space.lg,
     paddingBottom: ds.space.md,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: ds.color.glassBorder,
   },
   backButton: {
     width: 40,
@@ -197,7 +227,22 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: ds.color.textPrimary,
   },
-  scroll: { paddingHorizontal: ds.space.xl, paddingBottom: 30, gap: 14 },
+  scroll: { paddingHorizontal: ds.space.xl, paddingTop: 24, paddingBottom: 30 },
+  sectionGroup: { gap: 10, marginBottom: 22 },
+  sectionLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: ds.color.textTertiary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  sectionCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: ds.color.glassBorder,
+    padding: 14,
+    gap: 16,
+  },
   fieldWrapper: { gap: 8 },
   fieldLabel: {
     fontSize: 12,
