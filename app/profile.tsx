@@ -671,7 +671,7 @@ export default function ProfileScreen() {
                 </View>
                 <View style={styles.navCardBody}>
                   <Text style={styles.navCardTitle}>Configure</Text>
-                  <Text style={styles.navCardDescription}>Platform, pipeline, scoring, and dataset controls</Text>
+                  <Text style={styles.navCardDescription}>Platform, analysis, scoring, dataset, and player administration settings</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
               </Pressable>

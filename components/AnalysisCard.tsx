@@ -9,6 +9,8 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import type { AnalysisResponse } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { formatDateTimeInTimeZone, resolveUserTimeZone } from "@/lib/timezone";
 
 interface AnalysisCardProps {
   analysis: AnalysisResponse;
@@ -18,6 +20,8 @@ interface AnalysisCardProps {
 
 export function AnalysisCard({ analysis, onPress, showUserName }: AnalysisCardProps) {
   const colors = Colors.dark;
+  const { user } = useAuth();
+  const profileTimeZone = resolveUserTimeZone(user);
 
   const statusConfig = {
     pending: { color: colors.amber, icon: "time-outline" as const, label: "Pending" },

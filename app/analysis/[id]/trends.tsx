@@ -317,6 +317,18 @@ export default function AnalysisMetricTrendsScreen() {
   const profileTimeZone = resolveUserTimeZone(user);
   const enrichmentPendingRef = useRef(false);
 
+  const handleBack = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (typeof router.canGoBack === "function" && router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace({
+      pathname: "/analysis/[id]",
+      params: { id },
+    });
+  };
+
   const { data: analysisDetail } = useQuery({
     queryKey: ["analysis", id],
     queryFn: () => fetchAnalysisDetail(id!),
@@ -516,10 +528,7 @@ export default function AnalysisMetricTrendsScreen() {
 
       <View style={styles.topBar}>
         <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.back();
-          }}
+          onPress={handleBack}
           style={({ pressed }) => [styles.navButton, { opacity: pressed ? 0.78 : 1 }]}
         >
           <Ionicons name="chevron-back" size={22} color="#F8FAFC" />

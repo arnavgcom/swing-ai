@@ -9,6 +9,8 @@ type UserTimeZoneInput = {
 const COUNTRY_TO_TIMEZONE: Record<string, string> = {
   singapore: "Asia/Singapore",
   sg: "Asia/Singapore",
+  sgp: "Asia/Singapore",
+  "republic of singapore": "Asia/Singapore",
   india: "Asia/Kolkata",
   in: "Asia/Kolkata",
   "united states": "America/Los_Angeles",
@@ -41,7 +43,7 @@ function countryToTimeZone(countryRaw: string | null | undefined): string | null
   const normalizedAlphaNum = country.replace(/[^a-z0-9]+/g, " ").trim();
   const compact = normalizedAlphaNum.replace(/\s+/g, "");
 
-  if (compact.includes("singapore") || compact === "sg") {
+  if (compact.includes("singapore") || compact === "sg" || compact === "sgp") {
     return "Asia/Singapore";
   }
   if (compact.includes("india") || compact === "in") {
@@ -137,6 +139,13 @@ export function resolveUserTimeZone(user: UserTimeZoneInput, fallback?: string):
   return "UTC";
 }
 
+function getFormatter(
+  options: Intl.DateTimeFormatOptions,
+  locale = "en-SG",
+): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat(locale, options);
+}
+
 export function formatDateTimeInTimeZone(
   value: string | Date | null | undefined,
   timeZone?: string,
@@ -146,7 +155,7 @@ export function formatDateTimeInTimeZone(
   const date = parseApiDate(value);
   if (!date) return "Unknown date";
 
-  return date.toLocaleString(undefined, {
+  return getFormatter({
     year: "numeric",
     month: "short",
     day: "2-digit",
@@ -154,7 +163,7 @@ export function formatDateTimeInTimeZone(
     minute: "2-digit",
     timeZone,
     ...options,
-  });
+  }).format(date);
 }
 
 export function formatDateInTimeZone(
@@ -166,13 +175,13 @@ export function formatDateInTimeZone(
   const date = parseApiDate(value);
   if (!date) return "Unknown date";
 
-  return date.toLocaleDateString(undefined, {
+  return getFormatter({
     year: "numeric",
     month: "short",
     day: "numeric",
     timeZone,
     ...options,
-  });
+  }).format(date);
 }
 
 export function formatMonthDayInTimeZone(
@@ -183,9 +192,9 @@ export function formatMonthDayInTimeZone(
   const date = parseApiDate(value);
   if (!date) return "-";
 
-  return date.toLocaleDateString(undefined, {
+  return getFormatter({
     month: "short",
     day: "numeric",
     timeZone,
-  });
+  }).format(date);
 }

@@ -28,6 +28,7 @@ import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
 import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/components/TabScreenIntro";
 import { ds } from "@/constants/design-system";
+import { formatDateTimeInTimeZone, resolveUserTimeZone } from "@/lib/timezone";
 
 const NativeDateTimePicker = Platform.OS === "web"
   ? null
@@ -104,14 +105,14 @@ function getFileExtension(fileName?: string | null, uri?: string | null): string
   return "mp4";
 }
 
-function formatSessionDateTime(value: Date): string {
-  return new Intl.DateTimeFormat(undefined, {
+function formatSessionDateTime(value: Date, timeZone?: string): string {
+  return formatDateTimeInTimeZone(value, timeZone, {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(value);
+  });
 }
 
 function toDateInputValue(value: Date): string {
@@ -175,6 +176,7 @@ export default function UploadScreen() {
   const colors = Colors.dark;
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const profileTimeZone = resolveUserTimeZone(user);
   const isAdmin = user?.role === "admin";
   const { selectedSport } = useSport();
   const isFocused = useIsFocused();
@@ -615,7 +617,7 @@ export default function UploadScreen() {
     ? "Match Play"
     : selectedFocus.movementName || tennisSport?.name || selectedSport?.name || "Tennis";
   const sessionDateValue = recordedAtOverride
-    ? formatSessionDateTime(recordedAtOverride)
+    ? formatSessionDateTime(recordedAtOverride, profileTimeZone)
     : "Optional";
   const selectedPlayerLabel =
     (() => {

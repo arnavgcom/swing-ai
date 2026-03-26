@@ -1,5 +1,4 @@
 import { fetch } from "expo/fetch";
-import { File } from "expo-file-system";
 import { Platform } from "react-native";
 import { getApiUrl } from "./query-client";
 import type { PoseLandmarkerModel } from "@shared/pose-landmarker";
@@ -535,6 +534,7 @@ export interface AnalysisShotAnnotationResponse {
   totalShots: number;
   orderedShotLabels: string[];
   usedForScoringShotIndexes: number[];
+  includeInTraining: boolean;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -690,17 +690,59 @@ export interface AnalysisSummary extends AnalysisResponse {
   modelVersion?: string | null;
 }
 
-export async function fetchAnalysesSummary(options?: { includeAll?: boolean }): Promise<AnalysisSummary[]> {
+export interface RecalculateAnalysesResponse {
+  traceId: string;
+  message: string;
+  scope: "all" | "user";
+  totalAnalyses: number;
+  queuedAnalyses: number;
+  queuedAnalysisIds: string[];
+  autoRelinkedAnalyses: number;
+  skippedAnalyses: number;
+  skippedDetails: Array<{
+    id: string;
+    reason: string;
+    filename: string;
+  }>;
+  willRefreshDiscrepancies: boolean;
+  queuedDiscrepancySnapshots: number;
+  analysesWithAnnotationsQueued: number;
+  selectedModelVersion?: string;
+  selectedModelSource?: "active" | "saved" | "draft";
+}
+
+export async function fetchAnalysesSummary(options?: { includeAll?: boolean; traceId?: string }): Promise<AnalysisSummary[]> {
   const baseUrl = getApiUrl();
   const params = new URLSearchParams();
   if (options?.includeAll) {
     params.set("includeAll", "true");
+  }
+  if (options?.traceId) {
+    params.set("traceId", options.traceId);
   }
   const query = params.toString() ? `?${params.toString()}` : "";
   const res = await fetch(`${baseUrl}api/analyses/summary${query}`, {
     credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to fetch analyses summary");
+  return res.json();
+}
+
+export async function startAnalysesRecalculation(payload?: {
+  modelVersion?: string;
+  useDraftModel?: boolean;
+}): Promise<RecalculateAnalysesResponse> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/analyses/recalculate`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(payload?.error || "Failed to start recalculation");
+  }
   return res.json();
 }
 
@@ -895,6 +937,7 @@ export async function saveAnalysisShotAnnotation(
     totalShots: number;
     orderedShotLabels: string[];
     usedForScoringShotIndexes: number[];
+    includeInTraining?: boolean;
     notes?: string;
   },
 ): Promise<AnalysisShotAnnotationResponse> {
@@ -1569,8 +1612,15 @@ export async function uploadVideo(
   const mimeType = guessVideoMimeType(filename);
 
   if (Platform.OS === "web") {
-    const file = new File(uri);
-    formData.append("video", file as any, filename);
+    const response = await globalThis.fetch(uri);
+    if (!response.ok) {
+      throw new Error("Failed to read the selected video in the browser before upload");
+    }
+    const blob = await response.blob();
+    const browserFile = new globalThis.File([blob], filename, {
+      type: blob.type || mimeType,
+    });
+    formData.append("video", browserFile);
   } else {
     formData.append("video", {
       uri,

@@ -577,6 +577,7 @@ export default function AnalysisDetailScreen() {
   const [selectedDiscrepancies, setSelectedDiscrepancies] = useState<string[]>([]);
   const [discrepancyText, setDiscrepancyText] = useState("");
   const [manualShotLabels, setManualShotLabels] = useState<string[]>([]);
+  const [manualIncludeInTraining, setManualIncludeInTraining] = useState(true);
   const [manualFormInitialized, setManualFormInitialized] = useState(false);
   const [activeShotDropdownIndex, setActiveShotDropdownIndex] = useState<number | null>(null);
   const [manualSavedVisible, setManualSavedVisible] = useState(false);
@@ -937,6 +938,7 @@ export default function AnalysisDetailScreen() {
       totalShots: number;
       orderedShotLabels: string[];
       usedForScoringShotIndexes: number[];
+      includeInTraining?: boolean;
       notes?: string;
     }) => saveAnalysisShotAnnotation(id!, payload),
     onSuccess: async (saved) => {
@@ -987,6 +989,7 @@ export default function AnalysisDetailScreen() {
   useEffect(() => {
     setManualFormInitialized(false);
     setManualShotLabels([]);
+    setManualIncludeInTraining(true);
     setActiveShotDropdownIndex(null);
     setManualAnnotationDone(false);
   }, [id]);
@@ -1009,6 +1012,8 @@ export default function AnalysisDetailScreen() {
     const savedLabels = (shotAnnotation?.orderedShotLabels || [])
       .map((item) => String(item || "").trim().toLowerCase())
       .filter(Boolean);
+
+    setManualIncludeInTraining(shotAnnotation?.includeInTraining ?? true);
 
     if (savedLabels.length > 0) {
       setManualShotLabels(savedLabels);
@@ -1136,9 +1141,11 @@ export default function AnalysisDetailScreen() {
         { length: totalShots },
         (_value, index) => index + 1,
       ),
+      includeInTraining: manualIncludeInTraining,
     });
   }, [
     diagnostics?.shotSegments,
+    manualIncludeInTraining,
     manualShotLabels,
     shotAnnotation?.orderedShotLabels,
     shotAnnotationMutation,
@@ -1484,11 +1491,11 @@ export default function AnalysisDetailScreen() {
     return improvedStrokeMixItems[0] || null;
   }, [improvedStrokeMixItems]);
 
-  const stickyHeaderIndex = useMemo(() => {
-    let index = 2;
-    if (enrichmentMessage) index += 1;
-    if (showMatchPlaySummaryCard) index += 1;
-    return index;
+  const stickyHeaderIndices = useMemo(() => {
+    let performanceJumpIndex = 2;
+    if (enrichmentMessage) performanceJumpIndex += 1;
+    if (showMatchPlaySummaryCard) performanceJumpIndex += 1;
+    return [performanceJumpIndex];
   }, [enrichmentMessage, showMatchPlaySummaryCard]);
 
   const previousTrendPoint = useMemo(() => {
@@ -2006,7 +2013,7 @@ export default function AnalysisDetailScreen() {
     analysis.capturedAt || analysis.createdAt,
     profileTimeZone,
   );
-  const topHeaderTitle = `${headerPlayerNameResolved} ${headerDateTime}`;
+  const topHeaderTitle = `${headerPlayerNameResolved} • Session ${headerDateTime}`;
   const handleRetryAnalysis = () => {
     if (retryMutation.isPending) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -2228,7 +2235,7 @@ export default function AnalysisDetailScreen() {
             { paddingBottom: insets.bottom + 34 },
           ]}
           showsVerticalScrollIndicator={false}
-          stickyHeaderIndices={[stickyHeaderIndex]}
+          stickyHeaderIndices={stickyHeaderIndices}
           onScroll={handlePerformanceScroll}
           scrollEventThrottle={16}
         >
@@ -2302,47 +2309,49 @@ export default function AnalysisDetailScreen() {
             </View>
           ) : null}
 
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push({
-                pathname: "/analysis/[id]/trends",
-                params: {
-                  id: analysis.id,
-                  focusSection: "overall",
-                },
-              });
-            }}
-            style={({ pressed }) => [styles.scoreSection, { opacity: pressed ? 0.9 : 1 }]}
-          >
-            {displayOverallScore != null ? (
-              <>
-                <ScoreGauge
-                  score={displayOverallScore / 10}
-                  maxScore={10}
-                  size={160}
-                  label="Score"
-                />
-                {overallDeltaPct != null ? (
-                  <View style={styles.overallDeltaWrap}>
-                    <Ionicons
-                      name={deltaTrendIcon(overallDeltaPct)}
-                      size={13}
-                      color={deltaColor(overallDeltaPct)}
-                    />
-                    <Text style={[styles.overallDeltaText, { color: deltaColor(overallDeltaPct) }]}>
-                      {formatDeltaPercent(overallDeltaPct)}
-                    </Text>
-                  </View>
-                ) : null}
-              </>
-            ) : (
-              <View style={styles.scoreUnavailableWrap}>
-                <Text style={styles.scoreUnavailableValue}>N/A</Text>
-                <Text style={styles.scoreFilteredHint}>Insufficient score data</Text>
-              </View>
-            )}
-          </Pressable>
+          <View style={styles.scoreStickyWrap}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({
+                  pathname: "/analysis/[id]/trends",
+                  params: {
+                    id: analysis.id,
+                    focusSection: "overall",
+                  },
+                });
+              }}
+              style={({ pressed }) => [styles.scoreSection, { opacity: pressed ? 0.9 : 1 }]}
+            >
+              {displayOverallScore != null ? (
+                <>
+                  <ScoreGauge
+                    score={displayOverallScore / 10}
+                    maxScore={10}
+                    size={160}
+                    label="Score"
+                  />
+                  {overallDeltaPct != null ? (
+                    <View style={styles.overallDeltaWrap}>
+                      <Ionicons
+                        name={deltaTrendIcon(overallDeltaPct)}
+                        size={13}
+                        color={deltaColor(overallDeltaPct)}
+                      />
+                      <Text style={[styles.overallDeltaText, { color: deltaColor(overallDeltaPct) }]}> 
+                        {formatDeltaPercent(overallDeltaPct)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </>
+              ) : (
+                <View style={styles.scoreUnavailableWrap}>
+                  <Text style={styles.scoreUnavailableValue}>N/A</Text>
+                  <Text style={styles.scoreFilteredHint}>Insufficient score data</Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
 
           {showMatchPlaySummaryCard ? (
             <View style={styles.matchPlaySummaryCard}>
@@ -3073,6 +3082,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 20,
     gap: 8,
+  },
+  scoreStickyWrap: {
+    paddingBottom: 6,
+    backgroundColor: "transparent",
   },
   scoreUnavailableWrap: {
     alignItems: "center",

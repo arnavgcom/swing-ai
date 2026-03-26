@@ -280,8 +280,8 @@ export default function AnalysisDiagnosticsScreen() {
             </Pressable>
             {videoTechnicalExpanded ? (
               <>
-                <Text style={styles.rowText}>Captured: {formatDate(detail?.analysis?.capturedAt, profileTimeZone)}</Text>
-                <Text style={styles.rowText}>Created: {formatDate(detail?.analysis?.createdAt, profileTimeZone)}</Text>
+                <Text style={styles.rowText}>Session: {formatDate(detail?.analysis?.capturedAt, profileTimeZone)}</Text>
+                <Text style={styles.rowText}>Uploaded: {formatDate(detail?.analysis?.createdAt, profileTimeZone)}</Text>
                 <Text style={styles.rowText}>Duration: {diagnostics.videoDurationSec.toFixed(2)}s</Text>
                 <Text style={styles.rowText}>FPS: {diagnostics.fps.toFixed(2)}</Text>
                 <Text style={styles.rowText}>Resolution: {diagnostics.resolution.width}x{diagnostics.resolution.height}</Text>

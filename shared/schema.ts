@@ -173,6 +173,24 @@ export const analyses = pgTable("analyses", {
   updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
 });
 
+export const analysisRecalculationRuns = pgTable("analysis_recalculation_runs", {
+  traceId: varchar("trace_id").primaryKey(),
+  requestedByUserId: varchar("requested_by_user_id").references(() => users.id),
+  scope: text("scope").notNull(),
+  selectedModelVersion: varchar("selected_model_version"),
+  selectedModelSource: text("selected_model_source"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const analysisRecalculationRunItems = pgTable("analysis_recalculation_run_items", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  traceId: varchar("trace_id").notNull().references(() => analysisRecalculationRuns.traceId),
+  analysisId: varchar("analysis_id").notNull().references(() => analyses.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const metrics = pgTable("metrics", {
   id: varchar("id")
     .primaryKey()
@@ -241,6 +259,7 @@ export const analysisShotAnnotations = pgTable("analysis_shot_annotations", {
   totalShots: real("total_shots").notNull(),
   orderedShotLabels: jsonb("ordered_shot_labels").$type<string[]>().notNull(),
   usedForScoringShotIndexes: jsonb("used_for_scoring_shot_indexes").$type<number[]>().notNull(),
+  includeInTraining: boolean("include_in_training").notNull().default(true),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

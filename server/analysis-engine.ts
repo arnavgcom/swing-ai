@@ -37,8 +37,16 @@ import {
   validateTennisVideoUpload,
 } from "./tennis-upload-validation";
 import { getEnabledPrimarySport, getSportById, isSportEnabledRecord } from "./sport-availability";
-import { getDriveMovementClassificationModelPythonEnv } from "./classification-model-settings";
+import {
+  getDriveMovementClassificationModelPythonEnv,
+  getDriveMovementClassificationModelPythonEnvForSelection,
+} from "./classification-model-settings";
 import { getPoseLandmarkerPythonEnv } from "./pose-landmarker-settings";
+
+type ClassificationModelExecutionSelection = {
+  selectedModelKey: string;
+  modelVersion?: string | null;
+};
 
 interface PythonResult {
   configKey: string;
@@ -1069,6 +1077,7 @@ function runPythonAnalysis(
   analysisFpsSnapshot: AnalysisFpsRuntimeSnapshot,
   metricComputationMode: "core" | "full",
   dominantProfile?: string | null,
+  classificationModelSelection?: ClassificationModelExecutionSelection | null,
   onProgress?: (event: PipelineProgressEvent) => Promise<void> | void,
 ): Promise<PythonResult> {
   return new Promise((resolve, reject) => {
@@ -1076,7 +1085,9 @@ function runPythonAnalysis(
       const pythonExecutable = resolvePythonExecutable();
       const [poseEnv, classificationModelEnv] = await Promise.all([
         getPoseLandmarkerPythonEnv(),
-        getDriveMovementClassificationModelPythonEnv(),
+        classificationModelSelection
+          ? getDriveMovementClassificationModelPythonEnvForSelection(classificationModelSelection)
+          : getDriveMovementClassificationModelPythonEnv(),
       ]);
 
       const args = [
@@ -1282,6 +1293,7 @@ async function backfillAnalysisEnrichment(args: {
   configKey?: string | null;
   modelVersion?: string | null;
   auditActorUserId?: string | null;
+  classificationModelSelection?: ClassificationModelExecutionSelection | null;
 }): Promise<void> {
   const enrichmentStartedAt = Date.now();
   let pipelineTiming: PipelineTiming | null = await persistPipelineTimingUpdate(
@@ -1341,6 +1353,7 @@ async function backfillAnalysisEnrichment(args: {
         args.movementName,
         args.dominantProfile,
         args.analysisArtifactPath,
+        args.classificationModelSelection,
       ),
       shouldRunMetricEnrichment
         ? runPythonMetricEnrichment(args.videoPath, configKey, analysisArtifactPath)
@@ -1605,13 +1618,16 @@ function runPythonDiagnostics(
   movementName: string,
   dominantProfile?: string | null,
   analysisArtifactPath?: string | null,
+  classificationModelSelection?: ClassificationModelExecutionSelection | null,
 ): Promise<AiDiagnosticsPayload> {
   return new Promise((resolve, reject) => {
     void (async () => {
       const pythonExecutable = resolvePythonExecutable();
       const [poseEnv, classificationModelEnv] = await Promise.all([
         getPoseLandmarkerPythonEnv(),
-        getDriveMovementClassificationModelPythonEnv(),
+        classificationModelSelection
+          ? getDriveMovementClassificationModelPythonEnvForSelection(classificationModelSelection)
+          : getDriveMovementClassificationModelPythonEnv(),
       ]);
 
       const args = [
@@ -1700,6 +1716,7 @@ export async function processAnalysis(
   analysisId: string,
   options?: {
     forceFreshDiagnostics?: boolean;
+    classificationModelSelection?: ClassificationModelExecutionSelection | null;
   },
 ): Promise<void> {
   let pipelineTiming: PipelineTiming | null = null;
@@ -1816,6 +1833,9 @@ export async function processAnalysis(
         });
 
       const modelRegistryConfig = readModelRegistryConfig();
+      const selectedModelVersion = String(
+        options?.classificationModelSelection?.modelVersion || modelRegistryConfig.activeModelVersion,
+      ).trim() || modelRegistryConfig.activeModelVersion;
       const initialConfigKey = getConfigKey(sportName, movementName);
 
       const applyPipelineUpdate = async (
@@ -1830,7 +1850,7 @@ export async function processAnalysis(
       ) => {
         pipelineTiming = await persistPipelineTimingUpdate(analysisId, update, {
           configKey: initialConfigKey,
-          modelVersion: modelRegistryConfig.activeModelVersion,
+          modelVersion: selectedModelVersion,
           auditActorUserId,
           existingTiming: pipelineTiming,
         });
@@ -1840,7 +1860,7 @@ export async function processAnalysis(
         ? null
         : await findReusableAnalysisPayload(
           analysis,
-          modelRegistryConfig.activeModelVersion,
+          selectedModelVersion,
         );
       if (reusablePayload) {
         const needsDiagnosticsBackfill = !hasAllRequiredUploadDiagnosticsMetrics(
@@ -1943,8 +1963,9 @@ export async function processAnalysis(
             movementName: reusablePayload.detectedMovement || movementName,
             dominantProfile,
             configKey: reusablePayload.configKey,
-            modelVersion: modelRegistryConfig.activeModelVersion,
+            modelVersion: selectedModelVersion,
             auditActorUserId,
+            classificationModelSelection: options?.classificationModelSelection,
           });
         }
 
@@ -1983,6 +2004,7 @@ export async function processAnalysis(
         analysisFpsSnapshot,
         shouldUseCoreMetricComputation(configKey) ? "core" : "full",
         dominantProfile,
+        options?.classificationModelSelection,
         async (event) => {
           await applyPipelineUpdate(event);
         },
@@ -2071,7 +2093,7 @@ export async function processAnalysis(
         await tx.insert(metrics).values({
           analysisId,
           configKey: resolvedConfigKey,
-          modelVersion: modelRegistryConfig.activeModelVersion,
+          modelVersion: selectedModelVersion,
           overallScore: persistedOverallScore,
           metricValues,
           scoreInputs,
@@ -2105,8 +2127,9 @@ export async function processAnalysis(
         dominantProfile,
         analysisArtifactPath: result.analysisArtifactPath,
         configKey: resolvedConfigKey,
-        modelVersion: modelRegistryConfig.activeModelVersion,
+        modelVersion: selectedModelVersion,
         auditActorUserId,
+        classificationModelSelection: options?.classificationModelSelection,
       });
 
       void videoContentHashPromise;

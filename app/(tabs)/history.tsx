@@ -216,6 +216,12 @@ const TREND_SESSION_FILTERS = [
 ] as const;
 type TrendSessionWindow = (typeof TREND_SESSION_FILTERS)[number]["key"];
 
+const HISTORY_SORT_OPTIONS = [
+  { key: "session", label: "Session" },
+  { key: "upload", label: "Upload" },
+] as const;
+type HistorySortKey = (typeof HISTORY_SORT_OPTIONS)[number]["key"];
+
 function isInFlightAnalysisStatus(status: string | null | undefined): boolean {
   return status === "pending" || status === "processing";
 }
@@ -636,6 +642,7 @@ function SummaryCard({
   isAdmin,
   isHighlighted,
   highlightColor,
+  sortMode,
   onPress,
   onDelete,
   onRetry,
@@ -652,6 +659,7 @@ function SummaryCard({
   isAdmin: boolean;
   isHighlighted: boolean;
   highlightColor: string;
+  sortMode: HistorySortKey;
   onPress: () => void;
   onDelete: () => void;
   onRetry: () => void;
@@ -687,6 +695,9 @@ function SummaryCard({
   const compactStrokeLabel = isInFlightAnalysisStatus(item.status) || item.status === "rejected"
     ? null
     : requestedFocusLabel || (movement ? toTitleCase(movement).replace(/-/g, " ") : null);
+  const isRecentUpload =
+    sortMode === "upload"
+    && Date.now() - (parseApiDate(item.createdAt)?.getTime() || 0) <= 24 * 60 * 60 * 1000;
   const elapsedTimeLabel = showBackgroundProcessing
     ? formatElapsedDuration(getProcessingStartDate(item), elapsedNowMs)
     : null;
@@ -757,6 +768,11 @@ function SummaryCard({
           ) : null}
           {item.userName || requestedSessionLabel || compactStrokeLabel || item.status === "rejected" ? (
             <View style={summaryStyles.compactMetaRow}>
+              {isRecentUpload ? (
+                <View style={[summaryStyles.compactMetaBadge, summaryStyles.compactUploadBadge]}>
+                  <Text style={[summaryStyles.compactMetaBadgeText, summaryStyles.compactUploadBadgeText]}>New</Text>
+                </View>
+              ) : null}
               {item.userName ? (
                 <View style={[summaryStyles.compactMetaBadge, summaryStyles.compactPlayerBadge]}>
                   <Text style={[summaryStyles.compactMetaBadgeText, summaryStyles.compactPlayerBadgeText]} numberOfLines={1}>
@@ -988,6 +1004,13 @@ const summaryStyles = StyleSheet.create({
   compactPlayerBadgeText: {
     color: "#A29BFE",
   },
+  compactUploadBadge: {
+    backgroundColor: "#34D39912",
+    borderColor: "#34D39944",
+  },
+  compactUploadBadgeText: {
+    color: "#34D399",
+  },
   compactSessionBadge: {
     backgroundColor: "#93C5FD12",
     borderColor: "#93C5FD30",
@@ -1197,6 +1220,7 @@ export default function HistoryScreen() {
     DEFAULT_SESSION_TYPE_FILTERS,
   );
   const [selectedStroke, setSelectedStroke] = useState<StrokeTypeFilter | null>(null);
+  const [selectedHistorySort, setSelectedHistorySort] = useState<HistorySortKey>("session");
   const [lastWorkedAnalysisId, setLastWorkedAnalysisId] = useState<string | null>(null);
   const [backgroundNotice, setBackgroundNotice] = useState<string | null>(null);
   const [completionNotice, setCompletionNotice] = useState<CompletionNotice | null>(null);
@@ -1400,6 +1424,17 @@ export default function HistoryScreen() {
     return filteredBySessionAndStroke;
   }, [filteredBySessionAndStroke]);
 
+  const sortedAnalyses = useMemo(() => {
+    const items = filteredAnalyses.slice();
+    const getSortTime = (item: AnalysisSummary) => {
+      const sortValue = selectedHistorySort === "upload" ? item.createdAt : getVideoDate(item);
+      return parseApiDate(sortValue)?.getTime() || 0;
+    };
+
+    items.sort((a, b) => getSortTime(b) - getSortTime(a));
+    return items;
+  }, [filteredAnalyses, selectedHistorySort]);
+
   const pendingSummaryVisible = useMemo(() => {
     if (!pendingAnalysisSummary) return null;
     if (
@@ -1409,7 +1444,7 @@ export default function HistoryScreen() {
       return null;
     }
 
-    if (filteredAnalyses.some((item) => item.id === pendingAnalysisSummary.id)) {
+    if (sortedAnalyses.some((item) => item.id === pendingAnalysisSummary.id)) {
       return null;
     }
 
@@ -1435,7 +1470,7 @@ export default function HistoryScreen() {
 
     return pendingAnalysisSummary;
   }, [
-    filteredAnalyses,
+    sortedAnalyses,
     isAdmin,
     pendingAnalysisSummary,
     selectedSessionTypes,
@@ -1447,9 +1482,9 @@ export default function HistoryScreen() {
   ]);
 
   const visibleAnalyses = useMemo(() => {
-    if (!pendingSummaryVisible) return filteredAnalyses;
-    return [pendingSummaryVisible, ...filteredAnalyses];
-  }, [filteredAnalyses, pendingSummaryVisible]);
+    if (!pendingSummaryVisible) return sortedAnalyses;
+    return [pendingSummaryVisible, ...sortedAnalyses];
+  }, [pendingSummaryVisible, sortedAnalyses]);
 
   const activeBackgroundAnalysisId = useMemo(() => {
     if (pendingAnalysisSummary && isInFlightAnalysisStatus(pendingAnalysisSummary.status)) {
@@ -1644,7 +1679,7 @@ export default function HistoryScreen() {
     ? selectedPlayerLabel
     : user?.name || "Player";
   const deltaByAnalysisId = useMemo(() => {
-    const completedByTimeAsc = visibleAnalyses
+    const completedByTimeAsc = filteredAnalyses
       .filter((analysis) => analysis.status === "completed")
       .slice()
       .sort((a, b) => (parseApiDate(getVideoDate(a))?.getTime() || 0) - (parseApiDate(getVideoDate(b))?.getTime() || 0));
@@ -1671,7 +1706,7 @@ export default function HistoryScreen() {
     }
 
     return map;
-  }, [visibleAnalyses]);
+  }, [filteredAnalyses]);
 
   const renderItem = ({ item }: { item: AnalysisSummary }) => (
     <SummaryCard
@@ -1681,6 +1716,7 @@ export default function HistoryScreen() {
       isAdmin={isAdmin}
       isHighlighted={item.id === activeBackgroundAnalysisId}
       highlightColor={historyHighlightColor}
+      sortMode={selectedHistorySort}
       timeZone={profileTimeZone}
       showBackgroundProcessing={
         item.id === activeBackgroundAnalysisId &&
@@ -1698,7 +1734,7 @@ export default function HistoryScreen() {
     />
   );
 
-  const historyControls = isAdmin || historyMovementLabel ? (
+  const historyControls = (
     <>
       {isAdmin ? (
         <Pressable
@@ -1753,7 +1789,7 @@ export default function HistoryScreen() {
         </View>
       ) : null}
     </>
-  ) : null;
+  );
 
   const listHeader = (
     <View>
@@ -1971,7 +2007,44 @@ export default function HistoryScreen() {
 
       {filteredAnalyses.length > 0 && (
         <View style={styles.recentHeaderRow}>
-          <Text style={styles.recentTitle}>Recent Sessions</Text>
+          <Text style={styles.recentTitle}>
+            {selectedHistorySort === "upload" ? "Recent Uploads" : "Recent Sessions"}
+          </Text>
+          <View
+            style={[
+              styles.recentSortToggle,
+              {
+                borderColor: `${historyHighlightColor}45`,
+                backgroundColor: `${historyHighlightColor}10`,
+              },
+            ]}
+          >
+            {HISTORY_SORT_OPTIONS.map((option) => {
+              const selected = selectedHistorySort === option.key;
+              return (
+                <Pressable
+                  key={option.key}
+                  onPress={() => setSelectedHistorySort(option.key)}
+                  style={[
+                    styles.recentSortOption,
+                    selected && {
+                      backgroundColor: `${historyHighlightColor}22`,
+                      borderColor: `${historyHighlightColor}55`,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.recentSortText,
+                      { color: selected ? historyHighlightColor : "#94A3B8" },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       )}
     </View>
@@ -2696,7 +2769,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 10,
     marginBottom: 12,
+  },
+  recentSortToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    padding: 2,
+    gap: 2,
+  },
+  recentSortOption: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "transparent",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  recentSortText: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
   },
   list: {
     paddingHorizontal: 20,
