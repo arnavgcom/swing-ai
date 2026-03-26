@@ -455,7 +455,7 @@ export default function ScoreMetricsSelectionScreen() {
         >
           <Ionicons name="chevron-back" size={24} color="#F8FAFC" />
         </Pressable>
-        <Text style={styles.headerTitle}>Score/Metrics Selection</Text>
+          <Text style={styles.headerTitle}>Select Scores & Metrics</Text>
         <View style={[styles.statusPill, saveStatusTone]}>
           <Text style={styles.statusPillText}>{saveStatusLabel}</Text>
         </View>

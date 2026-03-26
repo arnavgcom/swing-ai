@@ -309,7 +309,7 @@ export default function ConfigureScreen() {
     }
 
     Alert.alert(
-      "Recalculate Score/Metrics?",
+      "Recalculate Performance Metrics?",
       "This processing can take time and will run in the background. Do you want to continue?",
       [
         { text: "No", style: "cancel" },
@@ -511,8 +511,10 @@ export default function ConfigureScreen() {
                 <Ionicons name="options-outline" size={20} color="#A78BFA" />
               </View>
               <View style={styles.navCardBody}>
-                <Text style={styles.navCardTitle}>Select Score/Metrics</Text>
-                <Text style={styles.navCardDescription}>
+                <Text style={styles.navCardTitle} numberOfLines={1}>
+                  Performance Metrics Selection
+                </Text>
+                <Text style={styles.navCardDescription} numberOfLines={1}>
                   {scoreMetricSummary}
                 </Text>
               </View>
@@ -536,9 +538,9 @@ export default function ConfigureScreen() {
                 )}
               </View>
               <View style={styles.navCardBody}>
-                <Text style={styles.navCardTitle}>Recalc Score/Metrics</Text>
+                <Text style={styles.navCardTitle}>Recalculate Performance Metrics</Text>
                 <Text style={styles.navCardDescription}>
-                  Re-run scoring and metrics for eligible analyses
+                  Re-run scoring and performance metrics for eligible analyses
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#94A3B8" />

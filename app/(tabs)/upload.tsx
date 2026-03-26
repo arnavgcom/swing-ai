@@ -26,6 +26,8 @@ import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
+import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/components/TabScreenIntro";
+import { ds } from "@/constants/design-system";
 
 const NativeDateTimePicker = Platform.OS === "web"
   ? null
@@ -626,6 +628,31 @@ export default function UploadScreen() {
       });
     })() ||
     "Select player";
+  const uploadControls = isAdmin ? (
+    <Pressable
+      onPress={() => setShowPlayerDropdown((prev) => !prev)}
+      style={[
+        styles.playerDropdown,
+        {
+          borderColor: `${sportColor}55`,
+          backgroundColor: `${sportColor}12`,
+        },
+      ]}
+    >
+      <Ionicons name="people" size={15} color={sportColor} />
+      <Text
+        style={[styles.playerDropdownText, { color: sportColor }]}
+        numberOfLines={1}
+      >
+        {selectedPlayerLabel}
+      </Text>
+      <Ionicons
+        name={showPlayerDropdown ? "chevron-up" : "chevron-down"}
+        size={14}
+        color={sportColor}
+      />
+    </Pressable>
+  ) : null;
 
   return (
     <View style={styles.container}>
@@ -642,104 +669,36 @@ export default function UploadScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.headerSection}>
-          <Text style={[styles.title, { color: colors.text }]}>
-            Analyze {movementLabel}
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Upload a video for AI-powered tennis analysis
-          </Text>
-        </View>
-
-        {isAdmin ? (
-          <View style={styles.adminPlayerSection}>
-            <Text style={[styles.focusSectionLabel, { color: colors.textSecondary }]}>Player</Text>
-            <Pressable
-              onPress={() => setShowPlayerDropdown((prev) => !prev)}
-              style={[
-                styles.playerDropdown,
-                styles.inlinePlayerDropdown,
-                {
-                  borderColor: `${sportColor}55`,
-                  backgroundColor: `${sportColor}12`,
-                },
-              ]}
-            >
-              <Ionicons name="people" size={15} color={sportColor} />
-              <Text
-                style={[styles.playerDropdownText, { color: sportColor }]}
-                numberOfLines={1}
-              >
-                {selectedPlayerLabel}
-              </Text>
-              <Ionicons
-                name={showPlayerDropdown ? "chevron-up" : "chevron-down"}
-                size={14}
-                color={sportColor}
-              />
-            </Pressable>
-          </View>
-        ) : null}
-
-        <View style={styles.sectionBlock}>
-          <Text style={[styles.focusSectionLabel, { color: colors.textSecondary }]}>Session Type</Text>
-          <View style={styles.sessionTypeRow}>
-            {SESSION_TYPE_OPTIONS.map((option) => {
-              const selected = option.key === sessionType;
-              return (
-                <Pressable
-                  key={option.key}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setSessionType(option.key);
-                  }}
-                  style={[
-                    styles.sessionTypeOption,
-                    {
-                      borderColor: selected ? sportColor : "#2A2A5060",
-                      backgroundColor: selected ? `${sportColor}18` : "#15152D",
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.sessionTypeOptionText,
-                      { color: selected ? sportColor : colors.text },
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        {sessionType === "practice" ? (
-          <View style={styles.sectionBlock}>
-            <Text style={[styles.focusSectionLabel, { color: colors.textSecondary }]}>Focus</Text>
-            <View style={styles.focusOptionsRow}>
-              {TENNIS_FOCUS_OPTIONS.map((option) => {
-                const selected = option.key === selectedFocusKey;
+        <TabScreenIntro
+          title={`Analyze ${movementLabel}`}
+          subtitle="Upload a video for AI-powered tennis analysis"
+          controls={uploadControls}
+          titleColor={colors.text}
+          subtitleColor={ds.color.textTertiary}
+        >
+          <TabScreenFilterGroup label="SESSION TYPE" labelColor={colors.textSecondary}>
+            <TabScreenFilterRow>
+              {SESSION_TYPE_OPTIONS.map((option) => {
+                const selected = option.key === sessionType;
                 return (
                   <Pressable
                     key={option.key}
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setSelectedFocusKey(option.key);
+                      setSessionType(option.key);
                     }}
                     style={[
-                      styles.focusOption,
+                      styles.filterChip,
                       {
-                        borderColor: selected ? sportColor : "#2A2A5060",
-                        backgroundColor: selected ? `${sportColor}18` : "#15152D",
+                        borderColor: selected ? `${sportColor}75` : "#2A2A5060",
+                        backgroundColor: selected ? `${sportColor}1C` : "#0A0A1A80",
                       },
                     ]}
                   >
                     <Text
                       style={[
-                        styles.focusOptionText,
-                        { color: selected ? sportColor : colors.text },
+                        styles.filterChipText,
+                        { color: selected ? sportColor : "#94A3B8" },
                       ]}
                     >
                       {option.label}
@@ -747,9 +706,44 @@ export default function UploadScreen() {
                   </Pressable>
                 );
               })}
-            </View>
-          </View>
-        ) : null}
+            </TabScreenFilterRow>
+          </TabScreenFilterGroup>
+
+          {sessionType === "practice" ? (
+            <TabScreenFilterGroup label="FOCUS" labelColor={colors.textSecondary}>
+              <TabScreenFilterRow>
+                {TENNIS_FOCUS_OPTIONS.map((option) => {
+                  const selected = option.key === selectedFocusKey;
+                  return (
+                    <Pressable
+                      key={option.key}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setSelectedFocusKey(option.key);
+                      }}
+                      style={[
+                        styles.filterChip,
+                        {
+                          borderColor: selected ? `${sportColor}75` : "#2A2A5060",
+                          backgroundColor: selected ? `${sportColor}1C` : "#0A0A1A80",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          { color: selected ? sportColor : "#94A3B8" },
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </TabScreenFilterRow>
+            </TabScreenFilterGroup>
+          ) : null}
+        </TabScreenIntro>
 
         {isAdmin && showPlayerDropdown && (
           <Modal
@@ -1104,8 +1098,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   headerSection: {
-    marginTop: 12,
-    marginBottom: 20,
+    marginTop: 20,
+    marginBottom: 14,
   },
   title: {
     fontSize: 26,
@@ -1117,12 +1111,26 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: "#94A3B8",
   },
-  adminPlayerSection: {
-    gap: 8,
-    marginBottom: 14,
+  topControlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginTop: 14,
   },
-  inlinePlayerDropdown: {
-    maxWidth: "72%",
+  movementBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    maxWidth: "58%",
+  },
+  movementBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
   },
   sectionBlock: {
     gap: 8,
@@ -1166,6 +1174,36 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   focusOptionText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  filterSection: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  filterGroup: {
+    gap: 8,
+  },
+  filterLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+  },
+  filterChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  filterChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    minHeight: 34,
+    justifyContent: "center",
+  },
+  filterChipText: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
   },

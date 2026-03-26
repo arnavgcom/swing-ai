@@ -245,11 +245,25 @@ export async function setupAuth(app: Express) {
   });
 
   app.post("/api/auth/logout", (req: Request, res: Response) => {
+    const clearSessionCookie = () => {
+      res.clearCookie("connect.sid", {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        secure: false,
+      });
+    };
+
+    if (!req.session) {
+      clearSessionCookie();
+      return res.json({ message: "Logged out" });
+    }
+
     req.session.destroy((err) => {
       if (err) {
         return res.status(500).json({ error: "Logout failed" });
       }
-      res.clearCookie("connect.sid");
+      clearSessionCookie();
       res.json({ message: "Logged out" });
     });
   });
