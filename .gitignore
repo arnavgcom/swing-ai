@@ -38,7 +38,7 @@ yarn-error.*
 *.tsbuildinfo
 .vercel
 
-.env
+#.env
 
 # videos
 *.mp4
@@ -48,7 +48,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.env
+#*.env
 *.venv
 venv/
 ENV/
