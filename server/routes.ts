@@ -23,6 +23,8 @@ import {
   modelTrainingDatasets,
   modelTrainingState,
   analyses,
+  analysisRecalculationRunItems,
+  analysisRecalculationRuns,
   metrics,
   coachingInsights,
 } from "@shared/schema";
@@ -86,15 +88,25 @@ import { getPoseLandmarkerModel, getPoseLandmarkerPythonEnv, setPoseLandmarkerMo
 import { exportTennisTrainingDatasetSnapshot } from "./tennis-training-storage";
 import {
   getDriveMovementClassificationModelPythonEnv,
+  getDriveMovementClassificationModelPythonEnvForSelection,
   getDriveMovementClassificationModelSettings,
   setDriveMovementClassificationModelOptions,
   setDriveMovementClassificationModelSelection,
 } from "./classification-model-settings";
-import { publishClassificationModelArtifacts } from "./model-artifact-storage";
+import {
+  ensureLocalClassificationModelArtifact,
+  publishClassificationModelArtifacts,
+} from "./model-artifact-storage";
 
 const uploadDir = resolveProjectPath("uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+function normalizeModelVersionToken(value: unknown): string {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+  return trimmed.toLowerCase().startsWith("v") ? trimmed.slice(1) : trimmed;
 }
 
 const uploadToFilesystem = multer({
@@ -182,12 +194,15 @@ function runPythonDiagnostics(
   sportName: string,
   movementName: string,
   dominantProfile?: string | null,
+  classificationModelSelection?: { selectedModelKey: string; modelVersion?: string | null } | null,
 ): Promise<any> {
   return (async () => {
     const pythonExecutable = resolvePythonExecutable();
     const [poseLandmarkerEnv, classificationModelEnv] = await Promise.all([
       getPoseLandmarkerPythonEnv(),
-      getDriveMovementClassificationModelPythonEnv(),
+      classificationModelSelection
+        ? getDriveMovementClassificationModelPythonEnvForSelection(classificationModelSelection)
+        : getDriveMovementClassificationModelPythonEnv(),
     ]);
 
     const args = [
@@ -1537,38 +1552,38 @@ function buildTennisDatasetInsightSuggestions(payload: {
   const matchPlayShare = payload.currentDataset.sessionTypeDistribution.find((item) => item.label === "match-play")?.pct || 0;
 
   if (practiceShare >= 70) {
-    suggestions.push("Current training pool is practice-heavy. Add more annotated match-play videos so the classifier sees live-point stroke variation.");
+    suggestions.push("Practice-heavy set. Add more match-play videos.");
   } else if (matchPlayShare >= 70) {
-    suggestions.push("Current training pool is match-play-heavy. Add a few focused drill videos to sharpen single-stroke examples.");
+    suggestions.push("Match-heavy set. Add more drill videos.");
   }
 
   const underrepresentedVideoLabels = payload.currentDataset.videoDistribution
     .filter((item) => item.pct > 0 && item.pct < 15)
     .map((item) => item.label);
   if (underrepresentedVideoLabels.length > 0) {
-    suggestions.push(`Video coverage is thin for ${underrepresentedVideoLabels.join(", ")}. Prioritize new uploads there before the next retrain.`);
+    suggestions.push(`Low video coverage: ${underrepresentedVideoLabels.join(", ")}.`);
   }
 
   const underrepresentedShotLabels = payload.currentDataset.shotDistribution
     .filter((item) => item.pct > 0 && item.pct < 10)
     .map((item) => item.label);
   if (underrepresentedShotLabels.length > 0) {
-    suggestions.push(`Shot-level balance is light for ${underrepresentedShotLabels.join(", ")}. More labels in those classes should reduce class skew.`);
+    suggestions.push(`Low shot balance: ${underrepresentedShotLabels.join(", ")}.`);
   }
 
   if (payload.activeModel?.macroF1 != null && payload.activeModel.macroF1 < 0.8) {
-    suggestions.push("Active model Macro F1 is below 80%. Rebalance the dataset, then retrain and compare per-label results before saving the next version.");
+    suggestions.push("Macro F1 is below 80%. Rebalance and retrain.");
   }
 
   const weakestLabel = (payload.activeModel?.perLabel || [])
     .filter((item) => item.f1 != null)
     .sort((left, right) => Number(left.f1 || 0) - Number(right.f1 || 0))[0];
   if (weakestLabel?.f1 != null && weakestLabel.f1 < 0.7) {
-    suggestions.push(`Per-label quality is weakest on ${weakestLabel.label}. Review annotation consistency there and add more examples before promoting another version.`);
+    suggestions.push(`Weakest label: ${weakestLabel.label}. Add more examples.`);
   }
 
   if (suggestions.length === 0) {
-    suggestions.push("Dataset balance and active-model quality look reasonable. Keep adding fresh annotated videos and recheck after each saved version.");
+    suggestions.push("Coverage looks healthy. Keep adding fresh videos.");
   }
 
   return suggestions.slice(0, 4);
@@ -3092,6 +3107,7 @@ async function resolveAutoLabelsForAnalysis(
   movementName: string,
   manualLabels: string[],
   dominantProfile?: string | null,
+  classificationModelSelection?: { selectedModelKey: string; modelVersion?: string | null } | null,
 ): Promise<string[]> {
   let autoLabels: string[] = [];
 
@@ -3105,6 +3121,7 @@ async function resolveAutoLabelsForAnalysis(
           sportName,
           movementName,
           dominantProfile,
+          classificationModelSelection,
         ),
       );
       autoLabels = (diagnostics?.shotSegments || []).map((segment: any) =>
@@ -3324,8 +3341,13 @@ async function ensureAuditMetadataBackfill(): Promise<void> {
 
 async function refreshDiscrepancySnapshotsForAnalysis(
   analysisId: string,
+  options?: {
+    modelVersion?: string | null;
+    classificationModelSelection?: { selectedModelKey: string; modelVersion?: string | null } | null;
+  },
 ): Promise<{ refreshed: number; skipped: number }> {
   const modelConfig = readModelRegistryConfig();
+  const targetModelVersion = String(options?.modelVersion || modelConfig.activeModelVersion).trim() || modelConfig.activeModelVersion;
   const [analysis] = await db
     .select()
     .from(analyses)
@@ -3363,6 +3385,7 @@ async function refreshDiscrepancySnapshotsForAnalysis(
         movementName,
         manualLabels,
         dominantProfile,
+        options?.classificationModelSelection,
       );
       const snapshot = computeDiscrepancySnapshot(autoLabels, manualLabels);
 
@@ -3374,7 +3397,7 @@ async function refreshDiscrepancySnapshotsForAnalysis(
           videoName: analysis.videoFilename,
           sportName,
           movementName,
-          modelVersion: modelConfig.activeModelVersion,
+          modelVersion: targetModelVersion,
           autoShots: snapshot.autoShots,
           manualShots: snapshot.manualShots,
           mismatches: snapshot.mismatches,
@@ -3385,11 +3408,12 @@ async function refreshDiscrepancySnapshotsForAnalysis(
           ...buildInsertAuditFields(annotation.userId),
         })
         .onConflictDoUpdate({
-          target: [analysisShotDiscrepancies.analysisId, analysisShotDiscrepancies.userId],
+          target: [analysisShotDiscrepancies.analysisId, analysisShotDiscrepancies.userId, analysisShotDiscrepancies.modelVersion],
           set: {
             videoName: analysis.videoFilename,
             sportName,
             movementName,
+            modelVersion: targetModelVersion,
             autoShots: snapshot.autoShots,
             manualShots: snapshot.manualShots,
             mismatches: snapshot.mismatches,
@@ -3487,6 +3511,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       total_shots real not null,
       ordered_shot_labels jsonb not null,
       used_for_scoring_shot_indexes jsonb not null,
+      include_in_training boolean not null default true,
       notes text,
       created_at timestamp not null default now(),
       updated_at timestamp not null default now()
@@ -3497,6 +3522,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   await db.execute(sql`alter table analysis_shot_annotations add column if not exists created_by_user_id varchar`);
   await db.execute(sql`alter table analysis_shot_annotations add column if not exists updated_by_user_id varchar`);
+  await db.execute(sql`alter table analysis_shot_annotations add column if not exists include_in_training boolean default true`);
+  await db.execute(sql`update analysis_shot_annotations set include_in_training = true where include_in_training is null`);
+  await db.execute(sql`alter table analysis_shot_annotations alter column include_in_training set default true`);
+  await db.execute(sql`alter table analysis_shot_annotations alter column include_in_training set not null`);
 
   await db.execute(sql`
     create unique index if not exists analysis_shot_annotations_analysis_user_uq
@@ -3529,11 +3558,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`alter table analysis_shot_discrepancies add column if not exists updated_by_user_id varchar`);
 
   await db.execute(sql`
-    create unique index if not exists analysis_shot_discrepancies_analysis_user_uq
-    on analysis_shot_discrepancies (analysis_id, user_id)
-  `);
-
-  await db.execute(sql`
     create table if not exists app_settings (
       key varchar primary key,
       value jsonb not null,
@@ -3542,6 +3566,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ,created_by_user_id varchar
       ,updated_by_user_id varchar
     )
+  `);
+
+  await db.execute(sql`
+    create table if not exists analysis_recalculation_runs (
+      trace_id varchar primary key,
+      requested_by_user_id varchar references users(id),
+      scope text not null,
+      selected_model_version varchar,
+      selected_model_source text,
+      created_at timestamp with time zone not null default now()
+    )
+  `);
+
+  await db.execute(sql`
+    create table if not exists analysis_recalculation_run_items (
+      id varchar primary key default gen_random_uuid(),
+      trace_id varchar not null references analysis_recalculation_runs(trace_id) on delete cascade,
+      analysis_id varchar not null references analyses(id) on delete cascade,
+      created_at timestamp with time zone not null default now()
+    )
+  `);
+
+  await db.execute(sql`
+    create unique index if not exists analysis_recalculation_run_items_trace_analysis_uq
+    on analysis_recalculation_run_items (trace_id, analysis_id)
   `);
 
   await db.execute(sql`alter table app_settings add column if not exists created_at timestamp default now()`);
@@ -3587,6 +3636,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   await db.execute(sql`alter table metrics add column if not exists model_version varchar not null default '0.1'`);
   await db.execute(sql`alter table analysis_shot_discrepancies add column if not exists model_version varchar not null default '0.1'`);
+  await db.execute(sql`drop index if exists analysis_shot_discrepancies_analysis_user_uq`);
+  await db.execute(sql`
+    create unique index if not exists analysis_shot_discrepancies_analysis_user_version_uq
+    on analysis_shot_discrepancies (analysis_id, user_id, model_version)
+  `);
   await db.execute(sql`drop table if exists scoring_model_registry_dataset_metrics`);
   await db.execute(sql`drop table if exists scoring_model_registry_entries`);
 
@@ -3983,6 +4037,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
     return result;
+  };
+
+  const parseBooleanWithDefault = (value: unknown, defaultValue: boolean): boolean => {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (["true", "1", "yes", "on"].includes(normalized)) return true;
+      if (["false", "0", "no", "off"].includes(normalized)) return false;
+    }
+    return defaultValue;
   };
 
   const markStaleProcessingAsFailed = async (userId?: string) => {
@@ -4898,9 +4963,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const extractedMetadata = await withLocalMediaFile(finalPath, finalFilename, async (localPath) =>
           extractVideoMetadata(localPath)
         );
-        const uploadMetadata = recordedAtOverride
-          ? { ...extractedMetadata, capturedAt: recordedAtOverride }
-          : extractedMetadata;
+        const resolvedCapturedAt = recordedAtOverride || extractedMetadata.capturedAt || new Date();
+        const uploadMetadata = {
+          ...extractedMetadata,
+          capturedAt: resolvedCapturedAt,
+        };
 
         if (resolvedSportName && !isPrimaryEnabledSportName(resolvedSportName)) {
           await deleteStoredMedia(finalPathToCleanup);
@@ -4991,6 +5058,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
       const includeAll = isAdmin && String(req.query.includeAll || "").trim().toLowerCase() === "true";
+      const traceId = String(req.query.traceId || "").trim();
+      let traceModelVersion: string | null = null;
+
+      let traceAnalysisIds: string[] | null = null;
+      if (traceId) {
+        const [requestedRun] = await db
+          .select()
+          .from(analysisRecalculationRuns)
+          .where(eq(analysisRecalculationRuns.traceId, traceId))
+          .limit(1);
+
+        if (!requestedRun) {
+          return res.json([]);
+        }
+
+        traceModelVersion = String(requestedRun.selectedModelVersion || "").trim() || null;
+
+        if (!isAdmin && requestedRun.requestedByUserId !== userId) {
+          return res.status(403).json({ error: "You do not have access to this recalculation trace" });
+        }
+
+        const runItems = await db
+          .select({ analysisId: analysisRecalculationRunItems.analysisId })
+          .from(analysisRecalculationRunItems)
+          .where(eq(analysisRecalculationRunItems.traceId, traceId));
+
+        traceAnalysisIds = runItems.map((item) => item.analysisId);
+        if (!traceAnalysisIds.length) {
+          return res.json([]);
+        }
+      }
 
       await markStaleProcessingAsFailed(isAdmin ? undefined : userId);
 
@@ -5020,6 +5118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           scoreOutputs: metrics.scoreOutputs,
           configKey: metrics.configKey,
           modelVersion: metrics.modelVersion,
+          metricUpdatedAt: metrics.updatedAt,
         })
         .from(analyses)
         .leftJoin(users, eq(analyses.userId, users.id))
@@ -5027,13 +5126,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .leftJoin(sportMovements, eq(analyses.movementId, sportMovements.id))
         .leftJoin(metrics, eq(analyses.id, metrics.analysisId));
 
-      const rows = isAdmin
-        ? await query.orderBy(sql`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`)
-        : await query
-            .where(eq(analyses.userId, userId))
-            .orderBy(sql`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`);
+      const whereClauses = [];
+      if (!isAdmin) {
+        whereClauses.push(eq(analyses.userId, userId));
+      }
+      if (traceAnalysisIds) {
+        whereClauses.push(inArray(analyses.id, traceAnalysisIds));
+      }
 
-      const normalizedRows = rows.map((row) => {
+      const filteredQuery = whereClauses.length ? query.where(and(...whereClauses)) : query;
+      const rows = await filteredQuery.orderBy(sql`coalesce(${analyses.capturedAt}, ${analyses.createdAt}) desc`);
+
+      const dedupedRows = Array.from(
+        rows.reduce((acc, row) => {
+          const existing = acc.get(row.id);
+          if (!existing) {
+            acc.set(row.id, row);
+            return acc;
+          }
+
+          const existingMatchesTraceModel = traceModelVersion && existing.modelVersion === traceModelVersion;
+          const nextMatchesTraceModel = traceModelVersion && row.modelVersion === traceModelVersion;
+          if (nextMatchesTraceModel && !existingMatchesTraceModel) {
+            acc.set(row.id, row);
+            return acc;
+          }
+          if (existingMatchesTraceModel && !nextMatchesTraceModel) {
+            return acc;
+          }
+
+          const existingMetricUpdatedAt = existing.metricUpdatedAt ? new Date(existing.metricUpdatedAt).getTime() : 0;
+          const nextMetricUpdatedAt = row.metricUpdatedAt ? new Date(row.metricUpdatedAt).getTime() : 0;
+          if (nextMetricUpdatedAt > existingMetricUpdatedAt) {
+            acc.set(row.id, row);
+            return acc;
+          }
+
+          if (!existing.modelVersion && row.modelVersion) {
+            acc.set(row.id, row);
+          }
+
+          return acc;
+        }, new Map<string, (typeof rows)[number]>()),
+      ).map(([, row]) => row);
+
+      const normalizedRows = dedupedRows.map((row) => {
         const normalized = normalizeScoreRow(row);
         return {
           ...normalized,
@@ -5462,6 +5599,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? req.body.orderedShotLabels.map((value: unknown) => String(value || "").trim()).filter(Boolean)
         : [];
       const usedForScoringShotIndexes = parseIntegerList(req.body?.usedForScoringShotIndexes);
+      const includeInTraining = parseBooleanWithDefault(req.body?.includeInTraining, true);
       const notes = req.body?.notes ? String(req.body.notes) : null;
 
       if (!Number.isFinite(totalShotsNum) || totalShotsNum < 0) {
@@ -5492,6 +5630,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             totalShots: Math.trunc(totalShotsNum),
             orderedShotLabels,
             usedForScoringShotIndexes,
+            includeInTraining,
             notes,
             ...buildUpdateAuditFields(userId),
           })
@@ -5503,6 +5642,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           totalShots: Math.trunc(totalShotsNum),
           orderedShotLabels,
           usedForScoringShotIndexes,
+          includeInTraining,
           notes,
           ...buildInsertAuditFields(userId),
         });
@@ -5593,7 +5733,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ...buildInsertAuditFields(userId),
           })
           .onConflictDoUpdate({
-            target: [analysisShotDiscrepancies.analysisId, analysisShotDiscrepancies.userId],
+            target: [analysisShotDiscrepancies.analysisId, analysisShotDiscrepancies.userId, analysisShotDiscrepancies.modelVersion],
             set: {
               videoName: analysis.videoFilename,
               sportName,
@@ -5621,6 +5761,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           totalShots: Math.trunc(totalShotsNum),
           orderedShotLabels,
           usedForScoringShotIndexes,
+          includeInTraining,
           notes,
         }),
         discrepancySnapshotUpdated,
@@ -5837,14 +5978,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const existingSnapshots = isAdmin
-        ? await db.select().from(analysisShotDiscrepancies)
+        ? await db
+            .select()
+            .from(analysisShotDiscrepancies)
+            .where(eq(analysisShotDiscrepancies.modelVersion, modelConfig.activeModelVersion))
         : await db
             .select()
             .from(analysisShotDiscrepancies)
-            .where(eq(analysisShotDiscrepancies.userId, userId));
+            .where(
+              and(
+                eq(analysisShotDiscrepancies.userId, userId),
+                eq(analysisShotDiscrepancies.modelVersion, modelConfig.activeModelVersion),
+              ),
+            );
 
       const snapshotByAnalysisId = new Map(
-        existingSnapshots.map((item) => [`${item.analysisId}:${item.userId}`, item]),
+        existingSnapshots.map((item) => [`${item.analysisId}:${item.userId}:${item.modelVersion}`, item]),
       );
 
       const topVideos: Array<{
@@ -5874,7 +6023,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const movementName = row.movementName || analysis.detectedMovement || "forehand";
 
         const annotationOwnerId = annotation.userId;
-        const snapshotKey = `${analysis.id}:${annotationOwnerId}`;
+        const snapshotKey = `${analysis.id}:${annotationOwnerId}:${modelConfig.activeModelVersion}`;
         let snapshot = snapshotByAnalysisId.get(snapshotKey);
         if (!snapshot) {
           const modelConfig = readModelRegistryConfig();
@@ -5908,7 +6057,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               confusionPairs: computed.confusionPairs,
             })
             .onConflictDoUpdate({
-              target: [analysisShotDiscrepancies.analysisId, analysisShotDiscrepancies.userId],
+              target: [analysisShotDiscrepancies.analysisId, analysisShotDiscrepancies.userId, analysisShotDiscrepancies.modelVersion],
               set: {
                 videoName: analysis.videoFilename,
                 sportName,
@@ -5932,6 +6081,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               and(
                 eq(analysisShotDiscrepancies.analysisId, analysis.id),
                 eq(analysisShotDiscrepancies.userId, annotationOwnerId),
+                eq(analysisShotDiscrepancies.modelVersion, modelConfig.activeModelVersion),
               ),
             )
             .limit(1);
@@ -6553,6 +6703,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.session.userId!;
       const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
       const isAdmin = currentUser?.role === "admin";
+      const requestedModelVersion = normalizeModelVersionToken(req.body?.modelVersion);
+      const useDraftModel = req.body?.useDraftModel === true || String(req.body?.useDraftModel || "").toLowerCase() === "true";
+
+      if (!isAdmin && (requestedModelVersion || useDraftModel)) {
+        return res.status(403).json({ error: "Admin access required to select a recalculation model version" });
+      }
+
+      let selectedModelVersion = readModelRegistryConfig().activeModelVersion;
+      let selectedModelSource: "active" | "saved" | "draft" = "active";
+      let classificationModelSelection: { selectedModelKey: string; modelVersion: string } | null = null;
+
+      if (isAdmin && (requestedModelVersion || useDraftModel)) {
+        const status = await getTennisTrainingStatus();
+        const savedVersions = new Set<string>([
+          status.activeVersion,
+          ...status.history
+            .map((entry) => normalizeModelVersionToken(entry.savedModelVersion))
+            .filter((value): value is string => Boolean(value)),
+        ]);
+        const hasDraftCandidate = status.history.some((entry) => entry.status === "succeeded" && !entry.savedModelVersion);
+
+        if (useDraftModel) {
+          if (!requestedModelVersion) {
+            return res.status(400).json({ error: "modelVersion is required when selecting a draft model" });
+          }
+          if (requestedModelVersion !== status.draftVersion) {
+            return res.status(400).json({ error: `Draft model ${requestedModelVersion} is not the current draft version (${status.draftVersion})` });
+          }
+          if (!hasDraftCandidate) {
+            return res.status(400).json({ error: "Draft model artifact is not available yet. Train a new model before recalculating with draft." });
+          }
+
+          await ensureLocalClassificationModelArtifact({
+            selectedModelKey: "tennis-active",
+            modelVersion: requestedModelVersion,
+          });
+
+          selectedModelVersion = requestedModelVersion;
+          selectedModelSource = "draft";
+          classificationModelSelection = {
+            selectedModelKey: "tennis-active",
+            modelVersion: requestedModelVersion,
+          };
+        } else if (requestedModelVersion) {
+          if (!savedVersions.has(requestedModelVersion)) {
+            return res.status(400).json({ error: `Saved model version ${requestedModelVersion} is not available` });
+          }
+
+          const shouldPinSavedArtifact = requestedModelVersion !== status.activeVersion || hasDraftCandidate;
+          if (shouldPinSavedArtifact) {
+            await ensureLocalClassificationModelArtifact({
+              selectedModelKey: `tennis-version:${requestedModelVersion}`,
+              modelVersion: requestedModelVersion,
+            });
+
+            classificationModelSelection = {
+              selectedModelKey: `tennis-version:${requestedModelVersion}`,
+              modelVersion: requestedModelVersion,
+            };
+            selectedModelSource = "saved";
+          }
+
+          selectedModelVersion = requestedModelVersion;
+        }
+      }
 
       await markStaleProcessingAsFailed(isAdmin ? undefined : userId);
       const rawAnalyses = isAdmin
@@ -6731,6 +6946,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const ids = runnableAnalyses.map((analysis) => analysis.id);
+      const traceId = randomUUID();
       const annotationRows = ids.length
         ? await db
             .select({
@@ -6744,14 +6960,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         annotationRows.map((row) => row.analysisId),
       ).size;
 
+      await db.insert(analysisRecalculationRuns).values({
+        traceId,
+        requestedByUserId: userId,
+        scope: isAdmin ? "all" : "user",
+        selectedModelVersion,
+        selectedModelSource,
+      });
+
+      if (ids.length > 0) {
+        await db.insert(analysisRecalculationRunItems).values(
+          ids.map((analysisId) => ({
+            traceId,
+            analysisId,
+          })),
+        );
+      }
+
+      if (ids.length > 0) {
+        await db
+          .update(analyses)
+          .set({
+            status: "processing",
+            rejectionReason: null,
+            updatedAt: new Date(),
+          })
+          .where(inArray(analyses.id, ids));
+      }
+
       void (async () => {
         for (const id of ids) {
           try {
-            await processAnalysis(id, { forceFreshDiagnostics: true });
-            const snapshotResult = await refreshDiscrepancySnapshotsForAnalysis(id);
+            await processAnalysis(id, {
+              forceFreshDiagnostics: true,
+              classificationModelSelection,
+            });
+            const snapshotResult = await refreshDiscrepancySnapshotsForAnalysis(id, {
+              modelVersion: selectedModelVersion,
+              classificationModelSelection,
+            });
             if (snapshotResult.refreshed > 0 || snapshotResult.skipped > 0) {
               console.log(
-                `Discrepancy refresh for ${id}: refreshed=${snapshotResult.refreshed}, skipped=${snapshotResult.skipped}`,
+                `Discrepancy refresh for ${id}: refreshed=${snapshotResult.refreshed}, skipped=${snapshotResult.skipped}, modelVersion=${selectedModelVersion}`,
               );
             }
           } catch (err) {
@@ -6761,16 +7011,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       })();
 
       res.json({
+        traceId,
         message: "Recalculation started",
         scope: isAdmin ? "all" : "user",
         totalAnalyses: userAnalyses.length,
         queuedAnalyses: ids.length,
+        queuedAnalysisIds: ids,
         autoRelinkedAnalyses,
         skippedAnalyses: userAnalyses.length - ids.length,
         skippedDetails,
         willRefreshDiscrepancies: true,
         queuedDiscrepancySnapshots: annotationRows.length,
         analysesWithAnnotationsQueued,
+        selectedModelVersion,
+        selectedModelSource,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

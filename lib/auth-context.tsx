@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { apiRequest } from "./query-client";
+import { apiRequest, queryClient } from "./query-client";
 
 interface AuthUser {
   id: string;
@@ -51,8 +51,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const data = await res.json();
         setUser(data);
+      } else {
+        setUser(null);
       }
     } catch (e) {
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
@@ -68,8 +71,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const data = await res.json();
         setUser(data);
+      } else {
+        setUser(null);
       }
-    } catch (e) {}
+    } catch (e) {
+      setUser(null);
+    }
   }, []);
 
   const login = useCallback(async (identifier: string, password: string) => {
@@ -107,8 +114,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await apiRequest("POST", "/api/auth/logout");
-    setUser(null);
+    try {
+      await apiRequest("POST", "/api/auth/logout");
+    } catch (error) {
+      console.warn("Logout request failed, clearing local auth state anyway:", error);
+    } finally {
+      setUser(null);
+      queryClient.clear();
+    }
   }, []);
 
   return (

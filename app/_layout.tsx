@@ -83,10 +83,6 @@ function RootNavigator() {
           options={{ headerShown: false }}
         />
         <Stack.Screen
-          name="model-config"
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
           name="profile/add-player"
           options={{ headerShown: false }}
         />
@@ -96,6 +92,14 @@ function RootNavigator() {
         />
         <Stack.Screen
           name="profile/configure"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="profile/recalculate-metrics"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="profile/admin-dashboard"
           options={{ headerShown: false }}
         />
         <Stack.Screen
@@ -116,10 +120,6 @@ function RootNavigator() {
         />
         <Stack.Screen
           name="profile/drive-movement-classification-model-settings"
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="profile/dataset-insights"
           options={{ headerShown: false }}
         />
         <Stack.Screen

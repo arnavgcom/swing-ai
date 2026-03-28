@@ -1,8 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,14 +10,16 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/lib/auth-context";
-import { apiRequest, queryClient } from "@/lib/query-client";
+import { queryClient } from "@/lib/query-client";
 import {
   fetchAnalysisFpsSettings,
+  type RecalculateAnalysesResponse,
   fetchDriveMovementClassificationModelSettings,
   fetchPoseLandmarkerSettings,
   fetchSportsSettings,
@@ -94,6 +94,20 @@ const normalizeRole = (value?: string | null): "admin" | "player" => {
   return value?.trim().toLowerCase() === "admin" ? "admin" : "player";
 };
 
+const RECALC_RUN_STORAGE_KEY = "swingai_active_recalc_run";
+
+type PersistedRecalcState = {
+  run: RecalculateAnalysesResponse;
+  progress?: unknown;
+};
+
+const formatRecalcModelLabel = (run: RecalculateAnalysesResponse | null): string | null => {
+  if (!run?.selectedModelVersion) return null;
+  const source = String(run.selectedModelSource || "active").trim();
+  const sourceLabel = source ? `${source.charAt(0).toUpperCase()}${source.slice(1)}` : "Active";
+  return `${sourceLabel} v${run.selectedModelVersion}`;
+};
+
 const toSportPreferenceKey = (sportName?: string | null): string => {
   return String(sportName || "")
     .trim()
@@ -130,13 +144,7 @@ export default function ConfigureScreen() {
   const [sports, setSports] = useState<SportAvailabilityResponse[]>([]);
   const [videoStorageMode, setVideoStorageMode] = useState<"filesystem" | "r2">("filesystem");
   const [videoStorageLoading, setVideoStorageLoading] = useState(false);
-  const [recalculating, setRecalculating] = useState(false);
-  const [recalcToast, setRecalcToast] = useState<{
-    visible: boolean;
-    message: string;
-    tone: "success" | "error";
-  }>({ visible: false, message: "", tone: "success" });
-  const recalcToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [activeRecalcRun, setActiveRecalcRun] = useState<RecalculateAnalysesResponse | null>(null);
   const canUseAdminApis = normalizeRole(user?.role) === "admin";
 
   const refreshAdminSettings = React.useCallback(async () => {
@@ -203,6 +211,7 @@ export default function ConfigureScreen() {
     : `Current model: ${selectedClassificationModel.label}`;
 
   const classificationModelCardBadge = selectedClassificationModel.badge || "Selected";
+  const activeRecalcModelLabel = formatRecalcModelLabel(activeRecalcRun);
 
   useEffect(() => {
     if (!canUseAdminApis) {
@@ -229,17 +238,29 @@ export default function ConfigureScreen() {
     React.useCallback(() => {
       if (!canUseAdminApis) return undefined;
       void refreshAdminSettings().catch(() => undefined);
+
+      void (async () => {
+        try {
+          const raw = await AsyncStorage.getItem(RECALC_RUN_STORAGE_KEY);
+          if (!raw) {
+            setActiveRecalcRun(null);
+            return;
+          }
+          const parsed = JSON.parse(raw) as PersistedRecalcState | RecalculateAnalysesResponse;
+          const nextRun = "run" in parsed ? parsed.run : parsed;
+          if (Array.isArray(nextRun?.queuedAnalysisIds) && nextRun.queuedAnalysisIds.length > 0) {
+            setActiveRecalcRun(nextRun);
+            return;
+          }
+          setActiveRecalcRun(null);
+        } catch {
+          setActiveRecalcRun(null);
+        }
+      })();
+
       return undefined;
     }, [canUseAdminApis, refreshAdminSettings]),
   );
-
-  useEffect(() => {
-    return () => {
-      if (recalcToastTimerRef.current) {
-        clearTimeout(recalcToastTimerRef.current);
-      }
-    };
-  }, []);
 
   const handleVideoStorageToggle = async (enabled: boolean) => {
     if (!canUseAdminApis) return;
@@ -254,73 +275,6 @@ export default function ConfigureScreen() {
     } finally {
       setVideoStorageLoading(false);
     }
-  };
-
-  const handleRecalculateMetrics = async () => {
-    const runRecalculation = async () => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      setRecalculating(true);
-      try {
-        const res = await apiRequest("POST", "/api/analyses/recalculate");
-        const data = await res.json();
-        const queued = Number(data?.queuedAnalyses ?? 0);
-
-        if (recalcToastTimerRef.current) {
-          clearTimeout(recalcToastTimerRef.current);
-        }
-
-        setRecalcToast({
-          visible: true,
-          tone: "success",
-          message: `Started in background for ${queued} videos`,
-        });
-
-        await queryClient.invalidateQueries({ queryKey: ["analyses-summary"] });
-        await queryClient.refetchQueries({ queryKey: ["analyses-summary"] });
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-        recalcToastTimerRef.current = setTimeout(() => {
-          setRecalcToast((prev) => ({ ...prev, visible: false }));
-        }, 1800);
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : "Failed to recalc";
-        Alert.alert("Error", reason);
-        setRecalcToast({
-          visible: true,
-          tone: "error",
-          message: reason,
-        });
-      } finally {
-        setRecalculating(false);
-      }
-    };
-
-    if (Platform.OS === "web") {
-      const confirmed = typeof globalThis.confirm === "function"
-        ? globalThis.confirm(
-            "This processing can take time and will run in the background. Do you want to continue?",
-          )
-        : true;
-
-      if (confirmed) {
-        await runRecalculation();
-      }
-      return;
-    }
-
-    Alert.alert(
-      "Recalculate Score/Metrics?",
-      "This processing can take time and will run in the background. Do you want to continue?",
-      [
-        { text: "No", style: "cancel" },
-        {
-          text: "Yes",
-          onPress: () => {
-            void runRecalculation();
-          },
-        },
-      ],
-    );
   };
 
   const handleBack = () => {
@@ -511,34 +465,11 @@ export default function ConfigureScreen() {
                 <Ionicons name="options-outline" size={20} color="#A78BFA" />
               </View>
               <View style={styles.navCardBody}>
-                <Text style={styles.navCardTitle}>Select Score/Metrics</Text>
-                <Text style={styles.navCardDescription}>
-                  {scoreMetricSummary}
+                <Text style={styles.navCardTitle} numberOfLines={1}>
+                  Performance Metrics Selection
                 </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
-            </Pressable>
-
-            <Pressable
-              onPress={handleRecalculateMetrics}
-              disabled={recalculating}
-              style={({ pressed }) => [
-                styles.navCard,
-                recalculating && styles.navCardDisabled,
-                { transform: [{ scale: pressed ? 0.99 : 1 }] },
-              ]}
-            >
-              <View style={styles.navCardIconWrap}>
-                {recalculating ? (
-                  <ActivityIndicator size="small" color="#38BDF8" />
-                ) : (
-                  <Ionicons name="refresh-outline" size={20} color="#38BDF8" />
-                )}
-              </View>
-              <View style={styles.navCardBody}>
-                <Text style={styles.navCardTitle}>Recalc Score/Metrics</Text>
-                <Text style={styles.navCardDescription}>
-                  Re-run scoring and metrics for eligible analyses
+                <Text style={styles.navCardDescription} numberOfLines={1}>
+                  {scoreMetricSummary}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
@@ -547,19 +478,32 @@ export default function ConfigureScreen() {
             <Pressable
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push({ pathname: "/profile/dataset-insights", params: childRouteParams });
+                router.push({ pathname: "/profile/recalculate-metrics", params: childRouteParams });
               }}
-              style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+              style={({ pressed }) => [
+                styles.navCard,
+                { transform: [{ scale: pressed ? 0.99 : 1 }] },
+              ]}
             >
               <View style={styles.navCardIconWrap}>
-                <Ionicons name="analytics-outline" size={20} color="#22C55E" />
+                <Ionicons name="refresh-outline" size={20} color="#38BDF8" />
               </View>
               <View style={styles.navCardBody}>
-                <Text style={styles.navCardTitle}>Dataset Insights</Text>
+                <Text style={styles.navCardTitle}>Recalculate Performance Metrics</Text>
                 <Text style={styles.navCardDescription}>
-                  Coverage mix, practice vs match-play, and active model quality
+                  {activeRecalcRun
+                    ? activeRecalcModelLabel
+                      ? `${activeRecalcModelLabel} in progress for ${activeRecalcRun.queuedAnalyses} queued analyses`
+                      : `Recalc in progress for ${activeRecalcRun.queuedAnalyses} queued analyses`
+                    : "Re-run scoring and performance metrics for eligible analyses"}
                 </Text>
               </View>
+              {activeRecalcRun ? (
+                <View style={styles.inlineStatusBadgeActive}>
+                  <ActivityIndicator size="small" color="#38BDF8" />
+                  <Text style={styles.inlineStatusBadgeActiveText}>In progress</Text>
+                </View>
+              ) : null}
               <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
             </Pressable>
           </View>
@@ -590,18 +534,6 @@ export default function ConfigureScreen() {
         </View>
       </ScrollView>
 
-      {recalcToast.visible ? (
-        <View style={styles.toastContainer} pointerEvents="none">
-          <View style={[styles.toast, recalcToast.tone === "success" ? styles.toastSuccess : styles.toastError]}>
-            <Ionicons
-              name={recalcToast.tone === "success" ? "checkmark-circle" : "alert-circle"}
-              size={14}
-              color={recalcToast.tone === "success" ? "#34D399" : "#F87171"}
-            />
-            <Text style={styles.toastText}>{recalcToast.message}</Text>
-          </View>
-        </View>
-      ) : null}
     </View>
   );
 }

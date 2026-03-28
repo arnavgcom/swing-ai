@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  TextInput,
   ScrollView,
   Modal,
 } from "react-native";
@@ -43,6 +42,7 @@ import {
 } from "@/lib/timezone";
 import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
+import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/components/TabScreenIntro";
 
 const LAST_WORKED_ANALYSIS_KEY = "swingai_last_worked_analysis_id";
 const BACKGROUND_NOTICE_KEY = "swingai_background_processing_notice";
@@ -215,6 +215,12 @@ const TREND_SESSION_FILTERS = [
   { key: "all", label: "All" },
 ] as const;
 type TrendSessionWindow = (typeof TREND_SESSION_FILTERS)[number]["key"];
+
+const HISTORY_SORT_OPTIONS = [
+  { key: "session", label: "Session" },
+  { key: "upload", label: "Upload" },
+] as const;
+type HistorySortKey = (typeof HISTORY_SORT_OPTIONS)[number]["key"];
 
 function isInFlightAnalysisStatus(status: string | null | undefined): boolean {
   return status === "pending" || status === "processing";
@@ -636,6 +642,7 @@ function SummaryCard({
   isAdmin,
   isHighlighted,
   highlightColor,
+  sortMode,
   onPress,
   onDelete,
   onRetry,
@@ -652,6 +659,7 @@ function SummaryCard({
   isAdmin: boolean;
   isHighlighted: boolean;
   highlightColor: string;
+  sortMode: HistorySortKey;
   onPress: () => void;
   onDelete: () => void;
   onRetry: () => void;
@@ -687,6 +695,9 @@ function SummaryCard({
   const compactStrokeLabel = isInFlightAnalysisStatus(item.status) || item.status === "rejected"
     ? null
     : requestedFocusLabel || (movement ? toTitleCase(movement).replace(/-/g, " ") : null);
+  const isRecentUpload =
+    sortMode === "upload"
+    && Date.now() - (parseApiDate(item.createdAt)?.getTime() || 0) <= 24 * 60 * 60 * 1000;
   const elapsedTimeLabel = showBackgroundProcessing
     ? formatElapsedDuration(getProcessingStartDate(item), elapsedNowMs)
     : null;
@@ -757,6 +768,11 @@ function SummaryCard({
           ) : null}
           {item.userName || requestedSessionLabel || compactStrokeLabel || item.status === "rejected" ? (
             <View style={summaryStyles.compactMetaRow}>
+              {isRecentUpload ? (
+                <View style={[summaryStyles.compactMetaBadge, summaryStyles.compactUploadBadge]}>
+                  <Text style={[summaryStyles.compactMetaBadgeText, summaryStyles.compactUploadBadgeText]}>New</Text>
+                </View>
+              ) : null}
               {item.userName ? (
                 <View style={[summaryStyles.compactMetaBadge, summaryStyles.compactPlayerBadge]}>
                   <Text style={[summaryStyles.compactMetaBadgeText, summaryStyles.compactPlayerBadgeText]} numberOfLines={1}>
@@ -988,6 +1004,13 @@ const summaryStyles = StyleSheet.create({
   compactPlayerBadgeText: {
     color: "#A29BFE",
   },
+  compactUploadBadge: {
+    backgroundColor: "#34D39912",
+    borderColor: "#34D39944",
+  },
+  compactUploadBadgeText: {
+    color: "#34D399",
+  },
   compactSessionBadge: {
     backgroundColor: "#93C5FD12",
     borderColor: "#93C5FD30",
@@ -1188,17 +1211,16 @@ export default function HistoryScreen() {
   const isAdmin = user?.role === "admin";
   const { selectedSport, selectedMovement } = useSport();
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("all");
-  const [showReviewDetails, setShowReviewDetails] = useState(false);
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
   const [selectedTrendSessions, setSelectedTrendSessions] = useState<TrendSessionWindow>(10);
   const [userList, setUserList] = useState<
     Array<{ id: string; name: string; email: string; role: string }>
   >([]);
-  const [searchQuery, setSearchQuery] = useState("");
   const [selectedSessionTypes, setSelectedSessionTypes] = useState<SessionTypeFilter[]>(
     DEFAULT_SESSION_TYPE_FILTERS,
   );
   const [selectedStroke, setSelectedStroke] = useState<StrokeTypeFilter | null>(null);
+  const [selectedHistorySort, setSelectedHistorySort] = useState<HistorySortKey>("session");
   const [lastWorkedAnalysisId, setLastWorkedAnalysisId] = useState<string | null>(null);
   const [backgroundNotice, setBackgroundNotice] = useState<string | null>(null);
   const [completionNotice, setCompletionNotice] = useState<CompletionNotice | null>(null);
@@ -1399,12 +1421,19 @@ export default function HistoryScreen() {
   );
 
   const filteredAnalyses = useMemo(() => {
-    let result = filteredBySessionAndStroke.filter((item) =>
-      matchesAnalysisSearch(item, searchQuery, profileTimeZone),
-    );
+    return filteredBySessionAndStroke;
+  }, [filteredBySessionAndStroke]);
 
-    return result;
-  }, [filteredBySessionAndStroke, profileTimeZone, searchQuery]);
+  const sortedAnalyses = useMemo(() => {
+    const items = filteredAnalyses.slice();
+    const getSortTime = (item: AnalysisSummary) => {
+      const sortValue = selectedHistorySort === "upload" ? item.createdAt : getVideoDate(item);
+      return parseApiDate(sortValue)?.getTime() || 0;
+    };
+
+    items.sort((a, b) => getSortTime(b) - getSortTime(a));
+    return items;
+  }, [filteredAnalyses, selectedHistorySort]);
 
   const pendingSummaryVisible = useMemo(() => {
     if (!pendingAnalysisSummary) return null;
@@ -1415,7 +1444,7 @@ export default function HistoryScreen() {
       return null;
     }
 
-    if (filteredAnalyses.some((item) => item.id === pendingAnalysisSummary.id)) {
+    if (sortedAnalyses.some((item) => item.id === pendingAnalysisSummary.id)) {
       return null;
     }
 
@@ -1439,17 +1468,11 @@ export default function HistoryScreen() {
     );
     if (!bySessionAndStroke.length) return null;
 
-    if (!matchesAnalysisSearch(pendingAnalysisSummary, searchQuery, profileTimeZone)) {
-      return null;
-    }
-
     return pendingAnalysisSummary;
   }, [
-    filteredAnalyses,
+    sortedAnalyses,
     isAdmin,
     pendingAnalysisSummary,
-    profileTimeZone,
-    searchQuery,
     selectedSessionTypes,
     selectedMovement?.name,
     selectedPlayerId,
@@ -1459,9 +1482,9 @@ export default function HistoryScreen() {
   ]);
 
   const visibleAnalyses = useMemo(() => {
-    if (!pendingSummaryVisible) return filteredAnalyses;
-    return [pendingSummaryVisible, ...filteredAnalyses];
-  }, [filteredAnalyses, pendingSummaryVisible]);
+    if (!pendingSummaryVisible) return sortedAnalyses;
+    return [pendingSummaryVisible, ...sortedAnalyses];
+  }, [pendingSummaryVisible, sortedAnalyses]);
 
   const activeBackgroundAnalysisId = useMemo(() => {
     if (pendingAnalysisSummary && isInFlightAnalysisStatus(pendingAnalysisSummary.status)) {
@@ -1616,64 +1639,6 @@ export default function HistoryScreen() {
     visibleAnalyses?.filter(
       (a) => a.status === "processing" || a.status === "pending",
     ) || [];
-  const reviewQueue = useMemo(
-    () => visibleAnalyses
-      .filter((item) => item.status !== "completed")
-      .slice()
-      .sort((left, right) => {
-        const priorityDiff = getReviewPriority(left, nowMs) - getReviewPriority(right, nowMs);
-        if (priorityDiff !== 0) return priorityDiff;
-        return (parseApiDate(right.updatedAt)?.getTime() || 0) - (parseApiDate(left.updatedAt)?.getTime() || 0);
-      })
-      .slice(0, 4),
-    [nowMs, visibleAnalyses],
-  );
-  const attentionCount = useMemo(
-    () => visibleAnalyses.filter((item) => getReviewPriority(item, nowMs) <= 2).length,
-    [nowMs, visibleAnalyses],
-  );
-  const averageCompletedScore = useMemo(() => getAverageScore10(completed), [completed]);
-  const playerPulse = useMemo(() => {
-    if (!isAdmin) return [] as Array<{
-      playerId: string;
-      label: string;
-      averageScore: number | null;
-      sessionCount: number;
-      lastSessionAt: string;
-    }>;
-
-    const grouped = new Map<string, { label: string; items: AnalysisSummary[]; lastSessionAt: string }>();
-    filteredBySessionAndStroke.forEach((item) => {
-      if (item.status !== "completed" || !item.userId) return;
-      const key = item.userId;
-      const label = String(item.userName || "Unknown").trim() || "Unknown";
-      const existing = grouped.get(key);
-      const itemDate = getVideoDate(item);
-      if (!existing) {
-        grouped.set(key, { label, items: [item], lastSessionAt: itemDate });
-        return;
-      }
-      existing.items.push(item);
-      if ((parseApiDate(itemDate)?.getTime() || 0) > (parseApiDate(existing.lastSessionAt)?.getTime() || 0)) {
-        existing.lastSessionAt = itemDate;
-      }
-    });
-
-    return Array.from(grouped.entries())
-      .map(([playerId, value]) => ({
-        playerId,
-        label: value.label,
-        averageScore: getAverageScore10(value.items),
-        sessionCount: value.items.length,
-        lastSessionAt: value.lastSessionAt,
-      }))
-      .sort((left, right) => {
-        const scoreDiff = (right.averageScore ?? -1) - (left.averageScore ?? -1);
-        if (Math.abs(scoreDiff) > 1e-6) return scoreDiff;
-        return right.sessionCount - left.sessionCount;
-      })
-      .slice(0, 3);
-  }, [filteredBySessionAndStroke, isAdmin]);
 
   const trendSliceCount =
     selectedTrendSessions === "all"
@@ -1713,12 +1678,8 @@ export default function HistoryScreen() {
   const playerFilterLabel = isAdmin
     ? selectedPlayerLabel
     : user?.name || "Player";
-  const reviewSummaryLabel = isAdmin
-    ? `${reviewQueue.length} priority ${reviewQueue.length === 1 ? "item" : "items"} in scope`
-    : `${completed.length} completed ${completed.length === 1 ? "session" : "sessions"} in scope`;
-
   const deltaByAnalysisId = useMemo(() => {
-    const completedByTimeAsc = visibleAnalyses
+    const completedByTimeAsc = filteredAnalyses
       .filter((analysis) => analysis.status === "completed")
       .slice()
       .sort((a, b) => (parseApiDate(getVideoDate(a))?.getTime() || 0) - (parseApiDate(getVideoDate(b))?.getTime() || 0));
@@ -1745,7 +1706,7 @@ export default function HistoryScreen() {
     }
 
     return map;
-  }, [visibleAnalyses]);
+  }, [filteredAnalyses]);
 
   const renderItem = ({ item }: { item: AnalysisSummary }) => (
     <SummaryCard
@@ -1755,6 +1716,7 @@ export default function HistoryScreen() {
       isAdmin={isAdmin}
       isHighlighted={item.id === activeBackgroundAnalysisId}
       highlightColor={historyHighlightColor}
+      sortMode={selectedHistorySort}
       timeZone={profileTimeZone}
       showBackgroundProcessing={
         item.id === activeBackgroundAnalysisId &&
@@ -1772,224 +1734,85 @@ export default function HistoryScreen() {
     />
   );
 
-  const listHeader = (
-    <View>
-      <View style={styles.headerSection}>
-        <Text style={styles.title}>{isAdmin ? "Review Operations" : "Track Progress"}</Text>
-        <Text style={styles.subtitle}>
-          {isAdmin
-            ? "Watch incoming sessions, spot blocked analyses, and jump into the next review item fast."
-            : "Review recent sessions, compare your scores, and keep momentum between uploads."}
-        </Text>
-      </View>
-
-      <View style={styles.searchWrap}>
-        <Ionicons name="search" size={16} color="#64748B" />
-        <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Search"
-          placeholderTextColor="#64748B"
-          style={styles.searchInput}
-          autoCapitalize="none"
-          autoCorrect={false}
-          clearButtonMode="while-editing"
-          returnKeyType="search"
-        />
-      </View>
-
-      <View style={styles.topControlsRow}>
-        {isAdmin ? (
-          <Pressable
-            onPress={() => setShowPlayerDropdown((prev) => !prev)}
-            style={[
-              styles.playerDropdown,
-              {
-                borderColor: `${historyHighlightColor}55`,
-                backgroundColor: `${historyHighlightColor}12`,
-              },
-            ]}
+  const historyControls = (
+    <>
+      {isAdmin ? (
+        <Pressable
+          onPress={() => setShowPlayerDropdown((prev) => !prev)}
+          style={[
+            styles.playerDropdown,
+            {
+              borderColor: `${historyHighlightColor}55`,
+              backgroundColor: `${historyHighlightColor}12`,
+            },
+          ]}
+        >
+          <Ionicons name="people" size={15} color={historyHighlightColor} />
+          <Text
+            style={[styles.playerDropdownText, { color: historyHighlightColor }]}
+            numberOfLines={1}
           >
-            <Ionicons name="people" size={15} color={historyHighlightColor} />
-            <Text
-              style={[styles.playerDropdownText, { color: historyHighlightColor }]}
-              numberOfLines={1}
-            >
-              {selectedPlayerLabel}
-            </Text>
-            <Ionicons
-              name={showPlayerDropdown ? "chevron-up" : "chevron-down"}
-              size={14}
-              color={historyHighlightColor}
-            />
-          </Pressable>
-        ) : null}
-
-        {historyMovementLabel ? (
-          <View
-            style={[
-              styles.subcategoryBadge,
-              {
-                backgroundColor: `${historyHighlightColor}12`,
-                borderColor: `${historyHighlightColor}40`,
-              },
-            ]}
-          >
-            <Ionicons
-              name="flash-outline"
-              size={11}
-              color={historyHighlightColor}
-            />
-            <Text
-              style={[
-                styles.subcategoryBadgeText,
-                { color: historyHighlightColor },
-              ]}
-              numberOfLines={1}
-            >
-              {historyMovementLabel}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={styles.compactReviewSummaryCard}>
-        <View style={styles.compactReviewSummaryHeader}>
-          <View style={styles.compactReviewSummaryCopy}>
-            <Text style={styles.compactReviewSummaryTitle}>{isAdmin ? "Review now" : "Progress now"}</Text>
-            <Text style={styles.compactReviewSummarySubtitle}>{reviewSummaryLabel}</Text>
-          </View>
-          <Pressable
-            onPress={() => setShowReviewDetails((current) => !current)}
-            style={({ pressed }) => [styles.compactReviewSummaryToggle, { borderColor: `${historyHighlightColor}55`, opacity: pressed ? 0.84 : 1 }]}
-          >
-            <Text style={[styles.compactReviewSummaryToggleText, { color: historyHighlightColor }]}>
-              {showReviewDetails ? "Hide details" : "Show details"}
-            </Text>
-            <Ionicons name={showReviewDetails ? "chevron-up" : "chevron-down"} size={15} color={historyHighlightColor} />
-          </Pressable>
-        </View>
-        <View style={styles.compactReviewSummaryMetrics}>
-          <View style={styles.compactReviewSummaryMetric}>
-            <Text style={styles.compactReviewSummaryMetricLabel}>{isAdmin ? "Attention" : "In progress"}</Text>
-            <Text style={styles.compactReviewSummaryMetricValue}>{String(isAdmin ? attentionCount : processing.length)}</Text>
-          </View>
-          <View style={styles.compactReviewSummaryMetric}>
-            <Text style={styles.compactReviewSummaryMetricLabel}>{isAdmin ? "Completed" : "Average"}</Text>
-            <Text style={styles.compactReviewSummaryMetricValue}>
-              {isAdmin
-                ? String(completed.length)
-                : averageCompletedScore != null
-                  ? averageCompletedScore.toFixed(1)
-                  : "-"}
-            </Text>
-          </View>
-          <View style={styles.compactReviewSummaryMetric}>
-            <Text style={styles.compactReviewSummaryMetricLabel}>Total</Text>
-            <Text style={styles.compactReviewSummaryMetricValue}>{String(totalAnalyses)}</Text>
-          </View>
-        </View>
-      </View>
-
-      {showReviewDetails && isAdmin ? (
-        <View style={styles.adminOverviewSection}>
-          <View style={styles.adminMetricGrid}>
-            <ReviewMetricCard
-              label="Sessions in scope"
-              value={String(totalAnalyses)}
-              helper={selectedPlayerId === "all" ? "Across visible players" : "For the selected player"}
-              icon="albums-outline"
-              color="#60A5FA"
-            />
-            <ReviewMetricCard
-              label="Needs attention"
-              value={String(attentionCount)}
-              helper={attentionCount > 0 ? "Rejected, failed, or delayed runs" : "Nothing urgent right now"}
-              icon="alert-circle-outline"
-              color={attentionCount > 0 ? "#FBBF24" : "#34D399"}
-            />
-            <ReviewMetricCard
-              label="Average score"
-              value={averageCompletedScore != null ? averageCompletedScore.toFixed(1) : "-"}
-              helper={completed.length > 0 ? `${completed.length} completed sessions` : "Waiting for completed sessions"}
-              icon="stats-chart-outline"
-              color="#34D399"
-            />
-          </View>
-
-          <View style={styles.adminSectionCard}>
-            <View style={styles.adminSectionHeaderRow}>
-              <View>
-                <Text style={styles.adminSectionTitle}>Priority Queue</Text>
-                <Text style={styles.adminSectionSubtitle}>Open the next sessions that need review or intervention.</Text>
-              </View>
-              {reviewQueue.length > 0 ? (
-                <Text style={styles.adminSectionCount}>{reviewQueue.length}</Text>
-              ) : null}
-            </View>
-            {reviewQueue.length > 0 ? (
-              <View style={styles.reviewQueueList}>
-                {reviewQueue.map((item) => (
-                  <AdminQueueItem
-                    key={item.id}
-                    item={item}
-                    nowMs={nowMs}
-                    timeZone={profileTimeZone}
-                  />
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.adminEmptyText}>No blocked or in-flight sessions match the current scope.</Text>
-            )}
-          </View>
-
-          <View style={styles.adminSectionCard}>
-            <View style={styles.adminSectionHeaderRow}>
-              <View>
-                <Text style={styles.adminSectionTitle}>Player Pulse</Text>
-                <Text style={styles.adminSectionSubtitle}>Quickly scope the players with the most recent completed sessions.</Text>
-              </View>
-            </View>
-            {playerPulse.length > 0 ? (
-              <View style={styles.playerPulseList}>
-                {playerPulse.map((entry) => (
-                  <AdminPlayerPulseCard
-                    key={entry.playerId}
-                    label={entry.label}
-                    averageScore={entry.averageScore}
-                    sessionCount={entry.sessionCount}
-                    lastSessionLabel={formatMonthDayInTimeZone(entry.lastSessionAt, profileTimeZone)}
-                    accentColor={historyHighlightColor}
-                    isSelected={selectedPlayerId === entry.playerId}
-                    onPress={() => setSelectedPlayerId(entry.playerId)}
-                  />
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.adminEmptyText}>Completed sessions will show player pulse cards here.</Text>
-            )}
-          </View>
-        </View>
+            {selectedPlayerLabel}
+          </Text>
+          <Ionicons
+            name={showPlayerDropdown ? "chevron-up" : "chevron-down"}
+            size={14}
+            color={historyHighlightColor}
+          />
+        </Pressable>
       ) : null}
 
-      {showReviewDetails ? (
-      <View style={styles.filterSection}>
-        <View style={styles.filterGroup}>
-          <View style={styles.filterHeaderRow}>
-            <Text style={styles.filterLabel}>Session Type</Text>
-            {hasHistoryFilters ? (
-              <Pressable
-                onPress={clearHistoryFilters}
-                style={({ pressed }) => [
-                  styles.filterResetButton,
-                  { opacity: pressed ? 0.75 : 1 },
-                ]}
-              >
-                <Text style={[styles.filterResetText, { color: historyHighlightColor }]}>Clear filters</Text>
-              </Pressable>
-            ) : null}
-          </View>
-          <View style={styles.filterChipRow}>
+      {historyMovementLabel ? (
+        <View
+          style={[
+            styles.subcategoryBadge,
+            {
+              backgroundColor: `${historyHighlightColor}12`,
+              borderColor: `${historyHighlightColor}40`,
+            },
+          ]}
+        >
+          <Ionicons
+            name="flash-outline"
+            size={11}
+            color={historyHighlightColor}
+          />
+          <Text
+            style={[
+              styles.subcategoryBadgeText,
+              { color: historyHighlightColor },
+            ]}
+            numberOfLines={1}
+          >
+            {historyMovementLabel}
+          </Text>
+        </View>
+      ) : null}
+    </>
+  );
+
+  const listHeader = (
+    <View>
+      <TabScreenIntro
+        title="Track Progress"
+        subtitle="Monitor your improvements and track changes"
+        controls={historyControls}
+      >
+        <TabScreenFilterGroup
+          label="SESSION TYPE"
+          action={hasHistoryFilters ? (
+            <Pressable
+              onPress={clearHistoryFilters}
+              style={({ pressed }) => [
+                styles.filterResetButton,
+                { opacity: pressed ? 0.75 : 1 },
+              ]}
+            >
+              <Text style={[styles.filterResetText, { color: historyHighlightColor }]}>Clear filters</Text>
+            </Pressable>
+          ) : null}
+        >
+          <TabScreenFilterRow>
             {SESSION_TYPE_FILTER_OPTIONS.map((option) => {
               const selected = selectedSessionTypes.includes(option.key);
               return (
@@ -2015,12 +1838,11 @@ export default function HistoryScreen() {
                 </Pressable>
               );
             })}
-          </View>
-        </View>
+          </TabScreenFilterRow>
+        </TabScreenFilterGroup>
 
-        <View style={styles.filterGroup}>
-          <Text style={styles.filterLabel}>Stroke Type</Text>
-          <View style={styles.filterChipRow}>
+        <TabScreenFilterGroup label="FOCUS">
+          <TabScreenFilterRow>
             {STROKE_FILTER_OPTIONS.map((option) => {
               const selected = selectedStroke === option.key;
               return (
@@ -2046,10 +1868,9 @@ export default function HistoryScreen() {
                 </Pressable>
               );
             })}
-          </View>
-        </View>
-      </View>
-      ) : null}
+          </TabScreenFilterRow>
+        </TabScreenFilterGroup>
+      </TabScreenIntro>
 
       {isAdmin && showPlayerDropdown && (
         <Modal
@@ -2106,7 +1927,7 @@ export default function HistoryScreen() {
         </Modal>
       )}
 
-      {showReviewDetails && trendScores.length > 1 && (
+      {trendScores.length > 1 && (
         <View style={styles.trendCard}>
           <View style={styles.trendCardGradient}>
             <View style={styles.trendHeaderRow}>
@@ -2146,7 +1967,7 @@ export default function HistoryScreen() {
         </View>
       )}
 
-      {showReviewDetails ? (
+      {isAdmin ? (
       <View style={styles.statsRow}>
         {[
           {
@@ -2186,7 +2007,44 @@ export default function HistoryScreen() {
 
       {filteredAnalyses.length > 0 && (
         <View style={styles.recentHeaderRow}>
-          <Text style={styles.recentTitle}>{isAdmin ? "Sessions to Review" : "Recent Sessions"}</Text>
+          <Text style={styles.recentTitle}>
+            {selectedHistorySort === "upload" ? "Recent Uploads" : "Recent Sessions"}
+          </Text>
+          <View
+            style={[
+              styles.recentSortToggle,
+              {
+                borderColor: `${historyHighlightColor}45`,
+                backgroundColor: `${historyHighlightColor}10`,
+              },
+            ]}
+          >
+            {HISTORY_SORT_OPTIONS.map((option) => {
+              const selected = selectedHistorySort === option.key;
+              return (
+                <Pressable
+                  key={option.key}
+                  onPress={() => setSelectedHistorySort(option.key)}
+                  style={[
+                    styles.recentSortOption,
+                    selected && {
+                      backgroundColor: `${historyHighlightColor}22`,
+                      borderColor: `${historyHighlightColor}55`,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.recentSortText,
+                      { color: selected ? historyHighlightColor : "#94A3B8" },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       )}
     </View>
@@ -2296,13 +2154,11 @@ export default function HistoryScreen() {
               </View>
               <Text style={styles.emptyTitle}>No analysis history</Text>
               <Text style={styles.emptyText}>
-                {searchQuery.trim()
-                  ? "No sessions match your search"
-                  : hasHistoryFilters
-                    ? "No sessions match the selected session and stroke filters"
-                    : isAdmin
-                      ? "Uploads, retries, and review items will appear here as analyses arrive"
-                      : "Upload and analyze videos to see them here"}
+                {hasHistoryFilters
+                  ? "No sessions match the selected session type and focus filters"
+                  : isAdmin
+                    ? "Uploads, retries, and review items will appear here as analyses arrive"
+                    : "Upload and analyze videos to see them here"}
               </Text>
             </View>
           }
@@ -2316,17 +2172,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0A0A1A" },
   headerSection: {
     marginTop: 20,
-    marginBottom: 10,
+    marginBottom: 14,
   },
   title: {
-    fontSize: 24,
+    fontSize: 26,
     fontFamily: "Inter_700Bold",
     color: "#F8FAFC",
   },
   subtitle: {
-    marginTop: 6,
-    fontSize: 13,
-    lineHeight: 19,
+    marginTop: 10,
+    fontSize: 14,
     fontFamily: "Inter_400Regular",
     color: "#94A3B8",
     maxWidth: 620,
@@ -2336,11 +2191,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-    marginBottom: 12,
+    marginTop: 14,
   },
   filterSection: {
     gap: 12,
-    marginBottom: 16,
+    marginBottom: 20,
   },
   filterGroup: {
     gap: 8,
@@ -2352,9 +2207,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   filterLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     color: "#CBD5E1",
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
   },
   filterChipRow: {
     flexDirection: "row",
@@ -2365,7 +2222,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 6,
+    minHeight: 34,
+    justifyContent: "center",
   },
   filterChipText: {
     fontSize: 11,
@@ -2382,6 +2241,7 @@ const styles = StyleSheet.create({
   playerDropdown: {
     flexDirection: "row",
     alignItems: "center",
+    alignSelf: "flex-start",
     gap: 6,
     borderWidth: 1,
     borderRadius: 10,
@@ -2427,9 +2287,9 @@ const styles = StyleSheet.create({
   subcategoryBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderRadius: 10,
     borderWidth: 1,
     maxWidth: "58%",
@@ -2909,7 +2769,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 10,
     marginBottom: 12,
+  },
+  recentSortToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    padding: 2,
+    gap: 2,
+  },
+  recentSortOption: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "transparent",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  recentSortText: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
   },
   list: {
     paddingHorizontal: 20,

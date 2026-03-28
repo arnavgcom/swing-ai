@@ -49,6 +49,7 @@ export default function ManualAnnotationScreen() {
   const { user } = useAuth();
 
   const [manualShotLabels, setManualShotLabels] = useState<string[]>([]);
+  const [includeInTraining, setIncludeInTraining] = useState(true);
   const [activeShotDropdownIndex, setActiveShotDropdownIndex] = useState<number | null>(null);
 
   const { data: detail } = useQuery({
@@ -81,6 +82,8 @@ export default function ManualAnnotationScreen() {
     const savedLabels = (shotAnnotation?.orderedShotLabels || [])
       .map((item) => String(item || "").trim().toLowerCase())
       .filter(Boolean);
+
+    setIncludeInTraining(shotAnnotation?.includeInTraining ?? true);
 
     if (savedLabels.length > 0) {
       setManualShotLabels(savedLabels);
@@ -121,6 +124,7 @@ export default function ManualAnnotationScreen() {
       totalShots: number;
       orderedShotLabels: string[];
       usedForScoringShotIndexes: number[];
+      includeInTraining?: boolean;
     }) => saveAnalysisShotAnnotation(id!, payload),
     onSuccess: async (saved) => {
       await Promise.all([
@@ -154,6 +158,7 @@ export default function ManualAnnotationScreen() {
       totalShots,
       orderedShotLabels,
       usedForScoringShotIndexes: Array.from({ length: totalShots }, (_value, index) => index + 1),
+      includeInTraining,
     });
   };
 
@@ -197,6 +202,23 @@ export default function ManualAnnotationScreen() {
             <Text style={[styles.actionText, manualShotLabels.length === 0 && styles.actionTextDisabled]}>Remove Shot</Text>
           </Pressable>
         </View>
+
+        <GlassCard style={styles.trainingCard}>
+          <Pressable
+            onPress={() => setIncludeInTraining((prev) => !prev)}
+            style={({ pressed }) => [styles.trainingToggle, { opacity: pressed ? 0.85 : 1 }]}
+          >
+            <View style={[styles.trainingCheckbox, includeInTraining && styles.trainingCheckboxSelected]}>
+              {includeInTraining ? <Ionicons name="checkmark" size={12} color="#FFFFFF" /> : null}
+            </View>
+            <View style={styles.trainingTextWrap}>
+              <Text style={styles.trainingTitle}>Use this video for model training</Text>
+              <Text style={styles.trainingSubtitle}>
+                Include these manual labels in the tennis training dataset.
+              </Text>
+            </View>
+          </Pressable>
+        </GlassCard>
 
         {manualShotLabels.map((shotLabel, index) => {
           const dropdownOpen = activeShotDropdownIndex === index;
@@ -288,6 +310,46 @@ const styles = StyleSheet.create({
   },
   scroll: { paddingHorizontal: ds.space.xl, paddingBottom: 30, gap: 10 },
   actionsRow: { flexDirection: "row", gap: ds.space.sm, marginBottom: 4 },
+  trainingCard: {
+    borderRadius: ds.radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  trainingToggle: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  trainingCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.bgElevated,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  trainingCheckboxSelected: {
+    borderColor: ds.color.accent,
+    backgroundColor: ds.color.accent,
+  },
+  trainingTextWrap: {
+    flex: 1,
+    gap: 3,
+  },
+  trainingTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: ds.color.textPrimary,
+  },
+  trainingSubtitle: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: ds.color.textSecondary,
+    lineHeight: 17,
+  },
   actionButton: {
     flexDirection: "row",
     alignItems: "center",

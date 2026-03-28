@@ -209,6 +209,7 @@ export async function exportTennisTrainingDatasetSnapshot(params?: {
         ann.analysis_id,
         ann.user_id,
         ann.ordered_shot_labels,
+        ann.include_in_training,
         ann.updated_at
       from analysis_shot_annotations ann
       order by ann.analysis_id, ann.updated_at desc
@@ -224,6 +225,7 @@ export async function exportTennisTrainingDatasetSnapshot(params?: {
     inner join latest_annotations la on la.analysis_id = a.id
     where a.status = 'completed'
       and m.ai_diagnostics is not null
+      and la.include_in_training = true
       and lower(coalesce(m.config_key, '')) like 'tennis-%'
     order by a.created_at desc
   `);

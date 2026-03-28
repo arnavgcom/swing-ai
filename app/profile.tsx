@@ -15,8 +15,8 @@ import {
   FlatList,
   Switch,
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
@@ -102,6 +102,7 @@ const areProfileDraftsEqual = (
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { returnTo: rawReturnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const { user, logout, refreshUser } = useAuth();
   const webTopInset = Platform.OS === "web" ? 67 : 0;
@@ -419,13 +420,32 @@ export default function ProfileScreen() {
 
   const handleLogout = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    const performLogout = async () => {
+      try {
+        await logout();
+      } catch (error: any) {
+        Alert.alert("Logout failed", error?.message || "Could not log out.");
+      }
+    };
+
+    if (Platform.OS === "web") {
+      const confirmed = typeof globalThis.confirm === "function"
+        ? globalThis.confirm("Are you sure you want to log out?")
+        : true;
+      if (confirmed) {
+        await performLogout();
+      }
+      return;
+    }
+
     Alert.alert("Logout", "Are you sure you want to log out?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Logout",
         style: "destructive",
         onPress: async () => {
-          await logout();
+          await performLogout();
         },
       },
     ]);
@@ -651,7 +671,7 @@ export default function ProfileScreen() {
                 </View>
                 <View style={styles.navCardBody}>
                   <Text style={styles.navCardTitle}>Configure</Text>
-                  <Text style={styles.navCardDescription}>Platform, pipeline, scoring, and dataset controls</Text>
+                  <Text style={styles.navCardDescription}>Platform, analysis, scoring, dataset, and player administration settings</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
               </Pressable>
@@ -667,8 +687,8 @@ export default function ProfileScreen() {
                   <Ionicons name="options-outline" size={20} color="#6C5CE7" />
                 </View>
                 <View style={styles.navCardBody}>
-                  <Text style={styles.navCardTitle}>Select Score/Metrics</Text>
-                  <Text style={styles.navCardDescription}>Customize score sections and visible metrics by sport</Text>
+                  <Text style={styles.navCardTitle}>Performance Metrics Selection</Text>
+                  <Text style={styles.navCardDescription} numberOfLines={1}>Choose score sections and metrics by sport</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
               </Pressable>

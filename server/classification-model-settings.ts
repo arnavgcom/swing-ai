@@ -273,6 +273,24 @@ export async function getDriveMovementClassificationModelPythonEnv(actorUserId?:
   return selection.env;
 }
 
+export async function getDriveMovementClassificationModelPythonEnvForSelection(params: {
+  selectedModelKey: string;
+  modelVersion?: string | null;
+}): Promise<NodeJS.ProcessEnv> {
+  const modelPath = await ensureLocalClassificationModelArtifact({
+    selectedModelKey: params.selectedModelKey,
+    modelVersion: params.modelVersion || null,
+  });
+
+  return {
+    SWING_AI_DRIVE_MOVEMENT_CLASSIFICATION_MODEL_KEY: params.selectedModelKey,
+    SWING_AI_DRIVE_MOVEMENT_CLASSIFICATION_MODEL_PATH: modelPath,
+    ...(params.modelVersion
+      ? { SWING_AI_DRIVE_MOVEMENT_CLASSIFICATION_MODEL_VERSION: params.modelVersion }
+      : {}),
+  };
+}
+
 export async function setDriveMovementClassificationModelSelection(
   modelKey: string,
   actorUserId?: string | null,
