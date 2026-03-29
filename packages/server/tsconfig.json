@@ -6,12 +6,11 @@
     "esModuleInterop": true,
     "strict": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true
+    "baseUrl": ".",
+    "outDir": "./dist",
+    "paths": {
+      "@swing-ai/shared/*": ["../shared/*"]
+    }
   },
-  "references": [
-    { "path": "packages/shared" },
-    { "path": "packages/server" },
-    { "path": "packages/app" }
-  ],
-  "include": []
+  "include": ["src/**/*.ts"]
 }

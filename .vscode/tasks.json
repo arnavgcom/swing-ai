@@ -28,28 +28,11 @@
 			"isBackground": true
 		},
 		{
-			"label": "run-swing-ai-server-dev",
+			"label": "inspect-shot-labels",
 			"type": "shell",
-			"command": "npm run server:dev",
-			"isBackground": true
-		},
-		{
-			"label": "tmp-check-api-port-5000",
-			"type": "shell",
-			"command": "lsof",
+			"command": "${workspaceFolder}/packages/server/.venv/bin/python",
 			"args": [
-				"-nP",
-				"-iTCP:5000",
-				"-sTCP:LISTEN"
-			],
-			"isBackground": false
-		},
-		{
-			"label": "tmp-inspect-shot-labels",
-			"type": "shell",
-			"command": "/Users/vikramgupta/workspace/swing-ai/.venv/bin/python",
-			"args": [
-				"scripts/inspect_shot_labels.py"
+				"packages/server/scripts/inspect_shot_labels.py"
 			],
 			"isBackground": false
 		},
@@ -68,6 +51,16 @@
 			"label": "restart-swing-ai-server-5001",
 			"type": "shell",
 			"command": "PORT=5001 DATABASE_URL='postgres://swing_ai:swing_ai@localhost:5432/swing_ai_local' EXPO_PUBLIC_API_URL='http://192.168.0.166:5001' npm run server:dev",
+			"isBackground": true
+		},
+		{
+			"label": "start-expo-app",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"app:start"
+			],
 			"isBackground": true
 		}
 	]

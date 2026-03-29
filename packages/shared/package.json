@@ -1,0 +1,23 @@
+{
+  "name": "@swing-ai/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    "./schema": "./schema.ts",
+    "./sport-configs": "./sport-configs/index.ts",
+    "./sport-configs/*": "./sport-configs/*.ts",
+    "./metric-scale": "./metric-scale.ts",
+    "./pipeline-timing": "./pipeline-timing.ts",
+    "./pose-landmarker": "./pose-landmarker.ts",
+    "./default-user-preferences": "./default-user-preferences.ts",
+    "./video-validation": "./video-validation.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.39.3",
+    "drizzle-zod": "^0.7.0",
+    "zod": "^3.24.2"
+  }
+}

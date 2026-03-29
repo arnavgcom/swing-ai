@@ -56,6 +56,13 @@ env/
 env.bak/
 venv.bak/
 
+# Server build output
+packages/server/dist/
+
+# Uploads (runtime data)
+uploads/
+packages/server/uploads/
+
 # Logs
 logs
 *.log
