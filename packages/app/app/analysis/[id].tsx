@@ -2256,7 +2256,13 @@ export default function AnalysisDetailScreen() {
                 ]}
               >
                 <Ionicons name="sparkles-outline" size={14} color={sportThemeColor} />
-                <Text style={[styles.diagnosticsEntryButtonText, { color: sportThemeColor }]}>AI &gt;</Text>
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  style={[styles.diagnosticsEntryButtonText, { color: sportThemeColor }]}
+                >
+                  AI-Powered Analysis
+                </Text>
               </Pressable>
             </View>
             <View style={styles.badgesGroup}>
@@ -3129,7 +3135,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   diagnosticsEntryButtonText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
   },
   diagnosticsBody: {

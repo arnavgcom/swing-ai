@@ -163,7 +163,7 @@ export default function AnalysisDiagnosticsScreen() {
         >
           <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
         </Pressable>
-        <Text style={styles.title}>AI Diagnostics</Text>
+        <Text style={styles.title}>AI-Powered Analysis</Text>
         <View style={styles.backButton} />
       </View>
 

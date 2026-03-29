@@ -52,16 +52,20 @@ function ClassicTabLayout() {
           paddingTop: 0,
           paddingBottom: 0,
           justifyContent: "center",
+          alignItems: "center",
         },
         tabBarLabelStyle: {
           fontSize: 11,
           lineHeight: 14,
           fontWeight: "600",
-          marginBottom: 6,
+          marginBottom: 4,
+          alignSelf: "center",
+          textAlign: "center",
         },
         tabBarIconStyle: {
           marginTop: 6,
           marginBottom: 0,
+          alignSelf: "center",
         },
         tabBarBackground: () =>
           isIOS ? (
