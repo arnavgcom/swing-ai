@@ -164,7 +164,7 @@ export default function ManualAnnotationScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
 
       <View style={styles.header}>
         <Pressable
@@ -174,7 +174,7 @@ export default function ManualAnnotationScreen() {
           }}
           style={({ pressed }) => [styles.backButton, { opacity: pressed ? 0.75 : 1 }]}
         >
-          <Ionicons name="chevron-back" size={22} color="#F8FAFC" />
+          <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
         </Pressable>
         <Text style={styles.title}>Manual Annotation</Text>
         <View style={styles.backButton} />
@@ -186,7 +186,7 @@ export default function ManualAnnotationScreen() {
             onPress={() => setManualShotLabels((prev) => [...prev, movementTypeOptions[0] || "forehand"])}
             style={({ pressed }) => [styles.actionButton, { opacity: pressed ? 0.85 : 1 }]}
           >
-            <Ionicons name="add" size={14} color="#6C5CE7" />
+            <Ionicons name="add" size={14} color="#0A84FF" />
             <Text style={styles.actionText}>Add Shot</Text>
           </Pressable>
           <Pressable
@@ -198,7 +198,7 @@ export default function ManualAnnotationScreen() {
               { opacity: pressed ? 0.85 : 1 },
             ]}
           >
-            <Ionicons name="remove" size={14} color={manualShotLabels.length === 0 ? "#64748B" : "#FCA5A5"} />
+            <Ionicons name="remove" size={14} color={manualShotLabels.length === 0 ? "#636366" : "#FF6961"} />
             <Text style={[styles.actionText, manualShotLabels.length === 0 && styles.actionTextDisabled]}>Remove Shot</Text>
           </Pressable>
         </View>
@@ -231,7 +231,7 @@ export default function ManualAnnotationScreen() {
                   style={({ pressed }) => [styles.dropdownTrigger, { opacity: pressed ? 0.85 : 1 }]}
                 >
                   <Text style={styles.dropdownText}>{toTitle(shotLabel)}</Text>
-                  <Ionicons name={dropdownOpen ? "chevron-up" : "chevron-down"} size={14} color="#94A3B8" />
+                  <Ionicons name={dropdownOpen ? "chevron-up" : "chevron-down"} size={14} color="#8E8E93" />
                 </Pressable>
                 {dropdownOpen && (
                   <View style={styles.dropdownMenu}>
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: ds.color.bg },
   header: {
     marginTop: 52,
-    paddingHorizontal: ds.space.lg,
+    paddingHorizontal: ds.space.xl,
     paddingBottom: ds.space.md,
     flexDirection: "row",
     alignItems: "center",
@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   scroll: { paddingHorizontal: ds.space.xl, paddingBottom: 30, gap: 10 },
@@ -341,12 +341,11 @@ const styles = StyleSheet.create({
   },
   trainingTitle: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   trainingSubtitle: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textSecondary,
     lineHeight: 17,
   },
@@ -362,7 +361,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   actionButtonDisabled: { backgroundColor: ds.color.bgElevated },
-  actionText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: ds.color.textSecondary },
+  actionText: { fontSize: 12, fontWeight: "600", color: ds.color.textSecondary },
   actionTextDisabled: { color: ds.color.textTertiary },
   rowCard: {
     borderRadius: ds.radius.md,
@@ -372,7 +371,7 @@ const styles = StyleSheet.create({
     gap: 10,
     alignItems: "flex-start",
   },
-  indexText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: ds.color.accent, marginTop: 9 },
+  indexText: { fontSize: 13, fontWeight: "600", color: ds.color.accent, marginTop: 9 },
   dropdownWrap: { flex: 1 },
   dropdownTrigger: {
     borderRadius: ds.radius.sm,
@@ -385,7 +384,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  dropdownText: { fontSize: 12, fontFamily: "Inter_500Medium", color: ds.color.textSecondary },
+  dropdownText: { fontSize: 12, fontWeight: "500", color: ds.color.textSecondary },
   dropdownMenu: {
     marginTop: 6,
     borderRadius: ds.radius.sm,
@@ -406,7 +405,7 @@ const styles = StyleSheet.create({
     borderColor: ds.color.accent,
     backgroundColor: `${ds.color.accent}20`,
   },
-  dropdownOptionText: { fontSize: 12, fontFamily: "Inter_500Medium", color: ds.color.textSecondary },
+  dropdownOptionText: { fontSize: 12, fontWeight: "500", color: ds.color.textSecondary },
   saveButton: {
     marginTop: 10,
     borderRadius: ds.radius.sm,
@@ -417,5 +416,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  saveText: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#FFFFFF" },
+  saveText: { fontSize: 13, fontWeight: "700", color: "#FFFFFF" },
 });

@@ -195,9 +195,9 @@ function computePercentDelta(current: number | null, previous: number | null): n
 }
 
 function deltaColor(deltaPct: number | null): string {
-  if (deltaPct == null) return "#64748B";
-  if (Math.abs(deltaPct) < 1e-6) return "#94A3B8";
-  return deltaPct >= 0 ? "#34D399" : "#F87171";
+  if (deltaPct == null) return "#636366";
+  if (Math.abs(deltaPct) < 1e-6) return "#8E8E93";
+  return deltaPct >= 0 ? "#30D158" : "#FF453A";
 }
 
 function formatDeltaPercent(deltaPct: number | null, suffix = ""): string | null {
@@ -226,16 +226,16 @@ function metricHealthScore(
 }
 
 function scoreColor(score: number): string {
-  if (score >= 8) return "#34D399";
-  if (score >= 6) return "#60A5FA";
-  return "#FBBF24";
+  if (score >= 8) return "#30D158";
+  if (score >= 6) return "#0A84FF";
+  return "#FFD60A";
 }
 
 function strokeMixColor(stroke: string): string {
-  if (stroke === "serve") return "#60A5FA";
-  if (stroke === "backhand") return "#FBBF24";
-  if (stroke === "volley") return "#A78BFA";
-  return "#34D399";
+  if (stroke === "serve") return "#0A84FF";
+  if (stroke === "backhand") return "#FFD60A";
+  if (stroke === "volley") return "#BF5AF2";
+  return "#30D158";
 }
 
 function TenPointBar({
@@ -248,7 +248,7 @@ function TenPointBar({
   const hasScore = Number.isFinite(item.score);
   const score = hasScore ? Number(item.score) : null;
   const pct = score == null ? 0 : Math.max(0, Math.min(100, score * 10));
-  const color = score == null ? "#64748B" : scoreColor(score);
+  const color = score == null ? "#636366" : scoreColor(score);
 
   return (
     <View style={[styles.tenRow, compact && styles.tenRowCompact]}>
@@ -431,14 +431,14 @@ function TacticalBar({
   const pct = scoreOutOfTen == null ? 0 : scoreOutOfTen * 10;
   const color =
     scoreOutOfTen == null
-      ? "#64748B"
+      ? "#636366"
       : pct >= 80
-        ? "#34D399"
+        ? "#30D158"
         : pct >= 60
-          ? "#60A5FA"
+          ? "#0A84FF"
           : pct >= 40
-            ? "#FBBF24"
-            : "#F87171";
+            ? "#FFD60A"
+            : "#FF453A";
   const roundedScore = scoreOutOfTen == null ? null : Math.round(scoreOutOfTen * 10) / 10;
   const displayScore =
     roundedScore == null
@@ -1951,10 +1951,10 @@ export default function AnalysisDetailScreen() {
     return (
       <View style={[styles.container, styles.center]}>
         <LinearGradient
-          colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
+          colors={["#000000", "#1C1C1E", "#000000"]}
           style={StyleSheet.absoluteFill}
         />
-        <ActivityIndicator size="large" color="#6C5CE7" />
+        <ActivityIndicator size="large" color="#0A84FF" />
       </View>
     );
   }
@@ -1963,16 +1963,16 @@ export default function AnalysisDetailScreen() {
     return (
       <View style={[styles.container, styles.center]}>
         <LinearGradient
-          colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
+          colors={["#000000", "#1C1C1E", "#000000"]}
           style={StyleSheet.absoluteFill}
         />
-        <Ionicons name="alert-circle-outline" size={48} color="#F87171" />
-        <Text style={[styles.errorText, { color: "#F8FAFC" }]}>
+        <Ionicons name="alert-circle-outline" size={48} color="#FF453A" />
+        <Text style={[styles.errorText, { color: "#FFFFFF" }]}>
           Analysis not found
         </Text>
         <Pressable
           onPress={() => router.back()}
-          style={[styles.backButton, { backgroundColor: "#6C5CE7" }]}
+          style={[styles.backButton, { backgroundColor: "#0A84FF" }]}
         >
           <Text style={styles.backButtonText}>Go Back</Text>
         </Pressable>
@@ -2034,7 +2034,7 @@ export default function AnalysisDetailScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
+        colors={["#000000", "#1C1C1E", "#000000"]}
         style={StyleSheet.absoluteFill}
       />
       <View
@@ -2050,7 +2050,7 @@ export default function AnalysisDetailScreen() {
           }}
           style={({ pressed }) => [
             styles.navButton,
-            { backgroundColor: "#15152D", opacity: pressed ? 0.7 : 1 },
+            { backgroundColor: "#1C1C1E", opacity: pressed ? 0.7 : 1 },
           ]}
         >
           <Ionicons name="chevron-back" size={22} color={colors.text} />
@@ -2086,7 +2086,7 @@ export default function AnalysisDetailScreen() {
                   { opacity: pressed ? 0.75 : 1 },
                 ]}
               >
-                <Ionicons name="information-circle-outline" size={18} color="#CBD5E1" />
+                <Ionicons name="information-circle-outline" size={18} color="#AEAEB2" />
               </Pressable>
             </View>
             <ActivityIndicator size="large" color={sportThemeColor} />
@@ -2116,7 +2116,7 @@ export default function AnalysisDetailScreen() {
                     color={
                       analysis.status === "processing" && i < 3
                         ? sportThemeColor
-                        : "#475569"
+                        : "#48484A"
                     }
                   />
                   <Text
@@ -2126,7 +2126,7 @@ export default function AnalysisDetailScreen() {
                         color:
                           analysis.status === "processing" && i < 3
                             ? colors.text
-                            : "#475569",
+                            : "#48484A",
                       },
                     ]}
                   >
@@ -2165,7 +2165,7 @@ export default function AnalysisDetailScreen() {
                     onPress={() => setPipelineTimingModalVisible(false)}
                     style={({ pressed }) => [styles.pipelineModalCloseButton, { opacity: pressed ? 0.75 : 1 }]}
                   >
-                    <Ionicons name="close" size={18} color="#E2E8F0" />
+                    <Ionicons name="close" size={18} color="#C7C7CC" />
                   </Pressable>
                 </View>
                 <PipelineTimingPanel
@@ -2185,7 +2185,7 @@ export default function AnalysisDetailScreen() {
           <Text style={[styles.errorText, { color: colors.text }]}>
             Video Rejected
           </Text>
-          <Text style={[styles.rejectionReason, { color: "#94A3B8" }]}>
+          <Text style={[styles.rejectionReason, { color: "#8E8E93" }]}>
             This video could not be validated for tennis analysis. Please upload a clear tennis video and try again.
           </Text>
           <Pressable
@@ -2206,7 +2206,7 @@ export default function AnalysisDetailScreen() {
           <Text style={[styles.errorText, { color: colors.text }]}>
             Analysis failed
           </Text>
-          <Text style={[styles.errorSub, { color: "#94A3B8" }]}>
+          <Text style={[styles.errorSub, { color: "#8E8E93" }]}>
             {analysis.rejectionReason || "Please try uploading the video again"}
           </Text>
           <Pressable
@@ -2262,7 +2262,7 @@ export default function AnalysisDetailScreen() {
             <View style={styles.badgesGroup}>
               {requestedSessionLabel ? (
                 <View style={styles.requestedSessionBadge}>
-                  <Ionicons name="albums-outline" size={12} color="#93C5FD" />
+                  <Ionicons name="albums-outline" size={12} color="#64D2FF" />
                   <Text style={styles.requestedSessionBadgeText}>{requestedSessionLabel}</Text>
                 </View>
               ) : null}
@@ -2274,7 +2274,7 @@ export default function AnalysisDetailScreen() {
               ) : null}
               {(detectedMovement || sportConfig?.movementName) && (
                 <View style={styles.categoryBadge}>
-                  <Ionicons name="flash-outline" size={12} color="#34D399" />
+                  <Ionicons name="flash-outline" size={12} color="#30D158" />
                   <Text style={styles.categoryBadgeText}>
                     {displayMovementLabel}
                   </Text>
@@ -2304,7 +2304,7 @@ export default function AnalysisDetailScreen() {
 
           {enrichmentMessage ? (
             <View style={styles.enrichmentNotice}>
-              <ActivityIndicator size="small" color="#93C5FD" />
+              <ActivityIndicator size="small" color="#64D2FF" />
               <Text style={styles.enrichmentNoticeText}>{enrichmentMessage}</Text>
             </View>
           ) : null}
@@ -2442,7 +2442,7 @@ export default function AnalysisDetailScreen() {
 
           {wasOverridden && (
             <View style={styles.overrideBanner}>
-              <Ionicons name="information-circle" size={18} color="#60A5FA" />
+              <Ionicons name="information-circle" size={18} color="#0A84FF" />
               <Text style={styles.overrideBannerText}>
                 We detected this as a{" "}
                 <Text style={styles.overrideHighlight}>
@@ -2673,7 +2673,7 @@ export default function AnalysisDetailScreen() {
                     { opacity: pressed ? 0.7 : 1 },
                   ]}
                 >
-                  <Ionicons name="expand-outline" size={18} color="#94A3B8" />
+                  <Ionicons name="expand-outline" size={18} color="#8E8E93" />
                 </Pressable>
               </View>
               <View style={styles.videoContainer}>
@@ -2700,7 +2700,7 @@ export default function AnalysisDetailScreen() {
                     <Ionicons
                       name="create-outline"
                       size={16}
-                      color={manualAnnotationDone ? "#34D399" : "#94A3B8"}
+                      color={manualAnnotationDone ? "#30D158" : "#8E8E93"}
                     />
                   </Pressable>
                 )}
@@ -2819,19 +2819,19 @@ export default function AnalysisDetailScreen() {
                 icon="trophy"
                 title="Key Strength"
                 content={effectiveCoaching.keyStrength}
-                color="#34D399"
+                color="#30D158"
               />
               <CoachingCard
                 icon="warning"
                 title="Improvement Area"
                 content={effectiveCoaching.improvementArea}
-                color="#FBBF24"
+                color="#FFD60A"
               />
               <CoachingCard
                 icon="bulb"
                 title="Training Suggestion"
                 content={effectiveCoaching.trainingSuggestion}
-                color="#60A5FA"
+                color="#0A84FF"
               />
             </View>
           )}
@@ -2853,7 +2853,7 @@ export default function AnalysisDetailScreen() {
               <Ionicons
                 name={(pendingRating === "up" || (!pendingRating && feedback?.rating === "up")) ? "thumbs-up" : "thumbs-up-outline"}
                 size={16}
-                color={(pendingRating === "up" || (!pendingRating && feedback?.rating === "up")) ? "#34D399" : "#64748B"}
+                color={(pendingRating === "up" || (!pendingRating && feedback?.rating === "up")) ? "#30D158" : "#636366"}
               />
             </Pressable>
             <Pressable
@@ -2867,7 +2867,7 @@ export default function AnalysisDetailScreen() {
               <Ionicons
                 name={(pendingRating === "down" || (!pendingRating && feedback?.rating === "down")) ? "thumbs-down" : "thumbs-down-outline"}
                 size={16}
-                color={(pendingRating === "down" || (!pendingRating && feedback?.rating === "down")) ? "#F87171" : "#64748B"}
+                color={(pendingRating === "down" || (!pendingRating && feedback?.rating === "down")) ? "#FF453A" : "#636366"}
               />
             </Pressable>
           </View>
@@ -2883,7 +2883,7 @@ export default function AnalysisDetailScreen() {
             <Ionicons
               name={manualSaveMessage === "Saving..." ? "time-outline" : manualSaveMessage === "Save Failed" ? "close-circle" : "checkmark-circle"}
               size={14}
-              color={manualSaveMessage === "Saving..." ? "#94A3B8" : manualSaveMessage === "Save Failed" ? "#F87171" : "#34D399"}
+              color={manualSaveMessage === "Saving..." ? "#8E8E93" : manualSaveMessage === "Save Failed" ? "#FF453A" : "#30D158"}
             />
             <Text style={styles.savedBreadcrumbText}>{manualSaveMessage}</Text>
           </View>
@@ -2945,7 +2945,7 @@ export default function AnalysisDetailScreen() {
                 <TextInput
                   style={styles.feedbackSheetInput}
                   placeholder="Ex: Backhand was detected but this was a forehand; contact timing score looks low compared to video."
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor="#636366"
                   value={discrepancyText}
                   onChangeText={setDiscrepancyText}
                   multiline
@@ -3016,7 +3016,7 @@ const METRIC_CARD_WIDTH = (SCREEN_WIDTH - 40 - 12) / 2;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0A0A1A",
+    backgroundColor: "#000000",
   },
   center: {
     alignItems: "center",
@@ -3026,7 +3026,7 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 12,
     gap: 12,
   },
@@ -3039,7 +3039,7 @@ const styles = StyleSheet.create({
   },
   topTitle: {
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     textAlign: "center",
   },
   topTitlePressable: {
@@ -3094,19 +3094,19 @@ const styles = StyleSheet.create({
     height: 160,
     borderRadius: 80,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderColor: "#54545860",
+    backgroundColor: "#1C1C1E",
     gap: 4,
   },
   scoreUnavailableValue: {
     fontSize: 34,
-    fontFamily: "Inter_700Bold",
-    color: "#94A3B8",
+    fontWeight: "700",
+    color: "#8E8E93",
   },
   scoreFilteredHint: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
     textAlign: "center",
   },
   diagnosticsIconButton: {
@@ -3116,8 +3116,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderColor: "#54545860",
+    backgroundColor: "#1C1C1E",
   },
   diagnosticsEntryButton: {
     flexDirection: "row",
@@ -3130,14 +3130,14 @@ const styles = StyleSheet.create({
   },
   diagnosticsEntryButtonText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   diagnosticsBody: {
     borderWidth: 1,
-    borderColor: "#2A2A5040",
+    borderColor: "#54545840",
     borderRadius: 16,
     padding: 14,
-    backgroundColor: "#131328",
+    backgroundColor: "#1C1C1E",
     gap: 12,
   },
   diagnosticsBodyActive: {
@@ -3154,7 +3154,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#2A2A5035",
+    borderBottomColor: "#54545835",
   },
   diagHeaderLeft: {
     flexDirection: "row",
@@ -3168,14 +3168,14 @@ const styles = StyleSheet.create({
   },
   diagHeaderTitle: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
+    fontWeight: "600",
+    color: "#AEAEB2",
     letterSpacing: 0.3,
   },
   diagHeaderHint: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#94A3B8",
+    fontWeight: "600",
+    color: "#8E8E93",
   },
   diagnosticsGrid: {
     gap: 8,
@@ -3188,25 +3188,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: "#0A0A1A90",
+    backgroundColor: "#00000090",
     borderWidth: 1,
-    borderColor: "#2A2A5035",
+    borderColor: "#54545835",
   },
   diagLabel: {
     flex: 1,
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   diagValueText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    fontWeight: "600",
+    color: "#C7C7CC",
   },
   diagSubTitle: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
+    fontWeight: "600",
+    color: "#AEAEB2",
     letterSpacing: 0.3,
     marginTop: 6,
     textTransform: "uppercase",
@@ -3216,9 +3216,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: "#0A0A1A90",
+    backgroundColor: "#00000090",
     borderWidth: 1,
-    borderColor: "#2A2A5035",
+    borderColor: "#54545835",
   },
   techHeaderRow: {
     flexDirection: "row",
@@ -3230,26 +3230,24 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
     borderWidth: 1,
-    borderColor: "#2A2A5035",
-    backgroundColor: "#0A0A1A70",
+    borderColor: "#54545835",
+    backgroundColor: "#00000070",
   },
   diagBlockTitle: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
+    fontWeight: "600",
+    color: "#AEAEB2",
     letterSpacing: 0.3,
     textTransform: "uppercase",
   },
   diagItem: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
     lineHeight: 18,
   },
   diagParagraph: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
     lineHeight: 18,
   },
   sportBadge: {
@@ -3259,13 +3257,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
-    backgroundColor: "#6C5CE712",
+    backgroundColor: "#0A84FF12",
     borderWidth: 1,
-    borderColor: "#6C5CE730",
+    borderColor: "#0A84FF30",
   },
   sportBadgeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   requestedSessionBadge: {
     flexDirection: "row",
@@ -3274,14 +3272,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
-    backgroundColor: "#93C5FD12",
+    backgroundColor: "#64D2FF12",
     borderWidth: 1,
-    borderColor: "#93C5FD30",
+    borderColor: "#64D2FF30",
   },
   requestedSessionBadgeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#93C5FD",
+    fontWeight: "600",
+    color: "#64D2FF",
   },
   requestedFocusBadge: {
     flexDirection: "row",
@@ -3296,7 +3294,7 @@ const styles = StyleSheet.create({
   },
   requestedFocusBadgeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: "#C4B5FD",
   },
   categoryBadge: {
@@ -3306,14 +3304,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
-    backgroundColor: "#34D39912",
+    backgroundColor: "#30D15812",
     borderWidth: 1,
-    borderColor: "#34D39930",
+    borderColor: "#30D15830",
   },
   categoryBadgeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#34D399",
+    fontWeight: "600",
+    color: "#30D158",
   },
   shotCountBadge: {
     flexDirection: "row",
@@ -3322,13 +3320,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
-    backgroundColor: "#6C5CE712",
+    backgroundColor: "#0A84FF12",
     borderWidth: 1,
-    borderColor: "#6C5CE730",
+    borderColor: "#0A84FF30",
   },
   shotCountBadgeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     flexShrink: 0,
   },
   shotSpeedBadge: {
@@ -3338,14 +3336,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
-    backgroundColor: "#F59E0B12",
+    backgroundColor: "#FF9F0A12",
     borderWidth: 1,
-    borderColor: "#F59E0B30",
+    borderColor: "#FF9F0A30",
   },
   shotSpeedBadgeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F59E0B",
+    fontWeight: "600",
+    color: "#FF9F0A",
   },
   compactThumbsRow: {
     flexDirection: "row",
@@ -3364,8 +3362,8 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A",
+    borderColor: "#54545860",
+    backgroundColor: "#000000",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3375,20 +3373,19 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     borderRadius: 12,
-    backgroundColor: "#60A5FA10",
+    backgroundColor: "#0A84FF10",
     borderWidth: 1,
-    borderColor: "#60A5FA25",
+    borderColor: "#0A84FF25",
   },
   overrideBannerText: {
     flex: 1,
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
     lineHeight: 19,
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   overrideHighlight: {
-    fontFamily: "Inter_600SemiBold",
-    color: "#60A5FA",
+    fontWeight: "600",
+    color: "#0A84FF",
   },
   videoSection: {
     gap: 10,
@@ -3403,7 +3400,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#47556966",
+    borderColor: "#48484A66",
     backgroundColor: "rgba(16, 16, 37, 0.78)",
     zIndex: 3,
   },
@@ -3417,7 +3414,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#47556966",
+    borderColor: "#48484A66",
     backgroundColor: "rgba(16, 16, 37, 0.78)",
     zIndex: 3,
   },
@@ -3430,9 +3427,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "#15152D",
+    backgroundColor: "#1C1C1E",
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: "#54545860",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3441,7 +3438,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#000",
     borderWidth: 1,
-    borderColor: "#2A2A5040",
+    borderColor: "#54545840",
   },
   videoPlayer: {
     width: "100%",
@@ -3470,15 +3467,15 @@ const styles = StyleSheet.create({
   section: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderColor: "#54545860",
+    backgroundColor: "#1C1C1E",
     padding: 22,
     gap: 18,
   },
   sectionCompact: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: "#54545860",
     backgroundColor: "#13132A",
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -3493,7 +3490,7 @@ const styles = StyleSheet.create({
     marginHorizontal: -4,
     paddingHorizontal: 4,
     paddingVertical: 6,
-    backgroundColor: "#0F0F2EDB",
+    backgroundColor: "#1C1C1EDB",
   },
   performanceJumpRow: {
     flexDirection: "row",
@@ -3510,7 +3507,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#101828",
   },
   performanceJumpPillActive: {
-    borderColor: "#60A5FA",
+    borderColor: "#0A84FF",
     backgroundColor: "#1E3A8A66",
   },
   performanceJumpPillDisabled: {
@@ -3519,19 +3516,19 @@ const styles = StyleSheet.create({
   },
   performanceJumpText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
+    fontWeight: "600",
+    color: "#AEAEB2",
   },
   performanceJumpTextActive: {
     color: "#E0F2FE",
   },
   performanceJumpTextDisabled: {
-    color: "#64748B",
+    color: "#636366",
   },
   sectionCompactTechnical: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2A2A5050",
+    borderColor: "#54545850",
     backgroundColor: "#13132A",
     paddingHorizontal: 11,
     paddingVertical: 10,
@@ -3539,8 +3536,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   sectionScoreHeader: {
     flexDirection: "row",
@@ -3556,24 +3553,24 @@ const styles = StyleSheet.create({
     minWidth: 104,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A90",
+    borderColor: "#54545860",
+    backgroundColor: "#00000090",
     paddingHorizontal: 12,
     paddingVertical: 4,
     gap: 4,
   },
   sectionScoreBadgeTechnical: {
-    borderColor: "#2A2A5040",
-    backgroundColor: "#0A0A1A66",
+    borderColor: "#54545840",
+    backgroundColor: "#00000066",
   },
   sectionScoreText: {
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    color: "#E2E8F0",
+    fontWeight: "700",
+    color: "#C7C7CC",
   },
   sectionDeltaText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   sectionDeltaWrap: {
     flexDirection: "row",
@@ -3589,13 +3586,13 @@ const styles = StyleSheet.create({
   },
   overallDeltaText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   matchPlaySummaryCard: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderColor: "#54545860",
+    backgroundColor: "#1C1C1E",
     padding: 16,
     gap: 14,
   },
@@ -3607,16 +3604,16 @@ const styles = StyleSheet.create({
   },
   matchPlaySummaryEyebrow: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#93C5FD",
+    fontWeight: "600",
+    color: "#64D2FF",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   matchPlaySummaryTitle: {
     marginTop: 4,
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    fontWeight: "600",
+    color: "#C7C7CC",
   },
   matchPlayPrimaryStrokeBadge: {
     flexDirection: "row",
@@ -3636,8 +3633,8 @@ const styles = StyleSheet.create({
   },
   matchPlayPrimaryStrokeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
+    fontWeight: "600",
+    color: "#AEAEB2",
   },
   matchPlaySummaryGrid: {
     flexDirection: "row",
@@ -3649,7 +3646,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2A2A5050",
+    borderColor: "#54545850",
     backgroundColor: "#13132A",
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -3657,13 +3654,13 @@ const styles = StyleSheet.create({
   },
   matchPlaySummaryStatLabel: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   matchPlaySummaryStatValue: {
     fontSize: 15,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   matchPlaySummaryDeltaWrap: {
     flexDirection: "row",
@@ -3672,7 +3669,7 @@ const styles = StyleSheet.create({
   },
   matchPlaySummaryDeltaText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   barsContainer: {
     gap: 18,
@@ -3683,8 +3680,8 @@ const styles = StyleSheet.create({
   tenRow: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2A2A5030",
-    backgroundColor: "#0A0A1A75",
+    borderColor: "#54545830",
+    backgroundColor: "#00000075",
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 5,
@@ -3703,8 +3700,8 @@ const styles = StyleSheet.create({
   tenLabel: {
     flex: 1,
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    fontWeight: "600",
+    color: "#C7C7CC",
     marginRight: 8,
   },
   tenLabelCompact: {
@@ -3713,7 +3710,7 @@ const styles = StyleSheet.create({
   },
   tenScore: {
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   tenTrack: {
     height: 8,
@@ -3730,8 +3727,7 @@ const styles = StyleSheet.create({
   },
   tenExplanation: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
     lineHeight: 16,
   },
   tenExplanationCompact: {
@@ -3744,15 +3740,15 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2A2A5030",
-    backgroundColor: "#0A0A1A88",
+    borderColor: "#54545830",
+    backgroundColor: "#00000088",
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   inlineSectionLoadingText: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   inlineMoreButton: {
     marginTop: -2,
@@ -3763,13 +3759,13 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A",
+    borderColor: "#54545860",
+    backgroundColor: "#000000",
   },
   inlineMoreButtonText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#60A5FA",
+    fontWeight: "600",
+    color: "#0A84FF",
   },
   strokeMixList: {
     gap: 10,
@@ -3796,13 +3792,13 @@ const styles = StyleSheet.create({
   },
   strokeMixLabel: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    fontWeight: "600",
+    color: "#C7C7CC",
   },
   strokeMixMeta: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   strokeMixTrack: {
     height: 7,
@@ -3816,7 +3812,7 @@ const styles = StyleSheet.create({
   },
   strokeMixPercent: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: "#AFC4E0",
     textAlign: "right",
   },
@@ -3829,26 +3825,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: "#15152D",
+    backgroundColor: "#1C1C1E",
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: "#54545860",
   },
   periodPillActive: {
-    backgroundColor: "#6C5CE7",
-    borderColor: "#6C5CE7",
+    backgroundColor: "#0A84FF",
+    borderColor: "#0A84FF",
   },
   periodText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#64748B",
+    fontWeight: "600",
+    color: "#636366",
   },
   periodTextActive: {
     color: "#FFFFFF",
   },
   periodHint: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: "#475569",
+    color: "#48484A",
     marginLeft: 4,
   },
   metricsSection: {
@@ -3868,8 +3863,8 @@ const styles = StyleSheet.create({
   shotReportCard: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderColor: "#54545860",
+    backgroundColor: "#1C1C1E",
     padding: 16,
     gap: 10,
   },
@@ -3880,19 +3875,19 @@ const styles = StyleSheet.create({
   },
   shotReportTitle: {
     fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   shotReportMeta: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   shotReportSubTitle: {
     marginTop: 6,
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
+    fontWeight: "600",
+    color: "#AEAEB2",
   },
   shotReportList: {
     gap: 6,
@@ -3900,30 +3895,28 @@ const styles = StyleSheet.create({
   shotReportRow: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2A2A5035",
-    backgroundColor: "#0A0A1A90",
+    borderColor: "#54545835",
+    backgroundColor: "#00000090",
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 2,
   },
   shotReportRowText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    fontWeight: "600",
+    color: "#C7C7CC",
   },
   shotReportRowMeta: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   shotReportInput: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A",
-    color: "#F8FAFC",
+    borderColor: "#54545860",
+    backgroundColor: "#000000",
+    color: "#FFFFFF",
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -3933,7 +3926,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 13,
     borderRadius: 12,
-    backgroundColor: "#6C5CE7",
+    backgroundColor: "#0A84FF",
   },
   shotReportSaveButtonDisabled: {
     backgroundColor: "#4C4A68",
@@ -3941,7 +3934,7 @@ const styles = StyleSheet.create({
   shotReportSaveText: {
     color: "#FFFFFF",
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   manualOverlay: {
     flex: 1,
@@ -3956,7 +3949,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     borderTopWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: "#54545860",
     backgroundColor: "#101025",
     paddingHorizontal: 18,
     paddingTop: 10,
@@ -3980,13 +3973,12 @@ const styles = StyleSheet.create({
   },
   manualTitle: {
     fontSize: 17,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   manualSubtitle: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
     lineHeight: 18,
   },
   manualShotList: {
@@ -4003,9 +3995,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     borderWidth: 1,
-    borderColor: "#2A2A5035",
+    borderColor: "#54545835",
     borderRadius: 10,
-    backgroundColor: "#0A0A1A80",
+    backgroundColor: "#00000080",
     paddingHorizontal: 10,
     paddingVertical: 10,
   },
@@ -4014,15 +4006,15 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: "#475569",
+    borderColor: "#48484A",
     backgroundColor: "#0F172A",
     alignItems: "center",
     justifyContent: "center",
   },
   manualTrainingToggleText: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: "#CBD5E1",
+    fontWeight: "500",
+    color: "#AEAEB2",
   },
   manualShotActionsRow: {
     flexDirection: "row",
@@ -4037,22 +4029,22 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A",
+    borderColor: "#54545860",
+    backgroundColor: "#000000",
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   manualShotActionDisabled: {
     backgroundColor: "#111827",
-    borderColor: "#2A2A5035",
+    borderColor: "#54545835",
   },
   manualShotActionText: {
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: "#E2E8F0",
+    fontWeight: "500",
+    color: "#C7C7CC",
   },
   manualShotActionTextDisabled: {
-    color: "#64748B",
+    color: "#636366",
   },
   manualShotRow: {
     flexDirection: "row",
@@ -4060,8 +4052,8 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2A2A5035",
-    backgroundColor: "#0A0A1A90",
+    borderColor: "#54545835",
+    backgroundColor: "#00000090",
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
@@ -4074,7 +4066,7 @@ const styles = StyleSheet.create({
     borderColor: "#312E81",
     overflow: "hidden",
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: "#C4B5FD",
     textAlign: "center",
     textAlignVertical: "center",
@@ -4086,8 +4078,8 @@ const styles = StyleSheet.create({
   manualDropdownTrigger: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A",
+    borderColor: "#54545860",
+    backgroundColor: "#000000",
     paddingHorizontal: 14,
     paddingVertical: 12,
     flexDirection: "row",
@@ -4096,14 +4088,14 @@ const styles = StyleSheet.create({
   },
   manualDropdownTriggerText: {
     fontSize: 14,
-    fontFamily: "Inter_500Medium",
-    color: "#F8FAFC",
+    fontWeight: "500",
+    color: "#FFFFFF",
   },
   manualDropdownMenu: {
     marginTop: 8,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: "#54545860",
     backgroundColor: "#101025",
     padding: 8,
     gap: 6,
@@ -4112,18 +4104,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: "#0A0A1A",
+    backgroundColor: "#000000",
     borderWidth: 1,
-    borderColor: "#2A2A5035",
+    borderColor: "#54545835",
   },
   manualDropdownOptionActive: {
-    borderColor: "#6C5CE7",
-    backgroundColor: "#6C5CE720",
+    borderColor: "#0A84FF",
+    backgroundColor: "#0A84FF20",
   },
   manualDropdownOptionText: {
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: "#E2E8F0",
+    fontWeight: "500",
+    color: "#C7C7CC",
   },
   manualCloseButton: {
     width: 28,
@@ -4142,17 +4134,17 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderColor: "#54545860",
+    backgroundColor: "#1C1C1E",
     gap: 14,
   },
   thumbButtonActiveUp: {
-    borderColor: "#34D39940",
-    backgroundColor: "#34D39910",
+    borderColor: "#30D15840",
+    backgroundColor: "#30D15810",
   },
   thumbButtonActiveDown: {
-    borderColor: "#F8717140",
-    backgroundColor: "#F8717110",
+    borderColor: "#FF453A40",
+    backgroundColor: "#FF453A10",
   },
   feedbackOverlay: {
     flex: 1,
@@ -4172,7 +4164,7 @@ const styles = StyleSheet.create({
     maxHeight: "82%",
     backgroundColor: "#101025",
     borderTopWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: "#54545860",
   },
   feedbackSheetContent: {
     gap: 10,
@@ -4187,20 +4179,19 @@ const styles = StyleSheet.create({
   },
   feedbackSheetTitle: {
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   feedbackSheetSubtitle: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
     lineHeight: 18,
   },
   feedbackGroupTitle: {
     marginTop: 2,
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
+    fontWeight: "600",
+    color: "#AEAEB2",
   },
   feedbackChipWrap: {
     flexDirection: "row",
@@ -4211,34 +4202,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "#0A0A1A",
+    backgroundColor: "#000000",
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: "#54545860",
   },
   feedbackChipActive: {
-    borderColor: "#6C5CE7",
-    backgroundColor: "#6C5CE720",
+    borderColor: "#0A84FF",
+    backgroundColor: "#0A84FF20",
   },
   feedbackChipText: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   feedbackChipTextActive: {
-    color: "#E2E8F0",
+    color: "#C7C7CC",
   },
   feedbackSheetInput: {
     minHeight: 72,
     maxHeight: 120,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A",
+    borderColor: "#54545860",
+    backgroundColor: "#000000",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: "#F8FAFC",
+    color: "#FFFFFF",
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
     textAlignVertical: "top",
   },
   feedbackSheetActions: {
@@ -4254,13 +4244,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A",
+    borderColor: "#54545860",
+    backgroundColor: "#000000",
   },
   feedbackSheetGhostText: {
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   feedbackSheetSubmit: {
     flex: 1,
@@ -4268,14 +4258,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: "#6C5CE7",
+    backgroundColor: "#0A84FF",
   },
   feedbackSheetSubmitDisabled: {
     backgroundColor: "#4C4A68",
   },
   feedbackSheetSubmitText: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: "#FFFFFF",
   },
   savedBreadcrumbContainer: {
@@ -4293,19 +4283,19 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: "#54545860",
     backgroundColor: "#101025EE",
   },
   savedBreadcrumbText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    fontWeight: "600",
+    color: "#C7C7CC",
   },
   processingCard: {
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderColor: "#54545860",
+    backgroundColor: "#1C1C1E",
     padding: 28,
     alignItems: "center",
     gap: 14,
@@ -4332,14 +4322,13 @@ const styles = StyleSheet.create({
   },
   ghostLoadingTitle: {
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   ghostLoadingSubtitle: {
     fontSize: 12,
     lineHeight: 18,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   processingCardHeader: {
     width: "100%",
@@ -4354,12 +4343,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: "#54545860",
     backgroundColor: "#0F172A",
   },
   processingTitle: {
     fontSize: 20,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     marginTop: 8,
   enrichmentNotice: {
     marginTop: 10,
@@ -4378,17 +4367,16 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     lineHeight: 17,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: "#BFDBFE",
   },
-    color: "#F8FAFC",
+    color: "#FFFFFF",
   },
   processingSubtitle: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
     textAlign: "center",
     lineHeight: 21,
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   processingSteps: {
     gap: 10,
@@ -4407,14 +4395,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#60A5FA40",
+    borderColor: "#0A84FF40",
     backgroundColor: "#1E3A5FCC",
   },
   processingToastText: {
     flex: 1,
     fontSize: 12,
     lineHeight: 18,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: "#DBEAFE",
   },
   pipelineModalBackdrop: {
@@ -4426,7 +4414,7 @@ const styles = StyleSheet.create({
   pipelineModalCard: {
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: "#54545860",
     backgroundColor: "#111827",
     padding: 18,
     gap: 14,
@@ -4443,14 +4431,13 @@ const styles = StyleSheet.create({
   },
   pipelineModalTitle: {
     fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   pipelineModalSubtitle: {
     fontSize: 12,
     lineHeight: 18,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   pipelineModalCloseButton: {
     width: 30,
@@ -4459,8 +4446,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderColor: "#54545860",
+    backgroundColor: "#1C1C1E",
   },
   stepRow: {
     flexDirection: "row",
@@ -4469,18 +4456,16 @@ const styles = StyleSheet.create({
   },
   stepText: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
     flex: 1,
     lineHeight: 16,
   },
   errorText: {
     fontSize: 18,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     marginTop: 6,
   },
   errorSub: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
     marginTop: 8,
     textAlign: "center",
     lineHeight: 20,
@@ -4511,7 +4496,6 @@ const styles = StyleSheet.create({
   },
   rejectionReason: {
     fontSize: 15,
-    fontFamily: "Inter_400Regular",
     marginTop: 8,
     textAlign: "center",
     lineHeight: 22,
@@ -4521,7 +4505,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#6C5CE7",
+    backgroundColor: "#0A84FF",
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 14,
@@ -4535,7 +4519,7 @@ const styles = StyleSheet.create({
   },
   tryAgainText: {
     color: "#FFF",
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     fontSize: 15,
   },
   backButton: {
@@ -4546,7 +4530,7 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     color: "#fff",
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     fontSize: 15,
   },
 });

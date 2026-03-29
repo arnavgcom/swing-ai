@@ -15,8 +15,8 @@ const TRACKED_JOINTS: PathConfig[] = [
   { jointIds: [23, 24], aggregate: true, strokeWidth: 1.8, opacity: 0.55 },
 ];
 
-const PLAYER_COLOR = "#F87171";
-const OPTIMAL_COLOR = "#22C55E";
+const PLAYER_COLOR = "#FF453A";
+const OPTIMAL_COLOR = "#30D158";
 
 function extractPoint(
   landmarks: Landmark[],

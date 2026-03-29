@@ -12,7 +12,6 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
 
@@ -65,27 +64,19 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={["#020614", "#0A1128", "#050A18"]}
-        style={StyleSheet.absoluteFill}
-        start={{ x: 0.2, y: 0 }}
-        end={{ x: 0.8, y: 1 }}
-      />
-
-      <View style={styles.glowOrbTop} />
-      <View style={styles.glowOrbBottom} />
-      <View style={styles.glowOrbMid} />
-
       <View
         style={[
           styles.content,
           {
-            paddingTop: insets.top + webTopInset,
+            paddingTop: insets.top + webTopInset + 40,
             paddingBottom: insets.bottom + 28 + webBottomInset,
           },
         ]}
       >
         <View style={styles.brandingSection}>
+          <View style={styles.logoWrap}>
+            <Ionicons name="analytics" size={36} color="#0A84FF" />
+          </View>
           <Text style={styles.appName}>
             Swing <Text style={styles.appNameAccent}>AI</Text>
           </Text>
@@ -93,16 +84,19 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.authCard}>
-          <Text style={styles.cardTitle}>{isSignUpMode ? "Create Account" : "Login"}</Text>
+          <Text style={styles.cardTitle}>{isSignUpMode ? "Create Account" : "Welcome Back"}</Text>
+          <Text style={styles.cardSubtitle}>
+            {isSignUpMode ? "Start your journey" : "Sign in to continue"}
+          </Text>
 
           {isSignUpMode && (
             <View style={styles.inputWrap}>
-              <Ionicons name="person-outline" size={18} color="#9CA3AF" />
+              <Ionicons name="person-outline" size={18} color="#636366" />
               <TextInput
                 value={fullName}
                 onChangeText={setFullName}
                 placeholder="Full Name"
-                placeholderTextColor="#6B7280"
+                placeholderTextColor="#636366"
                 autoCapitalize="words"
                 autoCorrect={false}
                 style={styles.input}
@@ -113,12 +107,12 @@ export default function LoginScreen() {
           )}
 
           <View style={styles.inputWrap}>
-            <Ionicons name="mail-outline" size={18} color="#9CA3AF" />
+            <Ionicons name="mail-outline" size={18} color="#636366" />
             <TextInput
               value={email}
               onChangeText={setEmail}
               placeholder="Email"
-              placeholderTextColor="#6B7280"
+              placeholderTextColor="#636366"
               autoCapitalize="none"
               keyboardType="email-address"
               autoCorrect={false}
@@ -129,12 +123,12 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.inputWrap}>
-            <Ionicons name="lock-closed-outline" size={18} color="#9CA3AF" />
+            <Ionicons name="lock-closed-outline" size={18} color="#636366" />
             <TextInput
               value={password}
               onChangeText={setPassword}
               placeholder="Password"
-              placeholderTextColor="#6B7280"
+              placeholderTextColor="#636366"
               secureTextEntry
               style={styles.input}
               returnKeyType="go"
@@ -149,21 +143,18 @@ export default function LoginScreen() {
             style={({ pressed }) => [
               styles.primaryButton,
               {
-                transform: [{ scale: pressed ? 0.98 : 1 }],
+                transform: [{ scale: pressed ? 0.97 : 1 }],
                 opacity: authLoading ? 0.7 : 1,
               },
             ]}
             testID="local-auth-button"
           >
             {authLoading ? (
-              <ActivityIndicator size="small" color="#22C55E" />
+              <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <>
-                <Ionicons name="arrow-forward-circle" size={20} color="#22C55E" />
-                <Text style={styles.primaryButtonText}>
-                  {isSignUpMode ? "Sign Up" : "Login"}
-                </Text>
-              </>
+              <Text style={styles.primaryButtonText}>
+                {isSignUpMode ? "Sign Up" : "Sign In"}
+              </Text>
             )}
           </Pressable>
 
@@ -174,8 +165,11 @@ export default function LoginScreen() {
           >
             <Text style={styles.modeToggleText}>
               {isSignUpMode
-                ? "Already have an account? Login"
-                : "New here? Create an account"}
+                ? "Already have an account? "
+                : "New here? "}
+              <Text style={styles.modeToggleLink}>
+                {isSignUpMode ? "Sign In" : "Create Account"}
+              </Text>
             </Text>
           </Pressable>
         </View>
@@ -186,119 +180,97 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#020614" },
+  container: { flex: 1, backgroundColor: "#000000" },
   content: {
     flex: 1,
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
     justifyContent: "center",
-    gap: 24,
-  },
-  glowOrbTop: {
-    position: "absolute",
-    top: -100,
-    right: -50,
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: "#818CF808",
-  },
-  glowOrbBottom: {
-    position: "absolute",
-    bottom: -90,
-    left: -50,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: "#4ADE8006",
-  },
-  glowOrbMid: {
-    position: "absolute",
-    top: "35%",
-    left: "20%",
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: "#818CF806",
+    gap: 32,
   },
   brandingSection: {
     alignItems: "center",
+    gap: 8,
+  },
+  logoWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: "rgba(10, 132, 255, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 8,
   },
   appName: {
-    fontSize: 48,
-    fontFamily: "Inter_700Bold",
-    color: "#F1F5F9",
-    letterSpacing: -1.5,
+    fontSize: 40,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: -1,
   },
   appNameAccent: {
-    color: "#4ADE80",
+    color: "#0A84FF",
   },
   tagline: {
-    marginTop: 10,
     fontSize: 15,
-    fontFamily: "Inter_400Regular",
-    color: "#78909C",
-    letterSpacing: 0.3,
+    color: "#8E8E93",
+    letterSpacing: 0.2,
   },
   authCard: {
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
-    backgroundColor: "rgba(12, 20, 40, 0.55)",
-    padding: 22,
+    borderRadius: 18,
+    backgroundColor: "#1C1C1E",
+    padding: 20,
     gap: 12,
   },
   cardTitle: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
-    color: "#F1F5F9",
-    marginBottom: 6,
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#FFFFFF",
     letterSpacing: -0.3,
+  },
+  cardSubtitle: {
+    fontSize: 15,
+    color: "#8E8E93",
+    marginBottom: 4,
   },
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.06)",
-    backgroundColor: "rgba(5, 10, 24, 0.7)",
+    gap: 10,
+    borderRadius: 12,
+    backgroundColor: "#2C2C2E",
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === "web" ? 14 : 12,
   },
   input: {
     flex: 1,
-    color: "#F1F5F9",
+    color: "#FFFFFF",
     fontSize: 15,
-    fontFamily: "Inter_400Regular",
     paddingVertical: 0,
   },
   primaryButton: {
-    marginTop: 6,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: "#4ADE80",
-    backgroundColor: "rgba(74, 222, 128, 0.06)",
-    paddingVertical: 14,
-    flexDirection: "row",
+    marginTop: 4,
+    borderRadius: 12,
+    backgroundColor: "#0A84FF",
+    paddingVertical: 15,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
   },
   primaryButtonText: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-    color: "#4ADE80",
-    letterSpacing: 0.2,
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    letterSpacing: -0.2,
   },
   modeToggle: {
     alignItems: "center",
-    paddingTop: 6,
+    paddingTop: 8,
     paddingBottom: 2,
   },
   modeToggleText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: "#A5B4FC",
+    fontSize: 14,
+    color: "#8E8E93",
+  },
+  modeToggleLink: {
+    color: "#0A84FF",
+    fontWeight: "500",
   },
 });

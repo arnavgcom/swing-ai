@@ -32,7 +32,7 @@ export function SkeletonRenderer({
   landmarks,
   color,
   highlightJoints,
-  highlightColor = "#F87171",
+  highlightColor = "#FF453A",
   opacity = 1,
   width,
   height,

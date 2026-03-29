@@ -42,7 +42,7 @@ function getStageStatusMeta(status: PipelineTimingStage["status"]) {
     case "completed":
       return { icon: "checkmark-circle", color: ds.color.success, label: "Completed" } as const;
     case "running":
-      return { icon: "time", color: "#60A5FA", label: "Running" } as const;
+      return { icon: "time", color: "#0A84FF", label: "Running" } as const;
     case "failed":
       return { icon: "alert-circle", color: ds.color.danger, label: "Failed" } as const;
     default:
@@ -139,12 +139,12 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
   summaryValue: {
     fontSize: 13,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     color: ds.color.textPrimary,
   },
   stageList: {
@@ -173,18 +173,17 @@ const styles = StyleSheet.create({
   },
   stageLabel: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   stageDescription: {
     fontSize: 11,
     lineHeight: 16,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
   },
   stageDuration: {
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     color: ds.color.textSecondary,
   },
   stageBottomRow: {
@@ -204,18 +203,17 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   noteText: {
     flex: 1,
     textAlign: "right",
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
   },
   emptyText: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
 });

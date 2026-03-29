@@ -12,12 +12,12 @@ import {
   Pressable,
   ScrollView,
   Modal,
+  useWindowDimensions,
 } from "react-native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -43,6 +43,8 @@ import {
 import { useSport } from "@/lib/sport-context";
 import { TabHeader } from "@/components/TabHeader";
 import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/components/TabScreenIntro";
+import { ds } from "@/constants/design-system";
+import { useTabBar } from "@/lib/tab-bar-context";
 
 const LAST_WORKED_ANALYSIS_KEY = "swingai_last_worked_analysis_id";
 const BACKGROUND_NOTICE_KEY = "swingai_background_processing_notice";
@@ -54,15 +56,77 @@ type CompletionNotice = {
   message: string;
 };
 
+/** Collapsible section for history screen */
+function HistoryCollapsibleSection({
+  title,
+  color,
+  children,
+}: {
+  title: string;
+  color: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={[hcStyles.wrapper, { borderColor: `${color}30` }]}>
+      <View style={hcStyles.header}>
+        <View style={hcStyles.titleRow}>
+          <View style={[hcStyles.titleAccent, { backgroundColor: color }]} />
+          <Text style={hcStyles.title}>{title}</Text>
+        </View>
+      </View>
+      <View style={hcStyles.content}>{children}</View>
+    </View>
+  );
+}
+
+const hcStyles = StyleSheet.create({
+  wrapper: {
+    borderRadius: 14,
+    backgroundColor: "#1C1C1E",
+    borderWidth: 1,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  titleAccent: {
+    width: 3,
+    height: 16,
+    borderRadius: 2,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+});
+
 function TrendChart({ data, dates }: { data: number[]; dates: string[] }) {
   if (data.length === 0) return null;
 
+  const { width: screenWidth } = useWindowDimensions();
   const maxVal = Math.max(...data, 1);
   const minVal = Math.min(...data, 0);
   const range = Math.max(maxVal - minVal, 10);
   const chartHeight = 30;
   const yLabelWidth = 28;
-  const chartWidth = 260;
+  // screenWidth - card marginHorizontal(20*2) - content paddingHorizontal(16*2) - yLabelWidth
+  const chartWidth = Math.max(screenWidth - 100, 100);
   const stepX = data.length > 1 ? chartWidth / (data.length - 1) : 0;
 
   const points = data.map((val, i) => ({
@@ -105,7 +169,7 @@ function TrendChart({ data, dates }: { data: number[]; dates: string[] }) {
                   top: prev.y,
                   width: length,
                   height: 2,
-                  backgroundColor: "#34D399",
+                  backgroundColor: "#30D158",
                   transform: [{ rotate: `${angle}deg` }],
                   transformOrigin: "left center",
                   opacity: 0.8,
@@ -120,7 +184,7 @@ function TrendChart({ data, dates }: { data: number[]; dates: string[] }) {
                 trendStyles.dot,
                 {
                   backgroundColor:
-                    i === points.length - 1 ? "#34D399" : "#34D39960",
+                    i === points.length - 1 ? "#30D158" : "#30D15860",
                   width: i === points.length - 1 ? 8 : 6,
                   height: i === points.length - 1 ? 8 : 6,
                   borderRadius: i === points.length - 1 ? 4 : 3,
@@ -163,8 +227,7 @@ const trendStyles = StyleSheet.create({
   },
   yLabel: {
     fontSize: 9,
-    fontFamily: "Inter_400Regular",
-    color: "#64748B",
+    color: "#636366",
     textAlign: "right" as const,
   },
   gridLine: {
@@ -173,7 +236,7 @@ const trendStyles = StyleSheet.create({
     right: 0,
     top: 0,
     height: 1,
-    backgroundColor: "#2A2A5020",
+    backgroundColor: "#54545820",
   },
   dot: { position: "absolute" },
   xAxis: {
@@ -183,8 +246,7 @@ const trendStyles = StyleSheet.create({
   },
   xLabel: {
     fontSize: 9,
-    fontFamily: "Inter_400Regular",
-    color: "#64748B",
+    color: "#636366",
     flex: 1,
     textAlign: "center" as const,
   },
@@ -308,9 +370,9 @@ function computePercentDelta(current: number | null, previous: number | null): n
 }
 
 function getDeltaColor(deltaPct: number | null): string {
-  if (deltaPct == null) return "#64748B";
-  if (Math.abs(deltaPct) < 1e-6) return "#94A3B8";
-  return deltaPct >= 0 ? "#34D399" : "#F87171";
+  if (deltaPct == null) return "#636366";
+  if (Math.abs(deltaPct) < 1e-6) return "#8E8E93";
+  return deltaPct >= 0 ? "#30D158" : "#FF453A";
 }
 
 function formatDeltaPercent(deltaPct: number | null): string | null {
@@ -439,20 +501,20 @@ function getReviewStatusLabel(item: AnalysisSummary, nowMs: number): string {
 
 function getReviewStatusTone(item: AnalysisSummary, nowMs: number): { bg: string; border: string; text: string } {
   if (item.status === "rejected") {
-    return { bg: "#3F1114", border: "#7F1D1D", text: "#FCA5A5" };
+    return { bg: "#FF453A14", border: "#FF453A30", text: "#FF453A" };
   }
   if (item.status === "failed") {
-    return { bg: "#422006", border: "#92400E", text: "#FCD34D" };
+    return { bg: "#332B00", border: "#665600", text: "#FFD60A" };
   }
   if (item.status === "processing" || item.status === "pending") {
     const startedAt = parseApiDate(getProcessingStartDate(item))?.getTime() ?? nowMs;
     const elapsedMinutes = Math.max(nowMs - startedAt, 0) / 60000;
     if (elapsedMinutes >= 20) {
-      return { bg: "#3F2A07", border: "#92400E", text: "#FBBF24" };
+      return { bg: "#332B00", border: "#665600", text: "#FFD60A" };
     }
-    return { bg: "#0F2D42", border: "#1D4ED8", text: "#93C5FD" };
+    return { bg: "#002040", border: "#0A84FF", text: "#64D2FF" };
   }
-  return { bg: "#052E1A", border: "#166534", text: "#86EFAC" };
+  return { bg: "#30D15814", border: "#30D15840", text: "#30D158" };
 }
 
 function ReviewMetricCard({
@@ -518,11 +580,11 @@ function AdminQueueItem({
       <View style={styles.reviewQueueBottomRow}>
         <View style={styles.reviewQueueTags}>
           <View style={styles.reviewQueueTag}>
-            <Ionicons name="flash-outline" size={11} color="#94A3B8" />
+            <Ionicons name="flash-outline" size={11} color="#8E8E93" />
             <Text style={styles.reviewQueueTagText}>{movementLabel}</Text>
           </View>
           <View style={styles.reviewQueueTag}>
-            <Ionicons name="calendar-outline" size={11} color="#94A3B8" />
+            <Ionicons name="calendar-outline" size={11} color="#8E8E93" />
             <Text style={styles.reviewQueueTagText}>
               {formatMonthDayInTimeZone(getVideoDate(item), timeZone)}
             </Text>
@@ -715,11 +777,11 @@ function SummaryCard({
   const overallDeltaPct = deltas?.overallPct ?? null;
 
   const statusConfig: Record<string, { color: string; label: string }> = {
-    pending: { color: "#FBBF24", label: "Pending" },
-    processing: { color: "#60A5FA", label: "Processing" },
-    completed: { color: "#34D399", label: "Completed" },
-    failed: { color: "#F87171", label: "Failed Processing" },
-    rejected: { color: "#EF4444", label: "Rejected" },
+    pending: { color: "#FFD60A", label: "Pending" },
+    processing: { color: "#0A84FF", label: "Processing" },
+    completed: { color: "#30D158", label: "Completed" },
+    failed: { color: "#FF453A", label: "Failed Processing" },
+    rejected: { color: "#FF453A", label: "Rejected" },
   };
   const status = statusConfig[item.status] || statusConfig.pending;
   const failureMessage = item.status === "failed"
@@ -796,7 +858,7 @@ function SummaryCard({
               ) : null}
               {item.status === "rejected" ? (
                 <View style={summaryStyles.rejectedBadge}>
-                  <Ionicons name="close-circle-outline" size={11} color="#EF4444" />
+                  <Ionicons name="close-circle-outline" size={11} color="#FF453A" />
                   <Text style={summaryStyles.rejectedBadgeText}>Rejected</Text>
                 </View>
               ) : null}
@@ -845,13 +907,13 @@ function SummaryCard({
               </Text>
             </View>
           )}
-          <Ionicons name="chevron-forward" size={16} color="#475569" />
+          <Ionicons name="chevron-forward" size={16} color="#48484A" />
         </View>
       </View>
 
       {failureMessage ? (
         <View style={summaryStyles.failureMessageWrap}>
-          <Ionicons name="alert-circle-outline" size={13} color="#FCA5A5" />
+          <Ionicons name="alert-circle-outline" size={13} color="#FF453A" />
           <View style={summaryStyles.failureContent}>
             <Text style={summaryStyles.failureMessageText} numberOfLines={3}>
               {failureMessage}
@@ -870,9 +932,9 @@ function SummaryCard({
               ]}
             >
               {retryPending ? (
-                <ActivityIndicator size="small" color="#FEE2E2" />
+                <ActivityIndicator size="small" color="#FF453A" />
               ) : (
-                <Ionicons name="refresh" size={12} color="#FEE2E2" />
+                <Ionicons name="refresh" size={12} color="#FF453A" />
               )}
               <Text style={summaryStyles.retryButtonText}>{retryPending ? "Retrying..." : "Retry"}</Text>
             </Pressable>
@@ -928,7 +990,7 @@ function SummaryCard({
           ]}
           hitSlop={8}
         >
-          <Ionicons name="trash-outline" size={13} color="#F87171" />
+          <Ionicons name="trash-outline" size={13} color="#FF453A" />
         </Pressable>
       )}
     </Pressable>
@@ -937,10 +999,10 @@ function SummaryCard({
 
 const summaryStyles = StyleSheet.create({
   card: {
-    backgroundColor: "#15152D",
+    backgroundColor: "#1C1C1E",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2A2A5040",
+    borderColor: "#54545840",
     padding: 16,
     overflow: "hidden",
     position: "relative",
@@ -963,13 +1025,13 @@ const summaryStyles = StyleSheet.create({
   cardTopRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   timeText: {
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   playerNameText: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: "#A29BFE",
+    fontWeight: "500",
+    color: "#BF5AF2",
     flexShrink: 1,
   },
   playerMetaRow: {
@@ -995,35 +1057,35 @@ const summaryStyles = StyleSheet.create({
   },
   compactMetaBadgeText: {
     fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   compactPlayerBadge: {
-    backgroundColor: "#A29BFE12",
-    borderColor: "#A29BFE30",
+    backgroundColor: "#BF5AF212",
+    borderColor: "#BF5AF230",
   },
   compactPlayerBadgeText: {
-    color: "#A29BFE",
+    color: "#BF5AF2",
   },
   compactUploadBadge: {
-    backgroundColor: "#34D39912",
-    borderColor: "#34D39944",
+    backgroundColor: "#30D15812",
+    borderColor: "#30D15844",
   },
   compactUploadBadgeText: {
-    color: "#34D399",
+    color: "#30D158",
   },
   compactSessionBadge: {
-    backgroundColor: "#93C5FD12",
-    borderColor: "#93C5FD30",
+    backgroundColor: "#64D2FF12",
+    borderColor: "#64D2FF30",
   },
   compactSessionBadgeText: {
-    color: "#93C5FD",
+    color: "#64D2FF",
   },
   compactFocusBadge: {
-    backgroundColor: "#34D39912",
-    borderColor: "#34D39930",
+    backgroundColor: "#30D15812",
+    borderColor: "#30D15830",
   },
   compactFocusBadgeText: {
-    color: "#34D399",
+    color: "#30D158",
   },
   rejectedBadge: {
     flexDirection: "row",
@@ -1033,14 +1095,14 @@ const summaryStyles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 9,
-    backgroundColor: "#EF444414",
+    backgroundColor: "#FF453A14",
     borderWidth: 1,
-    borderColor: "#EF444430",
+    borderColor: "#FF453A30",
   },
   rejectedBadgeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#EF4444",
+    fontWeight: "600",
+    color: "#FF453A",
   },
   backgroundProcessingBadge: {
     flexDirection: "row",
@@ -1051,21 +1113,21 @@ const summaryStyles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "#0A0A1A90",
+    backgroundColor: "#00000090",
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: "#38383A",
   },
   inlineProcessingBadge: {
     marginTop: 0,
   },
   backgroundProcessingBadgeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   scoreText: {
     fontSize: 28,
-    fontFamily: "Inter_700Bold",
-    color: "#34D399",
+    fontWeight: "700",
+    color: "#30D158",
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -1074,7 +1136,7 @@ const summaryStyles = StyleSheet.create({
   },
   statusText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   failureMessageWrap: {
     flexDirection: "row",
@@ -1085,8 +1147,8 @@ const summaryStyles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#7F1D1D",
-    backgroundColor: "#450A0A66",
+    borderColor: "#FF453A30",
+    backgroundColor: "#FF453A14",
   },
   failureContent: {
     flex: 1,
@@ -1095,8 +1157,8 @@ const summaryStyles = StyleSheet.create({
   failureMessageText: {
     fontSize: 11,
     lineHeight: 16,
-    fontFamily: "Inter_500Medium",
-    color: "#FECACA",
+    fontWeight: "500",
+    color: "#FF453A",
   },
   retryButton: {
     alignSelf: "flex-start",
@@ -1107,17 +1169,17 @@ const summaryStyles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#7F1D1D",
-    backgroundColor: "#7F1D1D66",
+    borderColor: "#FF453A30",
+    backgroundColor: "#FF453A18",
   },
   retryButtonDisabled: {
-    backgroundColor: "#4B556380",
-    borderColor: "#6B7280",
+    backgroundColor: "#48484A80",
+    borderColor: "#636366",
   },
   retryButtonText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#FEE2E2",
+    fontWeight: "600",
+    color: "#FF453A",
   },
   metricsRow: {
     flexDirection: "row",
@@ -1129,25 +1191,25 @@ const summaryStyles = StyleSheet.create({
     minWidth: "31%" as any,
     flexGrow: 1,
     flexBasis: "31%" as any,
-    backgroundColor: "#0A0A1A50",
+    backgroundColor: "#00000050",
     borderRadius: 10,
     padding: 8,
     alignItems: "center",
     gap: 2,
     borderWidth: 1,
-    borderColor: "#2A2A5020",
+    borderColor: "#54545820",
   },
   metricLabel: {
     fontSize: 10,
-    fontFamily: "Inter_500Medium",
-    color: "#64748B",
+    fontWeight: "500",
+    color: "#636366",
     textTransform: "uppercase" as const,
     letterSpacing: 0.3,
   },
   metricValue: {
     fontSize: 14,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   metricValueRow: {
     width: "100%",
@@ -1161,8 +1223,8 @@ const summaryStyles = StyleSheet.create({
   },
   scoreLabel: {
     fontSize: 9,
-    fontFamily: "Inter_500Medium",
-    color: "#64748B",
+    fontWeight: "500",
+    color: "#636366",
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
   },
@@ -1179,11 +1241,11 @@ const summaryStyles = StyleSheet.create({
   },
   deltaText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   metricDeltaText: {
     fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     lineHeight: 10,
   },
   metricDeltaWrap: {
@@ -1210,6 +1272,7 @@ export default function HistoryScreen() {
   const profileTimeZone = resolveUserTimeZone(user);
   const isAdmin = user?.role === "admin";
   const { selectedSport, selectedMovement } = useSport();
+  const { handleScroll: handleTabBarScroll } = useTabBar();
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("all");
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
   const [selectedTrendSessions, setSelectedTrendSessions] = useState<TrendSessionWindow>(10);
@@ -1221,6 +1284,7 @@ export default function HistoryScreen() {
   );
   const [selectedStroke, setSelectedStroke] = useState<StrokeTypeFilter | null>(null);
   const [selectedHistorySort, setSelectedHistorySort] = useState<HistorySortKey>("session");
+  const [visibleCount, setVisibleCount] = useState(10);
   const [lastWorkedAnalysisId, setLastWorkedAnalysisId] = useState<string | null>(null);
   const [backgroundNotice, setBackgroundNotice] = useState<string | null>(null);
   const [completionNotice, setCompletionNotice] = useState<CompletionNotice | null>(null);
@@ -1486,6 +1550,11 @@ export default function HistoryScreen() {
     return [pendingSummaryVisible, ...sortedAnalyses];
   }, [pendingSummaryVisible, sortedAnalyses]);
 
+  // Reset pagination when the visible list changes (filter/sort change)
+  useEffect(() => {
+    setVisibleCount(10);
+  }, [sortedAnalyses, selectedSessionTypes, selectedStroke, selectedHistorySort]);
+
   const activeBackgroundAnalysisId = useMemo(() => {
     if (pendingAnalysisSummary && isInFlightAnalysisStatus(pendingAnalysisSummary.status)) {
       return pendingAnalysisSummary.id;
@@ -1653,7 +1722,7 @@ export default function HistoryScreen() {
     formatMonthDayInTimeZone(getVideoDate(a), profileTimeZone),
   );
 
-  const historyHighlightColor = selectedSport?.color || "#34D399";
+  const historyHighlightColor = selectedSport?.color || "#30D158";
   const historyMovementLabel = selectedMovement?.name
     ? toTitleCase(selectedMovement.name.replace(/-/g, " "))
     : null;
@@ -1799,7 +1868,6 @@ export default function HistoryScreen() {
         controls={historyControls}
       >
         <TabScreenFilterGroup
-          label="SESSION TYPE"
           action={hasHistoryFilters ? (
             <Pressable
               onPress={clearHistoryFilters}
@@ -1808,7 +1876,7 @@ export default function HistoryScreen() {
                 { opacity: pressed ? 0.75 : 1 },
               ]}
             >
-              <Text style={[styles.filterResetText, { color: historyHighlightColor }]}>Clear filters</Text>
+              <Text style={[styles.filterResetText, { color: historyHighlightColor }]}>Clear</Text>
             </Pressable>
           ) : null}
         >
@@ -1822,15 +1890,15 @@ export default function HistoryScreen() {
                   style={[
                     styles.filterChip,
                     {
-                      borderColor: selected ? `${historyHighlightColor}66` : "#2A2A5060",
-                      backgroundColor: selected ? `${historyHighlightColor}1A` : "#101426",
+                      borderColor: selected ? `${historyHighlightColor}66` : "#54545860",
+                      backgroundColor: selected ? `${historyHighlightColor}1A` : "#1C1C1E",
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.filterChipText,
-                      { color: selected ? historyHighlightColor : "#94A3B8" },
+                      { color: selected ? historyHighlightColor : "#8E8E93" },
                     ]}
                   >
                     {option.label}
@@ -1838,11 +1906,6 @@ export default function HistoryScreen() {
                 </Pressable>
               );
             })}
-          </TabScreenFilterRow>
-        </TabScreenFilterGroup>
-
-        <TabScreenFilterGroup label="FOCUS">
-          <TabScreenFilterRow>
             {STROKE_FILTER_OPTIONS.map((option) => {
               const selected = selectedStroke === option.key;
               return (
@@ -1852,15 +1915,15 @@ export default function HistoryScreen() {
                   style={[
                     styles.filterChip,
                     {
-                      borderColor: selected ? "#34D39955" : "#2A2A5060",
-                      backgroundColor: selected ? "#34D39918" : "#101426",
+                      borderColor: selected ? `${historyHighlightColor}66` : "#54545860",
+                      backgroundColor: selected ? `${historyHighlightColor}1A` : "#1C1C1E",
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.filterChipText,
-                      { color: selected ? "#34D399" : "#94A3B8" },
+                      { color: selected ? historyHighlightColor : "#8E8E93" },
                     ]}
                   >
                     {option.label}
@@ -1928,10 +1991,9 @@ export default function HistoryScreen() {
       )}
 
       {trendScores.length > 1 && (
-        <View style={styles.trendCard}>
+        <HistoryCollapsibleSection title="Performance Trend" color={historyHighlightColor} defaultOpen={true}>
           <View style={styles.trendCardGradient}>
             <View style={styles.trendHeaderRow}>
-              <Text style={styles.trendLabel}>Overall Performance Trend</Text>
               <View style={styles.trendSessionTabs}>
                 {TREND_SESSION_FILTERS.map((option) => (
                   <Pressable
@@ -1952,7 +2014,7 @@ export default function HistoryScreen() {
                           color:
                             selectedTrendSessions === option.key
                               ? historyHighlightColor
-                              : "#94A3B8",
+                              : "#8E8E93",
                         },
                       ]}
                     >
@@ -1964,42 +2026,19 @@ export default function HistoryScreen() {
             </View>
             <TrendChart data={trendScores} dates={trendDates} />
           </View>
-        </View>
+        </HistoryCollapsibleSection>
       )}
 
       {isAdmin ? (
       <View style={styles.statsRow}>
         {[
-          {
-            label: "Total",
-            value: totalAnalyses,
-            color: "#6C5CE7",
-            icon: "analytics" as const,
-          },
-          {
-            label: "In Progress",
-            value: processing.length,
-            color: "#60A5FA",
-            icon: "pulse" as const,
-          },
-          {
-            label: "Done",
-            value: completed.length,
-            color: "#34D399",
-            icon: "checkmark-circle" as const,
-          },
+          { label: "Total", value: totalAnalyses, color: "#0A84FF" },
+          { label: "Processing", value: processing.length, color: "#FFD60A" },
+          { label: "Done", value: completed.length, color: "#30D158" },
         ].map((stat) => (
           <View key={stat.label} style={styles.statCard}>
-            <LinearGradient
-              colors={[stat.color + "14", stat.color + "06"]}
-              style={styles.statCardGradient}
-            >
-              <Ionicons name={stat.icon} size={18} color={stat.color} />
-              <Text style={[styles.statNumber, { color: stat.color }]}>
-                {stat.value}
-              </Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
-            </LinearGradient>
+            <Text style={[styles.statNumber, { color: stat.color }]}>{stat.value}</Text>
+            <Text style={styles.statLabel}>{stat.label}</Text>
           </View>
         ))}
       </View>
@@ -2036,7 +2075,7 @@ export default function HistoryScreen() {
                   <Text
                     style={[
                       styles.recentSortText,
-                      { color: selected ? historyHighlightColor : "#94A3B8" },
+                      { color: selected ? historyHighlightColor : "#8E8E93" },
                     ]}
                   >
                     {option.label}
@@ -2047,16 +2086,50 @@ export default function HistoryScreen() {
           </View>
         </View>
       )}
+
+      {/* ── AI Session Insight (lazy-loads with scroll) ── */}
+      {!isAdmin && completed.length >= 2 && (() => {
+        const recent = completed.slice(0, 5);
+        const sectionKeys = ["technical", "tactical", "movement"] as const;
+        const avgBySection = sectionKeys.map((key) => {
+          const vals = recent
+            .map((a) => getSectionScore10(a, key))
+            .filter((v): v is number => v != null);
+          return {
+            key,
+            label: key.charAt(0).toUpperCase() + key.slice(1),
+            avg: vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null,
+          };
+        });
+        const weakest = avgBySection
+          .filter((s) => s.avg != null)
+          .sort((a, b) => (a.avg as number) - (b.avg as number))[0];
+        if (!weakest) return null;
+        const tipMap: Record<string, string> = {
+          technical: "Focus on form checkpoints — slow reps with a finish hold will accelerate gains.",
+          tactical: "Work on shot selection under pressure — pattern drills with recovery help most.",
+          movement: "Bolster footwork and balance — split-step drills and lateral shuffles pay off fast.",
+        };
+        return (
+          <View style={[styles.aiInsightCard, { borderColor: `${historyHighlightColor}30` }]}>
+            <View style={styles.aiInsightBadge}>
+              <Ionicons name="sparkles" size={12} color="#BF5AF2" />
+              <Text style={styles.aiInsightBadgeText}>AI Insight</Text>
+            </View>
+            <Text style={styles.aiInsightTitle}>
+              {weakest.label} needs attention ({weakest.avg!.toFixed(1)}/10)
+            </Text>
+            <Text style={styles.aiInsightTip}>
+              {tipMap[weakest.key] || "Keep at it — consistency is the key to improvement."}
+            </Text>
+          </View>
+        );
+      })()}
     </View>
   );
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
-        style={StyleSheet.absoluteFill}
-      />
-
       <TabHeader />
 
       <Animated.View
@@ -2073,7 +2146,7 @@ export default function HistoryScreen() {
         {backgroundNotice ? (
           <View style={styles.backgroundNoticeCard}>
             <View style={styles.backgroundNoticeIconWrap}>
-              <Ionicons name="time-outline" size={16} color="#60A5FA" />
+              <Ionicons name="time-outline" size={16} color="#0A84FF" />
             </View>
             <Text style={styles.backgroundNoticeText}>{backgroundNotice}</Text>
           </View>
@@ -2086,7 +2159,7 @@ export default function HistoryScreen() {
                 <Ionicons
                   name={completionNotice.status === "completed" ? "checkmark-circle" : "alert-circle"}
                   size={18}
-                  color={completionNotice.status === "completed" ? "#34D399" : "#FBBF24"}
+                  color={completionNotice.status === "completed" ? "#30D158" : "#FFD60A"}
                 />
               </View>
               <Text style={styles.completionNoticeText}>{completionNotice.message}</Text>
@@ -2125,11 +2198,11 @@ export default function HistoryScreen() {
 
       {isLoading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color="#6C5CE7" />
+          <ActivityIndicator size="large" color="#0A84FF" />
         </View>
       ) : (
         <FlatList
-          data={visibleAnalyses}
+          data={visibleAnalyses.slice(0, visibleCount)}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={[styles.list, { paddingBottom: 100 }]}
@@ -2138,9 +2211,13 @@ export default function HistoryScreen() {
             <RefreshControl
               refreshing={isRefetching}
               onRefresh={refetch}
-              tintColor="#6C5CE7"
+              tintColor="#0A84FF"
             />
           }
+          onScroll={handleTabBarScroll}
+          scrollEventThrottle={16}
+          onEndReached={() => setVisibleCount((c) => Math.min(c + 10, visibleAnalyses.length))}
+          onEndReachedThreshold={0.4}
           scrollEnabled
           ListHeaderComponent={listHeader}
           ListEmptyComponent={
@@ -2149,7 +2226,7 @@ export default function HistoryScreen() {
                 <Ionicons
                   name="folder-open-outline"
                   size={36}
-                  color="#475569"
+                  color="#48484A"
                 />
               </View>
               <Text style={styles.emptyTitle}>No analysis history</Text>
@@ -2169,21 +2246,55 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0A0A1A" },
+  container: { flex: 1, backgroundColor: ds.color.bg },
+  aiInsightCard: {
+    borderRadius: 14,
+    backgroundColor: ds.color.bgElevated,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 12,
+    overflow: "hidden",
+  },
+  aiInsightBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(191,90,242,0.12)",
+    marginBottom: 10,
+  },
+  aiInsightBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#BF5AF2",
+  },
+  aiInsightTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: ds.color.textPrimary,
+    marginBottom: 4,
+  },
+  aiInsightTip: {
+    fontSize: 13,
+    color: ds.color.textSecondary,
+    lineHeight: 18,
+  },
   headerSection: {
     marginTop: 20,
     marginBottom: 14,
   },
   title: {
     fontSize: 26,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   subtitle: {
     marginTop: 10,
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
     maxWidth: 620,
   },
   topControlsRow: {
@@ -2208,8 +2319,8 @@ const styles = StyleSheet.create({
   },
   filterLabel: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
+    fontWeight: "600",
+    color: "#AEAEB2",
     letterSpacing: 0.35,
     textTransform: "uppercase",
   },
@@ -2228,7 +2339,7 @@ const styles = StyleSheet.create({
   },
   filterChipText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   filterResetButton: {
     paddingHorizontal: 2,
@@ -2236,7 +2347,7 @@ const styles = StyleSheet.create({
   },
   filterResetText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   playerDropdown: {
     flexDirection: "row",
@@ -2251,7 +2362,7 @@ const styles = StyleSheet.create({
   },
   playerDropdownText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     maxWidth: 130,
   },
   playerDropdownReadonly: {
@@ -2261,14 +2372,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
     justifyContent: "flex-start",
-    paddingTop: 140,
+    paddingTop: 160,
     paddingHorizontal: 20,
   },
   playerDropdownMenu: {
-    borderRadius: 12,
+    borderRadius: ds.radius.md,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.glass,
     maxHeight: 260,
     overflow: "hidden",
   },
@@ -2281,8 +2392,8 @@ const styles = StyleSheet.create({
   },
   playerDropdownItemText: {
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: "#CBD5E1",
+    fontWeight: "500",
+    color: ds.color.textSecondary,
   },
   subcategoryBadge: {
     flexDirection: "row",
@@ -2296,15 +2407,15 @@ const styles = StyleSheet.create({
   },
   subcategoryBadgeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   compactReviewSummaryCard: {
     gap: 12,
-    marginBottom: 16,
-    borderRadius: 16,
+    marginBottom: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2A2A5040",
-    backgroundColor: "#15152D",
+    borderColor: "#54545840",
+    backgroundColor: "#1C1C1E",
     padding: 14,
   },
   compactReviewSummaryHeader: {
@@ -2319,14 +2430,13 @@ const styles = StyleSheet.create({
   },
   compactReviewSummaryTitle: {
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   compactReviewSummarySubtitle: {
     fontSize: 12,
     lineHeight: 18,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   compactReviewSummaryToggle: {
     flexDirection: "row",
@@ -2336,11 +2446,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 7,
-    backgroundColor: "#0F172A",
+    backgroundColor: "#1C1C1E",
+    borderColor: "rgba(84,84,88,0.36)",
   },
   compactReviewSummaryToggleText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   compactReviewSummaryMetrics: {
     flexDirection: "row",
@@ -2351,26 +2462,26 @@ const styles = StyleSheet.create({
     gap: 4,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#101426",
+    borderColor: "#54545860",
+    backgroundColor: "#1C1C1E",
     paddingHorizontal: 10,
     paddingVertical: 9,
   },
   compactReviewSummaryMetricLabel: {
     fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
-    color: "#94A3B8",
+    fontWeight: "600",
+    color: "#8E8E93",
     textTransform: "uppercase",
     letterSpacing: 0.35,
   },
   compactReviewSummaryMetricValue: {
     fontSize: 20,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   adminOverviewSection: {
     gap: 14,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   adminMetricGrid: {
     flexDirection: "row",
@@ -2378,10 +2489,10 @@ const styles = StyleSheet.create({
   },
   reviewMetricCard: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2A2A5040",
-    backgroundColor: "#15152D",
+    borderColor: "#54545840",
+    backgroundColor: "#1C1C1E",
     padding: 14,
     gap: 6,
   },
@@ -2394,24 +2505,23 @@ const styles = StyleSheet.create({
   },
   reviewMetricLabel: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   reviewMetricValue: {
     fontSize: 22,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   reviewMetricHelper: {
     fontSize: 11,
     lineHeight: 16,
-    fontFamily: "Inter_400Regular",
-    color: "#64748B",
+    color: "#636366",
   },
   adminSectionCard: {
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2A2A5040",
-    backgroundColor: "#15152D",
+    borderColor: "#54545840",
+    backgroundColor: "#1C1C1E",
     padding: 14,
     gap: 12,
   },
@@ -2423,26 +2533,25 @@ const styles = StyleSheet.create({
   },
   adminSectionTitle: {
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   adminSectionSubtitle: {
     marginTop: 3,
     fontSize: 12,
     lineHeight: 17,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   adminSectionCount: {
     minWidth: 28,
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "#0F172A",
-    color: "#E2E8F0",
+    backgroundColor: "#2C2C2E",
+    color: "#AEAEB2",
     textAlign: "center" as const,
     fontSize: 11,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   reviewQueueList: {
     gap: 10,
@@ -2450,8 +2559,8 @@ const styles = StyleSheet.create({
   reviewQueueItem: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#101426",
+    borderColor: "#54545860",
+    backgroundColor: "#1C1C1E",
     padding: 12,
     gap: 10,
   },
@@ -2467,13 +2576,12 @@ const styles = StyleSheet.create({
   },
   reviewQueuePlayer: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   reviewQueueVideo: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   reviewQueueStatusPill: {
     borderRadius: 999,
@@ -2483,7 +2591,7 @@ const styles = StyleSheet.create({
   },
   reviewQueueStatusText: {
     fontSize: 11,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   reviewQueueBottomRow: {
     flexDirection: "row",
@@ -2504,19 +2612,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "#0A0F1F",
+    backgroundColor: "#1C1C1E",
     borderWidth: 1,
-    borderColor: "#1E293B",
+    borderColor: "rgba(84,84,88,0.36)",
   },
   reviewQueueTagText: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: "#CBD5E1",
+    fontWeight: "500",
+    color: "#AEAEB2",
   },
   reviewQueueScoreText: {
     fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   playerPulseList: {
     gap: 10,
@@ -2524,8 +2632,8 @@ const styles = StyleSheet.create({
   playerPulseCard: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#101426",
+    borderColor: "#54545860",
+    backgroundColor: "#1C1C1E",
     padding: 12,
     gap: 4,
   },
@@ -2538,8 +2646,8 @@ const styles = StyleSheet.create({
   playerPulseName: {
     flex: 1,
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   playerPulseSelectedBadge: {
     borderRadius: 999,
@@ -2548,28 +2656,26 @@ const styles = StyleSheet.create({
   },
   playerPulseSelectedText: {
     fontSize: 10,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   playerPulseScore: {
     fontSize: 22,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   playerPulseMeta: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: "#CBD5E1",
+    fontWeight: "500",
+    color: "#AEAEB2",
   },
   playerPulseSubtle: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: "#64748B",
+    color: "#636366",
   },
   adminEmptyText: {
     fontSize: 12,
     lineHeight: 17,
-    fontFamily: "Inter_400Regular",
-    color: "#64748B",
+    color: "#636366",
   },
   loadingWrap: {
     flex: 1,
@@ -2577,10 +2683,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   searchWrap: {
-    backgroundColor: "#15152D",
+    backgroundColor: "#1C1C1E",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2A2A5040",
+    borderColor: "#54545840",
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: "row",
@@ -2590,9 +2696,8 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    color: "#E2E8F0",
+    color: "#C7C7CC",
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
     paddingVertical: 0,
   },
   toastLayer: {
@@ -2611,7 +2716,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#60A5FA40",
+    borderColor: "#0A84FF40",
     backgroundColor: "#172554EE",
     shadowColor: "#020617",
     shadowOpacity: 0.3,
@@ -2625,13 +2730,13 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0A0A1A80",
+    backgroundColor: "#00000080",
   },
   backgroundNoticeText: {
     flex: 1,
     fontSize: 12,
     lineHeight: 18,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: "#DBEAFE",
   },
   completionNoticeCard: {
@@ -2643,7 +2748,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#34D39940",
+    borderColor: "#30D15840",
     backgroundColor: "#052E2BCC",
     shadowColor: "#020617",
     shadowOpacity: 0.3,
@@ -2663,48 +2768,39 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0A0A1A80",
+    backgroundColor: "#00000080",
   },
   completionNoticeText: {
     flex: 1,
     fontSize: 12,
     lineHeight: 18,
-    fontFamily: "Inter_500Medium",
-    color: "#DCFCE7",
+    fontWeight: "500",
+    color: "#FFFFFF",
   },
   completionNoticeButton: {
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "#34D39922",
+    backgroundColor: "#30D15822",
     borderWidth: 1,
-    borderColor: "#34D39950",
+    borderColor: "#30D15850",
   },
   completionNoticeDismissButton: {
-    backgroundColor: "#FBBF2416",
-    borderColor: "#FBBF2440",
+    backgroundColor: "#FFD60A16",
+    borderColor: "#FFD60A40",
   },
   completionNoticeButtonText: {
     fontSize: 11,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
-  },
-  trendCard: {
-    backgroundColor: "#15152D",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#2A2A5040",
-    overflow: "hidden",
-    marginBottom: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   trendCardGradient: {
-    padding: 12,
-    borderRadius: 16,
+    // Content lives inside HistoryCollapsibleSection — no extra border/radius needed
   },
   trendLabel: {
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
     marginBottom: 4,
   },
   trendHeaderRow: {
@@ -2722,25 +2818,30 @@ const styles = StyleSheet.create({
   trendSessionTab: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0A0A1A80",
+    borderColor: "#54545860",
+    backgroundColor: "#00000080",
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   trendSessionTabText: {
     fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
-    color: "#94A3B8",
+    fontWeight: "600",
+    color: "#8E8E93",
   },
   statsRow: {
     flexDirection: "row",
-    gap: 10,
-    marginBottom: 24,
+    gap: 8,
+    marginBottom: 16,
   },
   statCard: {
     flex: 1,
-    borderRadius: 16,
-    overflow: "hidden",
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(84,84,88,0.36)",
+    backgroundColor: "#1C1C1E",
+    padding: 10,
+    alignItems: "center",
+    gap: 2,
   },
   statCardGradient: {
     padding: 14,
@@ -2748,22 +2849,21 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2A2A5040",
-    backgroundColor: "#15152D",
+    borderColor: "#54545840",
+    backgroundColor: "#1C1C1E",
   },
   statNumber: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
+    fontSize: 18,
+    fontWeight: "700",
   },
   statLabel: {
     fontSize: 10,
-    fontFamily: "Inter_400Regular",
-    color: "#64748B",
+    color: "#636366",
   },
   recentTitle: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   recentHeaderRow: {
     flexDirection: "row",
@@ -2789,7 +2889,7 @@ const styles = StyleSheet.create({
   },
   recentSortText: {
     fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   list: {
     paddingHorizontal: 20,
@@ -2804,22 +2904,21 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 20,
-    backgroundColor: "#15152D",
+    backgroundColor: "#1C1C1E",
     borderWidth: 1,
-    borderColor: "#2A2A5060",
+    borderColor: "#54545860",
     alignItems: "center",
     justifyContent: "center",
   },
   emptyTitle: {
     fontSize: 18,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   emptyText: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
     textAlign: "center" as const,
     paddingHorizontal: 40,
-    color: "#64748B",
+    color: "#636366",
   },
 });

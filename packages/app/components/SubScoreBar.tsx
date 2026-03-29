@@ -12,14 +12,14 @@ export function SubScoreBar({ label, score, change }: SubScoreBarProps) {
   const widthPercent = `${Math.max(0, Math.min(100, score))}%`;
 
   const getColor = () => {
-    if (score >= 80) return "#34D399";
-    if (score >= 60) return "#60A5FA";
-    if (score >= 40) return "#FBBF24";
-    return "#F87171";
+    if (score >= 80) return "#30D158";
+    if (score >= 60) return "#0A84FF";
+    if (score >= 40) return "#FFD60A";
+    return "#FF453A";
   };
 
   const hasChange = change !== null && change !== undefined;
-  const changeColor = hasChange ? (change >= 0 ? "#34D399" : "#F87171") : null;
+  const changeColor = hasChange ? (change >= 0 ? "#30D158" : "#FF453A") : null;
 
   return (
     <View style={styles.container}>
@@ -58,8 +58,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: "#F8FAFC",
+    color: "#FFFFFF",
   },
   scoreRow: {
     flexDirection: "row",
@@ -68,7 +67,7 @@ const styles = StyleSheet.create({
   },
   score: {
     fontSize: 16,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   changeRow: {
     flexDirection: "row",
@@ -77,7 +76,7 @@ const styles = StyleSheet.create({
   },
   changeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   track: {
     height: 6,

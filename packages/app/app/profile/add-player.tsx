@@ -23,6 +23,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 
 export default function AddPlayerScreen() {
   const insets = useSafeAreaInsets();
+  const webTopInset = Platform.OS === "web" ? 67 : 0;
   const { returnTo: rawReturnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const [newPlayerEmail, setNewPlayerEmail] = useState("");
   const [newPlayerName, setNewPlayerName] = useState("");
@@ -88,17 +89,17 @@ export default function AddPlayerScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
 
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}> 
+      <View style={[styles.header, { paddingTop: insets.top + 10 + webTopInset }]}> 
         <Pressable
           onPress={handleBack}
           style={({ pressed }) => [styles.backButton, { opacity: pressed ? 0.75 : 1 }]}
         >
-          <Ionicons name="chevron-back" size={22} color="#F8FAFC" />
+          <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
         </Pressable>
         <Text style={styles.title}>Add New Player</Text>
-        <View style={styles.backButton} />
+        <View style={styles.headerSpacer} />
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -109,7 +110,7 @@ export default function AddPlayerScreen() {
               <View style={styles.fieldWrapper}>
                 <Text style={styles.fieldLabel}>Email</Text>
                 <GlassCard style={styles.fieldInput}>
-                  <Ionicons name="mail-outline" size={18} color="#6C5CE7" />
+                  <Ionicons name="mail-outline" size={18} color="#0A84FF" />
                   <TextInput
                     value={newPlayerEmail}
                     onChangeText={(text) => {
@@ -129,7 +130,7 @@ export default function AddPlayerScreen() {
               <View style={styles.fieldWrapper}>
                 <Text style={styles.fieldLabel}>Full Name</Text>
                 <GlassCard style={styles.fieldInput}>
-                  <Ionicons name="person-outline" size={18} color="#6C5CE7" />
+                  <Ionicons name="person-outline" size={18} color="#0A84FF" />
                   <TextInput
                     value={newPlayerName}
                     onChangeText={(text) => {
@@ -153,7 +154,7 @@ export default function AddPlayerScreen() {
               <View style={styles.fieldWrapper}>
                 <Text style={styles.fieldLabel}>Password</Text>
                 <GlassCard style={styles.fieldInput}>
-                  <Ionicons name="lock-closed-outline" size={18} color="#6C5CE7" />
+                  <Ionicons name="lock-closed-outline" size={18} color="#0A84FF" />
                   <TextInput
                     value={newPlayerPassword}
                     onChangeText={(text) => {
@@ -183,10 +184,10 @@ export default function AddPlayerScreen() {
                 style={({ pressed }) => [styles.saveButton, { opacity: pressed || creatingPlayer ? 0.75 : 1 }]}
               >
                 {creatingPlayer ? (
-                  <ActivityIndicator size="small" color="#6C5CE7" />
+                  <ActivityIndicator size="small" color="#0A84FF" />
                 ) : (
                   <View style={styles.saveContent}>
-                    <Ionicons name="checkmark-circle" size={20} color="#6C5CE7" />
+                    <Ionicons name="checkmark-circle" size={20} color="#0A84FF" />
                     <Text style={styles.saveText}>Add Player</Text>
                   </View>
                 )}
@@ -202,7 +203,7 @@ export default function AddPlayerScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: ds.color.bg },
   header: {
-    paddingHorizontal: ds.space.lg,
+    paddingHorizontal: ds.space.xl,
     paddingBottom: ds.space.md,
     flexDirection: "row",
     alignItems: "center",
@@ -224,14 +225,14 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   scroll: { paddingHorizontal: ds.space.xl, paddingTop: 24, paddingBottom: 30 },
   sectionGroup: { gap: 10, marginBottom: 22 },
   sectionLabel: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -246,7 +247,7 @@ const styles = StyleSheet.create({
   fieldWrapper: { gap: 8 },
   fieldLabel: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -263,12 +264,11 @@ const styles = StyleSheet.create({
     flex: 1,
     color: ds.color.textPrimary,
     fontSize: 15,
-    fontFamily: "Inter_400Regular",
   },
   errorText: {
     color: "#EF4444",
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     marginTop: -4,
   },
   saveButton: {
@@ -281,6 +281,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  headerSpacer: {
+    width: 40,
+    height: 40,
+  },
   saveContent: { flexDirection: "row", alignItems: "center", gap: 8 },
-  saveText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#6C5CE7" },
+  saveText: { fontSize: 15, fontWeight: "600", color: "#0A84FF" },
 });

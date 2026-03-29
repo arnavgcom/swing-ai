@@ -25,7 +25,7 @@ export function MetricCard({
   change,
   optimalRange,
 }: MetricCardProps) {
-  const accentColor = color || "#6C5CE7";
+  const accentColor = color || "#0A84FF";
   const numericValue = typeof value === "number" && Number.isFinite(value) ? value : null;
   const hasOptimalRange =
     !!optimalRange
@@ -92,12 +92,12 @@ export function MetricCard({
 
   const changeColor =
     !hasChangeValue
-      ? "#64748B"
+      ? "#636366"
       : Math.abs(change) < 1e-6
-        ? "#94A3B8"
+        ? "#8E8E93"
         : change >= 0
-          ? "#34D399"
-          : "#F87171";
+          ? "#30D158"
+          : "#FF453A";
 
   const changeIcon =
     !hasChangeValue
@@ -159,7 +159,7 @@ export function MetricCard({
                     {
                       left: `${markerPct}%`,
                       borderColor: accentColor,
-                      backgroundColor: "#F8FAFC",
+                      backgroundColor: "#FFFFFF",
                     },
                   ]}
                 />
@@ -198,7 +198,6 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
     letterSpacing: 0.3,
     color: ds.color.textTertiary,
   },
@@ -209,12 +208,11 @@ const styles = StyleSheet.create({
   },
   value: {
     fontSize: 20,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     color: ds.color.textPrimary,
   },
   unit: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
   },
   footerBlock: {
@@ -243,7 +241,7 @@ const styles = StyleSheet.create({
   },
   rangeText: {
     fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textTertiary,
   },
   rangeChip: {
@@ -262,7 +260,7 @@ const styles = StyleSheet.create({
   },
   rangeStatusText: {
     fontSize: 9,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     letterSpacing: 0.4,
   },
   rangeTrack: {
@@ -289,6 +287,6 @@ const styles = StyleSheet.create({
   },
   changeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
 });

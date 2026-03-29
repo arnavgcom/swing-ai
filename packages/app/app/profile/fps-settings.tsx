@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -46,6 +47,7 @@ const normalizeRole = (value?: string | null): "admin" | "player" => {
 
 export default function FpsSettingsScreen() {
   const insets = useSafeAreaInsets();
+  const webTopInset = Platform.OS === "web" ? 67 : 0;
   const { returnTo: rawReturnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const { user } = useAuth();
   const canUseAdminApis = normalizeRole(user?.role) === "admin";
@@ -139,17 +141,17 @@ export default function FpsSettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
 
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}> 
+      <View style={[styles.header, { paddingTop: insets.top + 10 + webTopInset }]}> 
         <Pressable
           onPress={handleBack}
           style={styles.backButton}
         >
-          <Ionicons name="chevron-back" size={24} color="#F8FAFC" />
+          <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
         </Pressable>
         <Text style={styles.headerTitle}>FPS</Text>
-        <View style={styles.backButton} />
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}> 
@@ -182,7 +184,7 @@ export default function FpsSettingsScreen() {
                       <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>{option.label}</Text>
                       <Text style={styles.optionDescription}>{option.description}</Text>
                     </View>
-                    {selected ? <Ionicons name="checkmark-circle" size={18} color="#34D399" /> : null}
+                    {selected ? <Ionicons name="checkmark-circle" size={18} color="#30D158" /> : null}
                   </Pressable>
                 );
               })}
@@ -219,7 +221,7 @@ export default function FpsSettingsScreen() {
                       <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>{option.label}</Text>
                       <Text style={styles.optionDescription}>{option.description}</Text>
                     </View>
-                    {selected ? <Ionicons name="checkmark-circle" size={18} color="#34D399" /> : null}
+                    {selected ? <Ionicons name="checkmark-circle" size={18} color="#30D158" /> : null}
                   </Pressable>
                 );
               })}
@@ -247,8 +249,8 @@ export default function FpsSettingsScreen() {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   handleAnalysisFpsChange(lowImpactFpsStep, highImpactFpsStep, value, tennisMatchPlayUsesHighImpact);
                 }}
-                trackColor={{ false: "#2A2A50", true: "#38BDF840" }}
-                thumbColor={tennisAutoDetectUsesHighImpact ? "#38BDF8" : "#64748B"}
+                trackColor={{ false: "#545458", true: "#64D2FF40" }}
+                thumbColor={tennisAutoDetectUsesHighImpact ? "#64D2FF" : "#636366"}
               />
             </View>
 
@@ -264,8 +266,8 @@ export default function FpsSettingsScreen() {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   handleAnalysisFpsChange(lowImpactFpsStep, highImpactFpsStep, tennisAutoDetectUsesHighImpact, value);
                 }}
-                trackColor={{ false: "#2A2A50", true: "#38BDF840" }}
-                thumbColor={tennisMatchPlayUsesHighImpact ? "#38BDF8" : "#64748B"}
+                trackColor={{ false: "#545458", true: "#64D2FF40" }}
+                thumbColor={tennisMatchPlayUsesHighImpact ? "#64D2FF" : "#636366"}
               />
             </View>
           </View>
@@ -276,28 +278,32 @@ export default function FpsSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0A0A1A" },
+  container: { flex: 1, backgroundColor: "#000000" },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1A1A36",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#2C2C2E",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#1A1A36",
+    backgroundColor: "#2C2C2E",
     alignItems: "center",
     justifyContent: "center",
   },
+  headerSpacer: {
+    width: 40,
+    height: 40,
+  },
   headerTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   scroll: {
     paddingHorizontal: 20,
@@ -309,30 +315,29 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#94A3B8",
+    fontWeight: "600",
+    color: "#8E8E93",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   card: {
     gap: 10,
-    backgroundColor: "#131328",
+    backgroundColor: "#1C1C1E",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2A2A50",
+    borderColor: "rgba(84,84,88,0.65)",
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
   cardHeadline: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   cardSubtext: {
     fontSize: 12,
     lineHeight: 18,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   optionsList: {
     gap: 8,
@@ -344,14 +349,14 @@ const styles = StyleSheet.create({
     gap: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2A2A50",
-    backgroundColor: "#0E1022",
+    borderColor: "rgba(84,84,88,0.65)",
+    backgroundColor: "#2C2C2E",
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
   optionSelected: {
-    borderColor: "#34D39966",
-    backgroundColor: "#0A1F1A",
+    borderColor: "rgba(48,209,88,0.4)",
+    backgroundColor: "rgba(48,209,88,0.12)",
   },
   optionDisabled: {
     opacity: 0.7,
@@ -362,16 +367,15 @@ const styles = StyleSheet.create({
   },
   optionLabel: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   optionLabelSelected: {
-    color: "#DCFCE7",
+    color: "#FFFFFF",
   },
   optionDescription: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   toggleRow: {
     flexDirection: "row",
@@ -380,8 +384,8 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2A2A50",
-    backgroundColor: "#0E1022",
+    borderColor: "rgba(84,84,88,0.65)",
+    backgroundColor: "#2C2C2E",
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
@@ -391,13 +395,12 @@ const styles = StyleSheet.create({
   },
   toggleTitle: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: "#E2E8F0",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   toggleDescription: {
     fontSize: 12,
     lineHeight: 18,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
 });

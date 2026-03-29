@@ -26,7 +26,7 @@ export function AnalysisCard({ analysis, onPress, showUserName }: AnalysisCardPr
   const statusConfig = {
     pending: { color: colors.amber, icon: "time-outline" as const, label: "Pending" },
     processing: { color: colors.blue, icon: "sync-outline" as const, label: "Processing" },
-    completed: { color: "#34D399", icon: "checkmark-circle-outline" as const, label: "Completed" },
+    completed: { color: "#30D158", icon: "checkmark-circle-outline" as const, label: "Completed" },
     failed: { color: colors.red, icon: "alert-circle-outline" as const, label: "Failed" },
   };
 
@@ -53,7 +53,7 @@ export function AnalysisCard({ analysis, onPress, showUserName }: AnalysisCardPr
     >
       <View style={[styles.accentBar, { backgroundColor: status.color }]} />
       <View style={styles.iconWrap}>
-        <Ionicons name="videocam" size={20} color="#6C5CE7" />
+        <Ionicons name="videocam" size={20} color="#0A84FF" />
       </View>
       <View style={styles.info}>
         <Text style={styles.filename} numberOfLines={1}>
@@ -71,7 +71,7 @@ export function AnalysisCard({ analysis, onPress, showUserName }: AnalysisCardPr
             {status.label}
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={16} color="#475569" />
+        <Ionicons name="chevron-forward" size={16} color="#48484A" />
       </View>
     </Pressable>
   );
@@ -84,8 +84,8 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderColor: "#54545860",
+    backgroundColor: "#1C1C1E",
     gap: 12,
     overflow: "hidden",
   },
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#6C5CE714",
+    backgroundColor: "#0A84FF14",
   },
   info: {
     flex: 1,
@@ -112,18 +112,17 @@ const styles = StyleSheet.create({
   },
   filename: {
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   userName: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: "#A29BFE",
   },
   time: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   statusWrap: {
     flexDirection: "row",
@@ -140,6 +139,6 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
 });

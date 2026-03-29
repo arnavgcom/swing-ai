@@ -19,7 +19,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
 import { uploadVideo, type AnalysisSummary } from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
@@ -29,6 +28,7 @@ import { TabHeader } from "@/components/TabHeader";
 import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/components/TabScreenIntro";
 import { ds } from "@/constants/design-system";
 import { formatDateTimeInTimeZone, resolveUserTimeZone } from "@/lib/timezone";
+import { useTabBar } from "@/lib/tab-bar-context";
 
 const NativeDateTimePicker = Platform.OS === "web"
   ? null
@@ -180,6 +180,7 @@ export default function UploadScreen() {
   const isAdmin = user?.role === "admin";
   const { selectedSport } = useSport();
   const isFocused = useIsFocused();
+  const { handleScroll: handleTabBarScroll } = useTabBar();
 
   const sportColor = selectedSport?.color || colors.tint;
 
@@ -658,10 +659,6 @@ export default function UploadScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
-        style={StyleSheet.absoluteFill}
-      />
       <TabHeader />
       <ScrollView
         contentContainerStyle={[
@@ -670,6 +667,8 @@ export default function UploadScreen() {
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        onScroll={handleTabBarScroll}
+        scrollEventThrottle={16}
       >
         <TabScreenIntro
           title={`Analyze ${movementLabel}`}
@@ -692,15 +691,15 @@ export default function UploadScreen() {
                     style={[
                       styles.filterChip,
                       {
-                        borderColor: selected ? `${sportColor}75` : "#2A2A5060",
-                        backgroundColor: selected ? `${sportColor}1C` : "#0A0A1A80",
+                        borderColor: selected ? `${sportColor}75` : "#54545860",
+                        backgroundColor: selected ? `${sportColor}1C` : "#00000080",
                       },
                     ]}
                   >
                     <Text
                       style={[
                         styles.filterChipText,
-                        { color: selected ? sportColor : "#94A3B8" },
+                        { color: selected ? sportColor : "#8E8E93" },
                       ]}
                     >
                       {option.label}
@@ -726,15 +725,15 @@ export default function UploadScreen() {
                       style={[
                         styles.filterChip,
                         {
-                          borderColor: selected ? `${sportColor}75` : "#2A2A5060",
-                          backgroundColor: selected ? `${sportColor}1C` : "#0A0A1A80",
+                          borderColor: selected ? `${sportColor}75` : "#54545860",
+                          backgroundColor: selected ? `${sportColor}1C` : "#00000080",
                         },
                       ]}
                     >
                       <Text
                         style={[
                           styles.filterChipText,
-                          { color: selected ? sportColor : "#94A3B8" },
+                          { color: selected ? sportColor : "#8E8E93" },
                         ]}
                       >
                         {option.label}
@@ -819,6 +818,12 @@ export default function UploadScreen() {
             <Text style={[styles.uploadTitle, { color: colors.text }]}>
               {isSelectingVideo ? "Preparing Video" : "Select Video"}
             </Text>
+            {!isSelectingVideo ? (
+              <View style={styles.aiBadgeRow}>
+                <Ionicons name="sparkles" size={12} color="#BF5AF2" />
+                <Text style={styles.aiBadgeText}>AI-Powered Analysis</Text>
+              </View>
+            ) : null}
             {isSelectingVideo ? (
               <Text style={[styles.uploadHint, { color: colors.textSecondary }]}> 
                 {videoSelectionStage === "camera"
@@ -832,8 +837,8 @@ export default function UploadScreen() {
             style={[
               styles.previewCard,
               {
-                backgroundColor: "#15152D",
-                borderColor: "#2A2A5060",
+                backgroundColor: "#1C1C1E",
+                borderColor: "#54545860",
               },
             ]}
           >
@@ -859,7 +864,7 @@ export default function UploadScreen() {
                 <Ionicons
                   name="close-circle"
                   size={26}
-                  color={isUploadBusy ? "#334155" : "#475569"}
+                  color={isUploadBusy ? "#38383A" : "#48484A"}
                 />
               </Pressable>
             </View>
@@ -878,7 +883,7 @@ export default function UploadScreen() {
                   <Ionicons
                     name="time-outline"
                     size={14}
-                    color="#94A3B8"
+                    color="#8E8E93"
                   />
                   <Text style={styles.metaText}>
                     {selectedVideo.duration.toFixed(1)}s
@@ -890,7 +895,7 @@ export default function UploadScreen() {
                   <Ionicons
                     name="document-outline"
                     size={14}
-                    color="#94A3B8"
+                    color="#8E8E93"
                   />
                   <Text style={styles.metaText}>
                     {(selectedVideo.fileSize / (1024 * 1024)).toFixed(1)} MB
@@ -969,27 +974,30 @@ export default function UploadScreen() {
           </View>
         )}
 
-        <View style={styles.tipsSection}>
-          <Text style={[styles.tipsTitle, { color: colors.text }]}>
-            Tips for Best Results
-          </Text>
-          {[
-            { icon: "camera-outline" as const, text: "Film from the side for optimal pose detection" },
-            { icon: "sunny-outline" as const, text: "Ensure good lighting conditions" },
-            { icon: "body-outline" as const, text: "Full body should be visible in frame" },
-            { icon: "resize-outline" as const, text: "Keep camera steady and at waist height" },
-          ].map((tip, i) => (
-            <View key={i} style={styles.tipRow}>
-              <View
-                style={[styles.tipIcon, { backgroundColor: "#15152D" }]}
-              >
-                <Ionicons name={tip.icon} size={16} color={sportColor} />
-              </View>
-              <Text style={styles.tipText}>
-                {tip.text}
+        <View style={[styles.tipsSection, { borderColor: `${sportColor}30` }]}>
+          <View style={styles.tipsHeader}>
+            <View style={styles.tipsTitleRow}>
+              <View style={[styles.tipsTitleAccent, { backgroundColor: sportColor }]} />
+              <Text style={[styles.tipsTitle, { color: colors.text }]}>
+                Tips for Best Results
               </Text>
             </View>
-          ))}
+          </View>
+          <View style={styles.tipsContent}>
+            {[
+              { icon: "camera-outline" as const, text: "Film from the side for optimal pose detection" },
+              { icon: "sunny-outline" as const, text: "Ensure good lighting conditions" },
+              { icon: "body-outline" as const, text: "Full body should be visible in frame" },
+              { icon: "resize-outline" as const, text: "Keep camera steady and at waist height" },
+            ].map((tip, i) => (
+              <View key={i} style={styles.tipRow}>
+                <Ionicons name={tip.icon} size={16} color={sportColor} />
+                <Text style={styles.tipText}>
+                  {tip.text}
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
       </ScrollView>
 
@@ -1014,7 +1022,7 @@ export default function UploadScreen() {
                     value={recordedDateInput}
                     onChangeText={setRecordedDateInput}
                     placeholder="YYYY-MM-DD"
-                    placeholderTextColor="#64748B"
+                    placeholderTextColor="#636366"
                     autoCapitalize="none"
                     autoCorrect={false}
                     style={styles.recordedAtInput}
@@ -1026,7 +1034,7 @@ export default function UploadScreen() {
                     value={recordedTimeInput}
                     onChangeText={setRecordedTimeInput}
                     placeholder="HH:MM"
-                    placeholderTextColor="#64748B"
+                    placeholderTextColor="#636366"
                     autoCapitalize="none"
                     autoCorrect={false}
                     style={styles.recordedAtInput}
@@ -1094,10 +1102,21 @@ export default function UploadScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0A0A1A" },
+  container: { flex: 1, backgroundColor: ds.color.bg },
+  aiBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+  },
+  aiBadgeText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#BF5AF2",
+  },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: ds.space.xl,
   },
   headerSection: {
     marginTop: 20,
@@ -1105,13 +1124,12 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 26,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   subtitle: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
     marginTop: 10,
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   topControlsRow: {
     flexDirection: "row",
@@ -1132,15 +1150,15 @@ const styles = StyleSheet.create({
   },
   movementBadgeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   sectionBlock: {
     gap: 8,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   focusSectionLabel: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     letterSpacing: 0.35,
     textTransform: "uppercase",
   },
@@ -1160,7 +1178,7 @@ const styles = StyleSheet.create({
   },
   sessionTypeOptionText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   focusOptionsRow: {
     flexDirection: "row",
@@ -1177,7 +1195,7 @@ const styles = StyleSheet.create({
   },
   focusOptionText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   filterSection: {
     gap: 12,
@@ -1188,7 +1206,7 @@ const styles = StyleSheet.create({
   },
   filterLabel: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     letterSpacing: 0.35,
     textTransform: "uppercase",
   },
@@ -1207,7 +1225,7 @@ const styles = StyleSheet.create({
   },
   filterChipText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   playerDropdown: {
     flexDirection: "row",
@@ -1215,14 +1233,14 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     gap: 6,
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 7,
-    maxWidth: "55%",
+    maxWidth: "58%",
   },
   playerDropdownText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     maxWidth: 180,
   },
   playerDropdownReadonly: {
@@ -1232,14 +1250,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
     justifyContent: "flex-start",
-    paddingTop: 200,
+    paddingTop: 160,
     paddingHorizontal: 20,
   },
   playerDropdownMenu: {
-    borderRadius: 12,
+    borderRadius: ds.radius.md,
     borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#15152D",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.glass,
     maxHeight: 300,
     overflow: "hidden",
   },
@@ -1252,8 +1270,8 @@ const styles = StyleSheet.create({
   },
   playerDropdownItemText: {
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: "#CBD5E1",
+    fontWeight: "500",
+    color: ds.color.textSecondary,
   },
   uploadZone: {
     borderWidth: 1.5,
@@ -1276,11 +1294,10 @@ const styles = StyleSheet.create({
   },
   uploadTitle: {
     fontSize: 17,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   uploadHint: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
   },
   previewCard: {
     borderRadius: 16,
@@ -1303,7 +1320,7 @@ const styles = StyleSheet.create({
   },
   fileName: {
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     flexShrink: 1,
   },
   metaRow: {
@@ -1317,15 +1334,14 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   sessionDateCard: {
     marginBottom: 12,
   },
   sessionDateClear: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   sessionDatePickerButton: {
     borderRadius: 12,
@@ -1343,12 +1359,11 @@ const styles = StyleSheet.create({
   },
   sessionDateValue: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   sessionDateCaption: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   sessionDateActions: {
     flexDirection: "row",
@@ -1370,62 +1385,80 @@ const styles = StyleSheet.create({
   analyzeText: {
     color: "#fff",
     fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   analyzeStatusText: {
-    color: "#94A3B8",
+    color: "#8E8E93",
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
     lineHeight: 18,
     marginBottom: 16,
   },
-  tipsSection: { gap: 4, marginTop: 12 },
+  tipsSection: {
+    borderRadius: 14,
+    backgroundColor: ds.color.bgElevated,
+    borderWidth: 1,
+    borderColor: "rgba(84,84,88,0.36)",
+    overflow: "hidden",
+    marginTop: 12,
+  },
+  tipsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  tipsTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  tipsTitleAccent: {
+    width: 3,
+    height: 16,
+    borderRadius: 2,
+  },
   tipsTitle: {
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    marginBottom: 2,
+    fontWeight: "600",
+  },
+  tipsContent: {
+    gap: 4,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
   },
   tipRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  tipIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   tipText: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
     flex: 1,
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   recordedAtModalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(2, 6, 23, 0.68)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     paddingHorizontal: 20,
   },
   recordedAtModalCard: {
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#243041",
-    backgroundColor: "#0F172A",
+    borderColor: "rgba(84,84,88,0.36)",
+    backgroundColor: "#1C1C1E",
     padding: 18,
     gap: 14,
   },
   recordedAtModalTitle: {
     fontSize: 17,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   recordedAtModalHelp: {
     fontSize: 13,
     lineHeight: 19,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   recordedAtWebFields: {
     gap: 12,
@@ -1435,19 +1468,19 @@ const styles = StyleSheet.create({
   },
   recordedAtFieldLabel: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#CBD5E1",
+    fontWeight: "600",
+    color: "#AEAEB2",
   },
   recordedAtInput: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#334155",
-    backgroundColor: "#111827",
-    color: "#E2E8F0",
+    borderColor: "#38383A",
+    backgroundColor: "#2C2C2E",
+    color: "#AEAEB2",
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 14,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
   },
   recordedAtNativePickers: {
     gap: 6,
@@ -1461,14 +1494,14 @@ const styles = StyleSheet.create({
   recordedAtSecondaryButton: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: "#38383A",
     paddingHorizontal: 16,
     paddingVertical: 11,
   },
   recordedAtSecondaryText: {
-    color: "#CBD5E1",
+    color: "#AEAEB2",
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   recordedAtPrimaryButton: {
     borderRadius: 12,
@@ -1478,6 +1511,6 @@ const styles = StyleSheet.create({
   recordedAtPrimaryText: {
     color: "#FFFFFF",
     fontSize: 13,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
 });

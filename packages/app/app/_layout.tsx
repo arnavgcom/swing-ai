@@ -130,7 +130,7 @@ function RootNavigator() {
 
       {(isLoading || isRedirecting) && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#6C5CE7" />
+          <ActivityIndicator size="large" color="#0A84FF" />
         </View>
       )}
     </>
@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0A0A1A",
+    backgroundColor: "#000000",
   },
 });
 

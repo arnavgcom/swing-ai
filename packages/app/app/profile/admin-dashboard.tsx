@@ -29,11 +29,11 @@ export default function AdminDashboardScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
 
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 36 }]}
+        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 36 }]}
         showsVerticalScrollIndicator={false}
         onScroll={(event) => {
           setScrollY(event.nativeEvent.contentOffset.y);

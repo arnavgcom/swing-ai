@@ -42,9 +42,9 @@ export function PlaybackControls({
           maximumValue={Math.max(totalFrames - 1, 1)}
           value={currentFrame}
           onValueChange={(v) => onSeek(Math.round(v))}
-          minimumTrackTintColor="#60A5FA"
+          minimumTrackTintColor="#0A84FF"
           maximumTrackTintColor="rgba(255,255,255,0.2)"
-          thumbTintColor="#60A5FA"
+          thumbTintColor="#0A84FF"
           testID="ghost-scrubber"
         />
 
@@ -103,9 +103,9 @@ const styles = StyleSheet.create({
     height: 40,
   },
   frameLabel: {
-    color: "#CBD5E1",
+    color: "#AEAEB2",
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     minWidth: 52,
     textAlign: "right",
   },
@@ -128,9 +128,9 @@ const styles = StyleSheet.create({
     borderColor: "rgba(125,211,252,0.65)",
   },
   speedText: {
-    color: "#94A3B8",
+    color: "#8E8E93",
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
   },
   speedTextActive: {
     color: "#E0F2FE",

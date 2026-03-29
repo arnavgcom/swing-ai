@@ -76,12 +76,11 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     letterSpacing: 0.3,
   },
   content: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
     lineHeight: 21,
     color: ds.color.textSecondary,
   },
@@ -91,6 +90,6 @@ const styles = StyleSheet.create({
   },
   moreText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
 });

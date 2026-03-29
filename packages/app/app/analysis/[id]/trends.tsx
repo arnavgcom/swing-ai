@@ -137,9 +137,9 @@ function computePercentDelta(current: number | null, previous: number | null): n
 }
 
 function deltaColor(deltaPct: number | null): string {
-  if (deltaPct == null) return "#64748B";
-  if (Math.abs(deltaPct) < 1e-6) return "#94A3B8";
-  return deltaPct >= 0 ? "#34D399" : "#F87171";
+  if (deltaPct == null) return "#636366";
+  if (Math.abs(deltaPct) < 1e-6) return "#8E8E93";
+  return deltaPct >= 0 ? "#30D158" : "#FF453A";
 }
 
 function formatDeltaPercent(deltaPct: number | null): string {
@@ -264,7 +264,7 @@ function MetricTrendChart({ points, color }: { points: SeriesPoint[]; color: str
               cx={toX(index)}
               cy={toY(point.value)}
               r={index === focusedIndex ? 4 : 2.5}
-              fill={index === focusedIndex ? "#F8FAFC" : color}
+              fill={index === focusedIndex ? "#FFFFFF" : color}
               stroke={color}
               strokeWidth={index === focusedIndex ? 2 : 0}
             />
@@ -439,10 +439,10 @@ export default function AnalysisMetricTrendsScreen() {
               : "Movement Score",
         color:
           section === "technical"
-            ? "#60A5FA"
+            ? "#0A84FF"
             : section === "tactical"
-              ? "#34D399"
-              : "#F59E0B",
+              ? "#30D158"
+              : "#FF9F0A",
         unit: "/10",
         points: pointsForSection,
       };
@@ -465,7 +465,7 @@ export default function AnalysisMetricTrendsScreen() {
         unit: "kmph",
         icon: "speedometer-outline",
         category: "ball",
-        color: "#F59E0B",
+        color: "#FF9F0A",
         description: "Normalized shot speed across sessions.",
       });
     }
@@ -522,7 +522,7 @@ export default function AnalysisMetricTrendsScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
+        colors={["#000000", "#1C1C1E", "#000000"]}
         style={StyleSheet.absoluteFill}
       />
 
@@ -531,7 +531,7 @@ export default function AnalysisMetricTrendsScreen() {
           onPress={handleBack}
           style={({ pressed }) => [styles.navButton, { opacity: pressed ? 0.78 : 1 }]}
         >
-          <Ionicons name="chevron-back" size={22} color="#F8FAFC" />
+          <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
         </Pressable>
         <Text style={styles.topTitle}>Historical Performance</Text>
         <View style={styles.navButton} />
@@ -560,7 +560,7 @@ export default function AnalysisMetricTrendsScreen() {
 
       {isLoading ? (
         <View style={styles.centerWrap}>
-          <ActivityIndicator size="large" color="#6C5CE7" />
+          <ActivityIndicator size="large" color="#0A84FF" />
         </View>
       ) : isError || !sportConfig ? (
         <View style={styles.centerWrap}>
@@ -575,7 +575,7 @@ export default function AnalysisMetricTrendsScreen() {
           {enrichmentMessage ? (
             <GlassCard style={styles.enrichmentNotice}>
               <View style={styles.enrichmentNoticeRow}>
-                <ActivityIndicator size="small" color="#93C5FD" />
+                <ActivityIndicator size="small" color="#64D2FF" />
                 <Text style={styles.enrichmentNoticeText}>{enrichmentMessage}</Text>
               </View>
             </GlassCard>
@@ -591,8 +591,8 @@ export default function AnalysisMetricTrendsScreen() {
             <Text style={styles.sectionTitle}>Overall Score</Text>
             <GlassCard style={styles.metricTrendCard}>
               <View style={styles.metricHeaderRow}>
-                <View style={[styles.metricIconWrap, { backgroundColor: "#6C5CE71F" }]}>
-                  <Ionicons name="stats-chart" size={14} color="#6C5CE7" />
+                <View style={[styles.metricIconWrap, { backgroundColor: "#0A84FF1F" }]}>
+                  <Ionicons name="stats-chart" size={14} color="#0A84FF" />
                 </View>
                 <View style={styles.metricTitleWrap}>
                   <Text style={styles.metricTitle}>Overall Score Trend</Text>
@@ -609,7 +609,7 @@ export default function AnalysisMetricTrendsScreen() {
                   })()}
                 </View>
               </View>
-              <MetricTrendChart points={overallTrendPoints} color="#6C5CE7" />
+              <MetricTrendChart points={overallTrendPoints} color="#0A84FF" />
             </GlassCard>
           </View>
 
@@ -637,7 +637,7 @@ export default function AnalysisMetricTrendsScreen() {
                     </View>
                     <View style={styles.metricTitleWrap}>
                       <Text style={styles.metricTitle}>{scoreTrend.label}</Text>
-                      <Text style={[styles.metricSubTitle, { color: deltaPct != null ? deltaColor(deltaPct) : "#94A3B8" }]}>
+                      <Text style={[styles.metricSubTitle, { color: deltaPct != null ? deltaColor(deltaPct) : "#8E8E93" }]}>
                         Latest: {latestValue !== null ? latestValue.toFixed(2) : "-"} {scoreTrend.unit}
                         {formatDeltaPercent(deltaPct)}
                       </Text>
@@ -705,7 +705,7 @@ export default function AnalysisMetricTrendsScreen() {
                       </View>
                       <View style={styles.metricTitleWrap}>
                         <Text style={styles.metricTitle}>{metric.label}</Text>
-                        <Text style={[styles.metricSubTitle, { color: deltaPct != null ? deltaColor(deltaPct) : "#94A3B8" }]}>
+                        <Text style={[styles.metricSubTitle, { color: deltaPct != null ? deltaColor(deltaPct) : "#8E8E93" }]}>
                           Latest: {latestValue !== null ? latestValue.toFixed(latestPrecision) : "-"} {metricDisplayUnit}
                           {formatDeltaPercent(deltaPct)}
                         </Text>
@@ -731,7 +731,7 @@ const styles = StyleSheet.create({
   },
   topBar: {
     marginTop: 52,
-    paddingHorizontal: ds.space.lg,
+    paddingHorizontal: ds.space.xl,
     paddingBottom: ds.space.md,
     flexDirection: "row",
     alignItems: "center",
@@ -751,7 +751,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   periodRow: {
@@ -775,7 +775,7 @@ const styles = StyleSheet.create({
   },
   periodText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textTertiary,
   },
   periodTextActive: {
@@ -788,7 +788,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 14,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
   scrollContent: {
@@ -810,7 +810,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     lineHeight: 18,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: "#BFDBFE",
   },
   section: {
@@ -818,7 +818,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 20,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     color: ds.color.textPrimary,
   },
   metricTrendCard: {
@@ -844,17 +844,16 @@ const styles = StyleSheet.create({
   },
   metricTitle: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   metricSubTitle: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
   },
   metricEmpty: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
     paddingVertical: 8,
   },
@@ -871,13 +870,12 @@ const styles = StyleSheet.create({
   },
   chartValueText: {
     fontSize: 10,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
   chartLabel: {
     flex: 1,
     fontSize: 9,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
     textAlign: "center",
   },
@@ -897,12 +895,12 @@ const styles = StyleSheet.create({
   },
   chartTooltipValue: {
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     color: ds.color.textPrimary,
   },
   chartTooltipLabel: {
     fontSize: 10,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
 });

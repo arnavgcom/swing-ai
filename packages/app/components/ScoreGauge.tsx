@@ -32,7 +32,7 @@ export function ScoreGauge({
 
   const getScoreColor = () => {
     if (normalizedScore >= 80) return ds.color.success;
-    if (normalizedScore >= 60) return "#60A5FA";
+    if (normalizedScore >= 60) return "#0A84FF";
     if (normalizedScore >= 40) return ds.color.warning;
     return ds.color.danger;
   };
@@ -41,7 +41,7 @@ export function ScoreGauge({
   const hasRenderableChange = hasChange && Math.abs(change) >= 1e-6;
   const changeColor = hasRenderableChange
     ? Math.abs(change) < 1e-6
-      ? "#94A3B8"
+      ? "#8E8E93"
       : change > 0
         ? ds.color.success
         : ds.color.danger
@@ -163,10 +163,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   scoreText: {
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   label: {
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     marginTop: 2,
     textTransform: "uppercase",
     letterSpacing: 1,
@@ -184,6 +184,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   changeText: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
 });

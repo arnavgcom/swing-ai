@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -127,6 +128,7 @@ function summarizeStatus(items: AnalysisSummary[]) {
 
 export default function RecalculateMetricsScreen() {
   const insets = useSafeAreaInsets();
+  const webTopInset = Platform.OS === "web" ? 67 : 0;
   const { returnTo: rawReturnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const returnTo = Array.isArray(rawReturnTo) ? rawReturnTo[0] : rawReturnTo;
   const { user, isLoading: authLoading } = useAuth();
@@ -374,9 +376,9 @@ export default function RecalculateMetricsScreen() {
   if (authLoading) {
     return (
       <View style={styles.container}>
-        <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
         <View style={styles.authLoadingWrap}>
-          <ActivityIndicator size="small" color="#38BDF8" />
+          <ActivityIndicator size="small" color="#64D2FF" />
           <Text style={styles.authLoadingText}>Loading admin access...</Text>
         </View>
       </View>
@@ -385,14 +387,14 @@ export default function RecalculateMetricsScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
 
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}> 
+      <View style={[styles.header, { paddingTop: insets.top + 10 + webTopInset }]}>
         <Pressable onPress={handleBack} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={24} color="#F8FAFC" />
+          <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
         </Pressable>
         <Text style={styles.headerTitle}>Recalculate Metrics</Text>
-        <View style={styles.backButton} />
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}>
@@ -423,7 +425,7 @@ export default function RecalculateMetricsScreen() {
                     <Text style={styles.modelPickerBadgeText}>{selectedModelOption.badge}</Text>
                   </View>
                 ) : null}
-                <Ionicons name="chevron-down" size={18} color="#CBD5E1" />
+                <Ionicons name="chevron-down" size={18} color="#AEAEB2" />
               </View>
             </Pressable>
             <Text style={styles.modelCardFootnote}>
@@ -434,7 +436,7 @@ export default function RecalculateMetricsScreen() {
             ) : null}
             {trainingStatusQuery.isLoading ? (
               <View style={styles.inlineLoadingRow}>
-                <ActivityIndicator size="small" color="#38BDF8" />
+                <ActivityIndicator size="small" color="#64D2FF" />
                 <Text style={styles.inlineLoadingText}>Loading model versions...</Text>
               </View>
             ) : null}
@@ -445,7 +447,7 @@ export default function RecalculateMetricsScreen() {
 
           {restoring ? (
             <View style={styles.restoreStateWrap}>
-              <ActivityIndicator size="small" color="#38BDF8" />
+              <ActivityIndicator size="small" color="#64D2FF" />
               <Text style={styles.restoreStateText}>Restoring latest recalculation status...</Text>
             </View>
           ) : (
@@ -490,7 +492,7 @@ export default function RecalculateMetricsScreen() {
 
           {startError ? (
             <View style={styles.errorBanner}>
-              <Ionicons name="alert-circle" size={16} color="#FCA5A5" />
+              <Ionicons name="alert-circle" size={16} color="#FF6961" />
               <Text style={styles.errorBannerText}>{startError}</Text>
             </View>
           ) : null}
@@ -504,15 +506,15 @@ export default function RecalculateMetricsScreen() {
                 <Text style={styles.statLabel}>Queued</Text>
               </View>
               <View style={styles.statCard}>
-                <Text style={[styles.statValue, { color: "#60A5FA" }]}>{String(displayQueuedStatus.inProgress)}</Text>
+                <Text style={[styles.statValue, { color: "#0A84FF" }]}>{String(displayQueuedStatus.inProgress)}</Text>
                 <Text style={styles.statLabel}>Running</Text>
               </View>
               <View style={styles.statCard}>
-                <Text style={[styles.statValue, { color: "#34D399" }]}>{String(displayQueuedStatus.completed)}</Text>
+                <Text style={[styles.statValue, { color: "#30D158" }]}>{String(displayQueuedStatus.completed)}</Text>
                 <Text style={styles.statLabel}>Completed</Text>
               </View>
               <View style={styles.statCard}>
-                <Text style={[styles.statValue, { color: "#F87171" }]}>{String(displayQueuedStatus.failed)}</Text>
+                <Text style={[styles.statValue, { color: "#FF453A" }]}>{String(displayQueuedStatus.failed)}</Text>
                 <Text style={styles.statLabel}>Failed</Text>
               </View>
             </View>
@@ -534,7 +536,7 @@ export default function RecalculateMetricsScreen() {
             <View style={styles.panelCard}>
               <Text style={styles.panelTitle}>Latest queued analyses</Text>
               {analysesQuery.isFetching && !latestQueuedRows.length ? (
-                <ActivityIndicator size="small" color="#93C5FD" />
+                <ActivityIndicator size="small" color="#64D2FF" />
               ) : latestQueuedRows.length > 0 ? (
                 <View style={styles.listWrap}>
                   {latestQueuedRows.map((analysis) => (
@@ -627,7 +629,7 @@ function ModelPickerModal({
                         <Text style={styles.modalBadgeText}>{item.badge}</Text>
                       </View>
                     ) : null}
-                    {isSelected ? <Ionicons name="checkmark-circle" size={22} color="#38BDF8" /> : null}
+                    {isSelected ? <Ionicons name="checkmark-circle" size={22} color="#64D2FF" /> : null}
                   </View>
                 </Pressable>
               );
@@ -640,39 +642,43 @@ function ModelPickerModal({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0A0A1A" },
+  container: { flex: 1, backgroundColor: "#000000" },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1A1A36",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#38383A",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#1A1A36",
+    backgroundColor: "#2C2C2E",
     alignItems: "center",
     justifyContent: "center",
   },
+  headerSpacer: {
+    width: 40,
+    height: 40,
+  },
   headerTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   scroll: {
     paddingHorizontal: 20,
-    paddingTop: 24,
+    paddingTop: 28,
     gap: 16,
   },
   heroCard: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2A2A50",
-    backgroundColor: "#131328",
+    borderColor: "rgba(84,84,88,0.65)",
+    backgroundColor: "#1C1C1E",
     padding: 18,
     gap: 14,
   },
@@ -685,32 +691,31 @@ const styles = StyleSheet.create({
   },
   authLoadingText: {
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   heroTitle: {
     fontSize: 20,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   heroDescription: {
     fontSize: 13,
     lineHeight: 19,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   modelCard: {
     gap: 10,
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2A2A50",
-    backgroundColor: "#0E1022",
+    borderColor: "rgba(84,84,88,0.65)",
+    backgroundColor: "#2C2C2E",
   },
   modelCardLabel: {
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    color: "#E2E8F0",
+    fontWeight: "700",
+    color: "#C7C7CC",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -718,8 +723,8 @@ const styles = StyleSheet.create({
     minHeight: 56,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#334155",
-    backgroundColor: "#131328",
+    borderColor: "rgba(84,84,88,0.65)",
+    backgroundColor: "#1C1C1E",
     paddingHorizontal: 14,
     paddingVertical: 12,
     flexDirection: "row",
@@ -736,14 +741,13 @@ const styles = StyleSheet.create({
   },
   modelPickerTitle: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   modelPickerHint: {
     fontSize: 12,
     lineHeight: 17,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   modelPickerTrailing: {
     flexDirection: "row",
@@ -753,34 +757,33 @@ const styles = StyleSheet.create({
   modelPickerBadge: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#155E75",
-    backgroundColor: "#082F49",
+    borderColor: "#0A84FF40",
+    backgroundColor: "#0A84FF14",
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   modelPickerBadgeText: {
     fontSize: 10,
-    fontFamily: "Inter_700Bold",
-    color: "#BAE6FD",
+    fontWeight: "700",
+    color: "#64D2FF",
     textTransform: "uppercase",
   },
   modelCardFootnote: {
     fontSize: 11,
     lineHeight: 16,
-    fontFamily: "Inter_400Regular",
-    color: "#64748B",
+    color: "#636366",
   },
   modelCardLockNote: {
     fontSize: 11,
     lineHeight: 16,
-    fontFamily: "Inter_500Medium",
-    color: "#93C5FD",
+    fontWeight: "500",
+    color: "#64D2FF",
   },
   modelCardError: {
     fontSize: 11,
     lineHeight: 16,
-    fontFamily: "Inter_500Medium",
-    color: "#FCA5A5",
+    fontWeight: "500",
+    color: "#FF453A",
   },
   inlineLoadingRow: {
     flexDirection: "row",
@@ -789,24 +792,25 @@ const styles = StyleSheet.create({
   },
   inlineLoadingText: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   primaryButton: {
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: "#38BDF8",
+    minHeight: 50,
+    borderRadius: 14,
+    backgroundColor: "#0A84FF",
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
+    paddingHorizontal: 20,
   },
   primaryButtonDisabled: {
-    backgroundColor: "#25637F",
+    backgroundColor: "rgba(10,132,255,0.35)",
   },
   primaryButtonText: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
+    fontSize: 15,
+    fontWeight: "600",
     color: "#FFFFFF",
   },
   restoreStateWrap: {
@@ -817,8 +821,8 @@ const styles = StyleSheet.create({
   },
   restoreStateText: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   runStatusWrap: {
     gap: 8,
@@ -831,31 +835,31 @@ const styles = StyleSheet.create({
   },
   progressTitle: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   progressValue: {
     fontSize: 13,
-    fontFamily: "Inter_700Bold",
-    color: "#38BDF8",
+    fontWeight: "700",
+    color: "#0A84FF",
   },
   progressTrack: {
     height: 10,
     borderRadius: 999,
-    backgroundColor: "#0E1022",
+    backgroundColor: "#2C2C2E",
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#2A2A50",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(84,84,88,0.65)",
   },
   progressFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: "#38BDF8",
+    backgroundColor: "#0A84FF",
   },
   progressMeta: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   errorBanner: {
     flexDirection: "row",
@@ -863,8 +867,8 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#7F1D1D",
-    backgroundColor: "#3F1111",
+    borderColor: "#FF453A30",
+    backgroundColor: "#FF453A14",
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -872,8 +876,8 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     lineHeight: 17,
-    fontFamily: "Inter_500Medium",
-    color: "#FECACA",
+    fontWeight: "500",
+    color: "#FF453A",
   },
   statsRow: {
     flexDirection: "row",
@@ -883,8 +887,8 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2A2A50",
-    backgroundColor: "#131328",
+    borderColor: "rgba(84,84,88,0.65)",
+    backgroundColor: "#1C1C1E",
     paddingVertical: 14,
     paddingHorizontal: 10,
     alignItems: "center",
@@ -892,33 +896,32 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 22,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   statLabel: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#94A3B8",
+    fontWeight: "600",
+    color: "#8E8E93",
     textTransform: "uppercase",
   },
   panelCard: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2A2A50",
-    backgroundColor: "#131328",
+    borderColor: "rgba(84,84,88,0.65)",
+    backgroundColor: "#1C1C1E",
     padding: 16,
     gap: 10,
   },
   panelTitle: {
     fontSize: 15,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   panelText: {
     fontSize: 12,
     lineHeight: 18,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   listWrap: {
     gap: 8,
@@ -929,8 +932,8 @@ const styles = StyleSheet.create({
     gap: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2A2A50",
-    backgroundColor: "#0E1022",
+    borderColor: "rgba(84,84,88,0.65)",
+    backgroundColor: "#2C2C2E",
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -940,13 +943,12 @@ const styles = StyleSheet.create({
   },
   listTitle: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   listMeta: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: "#64748B",
+    color: "#636366",
   },
   statusBadge: {
     borderRadius: 999,
@@ -955,52 +957,52 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   statusBadgeCompleted: {
-    borderColor: "#166534",
-    backgroundColor: "#052E1A",
+    borderColor: "#30D15840",
+    backgroundColor: "#30D15814",
   },
   statusBadgeRunning: {
-    borderColor: "#1D4ED8",
-    backgroundColor: "#0F1F4A",
+    borderColor: "#0A84FF40",
+    backgroundColor: "#0A84FF14",
   },
   statusBadgeFailed: {
-    borderColor: "#7F1D1D",
-    backgroundColor: "#3F1111",
+    borderColor: "#FF453A30",
+    backgroundColor: "#FF453A14",
   },
   statusBadgeText: {
     fontSize: 10,
-    fontFamily: "Inter_700Bold",
-    color: "#E2E8F0",
+    fontWeight: "700",
+    color: "#C7C7CC",
     textTransform: "uppercase",
   },
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(2, 6, 23, 0.66)",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
   },
   modalContent: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    backgroundColor: "#111827",
+    backgroundColor: "#1C1C1E",
     paddingHorizontal: 20,
     paddingTop: 12,
     gap: 12,
-    borderWidth: 1,
-    borderColor: "#1E293B",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#38383A",
   },
   modalHandle: {
     alignSelf: "center",
     width: 42,
     height: 4,
     borderRadius: 999,
-    backgroundColor: "#334155",
+    backgroundColor: "#48484A",
   },
   modalHeader: {
     paddingTop: 4,
   },
   modalTitle: {
     fontSize: 17,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   modalList: {
     maxHeight: 420,
@@ -1011,11 +1013,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
     paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1E293B",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#38383A",
   },
   modalItemSelected: {
-    backgroundColor: "rgba(56, 189, 248, 0.08)",
+    backgroundColor: "rgba(10, 132, 255, 0.1)",
   },
   modalItemDisabled: {
     opacity: 0.45,
@@ -1031,33 +1033,32 @@ const styles = StyleSheet.create({
   },
   modalItemText: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   modalItemTextSelected: {
-    color: "#BAE6FD",
+    color: "#64D2FF",
   },
   modalItemTextDisabled: {
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   modalItemHint: {
     fontSize: 12,
     lineHeight: 17,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   modalBadge: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#155E75",
-    backgroundColor: "#082F49",
+    borderColor: "#0A84FF40",
+    backgroundColor: "#0A84FF14",
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   modalBadgeText: {
     fontSize: 10,
-    fontFamily: "Inter_700Bold",
-    color: "#BAE6FD",
+    fontWeight: "700",
+    color: "#64D2FF",
     textTransform: "uppercase",
   },
 });

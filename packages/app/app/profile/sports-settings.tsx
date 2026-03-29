@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,6 +24,7 @@ const normalizeRole = (value?: string | null): "admin" | "player" => {
 
 export default function SportsSettingsScreen() {
   const insets = useSafeAreaInsets();
+  const webTopInset = Platform.OS === "web" ? 67 : 0;
   const { returnTo: rawReturnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const { user } = useAuth();
   const canUseAdminApis = normalizeRole(user?.role) === "admin";
@@ -87,17 +89,17 @@ export default function SportsSettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
 
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}> 
+      <View style={[styles.header, { paddingTop: insets.top + 10 + webTopInset }]}> 
         <Pressable
           onPress={handleBack}
           style={styles.backButton}
         >
-          <Ionicons name="chevron-back" size={24} color="#F8FAFC" />
+          <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
         </Pressable>
         <Text style={styles.headerTitle}>Sports</Text>
-        <View style={styles.backButton} />
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}> 
@@ -112,7 +114,7 @@ export default function SportsSettingsScreen() {
             <View key={sport.id} style={styles.card}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardIconWrap}>
-                  <Ionicons name={(sport.icon as any) || "tennisball-outline"} size={18} color={sport.enabled ? sport.color || "#34D399" : "#94A3B8"} />
+                  <Ionicons name={(sport.icon as any) || "tennisball-outline"} size={18} color={sport.enabled ? sport.color || "#30D158" : "#8E8E93"} />
                 </View>
                 <View style={styles.cardBody}>
                   <Text style={styles.cardTitle}>{sport.name}</Text>
@@ -125,8 +127,8 @@ export default function SportsSettingsScreen() {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     handleToggle(sport, value);
                   }}
-                  trackColor={{ false: "#2A2A50", true: "#34D39940" }}
-                  thumbColor={sport.enabled ? "#34D399" : "#64748B"}
+                  trackColor={{ false: "#545458", true: "#30D15840" }}
+                  thumbColor={sport.enabled ? "#30D158" : "#636366"}
                 />
               </View>
               <View style={styles.badgeRow}>
@@ -145,28 +147,32 @@ export default function SportsSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0A0A1A" },
+  container: { flex: 1, backgroundColor: "#000000" },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1A1A36",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#2C2C2E",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#1A1A36",
+    backgroundColor: "#2C2C2E",
     alignItems: "center",
     justifyContent: "center",
   },
+  headerSpacer: {
+    width: 40,
+    height: 40,
+  },
   headerTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   scroll: {
     paddingHorizontal: 20,
@@ -179,22 +185,21 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#94A3B8",
+    fontWeight: "600",
+    color: "#8E8E93",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   sectionHint: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "#64748B",
+    color: "#636366",
   },
   card: {
     gap: 10,
-    backgroundColor: "#131328",
+    backgroundColor: "#1C1C1E",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2A2A50",
+    borderColor: "rgba(84,84,88,0.65)",
     paddingHorizontal: 14,
     paddingVertical: 14,
     marginBottom: 12,
@@ -210,9 +215,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0E1022",
+    backgroundColor: "#2C2C2E",
     borderWidth: 1,
-    borderColor: "#2A2A50",
+    borderColor: "rgba(84,84,88,0.65)",
   },
   cardBody: {
     flex: 1,
@@ -220,14 +225,13 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: "#F8FAFC",
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   cardDescription: {
     fontSize: 12,
     lineHeight: 18,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   badgeRow: {
     flexDirection: "row",
@@ -248,14 +252,14 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   badgeTextEnabled: {
-    color: "#34D399",
+    color: "#30D158",
   },
   badgeTextDisabled: {
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
 });

@@ -141,9 +141,9 @@ export default function AnalysisDiagnosticsScreen() {
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
         <View style={styles.centerWrap}>
-          <ActivityIndicator size="large" color="#6C5CE7" />
+          <ActivityIndicator size="large" color="#0A84FF" />
         </View>
       </View>
     );
@@ -151,7 +151,7 @@ export default function AnalysisDiagnosticsScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
 
       <View style={styles.header}>
         <Pressable
@@ -161,7 +161,7 @@ export default function AnalysisDiagnosticsScreen() {
           }}
           style={({ pressed }) => [styles.backButton, { opacity: pressed ? 0.75 : 1 }]}
         >
-          <Ionicons name="chevron-back" size={22} color="#F8FAFC" />
+          <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
         </Pressable>
         <Text style={styles.title}>AI Diagnostics</Text>
         <View style={styles.backButton} />
@@ -176,7 +176,7 @@ export default function AnalysisDiagnosticsScreen() {
           {enrichmentMessage ? (
             <GlassCard style={styles.statusCard}>
               <View style={styles.statusRow}>
-                <ActivityIndicator size="small" color="#93C5FD" />
+                <ActivityIndicator size="small" color="#64D2FF" />
                 <Text style={styles.statusText}>{enrichmentMessage}</Text>
               </View>
             </GlassCard>
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
   centerWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   header: {
     marginTop: 52,
-    paddingHorizontal: ds.space.lg,
+    paddingHorizontal: ds.space.xl,
     paddingBottom: ds.space.md,
     flexDirection: "row",
     alignItems: "center",
@@ -322,32 +322,31 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
-  emptyText: { fontSize: 13, fontFamily: "Inter_500Medium", color: ds.color.textTertiary },
+  emptyText: { fontSize: 13, fontWeight: "500", color: ds.color.textTertiary },
   scroll: { paddingHorizontal: ds.space.xl, paddingBottom: 26, gap: ds.space.md },
   heroCard: {
     borderRadius: ds.radius.lg,
     padding: ds.space.lg,
     gap: 4,
   },
-  heroLabel: { fontSize: 12, fontFamily: "Inter_500Medium", color: ds.color.textTertiary },
-  heroValue: { fontSize: 30, fontFamily: "Inter_700Bold", color: ds.color.success },
-  heroSub: { fontSize: 13, fontFamily: "Inter_500Medium", color: ds.color.textSecondary },
+  heroLabel: { fontSize: 12, fontWeight: "500", color: ds.color.textTertiary },
+  heroValue: { fontSize: 30, fontWeight: "700", color: ds.color.success },
+  heroSub: { fontSize: 13, fontWeight: "500", color: ds.color.textSecondary },
   card: {
     borderRadius: ds.radius.md,
     padding: ds.space.md,
     gap: 6,
   },
-  cardTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: ds.color.textPrimary },
+  cardTitle: { fontSize: 14, fontWeight: "600", color: ds.color.textPrimary },
   cardHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  cardBody: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", color: ds.color.textSecondary },
-  rowText: { fontSize: 12, fontFamily: "Inter_500Medium", color: ds.color.textSecondary },
+  rowText: { fontSize: 12, fontWeight: "500", color: ds.color.textSecondary },
   statusCard: {
     borderRadius: ds.radius.md,
     padding: ds.space.md,
@@ -361,7 +360,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     lineHeight: 18,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: "#BFDBFE",
   },
   shotItem: {
@@ -370,6 +369,5 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 2,
   },
-  shotTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: ds.color.textSecondary },
-  shotSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: ds.color.textTertiary },
+  shotTitle: { fontSize: 12, fontWeight: "600", color: ds.color.textSecondary },
 });

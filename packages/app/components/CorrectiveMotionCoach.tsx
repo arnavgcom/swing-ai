@@ -119,7 +119,7 @@ export function CorrectiveMotionCoach({ recommendations }: CorrectiveMotionCoach
                 },
               ]}
             >
-              <Text style={[styles.metricChipText, { color: selected ? "#F8FAFC" : ds.color.textSecondary }]} numberOfLines={1}>
+              <Text style={[styles.metricChipText, { color: selected ? "#FFFFFF" : ds.color.textSecondary }]} numberOfLines={1}>
                 {item.label}
               </Text>
             </Pressable>
@@ -214,7 +214,7 @@ export function CorrectiveMotionCoach({ recommendations }: CorrectiveMotionCoach
           </View>
           <View style={styles.legendRow}>
             <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: "#F8FAFC", borderColor: active.color }]} />
+              <View style={[styles.legendDot, { backgroundColor: "#FFFFFF", borderColor: active.color }]} />
               <Text style={styles.legendText}>Your movement path</Text>
             </View>
             <View style={styles.legendItem}>
@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   chipsRow: {
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
   },
   metricChipText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   card: {
     borderRadius: ds.radius.lg,
@@ -283,12 +283,12 @@ const styles = StyleSheet.create({
   },
   metricTitle: {
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   metricSubtext: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.warning,
   },
   valuesRow: {
@@ -306,12 +306,12 @@ const styles = StyleSheet.create({
   },
   valueLabel: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
   valueText: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   animationPanel: {
@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
   },
   animationLabel: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     letterSpacing: 0.2,
     color: ds.color.textSecondary,
   },
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#C7C7CC",
     backgroundColor: "#0F172A",
   },
   figureTorso: {
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 33,
     borderRadius: 99,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#FFFFFF",
   },
   figureArm: {
     position: "absolute",
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 22,
     borderRadius: 99,
-    backgroundColor: "#CBD5E1",
+    backgroundColor: "#AEAEB2",
   },
   figureArmLeft: {
     left: 11,
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 28,
     borderRadius: 99,
-    backgroundColor: "#94A3B8",
+    backgroundColor: "#8E8E93",
   },
   figureLegLeft: {
     left: 15,
@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
     height: 14,
     borderRadius: 999,
     borderWidth: 2,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#FFFFFF",
     top: 1,
   },
   legendRow: {
@@ -453,7 +453,6 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
   },
   copyBlock: {
@@ -461,13 +460,12 @@ const styles = StyleSheet.create({
   },
   copyTitle: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textSecondary,
     marginTop: 2,
   },
   copyText: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
     lineHeight: 20,
     color: ds.color.textSecondary,
   },

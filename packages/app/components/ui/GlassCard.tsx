@@ -13,32 +13,32 @@ type GlassCardProps = ViewProps & {
 export function GlassCard({
   children,
   style,
-  intensity = 28,
+  intensity = 40,
   tint = "dark",
   ...rest
 }: GlassCardProps) {
-  if (Platform.OS === "android") {
+  // Use BlurView on iOS for subtle vibrancy; solid card elsewhere
+  if (Platform.OS === "ios") {
     return (
-      <View style={[styles.base, style]} {...rest}>
+      <BlurView intensity={intensity} tint={tint} style={[styles.base, style]} {...rest}>
         {children}
-      </View>
+      </BlurView>
     );
   }
 
   return (
-    <BlurView intensity={intensity} tint={tint} style={[styles.base, style]} {...rest}>
+    <View style={[styles.base, style]} {...rest}>
       {children}
-    </BlurView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: ds.radius.lg,
-    borderWidth: 1,
+    borderRadius: ds.radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: ds.color.glassBorder,
-    backgroundColor: ds.color.glass,
+    backgroundColor: ds.color.bgElevated,
     overflow: "hidden",
-    ...ds.shadow.subtle,
   },
 });

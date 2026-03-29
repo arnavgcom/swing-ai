@@ -113,6 +113,7 @@ const toSportPreferenceKey = (sportName?: string | null): string =>
 
 export default function ScoreMetricsSelectionScreen() {
   const insets = useSafeAreaInsets();
+  const webTopInset = Platform.OS === "web" ? 67 : 0;
   const { returnTo: rawReturnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const { user, refreshUser } = useAuth();
   const { selectedSport } = useSport();
@@ -443,17 +444,17 @@ export default function ScoreMetricsSelectionScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
+        colors={["#000000", "#1C1C1E", "#000000"]}
         style={StyleSheet.absoluteFill}
       />
 
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 + webTopInset }]}> 
         <Pressable
           onPress={handleBack}
           style={styles.backButton}
           testID="score-metrics-back"
         >
-          <Ionicons name="chevron-back" size={24} color="#F8FAFC" />
+          <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
         </Pressable>
           <Text style={styles.headerTitle}>Select Scores & Metrics</Text>
         <View style={[styles.statusPill, saveStatusTone]}>
@@ -475,11 +476,11 @@ export default function ScoreMetricsSelectionScreen() {
                 style={styles.fieldInput}
                 testID="field-selected-sport"
               >
-                <Ionicons name="football-outline" size={18} color="#6C5CE7" />
+                <Ionicons name="football-outline" size={18} color="#0A84FF" />
                 <Text style={[styles.dropdownText, !selectedSportName && styles.dropdownPlaceholder]}>
                   {selectedSportName || "Select sport"}
                 </Text>
-                <Ionicons name="chevron-down" size={16} color="#64748B" />
+                <Ionicons name="chevron-down" size={16} color="#636366" />
               </Pressable>
             </View>
           </View>
@@ -495,13 +496,13 @@ export default function ScoreMetricsSelectionScreen() {
                 style={styles.fieldInput}
                 testID="field-score-sections"
               >
-                <Ionicons name="layers-outline" size={18} color="#6C5CE7" />
+                <Ionicons name="layers-outline" size={18} color="#0A84FF" />
                 <Text style={[styles.dropdownText, selectedScoreSections.length === 0 && styles.dropdownPlaceholder]}>
                   {selectedScoreSections.length > 0
                     ? `${selectedScoreSections.length} selected`
                     : "Select score sections"}
                 </Text>
-                <Ionicons name="chevron-down" size={16} color="#64748B" />
+                <Ionicons name="chevron-down" size={16} color="#636366" />
               </Pressable>
               {selectedScoreSections.length > 0 ? (
                 <View style={styles.chipRow}>
@@ -531,13 +532,13 @@ export default function ScoreMetricsSelectionScreen() {
                 style={styles.fieldInput}
                 testID="field-selected-metrics"
               >
-                <Ionicons name="options-outline" size={18} color="#6C5CE7" />
+                <Ionicons name="options-outline" size={18} color="#0A84FF" />
                 <Text style={[styles.dropdownText, selectedMetricKeys.length === 0 && styles.dropdownPlaceholder]}>
                   {selectedMetricKeys.length > 0
                     ? `${selectedMetricKeys.length} selected`
                     : `Select metrics (${metricOptions.length} available)`}
                 </Text>
-                <Ionicons name="chevron-down" size={16} color="#64748B" />
+                <Ionicons name="chevron-down" size={16} color="#636366" />
               </Pressable>
               {sortedSelectedMetricKeys.length > 0 ? (
                 <View style={styles.chipRow}>
@@ -658,7 +659,7 @@ function PickerModal({
                     {item.hint ? <Text style={styles.modalItemHint}>{item.hint}</Text> : null}
                   </View>
                   {isSelected && (
-                    <Ionicons name="checkmark-circle" size={22} color="#6C5CE7" />
+                    <Ionicons name="checkmark-circle" size={22} color="#0A84FF" />
                   )}
                 </Pressable>
               );
@@ -673,29 +674,29 @@ function PickerModal({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0A0A1A",
+    backgroundColor: "#000000",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1A1A36",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#2C2C2E",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#1A1A36",
+    backgroundColor: "#2C2C2E",
     alignItems: "center",
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   statusPill: {
     minWidth: 74,
@@ -707,21 +708,21 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   statusPillNeutral: {
-    backgroundColor: "#1A1A36",
-    borderColor: "#2A2A50",
+    backgroundColor: "#2C2C2E",
+    borderColor: "rgba(84,84,88,0.65)",
   },
   statusPillSuccess: {
     backgroundColor: "#052E1A",
     borderColor: "#166534",
   },
   statusPillError: {
-    backgroundColor: "#3F1114",
-    borderColor: "#7F1D1D",
+    backgroundColor: "#3A0A0F",
+    borderColor: "#5C0011",
   },
   statusPillText: {
     fontSize: 10,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontWeight: "700",
+    color: "#FFFFFF",
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -735,16 +736,16 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#94A3B8",
+    fontWeight: "600",
+    color: "#8E8E93",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   sectionCard: {
-    backgroundColor: "#131328",
+    backgroundColor: "#1C1C1E",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2A2A50",
+    borderColor: "rgba(84,84,88,0.65)",
     padding: 14,
   },
   fieldWrapper: {
@@ -752,32 +753,30 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#94A3B8",
+    fontWeight: "600",
+    color: "#8E8E93",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   fieldHint: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "#64748B",
+    color: "#636366",
   },
   fieldInput: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "#131328",
+    backgroundColor: "#1C1C1E",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2A2A50",
+    borderColor: "rgba(84,84,88,0.65)",
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === "web" ? 14 : 12,
   },
   dropdownText: {
     flex: 1,
     fontSize: 15,
-    fontFamily: "Inter_400Regular",
-    color: "#F8FAFC",
+    color: "#FFFFFF",
   },
   dropdownPlaceholder: {
     color: "#4A4A6A",
@@ -792,16 +791,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#6C5CE720",
+    backgroundColor: "#0A84FF20",
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: "#6C5CE740",
+    borderColor: "#0A84FF40",
   },
   chipText: {
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: "#A29BFE",
   },
   modalOverlay: {
@@ -810,7 +809,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalContent: {
-    backgroundColor: "#131328",
+    backgroundColor: "#1C1C1E",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 12,
@@ -831,24 +830,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 20,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#2A2A50",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(84,84,88,0.65)",
   },
   modalTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   modalDoneButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: "#6C5CE720",
+    backgroundColor: "#0A84FF20",
   },
   modalDoneText: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: "#6C5CE7",
+    fontWeight: "600",
+    color: "#0A84FF",
   },
   modalList: {
     paddingHorizontal: 12,
@@ -863,7 +862,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   modalItemSelected: {
-    backgroundColor: "#6C5CE715",
+    backgroundColor: "#0A84FF15",
   },
   modalItemDisabled: {
     opacity: 0.72,
@@ -874,19 +873,17 @@ const styles = StyleSheet.create({
   },
   modalItemText: {
     fontSize: 16,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   modalItemTextSelected: {
-    color: "#F8FAFC",
-    fontFamily: "Inter_600SemiBold",
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
   modalItemTextDisabled: {
-    color: "#64748B",
+    color: "#636366",
   },
   modalItemHint: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "#64748B",
+    color: "#636366",
   },
 });

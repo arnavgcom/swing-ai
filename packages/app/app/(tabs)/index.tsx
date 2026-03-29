@@ -50,6 +50,7 @@ import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/comp
 import AdminDashboardWorkspace from "@/components/AdminDashboardWorkspace";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ds } from "@/constants/design-system";
+import { useTabBar } from "@/lib/tab-bar-context";
 
 function formatLabel(label: string): string {
   return label
@@ -82,12 +83,12 @@ function formatDateTime(value: string, timeZone?: string): string {
 
 function getMismatchPalette(rate: number): { bg: string; border: string; text: string } {
   if (rate < 10) {
-    return { bg: "#052E1A", border: "#166534", text: ds.color.success };
+    return { bg: "#0B2618", border: "#0B4A2C", text: ds.color.success };
   }
   if (rate <= 25) {
-    return { bg: "#3F2A07", border: "#92400E", text: ds.color.warning };
+    return { bg: "#332B00", border: "#665600", text: ds.color.warning };
   }
-  return { bg: "#3F1114", border: "#7F1D1D", text: ds.color.danger };
+  return { bg: "#3A0A0F", border: "#5C0011", text: ds.color.danger };
 }
 
 function getPlayerDisplayName(u: {
@@ -118,15 +119,15 @@ const TREND_SESSION_FILTERS = [
 type TrendSessionWindow = (typeof TREND_SESSION_FILTERS)[number]["key"];
 
 const PLAYER_TREND_FILTERS = [
-  { key: "overall", label: "Overall", color: "#F59E0B" },
-  { key: "technical", label: "Technical", color: "#60A5FA" },
-  { key: "tactical", label: "Tactical", color: "#A78BFA" },
-  { key: "movement", label: "Movement", color: "#34D399" },
+  { key: "overall", label: "Overall", color: "#FF9F0A" },
+  { key: "technical", label: "Technical", color: "#0A84FF" },
+  { key: "tactical", label: "Tactical", color: "#BF5AF2" },
+  { key: "movement", label: "Movement", color: "#30D158" },
 ] as const;
 
 const PLAYER_METRICS = [
-  { key: "technical", label: "Technical", icon: "construct", color: "#60A5FA" },
-  { key: "tactical", label: "Tactical", icon: "analytics", color: "#A78BFA" },
+  { key: "technical", label: "Technical", icon: "construct", color: "#0A84FF" },
+  { key: "tactical", label: "Tactical", icon: "analytics", color: "#BF5AF2" },
   { key: "movement", label: "Movement", icon: "body", color: ds.color.success },
 ] as const;
 
@@ -329,7 +330,7 @@ function metricDeltaIcon(delta: number | null): "caret-up" | "caret-down" | "rem
 
 function getDeltaColor(delta: number | null): string {
   if (delta === null) return ds.color.textTertiary;
-  if (Math.abs(delta) < 1e-6) return "#94A3B8";
+  if (Math.abs(delta) < 1e-6) return "#8E8E93";
   if (delta >= 0) return ds.color.success;
   return ds.color.danger;
 }
@@ -445,7 +446,7 @@ function PlayerMetricTrendChart({
               y1={y}
               x2={chartWidth - rightPadding}
               y2={y}
-              stroke="#33415544"
+              stroke="rgba(84,84,88,0.25)"
               strokeWidth={1}
             />
           );
@@ -506,7 +507,7 @@ function PlayerMetricTrendChart({
               cx={point.x}
               cy={point.y}
               r={isLatest ? 4.2 : 2.4}
-              fill={isLatest ? "#F8FAFC" : activeSeries.color}
+              fill={isLatest ? "#FFFFFF" : activeSeries.color}
               stroke={activeSeries.color}
               strokeWidth={isLatest ? 2 : 0}
             />
@@ -588,7 +589,7 @@ function ModelRegistryTrendLineChart({
               y1={y}
               x2={chartWidth - rightPadding}
               y2={y}
-              stroke="#33415555"
+              stroke="rgba(84,84,88,0.35)"
               strokeWidth={1}
             />
           );
@@ -629,14 +630,82 @@ function ModelRegistryTrendLineChart({
   );
 }
 
+/** Reusable collapsible section with animated expand/collapse */
+function CollapsibleSection({
+  title,
+  sportColor,
+  children,
+}: {
+  title: string;
+  sportColor: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={[collapsibleStyles.wrapper, { borderColor: `${sportColor}30` }]}>
+      <View style={collapsibleStyles.header}>
+        <View style={collapsibleStyles.titleRow}>
+          <View style={[collapsibleStyles.titleAccent, { backgroundColor: sportColor }]} />
+          <Text style={collapsibleStyles.title}>{title}</Text>
+        </View>
+      </View>
+      <View style={collapsibleStyles.content}>{children}</View>
+    </View>
+  );
+}
+
+const collapsibleStyles = StyleSheet.create({
+  wrapper: {
+    borderRadius: 14,
+    backgroundColor: ds.color.bgElevated,
+    borderWidth: 1,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  titleAccent: {
+    width: 3,
+    height: 16,
+    borderRadius: 2,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+});
+
 export default function DashboardScreen() {
   const { user } = useAuth();
   const profileTimeZone = resolveUserTimeZone(user);
   const { selectedSport, selectedMovement } = useSport();
   const isAdmin = user?.role === "admin";
   const scrollRef = React.useRef<ScrollView | null>(null);
-  const [dashboardScrollY, setDashboardScrollY] = React.useState(0);
   const [mismatchSectionOffset, setMismatchSectionOffset] = React.useState<number | null>(null);
+  const [dashboardScrollY, setDashboardScrollY] = React.useState(0);
+  const { handleScroll: handleTabBarScroll } = useTabBar();
+  const handleDashboardScroll = React.useCallback(
+    (e: import("react-native").NativeSyntheticEvent<import("react-native").NativeScrollEvent>) => {
+      setDashboardScrollY(e.nativeEvent.contentOffset.y);
+      handleTabBarScroll(e);
+    },
+    [handleTabBarScroll],
+  );
   const greetingFirstName = getGreetingFirstName(user?.name);
   const [selectedTrendMetric, setSelectedTrendMetric] = React.useState<string>(PLAYER_TREND_FILTERS[0].key);
   const [selectedTrendSessions, setSelectedTrendSessions] = React.useState<TrendSessionWindow>(10);
@@ -644,6 +713,7 @@ export default function DashboardScreen() {
   const [userList, setUserList] = React.useState<Array<{id:string,name:string,email:string,role:string}>>([]);
   const [selectedPlayerId, setSelectedPlayerId] = React.useState<string>("all");
   const [showPlayerDropdown, setShowPlayerDropdown] = React.useState(false);
+  const [showAdminMismatchDetails, setShowAdminMismatchDetails] = React.useState(false);
   const [selectedSessionTypes, setSelectedSessionTypes] = React.useState<SessionTypeFilter[]>(
     DEFAULT_SESSION_TYPE_FILTERS,
   );
@@ -696,12 +766,38 @@ export default function DashboardScreen() {
   }, [isAdmin, user]);
 
   const sc = sportColors[selectedSport?.name || ""] || {
-    primary: "#6C5CE7",
-    gradient: "#5A4BD1",
+    primary: "#0A84FF",
+    gradient: "#0071E3",
   };
   const areAllSessionTypesSelected = selectedSessionTypes.length === DEFAULT_SESSION_TYPE_FILTERS.length;
   const hasDashboardFilters = !areAllSessionTypesSelected || selectedStroke !== null;
   const isUserScopedDashboard = !isAdmin || selectedPlayerId !== "all";
+
+  const openMismatchReview = React.useCallback(() => {
+    if (!isAdmin || isUserScopedDashboard) return;
+
+    setShowAdminMismatchDetails(true);
+
+    const scrollToMismatch = () => {
+      if (mismatchSectionOffset != null) {
+        scrollRef.current?.scrollTo({
+          y: Math.max(mismatchSectionOffset - 110, 0),
+          animated: true,
+        });
+      } else {
+        scrollRef.current?.scrollToEnd({ animated: true });
+      }
+    };
+
+    setTimeout(scrollToMismatch, 80);
+    setTimeout(scrollToMismatch, 240);
+  }, [isAdmin, isUserScopedDashboard, mismatchSectionOffset]);
+
+  React.useEffect(() => {
+    if (!isAdmin || isUserScopedDashboard) {
+      setShowAdminMismatchDetails(false);
+    }
+  }, [isAdmin, isUserScopedDashboard]);
 
   const toggleSessionType = React.useCallback((sessionType: SessionTypeFilter) => {
     setSelectedSessionTypes((current) => {
@@ -1021,7 +1117,7 @@ export default function DashboardScreen() {
       ) : null}
       {selectedMovement?.name ? (
         <View style={styles.movementBadge}>
-          <Ionicons name="flash-outline" size={11} color="#34D399" />
+          <Ionicons name="flash-outline" size={11} color="#30D158" />
           <Text style={styles.movementBadgeText}>
             {formatMovementBadgeLabel(selectedMovement?.name)}
           </Text>
@@ -1032,11 +1128,6 @@ export default function DashboardScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
-        style={StyleSheet.absoluteFill}
-      />
-
       <TabHeader />
 
       <ScrollView
@@ -1052,13 +1143,11 @@ export default function DashboardScreen() {
                 refetchShotAnnotations();
               }
             }}
-            tintColor="#6C5CE7"
+            tintColor="#0A84FF"
           />
         }
         showsVerticalScrollIndicator={false}
-        onScroll={(event) => {
-          setDashboardScrollY(event.nativeEvent.contentOffset.y);
-        }}
+        onScroll={handleDashboardScroll}
         scrollEventThrottle={16}
       >
         <TabScreenIntro
@@ -1094,8 +1183,8 @@ export default function DashboardScreen() {
                         style={({ pressed }) => [
                           styles.filterChip,
                           {
-                            borderColor: selected ? `${sc.primary}75` : "#2A2A5060",
-                            backgroundColor: selected ? `${sc.primary}1C` : "#0A0A1A80",
+                            borderColor: selected ? `${sc.primary}60` : "rgba(84,84,88,0.36)",
+                            backgroundColor: selected ? `${sc.primary}1C` : "#1C1C1E",
                             opacity: pressed ? 0.82 : 1,
                           },
                         ]}
@@ -1103,7 +1192,7 @@ export default function DashboardScreen() {
                         <Text
                           style={[
                             styles.filterChipText,
-                            { color: selected ? sc.primary : "#94A3B8" },
+                            { color: selected ? sc.primary : "#8E8E93" },
                           ]}
                         >
                           {option.label}
@@ -1125,8 +1214,8 @@ export default function DashboardScreen() {
                         style={({ pressed }) => [
                           styles.filterChip,
                           {
-                            borderColor: selected ? "#34D39966" : "#2A2A5060",
-                            backgroundColor: selected ? "#34D39918" : "#0A0A1A80",
+                            borderColor: selected ? "#30D15860" : "rgba(84,84,88,0.36)",
+                            backgroundColor: selected ? "#30D1581C" : "#1C1C1E",
                             opacity: pressed ? 0.82 : 1,
                           },
                         ]}
@@ -1134,7 +1223,7 @@ export default function DashboardScreen() {
                         <Text
                           style={[
                             styles.filterChipText,
-                            { color: selected ? "#34D399" : "#94A3B8" },
+                            { color: selected ? "#30D158" : "#8E8E93" },
                           ]}
                         >
                           {option.label}
@@ -1199,7 +1288,7 @@ export default function DashboardScreen() {
 
         {isLoading ? (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color="#6C5CE7" />
+            <ActivityIndicator size="large" color="#0A84FF" />
           </View>
         ) : (
           <>
@@ -1209,11 +1298,32 @@ export default function DashboardScreen() {
                   scrollRef={scrollRef}
                   scrollY={dashboardScrollY}
                   mismatchSectionOffset={mismatchSectionOffset}
+                  onSelectSection={(section) => {
+                    if (section === "mismatches") {
+                      openMismatchReview();
+                    }
+                  }}
                 />
+                {showMismatchSection ? (
+                  <View style={styles.mismatchPreviewCard}>
+                    <Text style={styles.mismatchPreviewTitle}>Mismatch Review</Text>
+                    <Text style={styles.mismatchPreviewText}>
+                      Detailed mismatch lists can be lengthy. Expand only when needed.
+                    </Text>
+                    <Pressable
+                      onPress={() => setShowAdminMismatchDetails((current) => !current)}
+                      style={({ pressed }) => [styles.mismatchPreviewButton, { opacity: pressed ? 0.82 : 1 }]}
+                    >
+                      <Text style={styles.mismatchPreviewButtonText}>
+                        {showAdminMismatchDetails ? "Hide details" : "Show mismatch details"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
               </>
             ) : null}
 
-            {showMismatchSection ? (
+            {(showMismatchSection && (isUserScopedDashboard || showAdminMismatchDetails)) ? (
               <View
                 onLayout={(event) => {
                   setMismatchSectionOffset(event.nativeEvent.layout.y);
@@ -1227,7 +1337,7 @@ export default function DashboardScreen() {
                     <View
                       style={[
                         styles.discrepancyRateBadge,
-                        { backgroundColor: "#3F2A07", borderColor: "#92400E" },
+                        { backgroundColor: "#332B00", borderColor: "#665600" },
                       ]}
                     >
                       <Text style={[styles.discrepancyRateText, { color: ds.color.warning }]}> 
@@ -1280,7 +1390,7 @@ export default function DashboardScreen() {
                           <View
                             style={[
                               styles.discrepancyRateBadge,
-                              { backgroundColor: "#3F2A07", borderColor: "#92400E" },
+                              { backgroundColor: "#332B00", borderColor: "#665600" },
                             ]}
                           >
                             <Text style={[styles.discrepancyRateText, { color: ds.color.warning }]}>Needs labels</Text>
@@ -1436,6 +1546,7 @@ export default function DashboardScreen() {
 
             {isUserScopedDashboard && playerDashboard && (
               <>
+                {/* ── Score Summary Card ── */}
                 <View style={styles.playerSummaryCard}>
                   <View style={[styles.playerSummaryAccentBar, { backgroundColor: sc.primary }]} />
                   <View style={styles.playerSummaryTop}>
@@ -1444,7 +1555,7 @@ export default function DashboardScreen() {
                       <View style={styles.playerSummaryMetaRow}>
                         <View style={[styles.playerSummaryMetaBadge, styles.playerSummarySessionBadge]}>
                           <Text style={[styles.playerSummaryMetaBadgeText, styles.playerSummarySessionBadgeText]}>
-                            {playerDashboard.scoreCount} sessions tracked
+                            {playerDashboard.scoreCount} sessions
                           </Text>
                         </View>
                       </View>
@@ -1510,14 +1621,73 @@ export default function DashboardScreen() {
                   </View>
                 </View>
 
-                <GlassCard style={styles.playerSectionCard}>
-                  <View style={styles.playerTrendHeaderRow}>
-                    <View>
-                      <Text style={styles.playerSectionTitle}>Trend</Text>
-                      <Text style={styles.playerTrendSubtitle}>
-                        Showing {selectedTrendSessions === "all" ? playerDashboard.scoreCount : Math.min(selectedTrendSessions, playerDashboard.scoreCount)} of {playerDashboard.scoreCount} sessions
-                      </Text>
+                {/* ── AI Coaching Plan (Highlighted) ── */}
+                <View style={styles.aiSectionCard}>
+                  <LinearGradient
+                    colors={["rgba(10,132,255,0.12)", "rgba(191,90,242,0.08)", "transparent"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={styles.aiSectionHeader}>
+                    <View style={styles.aiSectionBadge}>
+                      <Ionicons name="sparkles" size={12} color="#BF5AF2" />
+                      <Text style={styles.aiSectionBadgeText}>AI Coach</Text>
                     </View>
+                    <View style={styles.playerPlanDurationRow}>
+                      {PLAN_DURATIONS.map((minutes) => (
+                        <Pressable
+                          key={minutes}
+                          onPress={() => setSelectedPlanMinutes(minutes)}
+                          style={({ pressed }) => [
+                            styles.playerPlanDurationChip,
+                            {
+                              borderColor:
+                                selectedPlanMinutes === minutes ? "rgba(191,90,242,0.5)" : "rgba(84,84,88,0.36)",
+                              backgroundColor:
+                                selectedPlanMinutes === minutes ? "rgba(191,90,242,0.15)" : "#1C1C1E",
+                              opacity: pressed ? 0.8 : 1,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.playerPlanDurationText,
+                              { color: selectedPlanMinutes === minutes ? "#BF5AF2" : "#8E8E93" },
+                            ]}
+                          >
+                            {minutes}m
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                  {playerDashboard.focusAreas.map((area, index) => (
+                    <View key={area.key} style={styles.playerPlanRow}>
+                      <View style={[styles.playerPlanIndexWrap, { backgroundColor: "rgba(191,90,242,0.15)" }]}>
+                        <Text style={[styles.playerPlanIndex, { color: "#BF5AF2" }]}>{index + 1}</Text>
+                      </View>
+                      <View style={styles.playerPlanContent}>
+                        <Text style={styles.playerPlanTitle}>{area.label}</Text>
+                        <Text style={styles.playerPlanMeta}>
+                          {area.current.toFixed(1)} → {area.target.toFixed(1)}
+                        </Text>
+                        <Text style={styles.playerPlanGain}>+{area.expectedGain.toFixed(1)} expected</Text>
+                        <View style={styles.aiDrillRow}>
+                          <Ionicons name="barbell-outline" size={11} color="#BF5AF2" />
+                          <Text style={styles.playerPlanDrill}>{area.drill}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+
+                {/* ── Trend (collapsed by default, tap to expand) ── */}
+                <CollapsibleSection title="Performance Trend" sportColor={sc.primary} defaultOpen={false}>
+                  <View style={styles.playerTrendHeaderRow}>
+                    <Text style={styles.playerTrendSubtitle}>
+                      {selectedTrendSessions === "all" ? playerDashboard.scoreCount : Math.min(selectedTrendSessions, playerDashboard.scoreCount)} of {playerDashboard.scoreCount} sessions
+                    </Text>
                     <View style={styles.playerTrendSessionTabs}>
                       {TREND_SESSION_FILTERS.map((option) => (
                         <Pressable
@@ -1527,9 +1697,9 @@ export default function DashboardScreen() {
                             styles.playerTrendSessionTab,
                             {
                               borderColor:
-                                selectedTrendSessions === option.key ? `${sc.primary}80` : "#2A2A5060",
+                                selectedTrendSessions === option.key ? `${sc.primary}60` : "rgba(84,84,88,0.36)",
                               backgroundColor:
-                                selectedTrendSessions === option.key ? `${sc.primary}20` : "#0A0A1A80",
+                                selectedTrendSessions === option.key ? `${sc.primary}20` : "#1C1C1E",
                               opacity: pressed ? 0.8 : 1,
                             },
                           ]}
@@ -1537,7 +1707,7 @@ export default function DashboardScreen() {
                           <Text
                             style={[
                               styles.playerTrendSessionTabText,
-                              { color: selectedTrendSessions === option.key ? sc.primary : "#94A3B8" },
+                              { color: selectedTrendSessions === option.key ? sc.primary : "#8E8E93" },
                             ]}
                           >
                             {option.label}
@@ -1556,12 +1726,12 @@ export default function DashboardScreen() {
                           {
                             borderColor:
                               selectedTrendMetric === metric.key
-                                ? `${metric.color}80`
-                                : "#2A2A5060",
+                                ? `${metric.color}60`
+                                : "rgba(84,84,88,0.36)",
                             backgroundColor:
                               selectedTrendMetric === metric.key
                                 ? `${metric.color}1F`
-                                : "#0A0A1A80",
+                                : "#1C1C1E",
                             opacity: pressed ? 0.8 : 1,
                           },
                         ]}
@@ -1570,7 +1740,7 @@ export default function DashboardScreen() {
                           style={[
                             styles.playerTrendMetricTabText,
                             {
-                              color: selectedTrendMetric === metric.key ? metric.color : "#94A3B8",
+                              color: selectedTrendMetric === metric.key ? metric.color : "#8E8E93",
                             },
                           ]}
                         >
@@ -1579,18 +1749,17 @@ export default function DashboardScreen() {
                       </Pressable>
                     ))}
                   </View>
-                  <GlassCard style={styles.playerTrendGlassCard}>
+                  <View style={styles.playerTrendGlassCard}>
                     <PlayerMetricTrendChart
                       labels={playerDashboard.trendPoints.map((point) => point.label)}
                       series={playerDashboard.metricTrendSeries}
                       activeKey={selectedTrendMetric}
                     />
-                  </GlassCard>
+                  </View>
+                </CollapsibleSection>
 
-                </GlassCard>
-
-                <GlassCard style={styles.playerSectionCard}>
-                  <Text style={styles.playerSectionTitle}>Stroke performance</Text>
+                {/* ── Stroke Performance (collapsed by default) ── */}
+                <CollapsibleSection title="Stroke Performance" sportColor={sc.primary} defaultOpen={false}>
                   {playerDashboard.movementCards.map((movement) => (
                     <View key={movement.movement} style={styles.playerMovementRow}>
                       <View>
@@ -1612,53 +1781,7 @@ export default function DashboardScreen() {
                       </View>
                     </View>
                   ))}
-                </GlassCard>
-
-                <GlassCard style={styles.playerSectionCard}>
-                  <Text style={styles.playerSectionTitle}>Improvement plan</Text>
-                  <View style={styles.playerPlanDurationRow}>
-                    {PLAN_DURATIONS.map((minutes) => (
-                      <Pressable
-                        key={minutes}
-                        onPress={() => setSelectedPlanMinutes(minutes)}
-                        style={({ pressed }) => [
-                          styles.playerPlanDurationChip,
-                          {
-                            borderColor:
-                              selectedPlanMinutes === minutes ? `${sc.primary}80` : "#2A2A5060",
-                            backgroundColor:
-                              selectedPlanMinutes === minutes ? `${sc.primary}20` : "#0A0A1A80",
-                            opacity: pressed ? 0.8 : 1,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.playerPlanDurationText,
-                            { color: selectedPlanMinutes === minutes ? sc.primary : "#94A3B8" },
-                          ]}
-                        >
-                          {minutes} min
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                  {playerDashboard.focusAreas.map((area, index) => (
-                    <View key={area.key} style={styles.playerPlanRow}>
-                      <View style={styles.playerPlanIndexWrap}>
-                        <Text style={styles.playerPlanIndex}>{index + 1}</Text>
-                      </View>
-                      <View style={styles.playerPlanContent}>
-                        <Text style={styles.playerPlanTitle}>{area.label}</Text>
-                        <Text style={styles.playerPlanMeta}>
-                          {area.current.toFixed(1)} now to target {area.target.toFixed(1)}
-                        </Text>
-                        <Text style={styles.playerPlanGain}>Expected gain: +{area.expectedGain.toFixed(1)}</Text>
-                        <Text style={styles.playerPlanDrill}>{area.drill}</Text>
-                      </View>
-                    </View>
-                  ))}
-                </GlassCard>
+                </CollapsibleSection>
 
               </>
             )}
@@ -1679,7 +1802,7 @@ export default function DashboardScreen() {
                   <Ionicons
                     name={(selectedSport?.icon as any) || "fitness-outline"}
                     size={36}
-                    color="#475569"
+                    color="#636366"
                   />
                 </View>
                 <Text style={styles.emptyTitle}>No analyses yet</Text>
@@ -1721,27 +1844,26 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   registryToastSuccess: {
-    borderColor: "#166534",
-    backgroundColor: "#052E1A",
+    borderColor: "#0B4A2C",
+    backgroundColor: "#0B2618",
   },
   registryToastError: {
-    borderColor: "#7F1D1D",
-    backgroundColor: "#3F1114",
+    borderColor: "#5C0011",
+    backgroundColor: "#3A0A0F",
   },
   registryToastText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textSecondary,
   },
   greetingSection: { marginTop: 20, marginBottom: 14 },
   greeting: {
     fontSize: 26,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     color: ds.color.textPrimary,
   },
   greetingSubtitle: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
     marginTop: 10,
     color: ds.color.textTertiary,
   },
@@ -1752,14 +1874,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
-    backgroundColor: "#34D39912",
+    backgroundColor: "#30D15815",
     borderWidth: 1,
-    borderColor: "#34D39930",
+    borderColor: "#30D15830",
   },
   movementBadgeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#34D399",
+    fontWeight: "600",
+    color: "#30D158",
   },
   filterSection: {
     gap: 12,
@@ -1776,7 +1898,7 @@ const styles = StyleSheet.create({
   },
   filterLabel: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textSecondary,
     letterSpacing: 0.35,
     textTransform: "uppercase",
@@ -1796,7 +1918,7 @@ const styles = StyleSheet.create({
   },
   filterChipText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   filterResetButton: {
     paddingHorizontal: 2,
@@ -1804,7 +1926,7 @@ const styles = StyleSheet.create({
   },
   filterResetText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   playerDropdown: {
     flexDirection: "row",
@@ -1814,12 +1936,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: 10,
-    paddingVertical: 7,
-    maxWidth: "55%",
+    paddingVertical: 6,
+    minHeight: 34,
+    maxWidth: "58%",
   },
   playerDropdownText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     maxWidth: 140,
   },
   playerDropdownReadonly: {
@@ -1829,7 +1952,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
     justifyContent: "flex-start",
-    paddingTop: 170,
+    paddingTop: 160,
     paddingHorizontal: 20,
   },
   playerDropdownMenu: {
@@ -1849,7 +1972,7 @@ const styles = StyleSheet.create({
   },
   playerDropdownItemText: {
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textSecondary,
   },
   loadingWrap: { paddingTop: 60, alignItems: "center" },
@@ -1860,7 +1983,42 @@ const styles = StyleSheet.create({
     backgroundColor: ds.color.glass,
     padding: ds.space.lg,
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 12,
+  },
+  mismatchPreviewCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(84,84,88,0.36)",
+    backgroundColor: "#1C1C1E",
+    padding: 14,
+    gap: 8,
+    marginBottom: 12,
+  },
+  mismatchPreviewTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: ds.color.textPrimary,
+  },
+  mismatchPreviewText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: ds.color.textTertiary,
+  },
+  mismatchPreviewButton: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(84,84,88,0.36)",
+    backgroundColor: "#1C1C1E",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minHeight: 34,
+    justifyContent: "center",
+  },
+  mismatchPreviewButtonText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: ds.color.textSecondary,
   },
   discrepancySectionBlock: {
     gap: 8,
@@ -1876,25 +2034,25 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   discrepancySectionEyebrow: {
-    color: "#93C5FD",
+    color: "#64D2FF",
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     letterSpacing: 0.9,
     textTransform: "uppercase",
     marginBottom: 8,
   },
   discrepancyTitle: {
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   discrepancyRate: {
     fontSize: 16,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   discrepancyStateText: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
   modelMetaCard: {
@@ -1908,12 +2066,12 @@ const styles = StyleSheet.create({
   },
   modelMetaText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textSecondary,
   },
   trainingFormLabel: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 0.3,
@@ -1927,7 +2085,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 9,
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
   },
   trainingFormInputMultiline: {
     minHeight: 72,
@@ -1935,7 +2093,6 @@ const styles = StyleSheet.create({
   },
   modelMetaSubText: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
     marginTop: 2,
   },
@@ -1947,15 +2104,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     paddingVertical: 9,
-    backgroundColor: "#0A0A1A80",
+    backgroundColor: "#1C1C1E",
   },
   scoringSaveText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   scoringSaveHintText: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
     marginTop: -4,
   },
@@ -1975,12 +2131,12 @@ const styles = StyleSheet.create({
   },
   discrepancyTrendTitle: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
   discrepancyTrendValue: {
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   discrepancyTrendBars: {
     flexDirection: "row",
@@ -2007,7 +2163,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     fontSize: 10,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
   discrepancyList: {
@@ -2042,23 +2198,22 @@ const styles = StyleSheet.create({
   },
   discrepancyVideoName: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textSecondary,
     flex: 1,
   },
   discrepancyMeta: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
   },
   discrepancyMetaSecondary: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textSecondary,
   },
   discrepancyUploader: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.accent,
   },
   discrepancyRateBadge: {
@@ -2069,7 +2224,7 @@ const styles = StyleSheet.create({
   },
   discrepancyRateText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   discrepancyReviewButton: {
     borderRadius: ds.radius.sm,
@@ -2080,11 +2235,11 @@ const styles = StyleSheet.create({
   },
   discrepancyReviewText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   discrepancyConfusionText: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textSecondary,
   },
   registryCard: {
@@ -2094,11 +2249,11 @@ const styles = StyleSheet.create({
     backgroundColor: ds.color.glass,
     padding: ds.space.lg,
     gap: 10,
-    marginBottom: 24,
+    marginBottom: 12,
   },
   registryTitle: {
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   trainingStatsRow: {
@@ -2124,17 +2279,16 @@ const styles = StyleSheet.create({
   },
   trainingStatValue: {
     fontSize: 24,
-    fontFamily: "Inter_800ExtraBold",
+    fontWeight: "800",
     color: ds.color.textPrimary,
   },
   trainingStatLabel: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
   registrySubtitle: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
   },
   registryMoreButton: {
@@ -2145,7 +2299,7 @@ const styles = StyleSheet.create({
   },
   registryMoreText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.accent,
   },
   registryTrendCard: {
@@ -2159,7 +2313,7 @@ const styles = StyleSheet.create({
   },
   registryTrendTitle: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textSecondary,
   },
   registryTrendLegendRow: {
@@ -2180,7 +2334,7 @@ const styles = StyleSheet.create({
   },
   registryLegendText: {
     fontSize: 10,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textSecondary,
   },
   registryXAxisLabels: {
@@ -2191,7 +2345,7 @@ const styles = StyleSheet.create({
   registryXAxisLabel: {
     flex: 1,
     fontSize: 10,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
     textAlign: "center",
   },
@@ -2201,7 +2355,7 @@ const styles = StyleSheet.create({
   },
   registryTrendVersionText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textSecondary,
   },
   registryTrendBarsWrap: {
@@ -2210,22 +2364,22 @@ const styles = StyleSheet.create({
   registryTrendBarTrack: {
     height: 8,
     borderRadius: 999,
-    backgroundColor: "#1E293B",
+    backgroundColor: "#2C2C2E",
     overflow: "hidden",
   },
   registryTrendBarFillMovement: {
     height: "100%",
-    backgroundColor: "#22C55E",
+    backgroundColor: "#30D158",
     borderRadius: 999,
   },
   registryTrendBarFillScoring: {
     height: "100%",
-    backgroundColor: "#38BDF8",
+    backgroundColor: "#64D2FF",
     borderRadius: 999,
   },
   registryTrendValueText: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
   registryEntryCard: {
@@ -2245,36 +2399,35 @@ const styles = StyleSheet.create({
   },
   registryEntryVersionText: {
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    color: "#34D399",
+    fontWeight: "700",
+    color: "#30D158",
   },
   registryEntryDateText: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
   registryEntryMetaText: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textSecondary,
   },
   registryEntrySubText: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
     marginTop: 2,
   },
   registryDetailOverlay: {
     flex: 1,
-    backgroundColor: "#020617B0",
+    backgroundColor: "rgba(0,0,0,0.7)",
     justifyContent: "center",
     paddingHorizontal: 20,
   },
   registryDetailCard: {
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#2A2A5060",
-    backgroundColor: "#0B1228",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(84,84,88,0.36)",
+    backgroundColor: "#1C1C1E",
     maxHeight: "82%",
     padding: 14,
     gap: 8,
@@ -2286,45 +2439,44 @@ const styles = StyleSheet.create({
   },
   registryDetailTitle: {
     fontSize: 15,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   registryDetailSectionTitle: {
     marginTop: 6,
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    color: "#93C5FD",
+    fontWeight: "700",
+    color: "#64D2FF",
   },
   registryDetailMeta: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: "#CBD5E1",
+    fontWeight: "500",
+    color: "#AEAEB2",
   },
   registryDetailDatasetBlock: {
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#33415580",
-    backgroundColor: "#0A1023",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(84,84,88,0.36)",
+    backgroundColor: "#2C2C2E",
     padding: 8,
     gap: 3,
   },
   registryDetailDatasetName: {
     fontSize: 11,
-    fontFamily: "Inter_700Bold",
-    color: "#E2E8F0",
+    fontWeight: "700",
+    color: "#C7C7CC",
   },
   registryDetailVideoMeta: {
     fontSize: 10,
-    fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    color: "#8E8E93",
   },
   playerSummaryCard: {
-    backgroundColor: "#15152D",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#2A2A5040",
+    backgroundColor: "#1C1C1E",
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(84,84,88,0.36)",
     padding: 16,
-    marginBottom: 14,
+    marginBottom: 12,
     overflow: "hidden",
     position: "relative",
   },
@@ -2353,8 +2505,8 @@ const styles = StyleSheet.create({
   },
   playerSummaryEyebrow: {
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   playerSummaryMetaRow: {
     flexDirection: "row",
@@ -2373,22 +2525,22 @@ const styles = StyleSheet.create({
   },
   playerSummaryMetaBadgeText: {
     fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   playerSummarySessionBadge: {
-    backgroundColor: "#93C5FD12",
-    borderColor: "#93C5FD30",
+    backgroundColor: "#64D2FF14",
+    borderColor: "#64D2FF30",
   },
   playerSummarySessionBadgeText: {
-    color: "#93C5FD",
+    color: "#64D2FF",
   },
   playerSummaryScoreWrap: {
     alignItems: "flex-end",
   },
   playerSummaryScoreLabel: {
     fontSize: 9,
-    fontFamily: "Inter_500Medium",
-    color: "#64748B",
+    fontWeight: "500",
+    color: "#636366",
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
   },
@@ -2399,8 +2551,8 @@ const styles = StyleSheet.create({
   },
   playerSummaryScoreText: {
     fontSize: 28,
-    fontFamily: "Inter_700Bold",
-    color: "#34D399",
+    fontWeight: "700",
+    color: "#30D158",
   },
   playerSummaryDeltaWrap: {
     flexDirection: "row",
@@ -2410,7 +2562,7 @@ const styles = StyleSheet.create({
   },
   playerSummaryDeltaText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   playerSummaryMetricsRow: {
     flexDirection: "row",
@@ -2422,25 +2574,25 @@ const styles = StyleSheet.create({
     minWidth: "31%" as const,
     flexGrow: 1,
     flexBasis: "31%" as const,
-    backgroundColor: "#0A0A1A50",
+    backgroundColor: "#2C2C2E",
     borderRadius: 10,
     padding: 8,
     alignItems: "center",
     gap: 2,
-    borderWidth: 1,
-    borderColor: "#2A2A5020",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(84,84,88,0.36)",
   },
   playerSummaryMetricLabel: {
     fontSize: 10,
-    fontFamily: "Inter_500Medium",
-    color: "#64748B",
+    fontWeight: "500",
+    color: "#636366",
     textTransform: "uppercase" as const,
     letterSpacing: 0.3,
   },
   playerSummaryMetricValue: {
     fontSize: 14,
-    fontFamily: "Inter_700Bold",
-    color: "#F8FAFC",
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   playerSummaryMetricValueRow: {
     width: "100%",
@@ -2460,17 +2612,53 @@ const styles = StyleSheet.create({
   },
   playerSummaryMetricDeltaText: {
     fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     lineHeight: 10,
   },
   playerSectionCard: {
     padding: ds.space.lg,
     gap: 10,
-    marginBottom: 14,
+    marginBottom: 12,
+  },
+  aiSectionCard: {
+    borderRadius: 14,
+    backgroundColor: ds.color.bgElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(191,90,242,0.25)",
+    padding: 16,
+    gap: 10,
+    marginBottom: 12,
+    overflow: "hidden",
+  },
+  aiSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  aiSectionBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(191,90,242,0.12)",
+  },
+  aiSectionBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#BF5AF2",
+  },
+  aiDrillRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 2,
   },
   playerSectionTitle: {
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   playerTrendHeaderRow: {
@@ -2482,7 +2670,6 @@ const styles = StyleSheet.create({
   playerTrendSubtitle: {
     marginTop: 2,
     fontSize: 10,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
   },
   playerTrendLabelsRow: {
@@ -2503,9 +2690,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: "#2A2A5055",
-    backgroundColor: "#0A0F22A0",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(84,84,88,0.36)",
+    backgroundColor: "#1C1C1E",
   },
   playerTrendMetricDot: {
     width: 8,
@@ -2514,17 +2701,16 @@ const styles = StyleSheet.create({
   },
   playerTrendMetricLabel: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textSecondary,
   },
   playerTrendMetricValue: {
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   playerTrendAxisLabel: {
     flex: 1,
     fontSize: 9,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
     textAlign: "center" as const,
   },
@@ -2542,7 +2728,7 @@ const styles = StyleSheet.create({
   },
   playerTrendSessionTabText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   playerTrendMetricTabs: {
     flexDirection: "row",
@@ -2557,30 +2743,26 @@ const styles = StyleSheet.create({
   },
   playerTrendMetricTabText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   playerTrendGlassCard: {
-    padding: 12,
+    marginTop: 8,
   },
   playerMovementRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: ds.color.glassBorder,
-    backgroundColor: ds.color.glass,
-    paddingHorizontal: 12,
     paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: ds.color.glassBorder,
   },
   playerMovementName: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   playerMovementMeta: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
     marginTop: 2,
   },
@@ -2589,12 +2771,12 @@ const styles = StyleSheet.create({
   },
   playerMovementScore: {
     fontSize: 20,
-    fontFamily: "Inter_700Bold",
-    color: "#34D399",
+    fontWeight: "700",
+    color: "#30D158",
   },
   playerMovementDelta: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   playerPlanRow: {
     flexDirection: "row",
@@ -2620,7 +2802,7 @@ const styles = StyleSheet.create({
   },
   playerPlanDurationText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   playerPlanIndexWrap: {
     width: 22,
@@ -2628,13 +2810,13 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1E293B",
+    backgroundColor: "#2C2C2E",
     marginTop: 1,
   },
   playerPlanIndex: {
     fontSize: 11,
-    fontFamily: "Inter_700Bold",
-    color: "#93C5FD",
+    fontWeight: "700",
+    color: "#64D2FF",
   },
   playerPlanContent: {
     flex: 1,
@@ -2642,22 +2824,21 @@ const styles = StyleSheet.create({
   },
   playerPlanTitle: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   playerPlanMeta: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
   playerPlanGain: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: "#34D399",
+    fontWeight: "500",
+    color: "#30D158",
   },
   playerPlanDrill: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textSecondary,
     lineHeight: 18,
   },
@@ -2668,12 +2849,11 @@ const styles = StyleSheet.create({
   },
   playerPendingTitle: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   playerPendingText: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
     lineHeight: 18,
   },
@@ -2694,13 +2874,12 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 18,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
     marginTop: 8,
   },
   emptyText: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
     textAlign: "center" as const,
     lineHeight: 21,
     paddingHorizontal: 20,

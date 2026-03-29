@@ -1,31 +1,37 @@
-const primary = "#818CF8";
-const primaryLight = "#A5B4FC";
-const primaryDark = "#6366F1";
-const neon = "#4ADE80";
-const neonDark = "#22C55E";
-const midnight = "#050A18";
-const darkSurface = "#0C1428";
-const darkCard = "#111C38";
-const darkCardAlt = "#162040";
-const darkBorder = "#ffffff18";
-const glow = "#818CF818";
-const white = "#F1F5F9";
-const offWhite = "#B0BEC5";
-const muted = "#546E7A";
-const accent = "#4ADE80";
-const red = "#FB7185";
-const amber = "#FCD34D";
-const blue = "#60A5FA";
-const cyan = "#22D3EE";
+/**
+ * Colour constants – Apple Fitness / Apple Sports inspired.
+ * Uses official Apple dark-mode system colour values.
+ */
+
+// ─── Core palette ────────────────────────────────────────────
+const primary = "#0A84FF"; // Apple system blue
+const primaryLight = "#409CFF";
+const primaryDark = "#0071E3";
+const neon = "#30D158"; // Apple system green
+const neonDark = "#28CD41";
+const midnight = "#000000"; // pure black
+const darkSurface = "#1C1C1E"; // systemGray6
+const darkCard = "#2C2C2E"; // systemGray5
+const darkCardAlt = "#3A3A3C"; // systemGray4
+const darkBorder = "rgba(84,84,88,0.36)"; // Apple separator
+const glow = "rgba(10,132,255,0.15)";
+const white = "#FFFFFF";
+const offWhite = "#8E8E93"; // systemGray
+const muted = "#636366"; // systemGray2
+const accent = "#30D158"; // green for positive
+const red = "#FF453A"; // Apple system red
+const amber = "#FFD60A"; // Apple system yellow
+const blue = "#0A84FF";
+const cyan = "#64D2FF";
 
 export default {
   light: {
-    text: "#0F172A",
-    textSecondary: "#64748B",
-    background: "#F8FAFC",
+    text: "#000000",
+    textSecondary: "#3C3C43",
+    background: "#F2F2F7",
     surface: "#FFFFFF",
-    surfaceAlt: "#F1F5F9",
-    border: "#E2E8F0",
+    surfaceAlt: "#F2F2F7",
+    border: "#C6C6C8",
     tint: primary,
     tintDark: primaryDark,
     accent: neon,
@@ -60,10 +66,10 @@ export default {
 };
 
 export const sportColors: Record<string, { primary: string; gradient: string }> = {
-  Tennis: { primary: "#10B981", gradient: "#059669" },
-  Golf: { primary: "#22D3EE", gradient: "#0891B2" },
-  Pickleball: { primary: "#F59E0B", gradient: "#D97706" },
-  Paddle: { primary: "#8B5CF6", gradient: "#7C3AED" },
-  Badminton: { primary: "#EF4444", gradient: "#DC2626" },
-  "Table Tennis": { primary: "#3B82F6", gradient: "#2563EB" },
+  Tennis: { primary: "#30D158", gradient: "#28CD41" },
+  Golf: { primary: "#64D2FF", gradient: "#40C8E0" },
+  Pickleball: { primary: "#FF9F0A", gradient: "#FF9500" },
+  Paddle: { primary: "#BF5AF2", gradient: "#AF52DE" },
+  Badminton: { primary: "#FF453A", gradient: "#FF3B30" },
+  "Table Tennis": { primary: "#0A84FF", gradient: "#007AFF" },
 };

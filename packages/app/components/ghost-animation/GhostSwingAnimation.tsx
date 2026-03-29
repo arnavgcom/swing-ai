@@ -306,7 +306,7 @@ export function GhostSwingAnimation({
     <GlassCard style={styles.card}>
       {isWalkthrough && (
         <View style={styles.walkthroughBanner}>
-          <Ionicons name="walk" size={14} color="#A78BFA" />
+          <Ionicons name="walk" size={14} color="#BF5AF2" />
           <Text style={styles.walkthroughBannerText}>
             Tour · {selectedCorrectionIndex + 1} / {correctionChips.length}
           </Text>
@@ -438,7 +438,7 @@ export function GhostSwingAnimation({
             <Ionicons
               name={isWalkthrough ? "stop-circle" : "play-skip-forward"}
               size={14}
-              color={isWalkthrough ? "#A78BFA" : ds.color.textTertiary}
+              color={isWalkthrough ? "#BF5AF2" : ds.color.textTertiary}
             />
             <Text style={[styles.pathToggleText, isWalkthrough && styles.tourToggleTextActive]}>Tour</Text>
           </Pressable>
@@ -470,7 +470,7 @@ export function GhostSwingAnimation({
                   <SkeletonRenderer
                     key={`trail-s-${index}`}
                     landmarks={trailItem.landmarks}
-                    color="#60A5FA"
+                    color="#0A84FF"
                     opacity={trailItem.opacity}
                     width={CANVAS_WIDTH}
                     height={CANVAS_HEIGHT}
@@ -478,9 +478,9 @@ export function GhostSwingAnimation({
                 ))}
                 <SkeletonRenderer
                   landmarks={playerLandmarks}
-                  color="#60A5FA"
+                  color="#0A84FF"
                   highlightJoints={activeCorrection.jointIndices}
-                  highlightColor="#F87171"
+                  highlightColor="#FF453A"
                   opacity={0.9}
                   width={CANVAS_WIDTH}
                   height={CANVAS_HEIGHT}
@@ -506,7 +506,7 @@ export function GhostSwingAnimation({
                 )}
                 <SkeletonRenderer
                   landmarks={correctedLandmarks}
-                  color="#34D399"
+                  color="#30D158"
                   opacity={0.9}
                   width={CANVAS_WIDTH}
                   height={CANVAS_HEIGHT}
@@ -539,7 +539,7 @@ export function GhostSwingAnimation({
                 <SkeletonRenderer
                   key={`trail-${index}`}
                   landmarks={trailItem.landmarks}
-                  color="#60A5FA"
+                  color="#0A84FF"
                   opacity={trailItem.opacity}
                   width={CANVAS_WIDTH}
                   height={CANVAS_HEIGHT}
@@ -547,16 +547,16 @@ export function GhostSwingAnimation({
               ))}
               <SkeletonRenderer
                 landmarks={correctedLandmarks}
-                color="#34D399"
+                color="#30D158"
                 opacity={0.55}
                 width={CANVAS_WIDTH}
                 height={CANVAS_HEIGHT}
               />
               <SkeletonRenderer
                 landmarks={playerLandmarks}
-                color="#60A5FA"
+                color="#0A84FF"
                 highlightJoints={activeCorrection.jointIndices}
-                highlightColor="#F87171"
+                highlightColor="#FF453A"
                 opacity={0.9}
                 width={CANVAS_WIDTH}
                 height={CANVAS_HEIGHT}
@@ -585,16 +585,16 @@ export function GhostSwingAnimation({
       {showPaths && (
         <View style={styles.pathLegend}>
           <View style={styles.pathLegendItem}>
-            <View style={[styles.pathLegendDot, { backgroundColor: "#F87171" }]} />
+            <View style={[styles.pathLegendDot, { backgroundColor: "#FF453A" }]} />
             <Text style={styles.pathLegendLabel}>Your Path</Text>
           </View>
           <View style={styles.pathLegendItem}>
-            <View style={[styles.pathLegendDot, { backgroundColor: "#34D399" }]} />
+            <View style={[styles.pathLegendDot, { backgroundColor: "#30D158" }]} />
             <Text style={styles.pathLegendLabel}>Optimal Path</Text>
           </View>
           {showCorrectionArrow && (
             <View style={styles.pathLegendItem}>
-              <View style={[styles.pathLegendDot, { backgroundColor: "#F59E0B" }]} />
+              <View style={[styles.pathLegendDot, { backgroundColor: "#FF9F0A" }]} />
               <Text style={styles.pathLegendLabel}>Correction Arrow</Text>
             </View>
           )}
@@ -604,15 +604,15 @@ export function GhostSwingAnimation({
       {showHeatmap && (
         <View style={styles.pathLegend}>
           <View style={styles.pathLegendItem}>
-            <View style={[styles.pathLegendDot, { backgroundColor: "#34D399" }]} />
+            <View style={[styles.pathLegendDot, { backgroundColor: "#30D158" }]} />
             <Text style={styles.pathLegendLabel}>Good</Text>
           </View>
           <View style={styles.pathLegendItem}>
-            <View style={[styles.pathLegendDot, { backgroundColor: "#FBBF24" }]} />
+            <View style={[styles.pathLegendDot, { backgroundColor: "#FFD60A" }]} />
             <Text style={styles.pathLegendLabel}>Small deviation</Text>
           </View>
           <View style={styles.pathLegendItem}>
-            <View style={[styles.pathLegendDot, { backgroundColor: "#F87171" }]} />
+            <View style={[styles.pathLegendDot, { backgroundColor: "#FF453A" }]} />
             <Text style={styles.pathLegendLabel}>Large deviation</Text>
           </View>
         </View>
@@ -665,11 +665,11 @@ const styles = StyleSheet.create({
   correctionChipText: {
     color: ds.color.textSecondary,
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
   },
   correctionChipTextActive: {
     color: "#FECACA",
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   titleRow: {
     flexDirection: "row",
@@ -709,12 +709,12 @@ const styles = StyleSheet.create({
     borderColor: "rgba(251,191,36,0.4)",
   },
   heatmapToggleTextActive: {
-    color: "#FBBF24",
+    color: "#FFD60A",
   },
   pathToggleText: {
     color: ds.color.textTertiary,
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
   },
   pathToggleTextActive: {
     color: "#fff",
@@ -777,7 +777,6 @@ const styles = StyleSheet.create({
   pathLegendLabel: {
     color: ds.color.textSecondary,
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
   },
   trailToggleActive: {
     backgroundColor: "rgba(96,165,250,0.2)",
@@ -809,7 +808,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: "#C4B5FD",
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   walkthroughStop: {
     padding: 4,
@@ -829,7 +828,7 @@ const styles = StyleSheet.create({
     top: 8,
     color: "rgba(255,255,255,0.55)",
     fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.8,
     zIndex: 1,

@@ -13,7 +13,7 @@ type TabScreenIntroProps = {
 };
 
 type TabScreenFilterGroupProps = {
-  label: string;
+  label?: string;
   labelColor?: string;
   action?: React.ReactNode;
   children: React.ReactNode;
@@ -22,6 +22,20 @@ type TabScreenFilterGroupProps = {
 type TabScreenFilterRowProps = {
   children: React.ReactNode;
 };
+
+function hasRenderableContent(node: React.ReactNode): boolean {
+  return React.Children.toArray(node).some((child) => {
+    if (child == null || typeof child === "boolean") return false;
+    if (typeof child === "string") return child.trim().length > 0;
+    if (typeof child === "number") return true;
+
+    if (React.isValidElement(child) && child.type === React.Fragment) {
+      return hasRenderableContent((child.props as { children?: React.ReactNode }).children);
+    }
+
+    return true;
+  });
+}
 
 export function TabScreenIntro({
   title,
@@ -32,8 +46,8 @@ export function TabScreenIntro({
   controls,
   children,
 }: TabScreenIntroProps) {
-  const hasControls = React.Children.toArray(controls).length > 0;
-  const hasFilters = React.Children.toArray(children).length > 0;
+  const hasControls = hasRenderableContent(controls);
+  const hasFilters = hasRenderableContent(children);
 
   return (
     <View>
@@ -57,13 +71,21 @@ export function TabScreenFilterGroup({
   children,
 }: TabScreenFilterGroupProps) {
   const hasAction = React.Children.toArray(action).length > 0;
+  const hasHeader = label || hasAction;
 
   return (
     <View style={styles.filterGroup}>
-      <View style={hasAction ? styles.filterHeaderRow : undefined}>
-        <Text style={[styles.filterLabel, { color: labelColor }]}>{label}</Text>
-        {hasAction ? action : null}
-      </View>
+      {hasHeader ? (
+        <View style={hasAction ? styles.filterHeaderRow : undefined}>
+          {label ? <Text style={[styles.filterLabel, { color: labelColor }]}>{label}</Text> : null}
+          {hasAction ? action : null}
+        </View>
+      ) : hasAction ? (
+        <View style={styles.filterHeaderRow}>
+          <View />
+          {action}
+        </View>
+      ) : null}
       {children}
     </View>
   );
@@ -76,23 +98,24 @@ export function TabScreenFilterRow({ children }: TabScreenFilterRowProps) {
 const styles = StyleSheet.create({
   headerSection: {
     marginTop: ds.space.xl,
-    marginBottom: ds.space.lg,
+    marginBottom: 8,
   },
   title: {
     fontSize: 26,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   subtitle: {
     marginTop: 10,
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "500",
   },
   controlsRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-    marginTop: 14,
+    marginTop: 10,
   },
   filterSection: {
     gap: ds.space.md,
@@ -109,7 +132,7 @@ const styles = StyleSheet.create({
   },
   filterLabel: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     letterSpacing: 0.35,
     textTransform: "uppercase",
   },

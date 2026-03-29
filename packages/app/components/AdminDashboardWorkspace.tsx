@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -34,16 +35,17 @@ type AdminDashboardWorkspaceProps = {
   scrollRef: React.RefObject<ScrollView | null>;
   scrollY: number;
   mismatchSectionOffset?: number | null;
+  onSelectSection?: (section: SectionKey) => void;
   onBack?: () => void;
 };
 
 const LABEL_COLORS: Record<string, string> = {
-  forehand: "#38BDF8",
-  backhand: "#A78BFA",
+  forehand: "#64D2FF",
+  backhand: "#BF5AF2",
   serve: "#F97316",
-  volley: "#34D399",
-  practice: "#38BDF8",
-  "match-play": "#F59E0B",
+  volley: "#30D158",
+  practice: "#64D2FF",
+  "match-play": "#FF9F0A",
 };
 
 function formatPercent(value?: number | null, digits = 0): string {
@@ -228,8 +230,11 @@ export default function AdminDashboardWorkspace({
   scrollRef,
   scrollY,
   mismatchSectionOffset,
+  onSelectSection,
   onBack,
 }: AdminDashboardWorkspaceProps) {
+  const { width: viewportWidth } = useWindowDimensions();
+  const isNarrowViewport = viewportWidth <= 430;
   const queryClient = useQueryClient();
   const sectionOffsets = React.useRef<Record<SectionKey, number>>({ models: 0, data: 0, mismatches: 0 });
   const [activeSection, setActiveSection] = React.useState<SectionKey>("models");
@@ -392,6 +397,7 @@ export default function AdminDashboardWorkspace({
     trainingQuery.isLoading || datasetQuery.isLoading || registryQuery.isLoading;
 
   const jumpToSection = (section: SectionKey) => {
+    onSelectSection?.(section);
     setActiveSection(section);
     scrollRef.current?.scrollTo({
       y: Math.max(sectionOffsets.current[section] - 110, 0),
@@ -459,7 +465,7 @@ export default function AdminDashboardWorkspace({
       >
         <Text style={styles.sectionEyebrow}>Models</Text>
 
-        <View style={styles.metricGrid}>
+        <View style={[styles.metricGrid, isNarrowViewport && styles.metricGridStack]}>
           <MetricTile
             label="Macro F1"
             value={formatPercent(datasetQuery.data?.activeModel?.macroF1 ?? trainingQuery.data?.latestTraining?.macroF1 ?? null, 0)}
@@ -470,7 +476,7 @@ export default function AdminDashboardWorkspace({
             label="Accuracy"
             value={formatPercent(datasetQuery.data?.activeModel?.accuracy)}
             helper="Classification accuracy"
-            accent="#38BDF8"
+            accent="#64D2FF"
           />
         </View>
 
@@ -481,20 +487,44 @@ export default function AdminDashboardWorkspace({
                 <Text style={styles.cardTitle}>Confusion matrix</Text>
                 <Text style={styles.metaHint}>Actual rows, predicted columns</Text>
               </View>
-              <View style={styles.confusionMatrixTable}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.confusionMatrixScrollContent}
+              >
+              <View style={[styles.confusionMatrixTable, isNarrowViewport && styles.confusionMatrixTableNarrow]}>
                 <View style={styles.confusionMatrixRow}>
-                  <View style={[styles.confusionMatrixCell, styles.confusionMatrixCornerCell]}>
+                  <View
+                    style={[
+                      styles.confusionMatrixCell,
+                      styles.confusionMatrixCornerCell,
+                      isNarrowViewport && styles.confusionMatrixAxisCellNarrow,
+                    ]}
+                  >
                     <Text style={styles.confusionMatrixAxisText}>Actual</Text>
                   </View>
                   {activeModelConfusionMatrix.labels.map((label) => (
-                    <View key={`header-${label}`} style={[styles.confusionMatrixCell, styles.confusionMatrixHeaderCell]}>
+                    <View
+                      key={`header-${label}`}
+                      style={[
+                        styles.confusionMatrixCell,
+                        styles.confusionMatrixHeaderCell,
+                        isNarrowViewport && styles.confusionMatrixCellNarrow,
+                      ]}
+                    >
                       <Text style={styles.confusionMatrixHeaderText}>{formatLabel(label)}</Text>
                     </View>
                   ))}
                 </View>
                 {activeModelConfusionMatrix.rows.map((row) => (
                   <View key={row.actual} style={styles.confusionMatrixRow}>
-                    <View style={[styles.confusionMatrixCell, styles.confusionMatrixRowLabelCell]}>
+                    <View
+                      style={[
+                        styles.confusionMatrixCell,
+                        styles.confusionMatrixRowLabelCell,
+                        isNarrowViewport && styles.confusionMatrixAxisCellNarrow,
+                      ]}
+                    >
                       <Text style={styles.confusionMatrixRowLabel}>{formatLabel(row.actual)}</Text>
                     </View>
                     {row.counts.map((cell) => {
@@ -506,6 +536,7 @@ export default function AdminDashboardWorkspace({
                           style={[
                             styles.confusionMatrixCell,
                             styles.confusionMatrixValueCell,
+                            isNarrowViewport && styles.confusionMatrixCellNarrow,
                             {
                               backgroundColor: isCorrect
                                 ? `rgba(34, 197, 94, ${0.16 + intensity * 0.42})`
@@ -522,6 +553,7 @@ export default function AdminDashboardWorkspace({
                   </View>
                 ))}
               </View>
+              </ScrollView>
             </View>
           </GlassCard>
         ) : null}
@@ -667,18 +699,18 @@ export default function AdminDashboardWorkspace({
       >
         <Text style={styles.sectionEyebrow}>Data</Text>
 
-        <View style={styles.metricGrid}>
+        <View style={[styles.metricGrid, isNarrowViewport && styles.metricGridStack]}>
           <MetricTile
             label="Eligible videos"
             value={formatCompactNumber(datasetDistributions?.eligibleVideoCount)}
             helper={`${formatCompactNumber(datasetDistributions?.eligibleShotCount)} labeled shots available`}
-            accent="#F59E0B"
+            accent="#FF9F0A"
           />
           <MetricTile
             label="Labeled shots"
             value={formatCompactNumber(datasetDistributions?.eligibleShotCount)}
             helper={`${datasetDistributions?.shotDistribution.length || 0} shot labels represented`}
-            accent="#22C55E"
+            accent="#30D158"
           />
         </View>
 
@@ -709,7 +741,8 @@ export default function AdminDashboardWorkspace({
 
 const styles = StyleSheet.create({
   content: {
-    gap: 18,
+    gap: 12,
+    paddingBottom: 16,
   },
   centerWrap: {
     alignItems: "center",
@@ -721,19 +754,18 @@ const styles = StyleSheet.create({
   loadingText: {
     color: ds.color.textSecondary,
     fontSize: 14,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
   },
   errorTitle: {
     color: ds.color.textPrimary,
     fontSize: 22,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     textAlign: "center",
   },
   errorText: {
     color: ds.color.textSecondary,
     fontSize: 14,
     lineHeight: 20,
-    fontFamily: "Inter_400Regular",
     textAlign: "center",
   },
   retryButton: {
@@ -745,7 +777,7 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     color: ds.color.textPrimary,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     fontSize: 14,
   },
   topRow: {
@@ -770,14 +802,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     flexWrap: "wrap",
+    marginTop: -6,
+    marginBottom: 2,
   },
   sectionChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    minHeight: 30,
     borderRadius: ds.radius.pill,
     borderWidth: 1,
-    borderColor: "rgba(148, 163, 184, 0.2)",
-    backgroundColor: "rgba(15, 23, 42, 0.5)",
+    borderColor: "rgba(84,84,88,0.36)",
+    backgroundColor: "#1C1C1E",
+    justifyContent: "center",
   },
   sectionChipActive: {
     backgroundColor: "rgba(52, 211, 153, 0.16)",
@@ -785,44 +821,49 @@ const styles = StyleSheet.create({
   },
   sectionChipText: {
     color: ds.color.textSecondary,
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+    fontWeight: "600",
   },
   sectionChipTextActive: {
     color: ds.color.textPrimary,
+    fontSize: 12,
+    fontWeight: "700",
   },
   sectionBlock: {
-    gap: 14,
+    gap: 12,
   },
   sectionEyebrow: {
-    color: "#93C5FD",
+    color: ds.color.textSecondary,
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: 1,
+    fontWeight: "700",
+    letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   sectionTitle: {
     color: ds.color.textPrimary,
     fontSize: 24,
     lineHeight: 30,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   sectionCopy: {
     color: ds.color.textSecondary,
     fontSize: 14,
     lineHeight: 21,
-    fontFamily: "Inter_400Regular",
   },
   metricGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
   },
+  metricGridStack: {
+    flexDirection: "column",
+    flexWrap: "nowrap",
+  },
   metricTile: {
-    minWidth: 154,
+    minWidth: 0,
     flexGrow: 1,
     flexBasis: 0,
-    padding: 16,
+    padding: 14,
     gap: 8,
   },
   metricAccent: {
@@ -832,37 +873,35 @@ const styles = StyleSheet.create({
   },
   metricLabel: {
     color: ds.color.textTertiary,
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+    fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.7,
   },
   metricValue: {
     color: ds.color.textPrimary,
-    fontSize: 28,
-    lineHeight: 32,
-    fontFamily: "Inter_700Bold",
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: "700",
   },
   metricHelper: {
     color: ds.color.textSecondary,
-    fontSize: 13,
+    fontSize: 12,
     lineHeight: 18,
-    fontFamily: "Inter_400Regular",
   },
   summaryCard: {
-    padding: 18,
-    gap: 14,
+    padding: 16,
+    gap: 12,
   },
   cardTitle: {
     color: ds.color.textPrimary,
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
+    fontSize: 17,
+    fontWeight: "700",
   },
   cardSubtext: {
     color: ds.color.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    fontFamily: "Inter_400Regular",
   },
   queueRow: {
     flexDirection: "row",
@@ -882,13 +921,13 @@ const styles = StyleSheet.create({
   queuePillValue: {
     color: ds.color.textPrimary,
     fontSize: 20,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   queuePillLabel: {
     marginTop: 4,
     color: ds.color.textTertiary,
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
   },
   dualColumnRow: {
     flexDirection: "row",
@@ -900,7 +939,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -913,7 +952,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textPrimary,
   },
   multilineInput: {
@@ -927,17 +965,15 @@ const styles = StyleSheet.create({
   },
   validationTitle: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textSecondary,
   },
   validationText: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
   },
   validationHint: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
   },
   featureCard: {
@@ -951,13 +987,12 @@ const styles = StyleSheet.create({
     color: ds.color.textPrimary,
     fontSize: 26,
     lineHeight: 30,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   featureText: {
     color: ds.color.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    fontFamily: "Inter_400Regular",
   },
   keyValueRow: {
     flexDirection: "row",
@@ -967,13 +1002,13 @@ const styles = StyleSheet.create({
   keyValueLabel: {
     color: ds.color.textTertiary,
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     flex: 1,
   },
   keyValueValue: {
     color: ds.color.textPrimary,
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     flex: 1,
     textAlign: "right",
   },
@@ -1012,18 +1047,17 @@ const styles = StyleSheet.create({
   trainingTrendDraftVersion: {
     color: ds.color.textPrimary,
     fontSize: 16,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   trainingTrendDraftLabel: {
     color: ds.color.textPrimary,
     fontSize: 11,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     textAlign: "right",
   },
   trainingTrendDraftHint: {
     color: ds.color.textSecondary,
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
   },
   trainingTrendDraftRunsList: {
     gap: 6,
@@ -1045,17 +1079,17 @@ const styles = StyleSheet.create({
     flex: 1,
     color: "#7DD3FC",
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     lineHeight: 16,
   },
   trainingTrendDraftRunValueText: {
     color: "#7DD3FC",
     fontSize: 11,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     textAlign: "right",
   },
   trainingTrendDraftRunBarFill: {
-    backgroundColor: "#38BDF8",
+    backgroundColor: "#64D2FF",
   },
   trainingTrendList: {
     gap: 10,
@@ -1075,44 +1109,44 @@ const styles = StyleSheet.create({
   trainingTrendVersionText: {
     color: ds.color.textPrimary,
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   trainingTrendBarTrack: {
     height: 8,
     borderRadius: 999,
-    backgroundColor: "#1E293B",
+    backgroundColor: "#2C2C2E",
     overflow: "hidden",
   },
   trainingTrendBarFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: "#38BDF8",
+    backgroundColor: "#64D2FF",
   },
   trainingTrendDraftBarFill: {
     opacity: 0.95,
   },
   trainingTrendHistoryBarFill: {
-    backgroundColor: "#22C55E",
+    backgroundColor: "#30D158",
   },
   trainingTrendValueText: {
     color: "#7DD3FC",
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   trainingTrendHistoryValueText: {
     color: "#4ADE80",
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   trainingTrendHistoryVersionText: {
     color: "#86EFAC",
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   trainingTrendMetaText: {
     color: ds.color.textTertiary,
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
   },
   inlineAction: {
     flexDirection: "row",
@@ -1129,7 +1163,7 @@ const styles = StyleSheet.create({
   inlineActionText: {
     color: ds.color.textPrimary,
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   jobStatusBox: {
     padding: 14,
@@ -1140,21 +1174,20 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   jobStatusTitle: {
-    color: "#93C5FD",
+    color: "#64D2FF",
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.7,
   },
   jobStatusText: {
     color: ds.color.textPrimary,
     fontSize: 16,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   jobStatusHint: {
     color: ds.color.textSecondary,
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
   },
   versionList: {
     gap: 10,
@@ -1180,13 +1213,12 @@ const styles = StyleSheet.create({
   versionTitle: {
     color: ds.color.textPrimary,
     fontSize: 15,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   versionDescription: {
     color: ds.color.textSecondary,
     fontSize: 13,
     lineHeight: 18,
-    fontFamily: "Inter_400Regular",
   },
   versionBadge: {
     paddingHorizontal: 12,
@@ -1200,7 +1232,7 @@ const styles = StyleSheet.create({
   versionBadgeText: {
     color: ds.color.textSecondary,
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   versionBadgeTextActive: {
     color: ds.color.textPrimary,
@@ -1218,13 +1250,11 @@ const styles = StyleSheet.create({
     color: ds.color.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    fontFamily: "Inter_400Regular",
   },
   emptyText: {
     color: ds.color.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    fontFamily: "Inter_400Regular",
   },
   datasetRow: {
     flexDirection: "row",
@@ -1244,17 +1274,16 @@ const styles = StyleSheet.create({
   },
   datasetName: {
     fontSize: 13,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     color: ds.color.textPrimary,
   },
   datasetMeta: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textSecondary,
   },
   datasetMetaSecondary: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
   },
   datasetCountPill: {
@@ -1270,8 +1299,8 @@ const styles = StyleSheet.create({
   },
   datasetCountText: {
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    color: "#34D399",
+    fontWeight: "700",
+    color: "#30D158",
   },
   distributionList: {
     gap: 10,
@@ -1287,18 +1316,18 @@ const styles = StyleSheet.create({
   },
   distributionLabel: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textSecondary,
   },
   distributionValue: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
   barTrack: {
     height: 9,
     borderRadius: 999,
-    backgroundColor: "#0E1022",
+    backgroundColor: "#2C2C2E",
     overflow: "hidden",
   },
   barFill: {
@@ -1307,13 +1336,11 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textSecondary,
   },
   metaHint: {
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 18,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
   },
   confusionMatrixBlock: {
@@ -1326,46 +1353,58 @@ const styles = StyleSheet.create({
     gap: 8,
     width: "100%",
   },
+  confusionMatrixTableNarrow: {
+    width: "auto",
+  },
+  confusionMatrixScrollContent: {
+    paddingRight: 2,
+  },
   confusionMatrixRow: {
     flexDirection: "row",
-    gap: 4,
+    gap: 6,
   },
   confusionMatrixCell: {
     flex: 1,
     minWidth: 0,
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
     paddingVertical: 8,
     borderRadius: ds.radius.md,
     borderWidth: 1,
     borderColor: "rgba(148, 163, 184, 0.12)",
     justifyContent: "center",
   },
+  confusionMatrixCellNarrow: {
+    minWidth: 108,
+  },
+  confusionMatrixAxisCellNarrow: {
+    minWidth: 112,
+  },
   confusionMatrixCornerCell: {
-    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    backgroundColor: "#1C1C1E",
   },
   confusionMatrixHeaderCell: {
-    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    backgroundColor: "#1C1C1E",
   },
   confusionMatrixRowLabelCell: {
-    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    backgroundColor: "#1C1C1E",
   },
   confusionMatrixAxisText: {
     color: ds.color.textTertiary,
     fontSize: 9,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   confusionMatrixHeaderText: {
     color: ds.color.textPrimary,
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+    fontWeight: "600",
     textAlign: "center",
   },
   confusionMatrixRowLabel: {
     color: ds.color.textPrimary,
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+    fontWeight: "600",
     textAlign: "center",
   },
   confusionMatrixValueCell: {
@@ -1374,17 +1413,17 @@ const styles = StyleSheet.create({
   confusionMatrixValueText: {
     color: ds.color.textPrimary,
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
   },
   confusionMatrixPctText: {
     color: ds.color.textSecondary,
     fontSize: 9,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
   },
   metaSectionLabel: {
     color: ds.color.textPrimary,
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
   metricsList: {
     gap: 10,
@@ -1412,18 +1451,18 @@ const styles = StyleSheet.create({
   },
   metricRowLabel: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textPrimary,
   },
   metricRowValue: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
     color: ds.color.textSecondary,
     minWidth: 58,
   },
   metricSupport: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textTertiary,
   },
   trendList: {
@@ -1448,7 +1487,7 @@ const styles = StyleSheet.create({
   },
   trendVersionText: {
     fontSize: 14,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     color: ds.color.textPrimary,
   },
   trendActiveBadge: {
@@ -1461,19 +1500,19 @@ const styles = StyleSheet.create({
   },
   trendActiveBadgeText: {
     fontSize: 10,
-    fontFamily: "Inter_700Bold",
-    color: "#34D399",
+    fontWeight: "700",
+    color: "#30D158",
     textTransform: "uppercase",
   },
   trendMetricText: {
     fontSize: 13,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     color: ds.color.success,
   },
   trendBarTrack: {
     height: 10,
     borderRadius: 999,
-    backgroundColor: "#0E1022",
+    backgroundColor: "#2C2C2E",
     overflow: "hidden",
   },
   trendBarFill: {
@@ -1483,25 +1522,23 @@ const styles = StyleSheet.create({
   },
   trendMetaText: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500",
     color: ds.color.textSecondary,
   },
   trendMetaSubText: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
     color: ds.color.textTertiary,
   },
   title: {
     color: ds.color.textPrimary,
     fontSize: 26,
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700",
     textAlign: "center",
   },
   subtitle: {
     color: ds.color.textSecondary,
     fontSize: 14,
     lineHeight: 20,
-    fontFamily: "Inter_400Regular",
     textAlign: "center",
   },
 });

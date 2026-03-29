@@ -90,8 +90,8 @@ export function buildJointDeviationMap(
 }
 
 /** Return a hex color corresponding to a normalised deviation score. */
-export function getHeatmapColor(score: number): "#34D399" | "#FBBF24" | "#F87171" {
-  if (score <= 0.2) return "#34D399"; // green  – within range
-  if (score <= 0.5) return "#FBBF24"; // yellow – small deviation
-  return "#F87171";                   // red    – large deviation
+export function getHeatmapColor(score: number): "#30D158" | "#FFD60A" | "#FF453A" {
+  if (score <= 0.2) return "#30D158"; // green  – within range
+  if (score <= 0.5) return "#FFD60A"; // yellow – small deviation
+  return "#FF453A";                   // red    – large deviation
 }
