@@ -1,15 +1,14 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
-# dependencies
+# ─── Dependencies ────────────────────────────────────────────
 node_modules/
 
-# Expo
+# ─── Expo / Metro ────────────────────────────────────────────
 .expo/
-dist/
 web-build/
-expo-env.d.ts
+.metro-health-check*
 
-# Native
+# ─── Native build artifacts ──────────────────────────────────
 ios/
 android/
 *.orig.*
@@ -19,53 +18,47 @@ android/
 *.key
 *.mobileprovision
 
-# Metro
-.metro-health-check*
-
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
+# ─── macOS ────────────────────────────────────────────────────
 .DS_Store
 *.pem
 
-# local env files
+# ─── Environment / secrets ───────────────────────────────────
 .env*.local
 
-# typescript
+# ─── TypeScript build info ───────────────────────────────────
 *.tsbuildinfo
 .vercel
 
-#.env
-
-# videos
+# ─── Videos ──────────────────────────────────────────────────
 *.mp4
 
-# Python
+# ─── Python ──────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-#*.env
 *.venv
 venv/
 ENV/
-env/
 env.bak/
 venv.bak/
 
-# Server build output
+# ─── Packages: server ────────────────────────────────────────
 packages/server/dist/
-
-# Uploads (runtime data)
-uploads/
 packages/server/uploads/
+server_dist/
 
-# Logs
-logs
+# ─── Packages: app (auto-generated) ─────────────────────────
+# expo-env.d.ts is also in packages/app/.gitignore
+
+# ─── Logs ────────────────────────────────────────────────────
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log* 
+yarn-error.log*
+
+# ─── Debug ───────────────────────────────────────────────────
+npm-debug.*
+yarn-debug.*
+yarn-error.*
