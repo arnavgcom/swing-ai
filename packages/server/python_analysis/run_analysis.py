@@ -304,6 +304,10 @@ def main():
         )
         from python_analysis.background_analyzer import analyze_background
         from python_analysis.sports.registry import get_analyzer
+        from python_analysis.temporal_features import (
+            extract_temporal_sequence,
+            temporal_sequence_to_list,
+        )
 
         cap = cv2.VideoCapture(args.video_path)
         if not cap.isOpened():
@@ -479,6 +483,14 @@ def main():
                 "modelVersion": diag.get("modelVersion"),
                 "reasons": list(diag.get("reasons", [])),
             }
+            # Store compact temporal sequence for future LSTM training
+            try:
+                temporal_seq = extract_temporal_sequence(
+                    segment, fps, frame_width, frame_height,
+                )
+                diag["classificationDebug"]["temporalSequence"] = temporal_sequence_to_list(temporal_seq)
+            except Exception:
+                pass
             shot_label_diagnostics.append(diag)
 
         target_drill_label = movement if movement in ("forehand", "backhand") else ""

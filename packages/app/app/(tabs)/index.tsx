@@ -45,7 +45,6 @@ import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
 import { formatDateTimeInTimeZone, formatMonthDayInTimeZone, parseApiDate, resolveUserTimeZone } from "@/lib/timezone";
 import { useSport } from "@/lib/sport-context";
-import { TabHeader } from "@/components/TabHeader";
 import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/components/TabScreenIntro";
 import AdminDashboardWorkspace from "@/components/AdminDashboardWorkspace";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -1128,8 +1127,6 @@ export default function DashboardScreen() {
 
   return (
     <View style={styles.container}>
-      <TabHeader />
-
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.scroll}

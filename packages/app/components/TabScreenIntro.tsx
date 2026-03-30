@@ -1,5 +1,13 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, Pressable, Image, Platform } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { router, usePathname } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
+import { useAuth } from "@/lib/auth-context";
+import { useSport } from "@/lib/sport-context";
+import { sportColors } from "@/constants/colors";
+import { resolveClientMediaUrl } from "@/lib/media";
 import { ds } from "@/constants/design-system";
 
 type TabScreenIntroProps = {
@@ -48,11 +56,43 @@ export function TabScreenIntro({
 }: TabScreenIntroProps) {
   const hasControls = hasRenderableContent(controls);
   const hasFilters = hasRenderableContent(children);
+  const insets = useSafeAreaInsets();
+  const pathname = usePathname();
+  const { user } = useAuth();
+  const { selectedSport } = useSport();
+  const sc = sportColors[selectedSport?.name || ""] || { primary: "#0A84FF", gradient: "#5A4BD1" };
+  const avatarUrl = resolveClientMediaUrl(user?.avatarUrl);
+  const avatarSource = avatarUrl ? { uri: avatarUrl } : null;
+  const webTopInset = Platform.OS === "web" ? 67 : 0;
 
   return (
     <View>
-      <View style={styles.headerSection}>
-        <Text style={[styles.title, { color: titleColor }]}>{title}</Text>
+      <View style={[styles.headerSection, { paddingTop: insets.top + 8 + webTopInset }]}>
+        <View style={styles.titleRow}>
+          <Text style={[styles.title, { color: titleColor, flex: 1 }]}>{title}</Text>
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push({
+                pathname: "/profile",
+                params: pathname ? { returnTo: pathname } : undefined,
+              });
+            }}
+            style={[
+              styles.iconCircle,
+              avatarSource && {
+                borderColor: sc.primary,
+                borderWidth: 2,
+              },
+            ]}
+          >
+            {avatarSource ? (
+              <Image source={avatarSource} style={styles.avatarImage} />
+            ) : (
+              <Ionicons name="person" size={16} color={sc.primary} />
+            )}
+          </Pressable>
+        </View>
         <Text style={[styles.subtitle, { color: subtitleColor, maxWidth: subtitleMaxWidth }]}>
           {subtitle}
         </Text>
@@ -97,15 +137,37 @@ export function TabScreenFilterRow({ children }: TabScreenFilterRowProps) {
 
 const styles = StyleSheet.create({
   headerSection: {
-    marginTop: ds.space.xl,
     marginBottom: 8,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: ds.space.md,
   },
   title: {
     fontSize: 26,
     fontWeight: "700",
   },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: ds.radius.pill,
+    backgroundColor: ds.color.glass,
+    borderWidth: 1,
+    borderColor: ds.color.glassBorder,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    ...ds.shadow.subtle,
+  },
+  avatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: ds.radius.pill,
+  },
   subtitle: {
-    marginTop: 10,
+    marginTop: 6,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "500",

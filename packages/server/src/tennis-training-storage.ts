@@ -22,6 +22,7 @@ export type TennisTrainingSample = {
   label: string;
   groupKey: string;
   featureValues: Record<string, unknown>;
+  temporalSequence?: number[][] | null;
 };
 
 type TennisTrainingDatasetRowInput = {
@@ -35,6 +36,7 @@ type TennisTrainingDatasetRowInput = {
   heuristicConfidence: number | null;
   heuristicReasons: string[];
   featureValues: Record<string, unknown>;
+  temporalSequence?: number[][] | null;
 };
 
 export type TennisTrainingDatasetSnapshot = {
@@ -187,6 +189,7 @@ function buildFeatureValues(
       shoulder_rotation_abs_deg: shoulderRotationDeltaDeg != null ? Math.abs(shoulderRotationDeltaDeg) : null,
       valid_pose_frames: validPoseFrames,
     },
+    temporalSequence: Array.isArray(dbg.temporalSequence) ? dbg.temporalSequence as number[][] : null,
   };
 }
 
@@ -262,6 +265,7 @@ export async function exportTennisTrainingDatasetSnapshot(params?: {
         label: manualLabel,
         groupKey: built.groupKey,
         featureValues: built.featureValues,
+        temporalSequence: built.temporalSequence || null,
       });
       analysisIds.add(String(row.analysis_id));
     }

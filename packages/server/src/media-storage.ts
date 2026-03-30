@@ -10,6 +10,7 @@ import { pipeline } from "node:stream/promises";
 import { db } from "./db";
 import { buildInsertAuditFields, buildUpdateAuditFields } from "./audit-metadata";
 import { resolveProjectPath } from "./env";
+import { getCachedR2Settings, onR2SettingsInvalidate } from "./r2-settings";
 import { sql } from "drizzle-orm";
 
 export type VideoStorageMode = "filesystem" | "r2";
@@ -57,8 +58,11 @@ function normalizeKeyPrefix(value: string, fallback: string): string {
   return raw || fallback;
 }
 
+onR2SettingsInvalidate(() => { cachedR2Client = null; });
+
 function getR2Bucket(): string {
-  const bucket = String(process.env.R2_BUCKET || "").trim();
+  const cfg = getCachedR2Settings();
+  const bucket = cfg.r2Bucket;
   if (!bucket) {
     throw new Error("R2_BUCKET is required when videoStorageMode is r2");
   }
@@ -70,10 +74,11 @@ function getR2Client(): S3Client {
     return cachedR2Client;
   }
 
-  const endpoint = String(process.env.R2_ENDPOINT || "").trim();
-  const accessKeyId = String(process.env.R2_ACCESS_KEY_ID || "").trim();
-  const secretAccessKey = String(process.env.R2_SECRET_ACCESS_KEY || "").trim();
-  const region = String(process.env.R2_REGION || "auto").trim() || "auto";
+  const cfg = getCachedR2Settings();
+  const endpoint = cfg.r2Endpoint;
+  const accessKeyId = cfg.r2AccessKeyId;
+  const secretAccessKey = cfg.r2SecretAccessKey;
+  const region = cfg.r2Region || "auto";
 
   if (!endpoint || !accessKeyId || !secretAccessKey) {
     throw new Error("R2 credentials are incomplete. Set R2_ENDPOINT, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY.");
@@ -93,9 +98,10 @@ function getR2Client(): S3Client {
 }
 
 function getR2Prefix(kind: MediaKind): string {
+  const cfg = getCachedR2Settings();
   return kind === "avatar"
-    ? normalizeKeyPrefix(process.env.R2_PLAYER_AVATAR_FOLDER || process.env.R2_PLAYER_AVATAR || "avatar", "avatar")
-    : normalizeKeyPrefix(process.env.R2_PLAYER_VIDEO_FOLDER || process.env.R2_PLAYER_VIDEO || "video", "video");
+    ? normalizeKeyPrefix(cfg.r2PlayerAvatarFolder || "avatar", "avatar")
+    : normalizeKeyPrefix(cfg.r2PlayerVideoFolder || "video", "video");
 }
 
 function isRelativeStorageKey(value: string): boolean {

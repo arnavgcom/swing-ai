@@ -126,6 +126,14 @@ function RootNavigator() {
           name="profile/sports-settings"
           options={{ headerShown: false }}
         />
+        <Stack.Screen
+          name="profile/ml-settings"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="profile/storage-settings"
+          options={{ headerShown: false }}
+        />
       </Stack>
 
       {(isLoading || isRedirecting) && (

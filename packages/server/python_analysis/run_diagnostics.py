@@ -863,6 +863,10 @@ def main():
             _segment_swings,
             _extract_features,
         )
+        from python_analysis.temporal_features import (
+            extract_temporal_sequence,
+            temporal_sequence_to_list,
+        )
 
         if not os.path.exists(args.video_path):
             raise FileNotFoundError(f"Video does not exist: {args.video_path}")
@@ -1045,6 +1049,14 @@ def main():
                         },
                     }
                 )
+                # Store compact temporal sequence for future LSTM training
+                try:
+                    temporal_seq = extract_temporal_sequence(
+                        segment_data, fps, frame_width, frame_height,
+                    )
+                    shot_segments[-1]["classificationDebug"]["temporalSequence"] = temporal_sequence_to_list(temporal_seq)
+                except Exception:
+                    pass
 
             target_drill_label = movement if movement in ("forehand", "backhand") else ""
 

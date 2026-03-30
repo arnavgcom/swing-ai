@@ -1129,6 +1129,76 @@ export async function updateAnalysisFpsSettings(
   return res.json();
 }
 
+// ── ML / LSTM Settings ────────────────────────────────────────
+
+export type MlSettings = {
+  lstmEnabled: boolean;
+  lstmEnsembleWeight: number;
+  lstmTrainingEnabled: boolean;
+  lstmMinTrainingRows: number;
+  lstmTrainingEpochs: number;
+  lstmTrainingBatchSize: number;
+  lstmLearningRate: number;
+  modelConfidenceThreshold: number;
+  modelMarginThreshold: number;
+};
+
+export async function fetchMlSettings(): Promise<MlSettings> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/ml-settings`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch ML settings");
+  return res.json();
+}
+
+export async function updateMlSettings(settings: Partial<MlSettings>): Promise<MlSettings> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/ml-settings`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok) throw new Error("Failed to update ML settings");
+  return res.json();
+}
+
+// ── R2 / Storage Settings ─────────────────────────────────────
+
+export type R2Settings = {
+  r2Endpoint: string;
+  r2Region: string;
+  r2Bucket: string;
+  r2AccessKeyId: string;
+  r2SecretAccessKey: string;
+  r2PlayerVideoFolder: string;
+  r2PlayerAvatarFolder: string;
+  r2PlayerModelFolder: string;
+  modelArtifactStorageMode: "filesystem" | "r2";
+};
+
+export async function fetchR2Settings(): Promise<R2Settings> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/r2-settings`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to fetch R2 settings");
+  return res.json();
+}
+
+export async function updateR2Settings(settings: Partial<R2Settings>): Promise<R2Settings> {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}api/platform/r2-settings`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok) throw new Error("Failed to update R2 settings");
+  return res.json();
+}
+
 export async function fetchSportsSettings(): Promise<{
   sports: SportAvailabilityResponse[];
   isAdmin: boolean;

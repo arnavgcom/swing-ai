@@ -24,7 +24,6 @@ import { uploadVideo, type AnalysisSummary } from "@/lib/api";
 import { getApiUrl } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
 import { useSport } from "@/lib/sport-context";
-import { TabHeader } from "@/components/TabHeader";
 import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/components/TabScreenIntro";
 import { ds } from "@/constants/design-system";
 import { formatDateTimeInTimeZone, resolveUserTimeZone } from "@/lib/timezone";
@@ -659,7 +658,6 @@ export default function UploadScreen() {
 
   return (
     <View style={styles.container}>
-      <TabHeader />
       <ScrollView
         contentContainerStyle={[
           styles.content,

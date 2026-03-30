@@ -5,7 +5,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from "react-native";
@@ -19,18 +18,16 @@ import * as Haptics from "expo-haptics";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
 import {
-  fetchAnalysisFpsSettings,
   type RecalculateAnalysesResponse,
+  fetchAnalysisFpsSettings,
   fetchDriveMovementClassificationModelSettings,
   fetchPoseLandmarkerSettings,
   fetchSportsSettings,
   fetchVideoValidationSettings,
-  fetchVideoStorageSettings,
   type AnalysisFpsStep,
   type DriveMovementClassificationModelOptionResponse,
   type SportAvailabilityResponse,
   type VideoValidationMode,
-  updateVideoStorageSettings,
 } from "@/lib/api";
 import type { PoseLandmarkerModel } from "@swing-ai/shared/pose-landmarker";
 
@@ -144,21 +141,17 @@ export default function ConfigureScreen() {
   const [selectedClassificationModelKey, setSelectedClassificationModelKey] = useState<string>("tennis-active");
   const [classificationModelLoading, setClassificationModelLoading] = useState(false);
   const [sports, setSports] = useState<SportAvailabilityResponse[]>([]);
-  const [videoStorageMode, setVideoStorageMode] = useState<"filesystem" | "r2">("filesystem");
-  const [videoStorageLoading, setVideoStorageLoading] = useState(false);
   const [activeRecalcRun, setActiveRecalcRun] = useState<RecalculateAnalysesResponse | null>(null);
   const canUseAdminApis = normalizeRole(user?.role) === "admin";
 
   const refreshAdminSettings = React.useCallback(async () => {
-    const [storageSettings, validationSettings, fpsSettings, poseSettings, sportsSettings, classificationModelSettings] = await Promise.all([
-      fetchVideoStorageSettings(),
+    const [validationSettings, fpsSettings, poseSettings, sportsSettings, classificationModelSettings] = await Promise.all([
       fetchVideoValidationSettings(),
       fetchAnalysisFpsSettings(),
       fetchPoseLandmarkerSettings(),
       fetchSportsSettings(),
       fetchDriveMovementClassificationModelSettings(),
     ]);
-    setVideoStorageMode(storageSettings.mode);
     setVideoValidationMode(validationSettings.mode);
     setLowImpactFpsStep(fpsSettings.lowImpactStep);
     setHighImpactFpsStep(fpsSettings.highImpactStep);
@@ -264,21 +257,6 @@ export default function ConfigureScreen() {
     }, [canUseAdminApis, refreshAdminSettings]),
   );
 
-  const handleVideoStorageToggle = async (enabled: boolean) => {
-    if (!canUseAdminApis) return;
-    setVideoStorageLoading(true);
-    const nextMode = enabled ? "r2" : "filesystem";
-    try {
-      await updateVideoStorageSettings(nextMode);
-      setVideoStorageMode(nextMode);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      Alert.alert("Error", "Failed to update video storage mode");
-    } finally {
-      setVideoStorageLoading(false);
-    }
-  };
-
   const handleBack = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (typeof router.canGoBack === "function" && router.canGoBack()) {
@@ -311,38 +289,24 @@ export default function ConfigureScreen() {
         <View style={styles.sectionGroup}>
           <Text style={styles.sectionLabel}>Platform</Text>
           <View style={styles.sectionCards}>
-            <View style={styles.navCard}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({ pathname: "/profile/storage-settings", params: childRouteParams });
+              }}
+              style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+            >
               <View style={styles.navCardIconWrap}>
-                <Ionicons
-                  name={videoStorageMode === "r2" ? "cloud-outline" : "folder-open-outline"}
-                  size={20}
-                  color={videoStorageMode === "r2" ? "#64D2FF" : "#0A84FF"}
-                />
+                <Ionicons name="cloud-outline" size={20} color="#64D2FF" />
               </View>
               <View style={styles.navCardBody}>
-                <Text style={styles.navCardTitle}>Video Storage Mode</Text>
+                <Text style={styles.navCardTitle}>Storage / R2 Settings</Text>
                 <Text style={styles.navCardDescription}>
-                  {videoStorageMode === "r2"
-                    ? "Store uploaded videos in Cloudflare R2"
-                    : "Store uploaded videos on the local filesystem"}
+                  Video storage mode, R2 credentials & folder prefixes
                 </Text>
               </View>
-              <View style={styles.storageModeControl}>
-                <Text style={styles.storageModeValue}>
-                  {videoStorageMode === "r2" ? "R2" : "Filesystem"}
-                </Text>
-              </View>
-              <Switch
-                value={videoStorageMode === "r2"}
-                disabled={videoStorageLoading}
-                onValueChange={(value) => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  handleVideoStorageToggle(value);
-                }}
-                trackColor={{ false: "#545458", true: "#64D2FF40" }}
-                thumbColor={videoStorageMode === "r2" ? "#64D2FF" : "#636366"}
-              />
-            </View>
+              <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+            </Pressable>
 
             <Pressable
               onPress={() => {
@@ -450,6 +414,26 @@ export default function ConfigureScreen() {
               </View>
               <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
             </Pressable>
+
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({ pathname: "/profile/ml-settings", params: childRouteParams });
+              }}
+              style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
+            >
+              <View style={styles.navCardIconWrap}>
+                <Ionicons name="hardware-chip-outline" size={20} color="#FF9F0A" />
+              </View>
+              <View style={styles.navCardBody}>
+                <Text style={styles.navCardTitle}>ML / LSTM Settings</Text>
+                <Text style={styles.navCardDescription}>
+                  Ensemble weights, thresholds & training params
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+            </Pressable>
+
           </View>
         </View>
 
@@ -646,17 +630,6 @@ const styles = StyleSheet.create({
     color: "#64D2FF",
     textTransform: "uppercase",
     letterSpacing: 0.4,
-  },
-  storageModeControl: {
-    alignItems: "flex-end",
-    gap: 8,
-  },
-  storageModeValue: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#8E8E93",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
   navCardTitle: {
     fontSize: 15,

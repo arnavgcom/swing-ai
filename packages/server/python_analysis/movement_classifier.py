@@ -1,8 +1,9 @@
 import math
+import os
 import numpy as np
 from typing import Any, Dict, List, Optional, Tuple
 
-from python_analysis.tennis_movement_model import predict_tennis_movement
+from python_analysis.tennis_movement_model import predict_tennis_movement, predict_tennis_movement_ensemble
 
 
 SPORT_MOVEMENTS = {
@@ -29,8 +30,8 @@ TENNIS_MIN_DISTANT_MEDIAN_BODY_AREA_RATIO = 0.006
 TENNIS_MIN_DISTANT_P75_BODY_AREA_RATIO = 0.0075
 TENNIS_MIN_DISTANT_MAX_BODY_AREA_RATIO = 0.012
 
-TENNIS_MODEL_CONFIDENCE_THRESHOLD = 0.58
-TENNIS_MODEL_MARGIN_THRESHOLD = 0.06
+TENNIS_MODEL_CONFIDENCE_THRESHOLD = float(os.environ.get("SWING_AI_MODEL_CONFIDENCE_THRESHOLD", "0.58"))
+TENNIS_MODEL_MARGIN_THRESHOLD = float(os.environ.get("SWING_AI_MODEL_MARGIN_THRESHOLD", "0.06"))
 
 
 def _compute_body_presence_metrics(
@@ -664,7 +665,13 @@ def classify_segment_movement_with_diagnostics(
             }
 
         if sport == "tennis":
-            model_prediction = _predict_tennis_model(features)
+            model_prediction = _predict_tennis_model(
+                features,
+                segment_data=segment_data,
+                fps=fps,
+                frame_width=frame_width,
+                frame_height=frame_height,
+            )
             if _is_actionable_tennis_model_prediction(model_prediction):
                 model_label = str(model_prediction.get("label", "unknown"))
                 model_confidence = float(model_prediction.get("confidence", 0.0))
@@ -768,9 +775,21 @@ def _build_tennis_key_features(features: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _predict_tennis_model(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _predict_tennis_model(
+    features: Dict[str, Any],
+    segment_data: Optional[List[Optional[Dict]]] = None,
+    fps: float = 30.0,
+    frame_width: int = 1920,
+    frame_height: int = 1080,
+) -> Optional[Dict[str, Any]]:
     model_input = _build_tennis_key_features(features)
-    return predict_tennis_movement(model_input)
+    return predict_tennis_movement_ensemble(
+        model_input,
+        segment_data=segment_data,
+        fps=fps,
+        frame_width=frame_width,
+        frame_height=frame_height,
+    )
 
 
 def _is_actionable_tennis_model_prediction(prediction: Optional[Dict[str, Any]]) -> bool:

@@ -41,7 +41,6 @@ import {
   resolveUserTimeZone,
 } from "@/lib/timezone";
 import { useSport } from "@/lib/sport-context";
-import { TabHeader } from "@/components/TabHeader";
 import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/components/TabScreenIntro";
 import { ds } from "@/constants/design-system";
 import { useTabBar } from "@/lib/tab-bar-context";
@@ -2130,8 +2129,6 @@ export default function HistoryScreen() {
 
   return (
     <View style={styles.container}>
-      <TabHeader />
-
       <Animated.View
         pointerEvents="box-none"
         style={[

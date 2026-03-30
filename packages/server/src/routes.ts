@@ -85,6 +85,8 @@ import {
   mapSportForApi,
 } from "./sport-availability";
 import { getPoseLandmarkerModel, getPoseLandmarkerPythonEnv, setPoseLandmarkerModel } from "./pose-landmarker-settings";
+import { getMlSettings, setMlSettings, getMlSettingsPythonEnv } from "./ml-settings";
+import { getR2Settings, setR2Settings, maskSecret } from "./r2-settings";
 import { exportTennisTrainingDatasetSnapshot } from "./tennis-training-storage";
 import {
   getDriveMovementClassificationModelPythonEnv,
@@ -198,11 +200,12 @@ function runPythonDiagnostics(
 ): Promise<any> {
   return (async () => {
     const pythonExecutable = resolvePythonExecutable();
-    const [poseLandmarkerEnv, classificationModelEnv] = await Promise.all([
+    const [poseLandmarkerEnv, classificationModelEnv, mlEnv] = await Promise.all([
       getPoseLandmarkerPythonEnv(),
       classificationModelSelection
         ? getDriveMovementClassificationModelPythonEnvForSelection(classificationModelSelection)
         : getDriveMovementClassificationModelPythonEnv(),
+      getMlSettingsPythonEnv(),
     ]);
 
     const args = [
@@ -226,7 +229,7 @@ function runPythonDiagnostics(
         args,
         {
           cwd: PROJECT_ROOT,
-          env: { ...process.env, ...poseLandmarkerEnv, ...classificationModelEnv },
+          env: { ...process.env, ...poseLandmarkerEnv, ...classificationModelEnv, ...mlEnv },
           timeout: 120000,
           maxBuffer: 10 * 1024 * 1024,
         },
@@ -1037,11 +1040,16 @@ async function getTennisDatasetInsights(params?: {
 }
 
 async function trainTennisMovementModel(jobId: string, actorUserId: string) {
-  const exportSummary = await exportTennisTrainingDatasetSnapshot({
-    actorUserId,
-    datasetName: `tennis-training-${jobId}`,
-    notes: `Generated for job ${jobId}`,
-  });
+  const [exportSummary, mlSettings] = await Promise.all([
+    exportTennisTrainingDatasetSnapshot({
+      actorUserId,
+      datasetName: `tennis-training-${jobId}`,
+      notes: `Generated for job ${jobId}`,
+    }),
+    getMlSettings(actorUserId),
+  ]);
+
+  // Train RF model (existing pipeline)
   const trainingSummary = await runPythonJsonModuleWithInput(
     "python_analysis.train_tennis_movement_model",
     ["--dataset-json-stdin"],
@@ -1051,6 +1059,36 @@ async function trainTennisMovementModel(jobId: string, actorUserId: string) {
       rows: exportSummary.samples,
     }),
   );
+
+  // Train LSTM model if enabled and enough rows have temporal sequences
+  let lstmTrainingSummary: Record<string, unknown> | null = null;
+  if (mlSettings.lstmTrainingEnabled) {
+    const rowsWithTemporal = exportSummary.samples.filter(
+      (s: any) => Array.isArray(s.temporalSequence) && s.temporalSequence.length > 0,
+    );
+    if (rowsWithTemporal.length >= mlSettings.lstmMinTrainingRows) {
+      try {
+        lstmTrainingSummary = await runPythonJsonModuleWithInput(
+          "python_analysis.train_lstm_movement_model",
+          [
+            "--dataset-json-stdin",
+            "--epochs", String(mlSettings.lstmTrainingEpochs),
+            "--batch-size", String(mlSettings.lstmTrainingBatchSize),
+            "--lr", String(mlSettings.lstmLearningRate),
+          ],
+          JSON.stringify({
+            datasetId: exportSummary.datasetId,
+            datasetPath: exportSummary.outputPath,
+            rows: exportSummary.samples,
+          }),
+        ) as Record<string, unknown>;
+      } catch {
+        // LSTM training is optional — don't fail the whole job
+        lstmTrainingSummary = null;
+      }
+    }
+  }
+
   const status = await getTennisTrainingStatus();
   return {
     ...status,
@@ -1078,6 +1116,13 @@ async function trainTennisMovementModel(jobId: string, actorUserId: string) {
           : {},
       datasetId: exportSummary.datasetId,
     },
+    lstmTrainingSummary: lstmTrainingSummary ? {
+      modelOut: String(lstmTrainingSummary?.modelOut || ""),
+      trainRows: Number(lstmTrainingSummary?.trainRows || 0),
+      valRows: Number(lstmTrainingSummary?.valRows || 0),
+      macroF1: typeof lstmTrainingSummary?.macroF1 === "number" ? lstmTrainingSummary.macroF1 : null,
+      bestValF1: typeof lstmTrainingSummary?.bestValF1 === "number" ? lstmTrainingSummary.bestValF1 : null,
+    } : null,
   };
 }
 
@@ -4374,6 +4419,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       await setAnalysisFpsSettings(settings, userId);
       res.json(settings);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ── ML / LSTM Settings ──────────────────────────────────────────────
+
+  app.get("/api/platform/ml-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const settings = await getMlSettings(userId);
+      res.json(settings);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/platform/ml-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const updated = await setMlSettings(req.body || {}, userId);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ── R2 / Storage Settings ──────────────────────────────────────────
+
+  app.get("/api/platform/r2-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const settings = await getR2Settings(userId);
+      // Mask secrets for the response
+      res.json({
+        ...settings,
+        r2AccessKeyId: maskSecret(settings.r2AccessKeyId),
+        r2SecretAccessKey: maskSecret(settings.r2SecretAccessKey),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/platform/r2-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (currentUser?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const updated = await setR2Settings(req.body || {}, userId);
+      res.json({
+        ...updated,
+        r2AccessKeyId: maskSecret(updated.r2AccessKeyId),
+        r2SecretAccessKey: maskSecret(updated.r2SecretAccessKey),
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

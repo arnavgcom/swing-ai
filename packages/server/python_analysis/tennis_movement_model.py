@@ -1,6 +1,8 @@
 import os
 from functools import lru_cache
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+
+import numpy as np
 
 try:
     import joblib
@@ -11,6 +13,14 @@ except Exception:  # pragma: no cover - runtime fallback when sklearn stack is a
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "tennis_movement_classifier.joblib")
 TENNIS_MOVEMENT_LABELS = ("forehand", "backhand", "serve", "volley", "unknown")
+
+# Ensemble weight for LSTM when both models are available.
+# Read at call time from env (set by server from DB settings).
+def _get_lstm_ensemble_weight() -> float:
+    return float(os.environ.get("SWING_AI_LSTM_ENSEMBLE_WEIGHT", "0.6"))
+
+def _is_lstm_enabled() -> bool:
+    return os.environ.get("SWING_AI_LSTM_ENABLED", "1") != "0"
 
 
 def resolve_tennis_movement_model_path() -> str:
@@ -97,3 +107,77 @@ def predict_tennis_movement(features: Dict[str, Any]) -> Optional[Dict[str, Any]
         }
     except Exception:
         return None
+
+
+def predict_tennis_movement_ensemble(
+    features: Dict[str, Any],
+    segment_data: Optional[List[Optional[Dict]]] = None,
+    fps: float = 30.0,
+    frame_width: int = 1920,
+    frame_height: int = 1080,
+) -> Optional[Dict[str, Any]]:
+    """Ensemble prediction combining RF and LSTM models.
+
+    When both models are available, probabilities are combined as a weighted
+    average (LSTM_ENSEMBLE_WEIGHT for LSTM, 1-weight for RF). When only one
+    model is available, that model's prediction is returned directly.
+    """
+    rf_pred = predict_tennis_movement(features)
+
+    lstm_pred = None
+    if segment_data is not None and _is_lstm_enabled():
+        try:
+            from python_analysis.lstm_model import predict_lstm
+            lstm_pred = predict_lstm(
+                pose_data=segment_data,
+                fps=fps,
+                frame_width=frame_width,
+                frame_height=frame_height,
+            )
+        except Exception:
+            pass
+
+    if rf_pred is None and lstm_pred is None:
+        return None
+
+    if rf_pred is not None and lstm_pred is None:
+        return rf_pred
+
+    if rf_pred is None and lstm_pred is not None:
+        return lstm_pred
+
+    # Both models available — weighted ensemble
+    rf_probs = rf_pred.get("probabilities", {})
+    lstm_probs = lstm_pred.get("probabilities", {})
+
+    all_labels = set(rf_probs.keys()) | set(lstm_probs.keys())
+    w_lstm = _get_lstm_ensemble_weight()
+    w_rf = 1.0 - w_lstm
+
+    ensemble_probs = {}
+    for lbl in all_labels:
+        ensemble_probs[lbl] = (
+            w_rf * rf_probs.get(lbl, 0.0)
+            + w_lstm * lstm_probs.get(lbl, 0.0)
+        )
+
+    if not ensemble_probs:
+        return rf_pred
+
+    label = max(ensemble_probs, key=lambda k: ensemble_probs[k])
+    confidence = float(ensemble_probs[label])
+    sorted_p = sorted(ensemble_probs.values(), reverse=True)
+    margin = confidence - (sorted_p[1] if len(sorted_p) > 1 else 0.0)
+
+    return {
+        "label": label,
+        "confidence": confidence,
+        "margin": float(margin),
+        "probabilities": ensemble_probs,
+        "modelVersion": resolve_tennis_movement_model_version(),
+        "source": "ensemble",
+        "rfLabel": rf_pred.get("label"),
+        "rfConfidence": rf_pred.get("confidence"),
+        "lstmLabel": lstm_pred.get("label"),
+        "lstmConfidence": lstm_pred.get("confidence"),
+    }
