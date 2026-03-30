@@ -164,7 +164,7 @@ export default function AnalysisDiagnosticsScreen() {
           <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
         </Pressable>
         <Text style={styles.title}>AI-Powered Analysis</Text>
-        <View style={styles.backButton} />
+        <View style={styles.headerSpacer} />
       </View>
 
       {!diagnostics ? (
@@ -370,4 +370,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   shotTitle: { fontSize: 12, fontWeight: "600", color: ds.color.textSecondary },
+  shotSub: { fontSize: 12, fontWeight: "500", color: ds.color.textTertiary },
+  cardBody: { fontSize: 13, fontWeight: "500", color: ds.color.textSecondary, lineHeight: 19 },
+  headerSpacer: { width: 40, height: 40 },
 });

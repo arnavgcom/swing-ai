@@ -2919,9 +2919,9 @@ export default function AnalysisDetailScreen() {
             >
               <View style={styles.feedbackSheetContent}>
                 <View style={styles.feedbackSheetHandle} />
-                <Text style={styles.feedbackSheetTitle}>Help us improve AI diagnostics</Text>
+                <Text style={styles.feedbackSheetTitle}>Help us improve AI-Powered Analysis</Text>
                 <Text style={styles.feedbackSheetSubtitle}>
-                  Share any discrepancy you notice in diagnostics or metrics.
+                  Share any discrepancy you notice in AI-Powered Analysis or metrics.
                 </Text>
 
                 <Text style={styles.feedbackGroupTitle}>What felt off?</Text>
@@ -4356,6 +4356,8 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     marginTop: 8,
+    color: "#FFFFFF",
+  },
   enrichmentNotice: {
     marginTop: 10,
     marginBottom: 2,
@@ -4375,8 +4377,6 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontWeight: "500",
     color: "#BFDBFE",
-  },
-    color: "#FFFFFF",
   },
   processingSubtitle: {
     fontSize: 14,

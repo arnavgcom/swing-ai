@@ -1,21 +1,18 @@
 import { Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
-import { Platform, StyleSheet, useWindowDimensions } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React from "react";
 import { TabBarProvider, useTabBar } from "@/lib/tab-bar-context";
 
-const PILL_HEIGHT = 58;
-const PILL_BOTTOM_OFFSET = 16; // distance from safe area bottom
+const TAB_BAR_HEIGHT = 50;
 
 function ClassicTabLayout() {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
   const isIOS = Platform.OS === "ios";
   const { translateY } = useTabBar();
-  const hideDistance = PILL_HEIGHT + PILL_BOTTOM_OFFSET + insets.bottom + 20;
-  const horizontalInset = Math.max(12, Math.min(24, Math.round(width * 0.07)));
+  const hideDistance = TAB_BAR_HEIGHT + insets.bottom + 12;
 
   const animatedTranslate = translateY.interpolate({
     inputRange: [0, 1],
@@ -28,42 +25,39 @@ function ClassicTabLayout() {
         headerShown: false,
         tabBarShowLabel: true,
         tabBarActiveTintColor: "#0A84FF",
-        tabBarInactiveTintColor: "#8E8E93",
+        tabBarInactiveTintColor: "#636366",
         tabBarStyle: {
           position: "absolute",
-          bottom: PILL_BOTTOM_OFFSET + insets.bottom,
-          left: horizontalInset,
-          right: horizontalInset,
-          height: PILL_HEIGHT,
-          borderRadius: PILL_HEIGHT / 2,
-          backgroundColor: isIOS ? "transparent" : "rgba(28,28,30,0.82)",
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: "rgba(255,255,255,0.18)",
-          elevation: 4,
-          paddingBottom: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: TAB_BAR_HEIGHT + insets.bottom,
+          paddingBottom: insets.bottom,
+          backgroundColor: isIOS ? "transparent" : "rgba(28,28,30,0.96)",
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: "rgba(255,255,255,0.08)",
+          borderColor: "transparent",
+          elevation: 0,
           overflow: "hidden",
           transform: [{ translateY: animatedTranslate as any }],
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: 0.3,
-          shadowRadius: 14,
+          shadowColor: "transparent",
+          shadowOpacity: 0,
         },
         tabBarItemStyle: {
-          paddingTop: 0,
-          paddingBottom: 0,
+          paddingTop: 6,
+          paddingBottom: 2,
           justifyContent: "center",
           alignItems: "center",
         },
         tabBarLabelStyle: {
-          fontSize: 11,
-          lineHeight: 14,
-          fontWeight: "600",
-          marginBottom: 4,
+          fontSize: 10,
+          lineHeight: 12,
+          fontWeight: "500",
+          marginTop: 2,
           alignSelf: "center",
           textAlign: "center",
         },
         tabBarIconStyle: {
-          marginTop: 6,
           marginBottom: 0,
           alignSelf: "center",
         },
@@ -72,7 +66,7 @@ function ClassicTabLayout() {
             <BlurView
               intensity={80}
               tint="systemChromeMaterialDark"
-              style={[StyleSheet.absoluteFill, { borderRadius: PILL_HEIGHT / 2, overflow: "hidden" }]}
+              style={StyleSheet.absoluteFill}
             />
           ) : null,
       }}
@@ -81,21 +75,21 @@ function ClassicTabLayout() {
         name="index"
         options={{
           title: "Dashboard",
-          tabBarIcon: ({ color }) => <Ionicons name="stats-chart" size={18} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="stats-chart" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="upload"
         options={{
           title: "Analyse",
-          tabBarIcon: ({ color }) => <Ionicons name="add-circle-outline" size={18} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="add-circle-outline" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="history"
         options={{
           title: "Track",
-          tabBarIcon: ({ color }) => <Ionicons name="time-outline" size={18} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="time-outline" size={22} color={color} />,
         }}
       />
     </Tabs>

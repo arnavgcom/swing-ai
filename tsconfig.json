@@ -9,9 +9,16 @@
     "resolveJsonModule": true
   },
   "references": [
-    { "path": "packages/shared" },
-    { "path": "packages/server" },
-    { "path": "packages/app" }
+    {
+      "path": "packages/shared"
+    },
+    {
+      "path": "packages/server"
+    },
+    {
+      "path": "packages/app"
+    }
   ],
-  "include": []
+  "include": [],
+  "extends": "expo/tsconfig.base"
 }
