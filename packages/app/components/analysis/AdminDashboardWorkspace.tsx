@@ -295,10 +295,12 @@ export default function AdminDashboardWorkspace({
   }, [mismatchSectionOffset]);
 
   React.useEffect(() => {
+    const offsets = sectionOffsets.current;
+    // Guard: don't switch sections until layout offsets have been measured
+    if (offsets.models === 0 && offsets.data === 0 && offsets.mismatches === 0) return;
     let nextSection: SectionKey = "models";
-    if (scrollY >= sectionOffsets.current.mismatches - 140) nextSection = "mismatches";
-    else if (scrollY >= sectionOffsets.current.data - 140) nextSection = "data";
-    else if (scrollY >= sectionOffsets.current.models - 140) nextSection = "models";
+    if (offsets.mismatches > 0 && scrollY >= offsets.mismatches - 140) nextSection = "mismatches";
+    else if (offsets.data > 0 && scrollY >= offsets.data - 140) nextSection = "data";
     setActiveSection((current) => (current === nextSection ? current : nextSection));
   }, [scrollY]);
 

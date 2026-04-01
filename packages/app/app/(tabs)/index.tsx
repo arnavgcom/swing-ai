@@ -820,8 +820,6 @@ export default function DashboardScreen() {
     setSelectedStroke(null);
   }, []);
 
-  const [hasActiveProcessing, setHasActiveProcessing] = React.useState(false);
-
   const {
     data: allAnalyses,
     isLoading,
@@ -830,15 +828,15 @@ export default function DashboardScreen() {
   } = useQuery<AnalysisSummary[]>({
     queryKey: ["analyses-summary"],
     queryFn: () => fetchAnalysesSummary(),
-    refetchInterval: hasActiveProcessing ? 5000 : false,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return false;
+      const active = data.some((a) => a.status === "processing" || a.status === "queued");
+      return active ? 5000 : false;
+    },
     enabled: !!user,
     retry: false,
   });
-
-  React.useEffect(() => {
-    const active = (allAnalyses || []).some((a) => a.status === "processing" || a.status === "queued");
-    setHasActiveProcessing(active);
-  }, [allAnalyses]);
 
   const {
     data: discrepancy,
