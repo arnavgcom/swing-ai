@@ -39,7 +39,7 @@ const DEFAULT_ML_SETTINGS: MlSettings = {
   lstmEnsembleWeight: 0.6,
   lstmTrainingEnabled: true,
   lstmMinTrainingRows: 20,
-  lstmTrainingEpochs: 80,
+  lstmTrainingEpochs: 150,
   lstmTrainingBatchSize: 32,
   lstmLearningRate: 0.001,
   modelConfidenceThreshold: 0.58,

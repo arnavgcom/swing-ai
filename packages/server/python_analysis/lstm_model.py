@@ -2,8 +2,8 @@
 
 Model architecture:
   Input  → (batch, SEQ_LEN, NUM_FEATURES)          [32 × 10]
-  BiLSTM → 2 layers, hidden=64                      → (batch, SEQ_LEN, 128)
-  Attention pool → weighted sum over timesteps       → (batch, 128)
+  BiLSTM → 2 layers, hidden=128                     → (batch, SEQ_LEN, 256)
+  Attention pool → weighted sum over timesteps       → (batch, 256)
   FC → dropout(0.3) → num_classes logits             → (batch, 5)
 
 The attention mechanism lets the network focus on the most discriminative

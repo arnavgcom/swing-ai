@@ -9,11 +9,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
 import joblib
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import GroupKFold, StratifiedKFold, cross_val_predict, train_test_split
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -171,15 +172,16 @@ def _load_rows_from_json_payload(payload: Dict[str, Any]) -> Tuple[List[Dict[str
 def _build_pipeline() -> Pipeline:
     return Pipeline([
         ("vectorizer", DictVectorizer(sparse=False)),
+        ("scaler", StandardScaler()),
         (
             "classifier",
-            RandomForestClassifier(
-                n_estimators=1000,
-                max_depth=None,
-                min_samples_leaf=1,
-                class_weight="balanced_subsample",
+            GradientBoostingClassifier(
+                n_estimators=300,
+                max_depth=4,
+                min_samples_leaf=3,
+                learning_rate=0.05,
+                subsample=0.8,
                 random_state=42,
-                n_jobs=-1,
             ),
         ),
     ])
@@ -211,6 +213,14 @@ def main() -> int:
     evaluation_mode = "holdout"
     grouped_evaluation = False
 
+    # Compute sample weights for class imbalance
+    import numpy as np
+    label_counts = Counter(labels)
+    total = len(labels)
+    num_classes = len(label_counts)
+    class_weights = {cls: total / (num_classes * cnt) for cls, cnt in label_counts.items()}
+    sample_weights = np.array([class_weights[label] for label in labels])
+
     if unique_groups >= 4:
         evaluation_mode = f"group-{unique_groups}fold"
         grouped_evaluation = True
@@ -222,6 +232,7 @@ def main() -> int:
             groups=groups,
             cv=GroupKFold(n_splits=unique_groups),
             n_jobs=1,
+            params={"classifier__sample_weight": sample_weights},
         )
         train_x = samples
         train_y = labels
@@ -237,26 +248,28 @@ def main() -> int:
             y=labels,
             cv=StratifiedKFold(n_splits=splits, shuffle=True, random_state=42),
             n_jobs=1,
+            params={"classifier__sample_weight": sample_weights},
         )
         train_x = samples
         train_y = labels
         test_x = samples
         test_y = labels
     else:
-        train_x, test_x, train_y, test_y = train_test_split(
+        train_x, test_x, train_y, test_y, train_weights, _ = train_test_split(
             samples,
             labels,
+            sample_weights,
             test_size=0.2,
             random_state=42,
             stratify=labels if len(set(labels)) > 1 else None,
         )
 
         pipeline = _build_pipeline()
-        pipeline.fit(train_x, train_y)
+        pipeline.fit(train_x, train_y, classifier__sample_weight=train_weights)
         predicted = pipeline.predict(test_x)
 
     pipeline = _build_pipeline()
-    pipeline.fit(samples, labels)
+    pipeline.fit(samples, labels, classifier__sample_weight=sample_weights)
 
     label_order = list(getattr(pipeline.named_steps["classifier"], "classes_", []))
     report = classification_report(test_y, predicted, output_dict=True, zero_division=0)

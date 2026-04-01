@@ -1204,7 +1204,7 @@ def _extract_features(
         swing_arc_ratio = max(swing_arc_ratio, l_arc)
 
     avg_wrist_height = float(np.mean(wrist_heights)) if wrist_heights else 0
-    is_overhead = avg_wrist_height > 0.15
+    is_overhead = avg_wrist_height > 0.08
     is_serve = _detect_serve(wrist_heights, pose_data, frame_height)
 
     dominant_side, dominant_side_confidence = _determine_dominant_side(
@@ -1215,7 +1215,7 @@ def _extract_features(
         preferred_dominant_side,
     )
 
-    is_compact_forward = swing_arc_ratio < 0.2 and max_wrist_speed < 0.35
+    is_compact_forward = swing_arc_ratio < 0.12 and max_wrist_speed < 1.5
 
     is_cross_body = _detect_cross_body(pose_data, frame_width, dominant_side)
 
@@ -1457,17 +1457,17 @@ def _detect_serve(
     pose_data: List[Optional[Dict]],
     frame_height: int,
 ) -> bool:
-    if not wrist_heights or len(wrist_heights) < 8:
+    if not wrist_heights or len(wrist_heights) < 5:
         return False
 
-    high_frames = sum(1 for h in wrist_heights if h > 0.25)
+    high_frames = sum(1 for h in wrist_heights if h > 0.12)
     high_ratio = high_frames / len(wrist_heights)
 
-    if high_ratio < 0.12:
+    if high_ratio < 0.08:
         return False
 
     peak_height = max(wrist_heights)
-    if peak_height < 0.28:
+    if peak_height < 0.18:
         return False
 
     visible_pose_frames = 0
@@ -1498,21 +1498,21 @@ def _detect_serve(
             if value is not None
         ) if right_raise is not None and left_raise is not None else 0.0
 
-        if max_raise >= 0.18:
+        if max_raise >= 0.10:
             strong_raise_votes += 1
 
-        if (max_raise >= 0.2 and min_raise >= 0.02) or (max_raise >= 0.24 and min_raise >= -0.02):
+        if (max_raise >= 0.12 and min_raise >= 0.0) or (max_raise >= 0.16 and min_raise >= -0.05):
             serve_pose_votes += 1
 
     if visible_pose_frames == 0:
-        return peak_height >= 0.4 and high_ratio >= 0.22
+        return peak_height >= 0.25 and high_ratio >= 0.15
 
     strong_raise_ratio = strong_raise_votes / visible_pose_frames
     serve_pose_ratio = serve_pose_votes / visible_pose_frames
 
     return (
-        (serve_pose_votes >= 2 and serve_pose_ratio >= 0.12 and high_ratio >= 0.16)
-        or (strong_raise_ratio >= 0.22 and peak_height >= 0.4 and high_ratio >= 0.22)
+        (serve_pose_votes >= 2 and serve_pose_ratio >= 0.08 and high_ratio >= 0.10)
+        or (strong_raise_ratio >= 0.15 and peak_height >= 0.25 and high_ratio >= 0.15)
     )
 
 

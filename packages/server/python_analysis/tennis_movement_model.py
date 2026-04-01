@@ -17,7 +17,7 @@ TENNIS_MOVEMENT_LABELS = ("forehand", "backhand", "serve", "volley", "unknown")
 # Ensemble weight for LSTM when both models are available.
 # Read at call time from env (set by server from DB settings).
 def _get_lstm_ensemble_weight() -> float:
-    return float(os.environ.get("SWING_AI_LSTM_ENSEMBLE_WEIGHT", "0.6"))
+    return float(os.environ.get("SWING_AI_LSTM_ENSEMBLE_WEIGHT", "0.85"))
 
 def _is_lstm_enabled() -> bool:
     return os.environ.get("SWING_AI_LSTM_ENABLED", "1") != "0"
@@ -149,6 +149,11 @@ def predict_tennis_movement_ensemble(
     # Both models available — weighted ensemble
     rf_probs = rf_pred.get("probabilities", {})
     lstm_probs = lstm_pred.get("probabilities", {})
+
+    # If LSTM is highly confident, trust it alone (RF can only hurt)
+    lstm_confidence = lstm_pred.get("confidence", 0.0)
+    if lstm_confidence >= 0.75:
+        return {**lstm_pred, "source": "lstm_gated"}
 
     all_labels = set(rf_probs.keys()) | set(lstm_probs.keys())
     w_lstm = _get_lstm_ensemble_weight()

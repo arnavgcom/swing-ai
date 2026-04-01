@@ -93,6 +93,89 @@ def _load_rows_from_json(payload: Dict[str, Any]) -> Tuple[
 
 
 # ---------------------------------------------------------------------------
+# Data augmentation
+# ---------------------------------------------------------------------------
+
+def _augment_sequence(seq: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """Apply random augmentations to a temporal sequence."""
+    aug = seq.copy()
+
+    # Gaussian noise (jitter)
+    if rng.random() < 0.8:
+        noise_scale = rng.uniform(0.005, 0.03)
+        aug = aug + rng.normal(0, noise_scale, aug.shape).astype(np.float32)
+
+    # Magnitude scaling
+    if rng.random() < 0.5:
+        scale = rng.uniform(0.85, 1.15)
+        aug = aug * scale
+
+    # Time warping (simple: random speed change per segment)
+    if rng.random() < 0.4:
+        t = aug.shape[0]
+        warp = np.sort(rng.uniform(0, t - 1, t))
+        warp = warp * (t - 1) / max(warp[-1], 1e-6)
+        warped = np.zeros_like(aug)
+        for col in range(aug.shape[1]):
+            warped[:, col] = np.interp(np.arange(t), warp, aug[:, col])
+        aug = warped
+
+    # Random feature dropout
+    if rng.random() < 0.2:
+        drop_col = rng.integers(0, aug.shape[1])
+        aug[:, drop_col] = 0.0
+
+    return aug.astype(np.float32)
+
+
+# ---------------------------------------------------------------------------
+# Focal Loss — better than CrossEntropy for class imbalance
+# ---------------------------------------------------------------------------
+
+def _build_focal_loss_class():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+
+    class FocalLoss(nn.Module):
+        def __init__(self, weight=None, gamma=2.0, label_smoothing=0.1):
+            super().__init__()
+            self.weight = weight
+            self.gamma = gamma
+            self.label_smoothing = label_smoothing
+
+        def forward(self, logits, targets):
+            num_classes = logits.size(-1)
+            ce = F.cross_entropy(
+                logits, targets,
+                weight=self.weight,
+                reduction="none",
+                label_smoothing=self.label_smoothing,
+            )
+            pt = torch.exp(-ce)
+            focal = ((1 - pt) ** self.gamma) * ce
+            return focal.mean()
+
+    return FocalLoss
+
+
+# ---------------------------------------------------------------------------
+# MixUp augmentation — interpolates pairs of samples for regularization
+# ---------------------------------------------------------------------------
+
+def _mixup_batch(x, y_onehot, alpha=0.4, rng_torch=None):
+    """Apply MixUp: blend random pairs of samples and their labels."""
+    import torch
+    lam = np.random.beta(alpha, alpha) if alpha > 0 else 1.0
+    lam = max(lam, 1 - lam)  # ensure dominant sample stays dominant
+    batch_size = x.size(0)
+    index = torch.randperm(batch_size)
+    mixed_x = lam * x + (1 - lam) * x[index]
+    mixed_y = lam * y_onehot + (1 - lam) * y_onehot[index]
+    return mixed_x, mixed_y
+
+
+# ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
 
@@ -100,12 +183,12 @@ def train(
     sequences: List[np.ndarray],
     label_indices: List[int],
     model_out: str,
-    epochs: int = 80,
+    epochs: int = 150,
     batch_size: int = 32,
     lr: float = 1e-3,
-    hidden_size: int = 64,
+    hidden_size: int = 128,
     num_layers: int = 2,
-    patience: int = 12,
+    patience: int = 20,
 ) -> Dict[str, Any]:
     """Train the LSTM and save a checkpoint. Returns evaluation metrics."""
     import torch
@@ -132,7 +215,19 @@ def train(
         X_train, y_train = X, y
         X_val, y_val = X[:1], y[:1]  # dummy
 
-    # Class weights for imbalanced data
+    # Data augmentation — expand training set
+    rng = np.random.default_rng(42)
+    aug_multiplier = max(4, 100 // max(len(X_train), 1))  # more augmentation for smaller datasets
+    X_aug_list = [X_train]
+    y_aug_list = [y_train]
+    for _ in range(aug_multiplier):
+        augmented = np.stack([_augment_sequence(x, rng) for x in X_train], axis=0)
+        X_aug_list.append(augmented)
+        y_aug_list.append(y_train.copy())
+    X_train_aug = np.concatenate(X_aug_list, axis=0)
+    y_train_aug = np.concatenate(y_aug_list, axis=0)
+
+    # Class weights for imbalanced data (computed on original training labels)
     class_counts = np.bincount(y_train, minlength=num_classes).astype(np.float32)
     class_counts = np.maximum(class_counts, 1.0)
     class_weights = 1.0 / class_counts
@@ -140,7 +235,7 @@ def train(
     weight_tensor = torch.from_numpy(class_weights)
 
     train_dataset = TensorDataset(
-        torch.from_numpy(X_train), torch.from_numpy(y_train),
+        torch.from_numpy(X_train_aug), torch.from_numpy(y_train_aug),
     )
     val_dataset = TensorDataset(
         torch.from_numpy(X_val), torch.from_numpy(y_val),
@@ -160,21 +255,42 @@ def train(
         num_classes=num_classes,
     )
 
-    criterion = nn.CrossEntropyLoss(weight=weight_tensor)
+    criterion = _build_focal_loss_class()(weight=weight_tensor, gamma=2.0, label_smoothing=0.1)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+
+    # Warmup + cosine annealing
+    warmup_epochs = min(10, epochs // 10)
+    def lr_lambda(epoch):
+        if epoch < warmup_epochs:
+            return (epoch + 1) / warmup_epochs
+        progress = (epoch - warmup_epochs) / max(epochs - warmup_epochs, 1)
+        return 0.5 * (1 + np.cos(np.pi * progress))
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
     best_val_f1 = -1.0
     best_state = None
     no_improve = 0
 
     for epoch in range(epochs):
-        # --- Train ---
+        # --- Train with MixUp ---
         model.train()
         for xb, yb in train_loader:
             optimizer.zero_grad()
-            logits = model(xb)
-            loss = criterion(logits, yb)
+            # Convert labels to one-hot for MixUp
+            yb_onehot = torch.zeros(yb.size(0), num_classes).scatter_(1, yb.unsqueeze(1), 1.0)
+            mixed_x, mixed_y = _mixup_batch(xb, yb_onehot, alpha=0.4)
+            logits = model(mixed_x)
+            # Soft cross-entropy with focal modulation
+            log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
+            ce = -(mixed_y * log_probs).sum(dim=-1)
+            pt = torch.exp(-ce)
+            focal = ((1 - pt) ** 2.0) * ce
+            if weight_tensor is not None:
+                # Apply class weights based on the dominant label
+                dominant_labels = mixed_y.argmax(dim=-1)
+                w = weight_tensor[dominant_labels]
+                focal = focal * w
+            loss = focal.mean()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
@@ -262,7 +378,7 @@ def main() -> int:
     parser.add_argument("--metadata-out")
     parser.add_argument("--report-out")
     parser.add_argument("--dataset-json-stdin", action="store_true")
-    parser.add_argument("--epochs", type=int, default=80)
+    parser.add_argument("--epochs", type=int, default=150)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
     args = parser.parse_args()

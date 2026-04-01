@@ -244,12 +244,21 @@ export default function AdminDashboardWorkspace({
   const [activeModelVersion, setActiveModelVersion] = React.useState("");
   const [modelVersionChangeDescription, setModelVersionChangeDescription] = React.useState("");
 
+  const [trainingPolling, setTrainingPolling] = React.useState(false);
+
   const trainingQuery = useQuery({
     queryKey: ["tennis-model-training-status"],
     queryFn: fetchTennisModelTrainingStatus,
     enabled: isAdmin,
     retry: false,
+    refetchInterval: trainingPolling ? 3000 : false,
   });
+
+  // Start/stop polling based on whether a job is currently running
+  React.useEffect(() => {
+    const jobActive = trainingQuery.data?.currentJob != null;
+    setTrainingPolling(jobActive);
+  }, [trainingQuery.data?.currentJob]);
 
   const datasetQuery = useQuery({
     queryKey: ["tennis-dataset-insights", "admin-dashboard"],
@@ -296,6 +305,7 @@ export default function AdminDashboardWorkspace({
   const trainMutation = useMutation({
     mutationFn: triggerTennisModelTraining,
     onSuccess: async () => {
+      setTrainingPolling(true);
       await refreshAll();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },

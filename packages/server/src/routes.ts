@@ -1067,6 +1067,7 @@ async function trainTennisMovementModel(jobId: string, actorUserId: string) {
     const rowsWithTemporal = exportSummary.samples.filter(
       (s: any) => Array.isArray(s.temporalSequence) && s.temporalSequence.length > 0,
     );
+    console.log(`[LSTM Training] lstmEnabled=${mlSettings.lstmTrainingEnabled}, rowsWithTemporal=${rowsWithTemporal.length}, minRequired=${mlSettings.lstmMinTrainingRows}, totalSamples=${exportSummary.samples.length}`);
     if (rowsWithTemporal.length >= mlSettings.lstmMinTrainingRows) {
       try {
         lstmTrainingSummary = await runPythonJsonModuleWithInput(
@@ -1083,8 +1084,8 @@ async function trainTennisMovementModel(jobId: string, actorUserId: string) {
             rows: exportSummary.samples,
           }),
         ) as Record<string, unknown>;
-      } catch {
-        // LSTM training is optional — don't fail the whole job
+      } catch (lstmError: any) {
+        console.error("[LSTM Training] Failed:", lstmError?.message || lstmError);
         lstmTrainingSummary = null;
       }
     }
@@ -6069,14 +6070,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .select({
               annotation: analysisShotAnnotations,
               analysis: analyses,
-              userName: sql<string | null>`(
-                select u.name from users u where u.id = ${analyses.userId}
-              )`,
+              userName: users.name,
               sportName: sports.name,
               movementName: sportMovements.name,
             })
             .from(analysisShotAnnotations)
             .innerJoin(analyses, eq(analysisShotAnnotations.analysisId, analyses.id))
+            .leftJoin(users, eq(analyses.userId, users.id))
             .leftJoin(sports, eq(analyses.sportId, sports.id))
             .leftJoin(sportMovements, eq(analyses.movementId, sportMovements.id))
             .orderBy(desc(analysisShotAnnotations.updatedAt))
@@ -6085,14 +6085,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .select({
               annotation: analysisShotAnnotations,
               analysis: analyses,
-              userName: sql<string | null>`(
-                select u.name from users u where u.id = ${analyses.userId}
-              )`,
+              userName: users.name,
               sportName: sports.name,
               movementName: sportMovements.name,
             })
             .from(analysisShotAnnotations)
             .innerJoin(analyses, eq(analysisShotAnnotations.analysisId, analyses.id))
+            .leftJoin(users, eq(analyses.userId, users.id))
             .leftJoin(sports, eq(analyses.sportId, sports.id))
             .leftJoin(sportMovements, eq(analyses.movementId, sportMovements.id))
             .where(eq(analysisShotAnnotations.userId, userId))
@@ -6112,6 +6111,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         return rowMovement === movementFilter;
       });
+
+      const modelConfig = readModelRegistryConfig();
 
       const existingSnapshots = isAdmin
         ? await db
@@ -6162,7 +6163,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const snapshotKey = `${analysis.id}:${annotationOwnerId}:${modelConfig.activeModelVersion}`;
         let snapshot = snapshotByAnalysisId.get(snapshotKey);
         if (!snapshot) {
-          const modelConfig = readModelRegistryConfig();
           const manualLabels = (annotation.orderedShotLabels || []).map((label) =>
             normalizeShotLabel(label),
           );
