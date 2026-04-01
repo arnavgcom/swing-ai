@@ -21,9 +21,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import { useAuth } from "@/lib/auth-context";
-import { getApiUrl, apiRequest } from "@/lib/query-client";
-import { resolveClientMediaUrl } from "@/lib/media";
+import { useAuth } from "@/contexts/auth-context";
+import { getApiUrl, apiRequest } from "@/services/query-client";
+import { resolveClientMediaUrl } from "@/utils/media";
 
 const COUNTRIES = [
   "Singapore",

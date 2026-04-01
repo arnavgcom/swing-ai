@@ -19,8 +19,8 @@ import {
   fetchAnalysisShotAnnotation,
   fetchSportConfig,
   saveAnalysisShotAnnotation,
-} from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+} from "@/services/api";
+import { useAuth } from "@/contexts/auth-context";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ds } from "@/constants/design-system";
 

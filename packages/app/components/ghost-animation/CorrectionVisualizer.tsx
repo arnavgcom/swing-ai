@@ -1,5 +1,5 @@
 import React from "react";
-import type { CorrectionResult } from "@/lib/ghost-correction";
+import type { CorrectionResult } from "@/features/ghost-correction";
 
 interface CorrectionVisualizerProps {
   correction: CorrectionResult;

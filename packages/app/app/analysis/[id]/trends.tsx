@@ -17,16 +17,16 @@ import Svg, { Line, Polyline, Circle, Polygon } from "react-native-svg";
 import {
   getAnalysisRefreshIntervalMs,
   getCompletedAnalysisEnrichmentMessage,
-} from "@/lib/analysis-refresh";
+} from "@/utils/analysis-refresh";
 import {
   fetchAnalysisDetail,
   fetchAnalysisMetricTrends,
   fetchSportConfig,
   type SportCategoryConfig,
-} from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
-import { formatMonthDayInTimeZone, resolveUserTimeZone } from "@/lib/timezone";
-import { normalizeMetricSelectionKey } from "@/lib/metrics-catalog";
+} from "@/services/api";
+import { useAuth } from "@/contexts/auth-context";
+import { formatMonthDayInTimeZone, resolveUserTimeZone } from "@/utils/timezone";
+import { normalizeMetricSelectionKey } from "@/utils/metrics-catalog";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ds } from "@/constants/design-system";
 

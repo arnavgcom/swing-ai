@@ -6,10 +6,10 @@ import type { Stats } from "node:fs";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { storage, type AnalysisMetadataInput } from "./storage";
-import { processAnalysis, seedUploadPipelineTiming } from "./analysis-engine";
-import { requireAuth } from "./auth";
-import { db } from "./db";
+import { storage, type AnalysisMetadataInput } from "./services/storage";
+import { processAnalysis, seedUploadPipelineTiming } from "./services/analysis-engine";
+import { requireAuth } from "./middleware/auth";
+import { db } from "./config/db";
 import {
   sports,
   sportMovements,
@@ -55,11 +55,11 @@ import {
   syncVideoForModelTuning,
   validateEvaluationDatasetManifest,
   writeModelRegistryConfig,
-} from "./model-registry";
-import { normalizeRuntimeScoreToHundred } from "./score-scale";
-import { persistedScoreToApiHundred } from "./score-scale";
-import { normalizeTacticalScoresToApi100, readTacticalScoreValue } from "./tactical-scores";
-import { buildInsertAuditFields, buildUpdateAuditFields } from "./audit-metadata";
+} from "./services/model-registry";
+import { normalizeRuntimeScoreToHundred } from "./lib/score-scale";
+import { persistedScoreToApiHundred } from "./lib/score-scale";
+import { normalizeTacticalScoresToApi100, readTacticalScoreValue } from "./lib/tactical-scores";
+import { buildInsertAuditFields, buildUpdateAuditFields } from "./lib/audit";
 import {
   copyStoredMediaToPath,
   deleteStoredMedia,
@@ -72,8 +72,8 @@ import {
   setVideoStorageMode,
   storeVideoBuffer,
   withLocalMediaFile,
-} from "./media-storage";
-import { PROJECT_ROOT, resolveProjectPath } from "./env";
+} from "./services/media-storage";
+import { PROJECT_ROOT, resolveProjectPath } from "./config/env";
 import { isVideoValidationMode, type VideoValidationMode } from "@swing-ai/shared/video-validation";
 import { isPoseLandmarkerModel } from "@swing-ai/shared/pose-landmarker";
 import {
@@ -83,22 +83,22 @@ import {
   isSportEnabledRecord,
   listSports,
   mapSportForApi,
-} from "./sport-availability";
-import { getPoseLandmarkerModel, getPoseLandmarkerPythonEnv, setPoseLandmarkerModel } from "./pose-landmarker-settings";
-import { getMlSettings, setMlSettings, getMlSettingsPythonEnv } from "./ml-settings";
-import { getR2Settings, setR2Settings, maskSecret } from "./r2-settings";
-import { exportTennisTrainingDatasetSnapshot } from "./tennis-training-storage";
+} from "./services/sport-availability";
+import { getPoseLandmarkerModel, getPoseLandmarkerPythonEnv, setPoseLandmarkerModel } from "./services/pose-landmarker-settings";
+import { getMlSettings, setMlSettings, getMlSettingsPythonEnv } from "./services/ml-settings";
+import { getR2Settings, setR2Settings, maskSecret } from "./services/r2-settings";
+import { exportTennisTrainingDatasetSnapshot } from "./services/tennis-training";
 import {
   getDriveMovementClassificationModelPythonEnv,
   getDriveMovementClassificationModelPythonEnvForSelection,
   getDriveMovementClassificationModelSettings,
   setDriveMovementClassificationModelOptions,
   setDriveMovementClassificationModelSelection,
-} from "./classification-model-settings";
+} from "./services/classification-model-settings";
 import {
   ensureLocalClassificationModelArtifact,
   publishClassificationModelArtifacts,
-} from "./model-artifact-storage";
+} from "./services/model-artifacts";
 
 const uploadDir = resolveProjectPath("uploads");
 if (!fs.existsSync(uploadDir)) {
@@ -598,6 +598,7 @@ function buildTennisModelArchivePaths(modelVersion: string) {
   const normalizedVersion = safeVersion.toLowerCase().startsWith("v") ? safeVersion : `v${safeVersion}`;
   return {
     modelPath: path.join(TENNIS_MODEL_VERSION_ARCHIVE_DIR, `tennis_movement_classifier_${normalizedVersion}.joblib`),
+    lstmModelPath: path.join(TENNIS_MODEL_VERSION_ARCHIVE_DIR, `tennis_movement_lstm_${normalizedVersion}.pt`),
   };
 }
 
@@ -1222,10 +1223,20 @@ async function saveCurrentTennisModelVersion(
 
   await fs.promises.mkdir(TENNIS_MODEL_VERSION_ARCHIVE_DIR, { recursive: true });
   await fs.promises.copyFile(modelPath, archivePaths.modelPath);
+
+  // Copy LSTM model if it exists (LSTM training is optional)
+  const lstmModelPath = resolveProjectPath("models", "tennis_movement_lstm.pt");
+  const lstmStats = await statIfExists(lstmModelPath);
+  if (lstmStats) {
+    await fs.promises.copyFile(lstmModelPath, archivePaths.lstmModelPath);
+  }
+
   const artifactInfo = await publishClassificationModelArtifacts({
     modelVersion,
     activeModelPath: modelPath,
     versionModelPath: archivePaths.modelPath,
+    lstmActiveModelPath: lstmStats ? lstmModelPath : undefined,
+    lstmVersionModelPath: lstmStats ? archivePaths.lstmModelPath : undefined,
   });
 
   const nextMetadata = {
@@ -1244,6 +1255,17 @@ async function saveCurrentTennisModelVersion(
         ...(artifactInfo.activeR2Key ? { activeR2Key: artifactInfo.activeR2Key } : {}),
         ...(artifactInfo.activeR2Reference ? { activeR2Reference: artifactInfo.activeR2Reference } : {}),
       },
+      ...(artifactInfo.lstm ? {
+        lstm: {
+          storageMode: artifactInfo.storageMode,
+          localVersionPath: artifactInfo.lstm.localVersionPath,
+          localActivePath: artifactInfo.lstm.localActivePath,
+          ...(artifactInfo.lstm.versionR2Key ? { versionR2Key: artifactInfo.lstm.versionR2Key } : {}),
+          ...(artifactInfo.lstm.versionR2Reference ? { versionR2Reference: artifactInfo.lstm.versionR2Reference } : {}),
+          ...(artifactInfo.lstm.activeR2Key ? { activeR2Key: artifactInfo.lstm.activeR2Key } : {}),
+          ...(artifactInfo.lstm.activeR2Reference ? { activeR2Reference: artifactInfo.lstm.activeR2Reference } : {}),
+        },
+      } : {}),
     },
   };
 

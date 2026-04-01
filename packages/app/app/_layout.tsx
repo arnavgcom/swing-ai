@@ -10,10 +10,10 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { queryClient } from "@/lib/query-client";
-import { AuthProvider, useAuth } from "@/lib/auth-context";
-import { SportProvider, useSport } from "@/lib/sport-context";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { queryClient } from "@/services/query-client";
+import { AuthProvider, useAuth } from "@/contexts/auth-context";
+import { SportProvider, useSport } from "@/contexts/sport-context";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 
 SplashScreen.preventAutoHideAsync();

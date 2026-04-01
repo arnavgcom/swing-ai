@@ -16,16 +16,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { apiRequest } from "@/lib/query-client";
-import { fetchSportConfig } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
-import { useSport } from "@/lib/sport-context";
+import { apiRequest } from "@/services/query-client";
+import { fetchSportConfig } from "@/services/api";
+import { useAuth } from "@/contexts/auth-context";
+import { useSport } from "@/contexts/sport-context";
 import { DEFAULT_SELECTED_METRIC_KEYS, DEFAULT_SELECTED_SCORE_SECTIONS } from "@swing-ai/shared/default-user-preferences";
 import {
   buildMetricOptionsWithCatalog,
   getCanonical25MetricOptions,
   normalizeMetricSelectionKey,
-} from "@/lib/metrics-catalog";
+} from "@/utils/metrics-catalog";
 
 const SCORE_SECTION_OPTIONS = [...DEFAULT_SELECTED_SCORE_SECTIONS];
 

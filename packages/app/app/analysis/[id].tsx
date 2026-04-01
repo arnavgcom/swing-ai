@@ -28,7 +28,7 @@ import { extractPipelineTiming } from "@swing-ai/shared/pipeline-timing";
 import {
   getAnalysisRefreshIntervalMs,
   getCompletedAnalysisEnrichmentMessage,
-} from "@/lib/analysis-refresh";
+} from "@/utils/analysis-refresh";
 import Colors, { sportColors } from "@/constants/colors";
 import {
   fetchAnalysisDetail,
@@ -48,21 +48,21 @@ import {
   retryAnalysis,
   type GhostCorrectionResponse,
   type MetricsResponse,
-} from "@/lib/api";
-import { resolveClientMediaUrl } from "@/lib/media";
+} from "@/services/api";
+import { resolveClientMediaUrl } from "@/utils/media";
 import { GlassCard } from "@/components/ui/GlassCard";
-import { ScoreGauge } from "@/components/ScoreGauge";
-import { MetricCard } from "@/components/MetricCard";
-import { CoachingCard } from "@/components/CoachingCard";
-import { PipelineTimingPanel } from "@/components/PipelineTimingPanel";
+import { ScoreGauge } from "@/components/scoring/ScoreGauge";
+import { MetricCard } from "@/components/cards/MetricCard";
+import { CoachingCard } from "@/components/cards/CoachingCard";
+import { PipelineTimingPanel } from "@/components/analysis/PipelineTimingPanel";
 import { SwingAnimationTabs } from "@/components/ghost-animation/SwingAnimationTabs";
-import { detectAllCorrections, detectPriorityCorrection } from "@/lib/ghost-correction";
-import { useAuth } from "@/lib/auth-context";
-import { formatDateTimeInTimeZone, parseApiDate, resolveUserTimeZone } from "@/lib/timezone";
+import { detectAllCorrections, detectPriorityCorrection } from "@/features/ghost-correction";
+import { useAuth } from "@/contexts/auth-context";
+import { formatDateTimeInTimeZone, parseApiDate, resolveUserTimeZone } from "@/utils/timezone";
 import {
   buildMetricOptionsWithCatalog,
   normalizeMetricSelectionKey,
-} from "@/lib/metrics-catalog";
+} from "@/utils/metrics-catalog";
 
 const MPH_TO_KMPH = 1.60934;
 const TECHNICAL_COMPACT_COUNT = 2;
@@ -97,7 +97,7 @@ function buildMetricsFromSummary(summary: AnalysisSummary): MetricsResponse | nu
     overallScore: summary.overallScore,
     subScores: summary.subScores || {},
     metricValues: metricValues || {},
-    scoreOutputs: scoreOutputs || undefined,
+    scoreOutputs: (scoreOutputs as MetricsResponse["scoreOutputs"]) || undefined,
     aiDiagnostics: null,
   };
 }
@@ -806,7 +806,9 @@ export default function AnalysisDetailScreen() {
   const ghostCorrection = useMemo(() => {
     if (!sportConfig?.metrics) return null;
 
-    const fallback = detectPriorityCorrection(ghostMetricValues, sportConfig.metrics);
+    const metricDefinitions = sportConfig.metrics as Parameters<typeof detectPriorityCorrection>[1];
+
+    const fallback = detectPriorityCorrection(ghostMetricValues, metricDefinitions);
 
     if (!ghostData?.correction) {
       return fallback;
@@ -817,7 +819,7 @@ export default function AnalysisDetailScreen() {
       return fallback;
     }
 
-    const metricDef = sportConfig.metrics.find((metric) => metric.key === serverMetricKey);
+    const metricDef = metricDefinitions.find((metric) => metric.key === serverMetricKey);
     if (!metricDef?.optimalRange) {
       return fallback;
     }
@@ -858,7 +860,8 @@ export default function AnalysisDetailScreen() {
   const ghostCorrections = useMemo(() => {
     if (!sportConfig?.metrics) return [];
 
-    const all = detectAllCorrections(ghostMetricValues, sportConfig.metrics);
+    const metricDefinitions = sportConfig.metrics as Parameters<typeof detectAllCorrections>[1];
+    const all = detectAllCorrections(ghostMetricValues, metricDefinitions);
     if (!ghostData?.correction || all.length <= 1) {
       return all;
     }
@@ -1316,7 +1319,7 @@ export default function AnalysisDetailScreen() {
               : "Insufficient data to score this technical component.",
         };
       })
-      .filter((item) => item.key !== "follow" && !String(item.label || "").toLowerCase().includes("follow"));
+            .filter((item) => !String(item.label || "").toLowerCase().includes("follow"));
   }, [improvedReport?.biomechanics, isMatchPlayImproved, m?.scoreOutputs?.technical?.components]);
 
   const hasMoreTechnicalItems = technicalBiomecItems.length > TECHNICAL_COMPACT_COUNT;

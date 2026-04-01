@@ -1,10 +1,10 @@
-import { PROJECT_ROOT } from "./env";
+import { PROJECT_ROOT } from "./config/env";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupAuth } from "./auth";
-import { getModelArtifactStorageLogDetails } from "./model-artifact-storage";
-import { seedSports } from "./seed-sports";
+import { setupAuth } from "./middleware/auth";
+import { getModelArtifactStorageLogDetails } from "./services/model-artifacts";
+import { seedSports } from "./services/seed-sports";
 import * as fs from "fs";
 import * as path from "path";
 import * as http from "http";

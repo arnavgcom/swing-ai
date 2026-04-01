@@ -16,7 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getApiUrl } from "@/lib/query-client";
+import { getApiUrl } from "@/services/query-client";
 import { fetch } from "expo/fetch";
 import { ds } from "@/constants/design-system";
 import { GlassCard } from "@/components/ui/GlassCard";

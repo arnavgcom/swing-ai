@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -15,8 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { useAuth } from "@/lib/auth-context";
-import { queryClient } from "@/lib/query-client";
+import { useAuth } from "@/contexts/auth-context";
 import {
   type RecalculateAnalysesResponse,
   fetchAnalysisFpsSettings,
@@ -27,9 +26,9 @@ import {
   type AnalysisFpsStep,
   type DriveMovementClassificationModelOptionResponse,
   type SportAvailabilityResponse,
-  type VideoValidationMode,
-} from "@/lib/api";
+} from "@/services/api";
 import type { PoseLandmarkerModel } from "@swing-ai/shared/pose-landmarker";
+import type { VideoValidationMode } from "@swing-ai/shared/video-validation";
 
 const LOW_IMPACT_FPS_OPTIONS: Array<{
   step: AnalysisFpsStep;

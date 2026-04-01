@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Circle, G } from "react-native-svg";
-import type { Landmark } from "@/lib/ghost-correction";
-import type { JointDeviationMap } from "@/lib/joint-heatmap";
-import { getHeatmapColor } from "@/lib/joint-heatmap";
+import type { Landmark } from "@/features/ghost-correction";
+import type { JointDeviationMap } from "@/utils/joint-heatmap";
+import { getHeatmapColor } from "@/utils/joint-heatmap";
 
 const RADIUS = 6;
 const PULSE_MIN = 6;

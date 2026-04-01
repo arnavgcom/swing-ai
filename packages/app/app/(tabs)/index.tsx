@@ -30,8 +30,8 @@ import {
   fetchDiscrepancySummary,
   fetchMyShotAnnotations,
   fetchScoringModelDashboard,
-} from "@/lib/api";
-import type { AnalysisSummary } from "@/lib/api";
+} from "@/services/api";
+import type { AnalysisSummary } from "@/services/api";
 import {
   DEFAULT_SESSION_TYPE_FILTERS,
   filterAnalysesBySessionAndStroke,
@@ -40,16 +40,16 @@ import {
   STROKE_FILTER_OPTIONS,
   type SessionTypeFilter,
   type StrokeTypeFilter,
-} from "@/lib/analysis-filters";
-import { getApiUrl } from "@/lib/query-client";
-import { useAuth } from "@/lib/auth-context";
-import { formatDateTimeInTimeZone, formatMonthDayInTimeZone, parseApiDate, resolveUserTimeZone } from "@/lib/timezone";
-import { useSport } from "@/lib/sport-context";
-import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/components/TabScreenIntro";
-import AdminDashboardWorkspace from "@/components/AdminDashboardWorkspace";
+} from "@/utils/analysis-filters";
+import { getApiUrl } from "@/services/query-client";
+import { useAuth } from "@/contexts/auth-context";
+import { formatDateTimeInTimeZone, formatMonthDayInTimeZone, parseApiDate, resolveUserTimeZone } from "@/utils/timezone";
+import { useSport } from "@/contexts/sport-context";
+import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/components/layout/TabScreenIntro";
+import AdminDashboardWorkspace from "@/components/analysis/AdminDashboardWorkspace";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ds } from "@/constants/design-system";
-import { useTabBar } from "@/lib/tab-bar-context";
+import { useTabBar } from "@/contexts/tab-bar-context";
 
 function formatLabel(label: string): string {
   return label
@@ -825,9 +825,9 @@ export default function DashboardScreen() {
     isLoading,
     refetch,
     isRefetching,
-  } = useQuery({
+  } = useQuery<AnalysisSummary[]>({
     queryKey: ["analyses-summary"],
-    queryFn: fetchAnalysesSummary,
+    queryFn: () => fetchAnalysesSummary(),
     refetchInterval: 5000,
     enabled: !!user,
     retry: false,
@@ -972,7 +972,7 @@ export default function DashboardScreen() {
       color: metric.color,
       values: trendEntries.map((entry) => {
         if (metric.key === "overall") {
-          return Number((entry.score * 10).toFixed(1));
+          return Number(((entry.score ?? 0) * 10).toFixed(1));
         }
         const value = getPlayerMetricValue(entry.analysis, metric.key);
         return value === null ? null : Number((value * 10).toFixed(1));
@@ -1074,6 +1074,8 @@ export default function DashboardScreen() {
   );
 
   const showMismatchSection = isAdmin
+    && !isLoading
+    && filteredAnalyses.length > 0
     && (
       shotAnnotationsLoading
       || missingAnnotationAnalyses.length > 0

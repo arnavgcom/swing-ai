@@ -15,16 +15,16 @@ import * as Haptics from "expo-haptics";
 import {
   getAnalysisRefreshIntervalMs,
   getCompletedAnalysisEnrichmentMessage,
-} from "@/lib/analysis-refresh";
+} from "@/utils/analysis-refresh";
 import {
   fetchAnalysisDetail,
   fetchAnalysisDiagnostics,
   fetchAnalysisVideoMetadata,
-} from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
-import { formatDateTimeInTimeZone, resolveUserTimeZone } from "@/lib/timezone";
+} from "@/services/api";
+import { useAuth } from "@/contexts/auth-context";
+import { formatDateTimeInTimeZone, resolveUserTimeZone } from "@/utils/timezone";
 import { GlassCard } from "@/components/ui/GlassCard";
-import { PipelineTimingPanel } from "@/components/PipelineTimingPanel";
+import { PipelineTimingPanel } from "@/components/analysis/PipelineTimingPanel";
 import { ds } from "@/constants/design-system";
 
 function formatBytes(bytes: number | null | undefined): string {

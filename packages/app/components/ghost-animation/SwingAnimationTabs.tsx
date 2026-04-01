@@ -1,8 +1,8 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { GhostSwingAnimation } from "./GhostSwingAnimation";
-import type { CorrectionResult, SkeletonFrame } from "@/lib/ghost-correction";
-import type { PlayerMetrics, OptimalRanges } from "@/lib/joint-heatmap";
+import type { CorrectionResult, SkeletonFrame } from "@/features/ghost-correction";
+import type { PlayerMetrics, OptimalRanges } from "@/utils/joint-heatmap";
 
 interface SwingAnimationTabsProps {
   playerFrames: SkeletonFrame[];

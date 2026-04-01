@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { G, Line, Path, Polygon, Text as SvgText, TSpan } from "react-native-svg";
-import type { CorrectionResult, Landmark } from "@/lib/ghost-correction";
+import type { CorrectionResult, Landmark } from "@/features/ghost-correction";
 
 const ORANGE = "#FF9F0A";
 const STROKE_WIDTH = 3;

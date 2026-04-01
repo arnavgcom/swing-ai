@@ -59,7 +59,7 @@ async function listVersionPlans(prefix: string): Promise<UploadPlan[]> {
   const versionsDir = path.resolve(PROJECT_ROOT, "models", "versions");
   const entries = await fs.readdir(versionsDir, { withFileTypes: true }).catch(() => []);
 
-  return entries
+  const joblibPlans = entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".joblib"))
     .sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" }))
     .map((entry) => ({
@@ -68,12 +68,24 @@ async function listVersionPlans(prefix: string): Promise<UploadPlan[]> {
       overwrite: false,
       label: `classifier archive ${entry.name}`,
     }));
+
+  const lstmPlans = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".pt"))
+    .sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" }))
+    .map((entry) => ({
+      localPath: path.join(versionsDir, entry.name),
+      key: `${prefix}/tennis/lstm/versions/${entry.name}`,
+      overwrite: false,
+      label: `lstm archive ${entry.name}`,
+    }));
+
+  return [...joblibPlans, ...lstmPlans];
 }
 
 async function buildUploadPlan(prefix: string): Promise<UploadPlan[]> {
   const versionPlans = await listVersionPlans(prefix);
 
-  return [
+  const plans: UploadPlan[] = [
     {
       localPath: path.resolve(PROJECT_ROOT, "models", "tennis_movement_classifier.joblib"),
       key: `${prefix}/tennis/classification/active/tennis_movement_classifier.joblib`,
@@ -100,6 +112,22 @@ async function buildUploadPlan(prefix: string): Promise<UploadPlan[]> {
       label: "pose heavy",
     },
   ];
+
+  // Include active LSTM model if it exists
+  const lstmPath = path.resolve(PROJECT_ROOT, "models", "tennis_movement_lstm.pt");
+  try {
+    await fs.access(lstmPath);
+    plans.splice(1, 0, {
+      localPath: lstmPath,
+      key: `${prefix}/tennis/lstm/active/tennis_movement_lstm.pt`,
+      overwrite: true,
+      label: "active lstm alias",
+    });
+  } catch {
+    // LSTM model not present locally — skip
+  }
+
+  return plans;
 }
 
 async function main(): Promise<void> {

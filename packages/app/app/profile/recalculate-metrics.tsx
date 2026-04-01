@@ -18,7 +18,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/contexts/auth-context";
 import {
   fetchAnalysesSummary,
   fetchTennisModelTrainingStatus,
@@ -26,7 +26,7 @@ import {
   type AnalysisSummary,
   type RecalculateAnalysesResponse,
   type TennisModelTrainingStatusResponse,
-} from "@/lib/api";
+} from "@/services/api";
 
 const normalizeRole = (value?: string | null): "admin" | "player" => {
   return value?.trim().toLowerCase() === "admin" ? "admin" : "player";

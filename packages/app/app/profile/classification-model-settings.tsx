@@ -13,12 +13,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/contexts/auth-context";
 import {
   fetchDriveMovementClassificationModelSettings,
   type DriveMovementClassificationModelOptionResponse,
   updateDriveMovementClassificationModelSettings,
-} from "@/lib/api";
+} from "@/services/api";
 
 const normalizeRole = (value?: string | null): "admin" | "player" => {
   return value?.trim().toLowerCase() === "admin" ? "admin" : "player";

@@ -20,14 +20,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
 import Colors from "@/constants/colors";
-import { uploadVideo, type AnalysisSummary } from "@/lib/api";
-import { getApiUrl } from "@/lib/query-client";
-import { useAuth } from "@/lib/auth-context";
-import { useSport } from "@/lib/sport-context";
-import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/components/TabScreenIntro";
+import { uploadVideo, type AnalysisSummary } from "@/services/api";
+import { getApiUrl } from "@/services/query-client";
+import { useAuth } from "@/contexts/auth-context";
+import { useSport } from "@/contexts/sport-context";
+import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/components/layout/TabScreenIntro";
 import { ds } from "@/constants/design-system";
-import { formatDateTimeInTimeZone, resolveUserTimeZone } from "@/lib/timezone";
-import { useTabBar } from "@/lib/tab-bar-context";
+import { formatDateTimeInTimeZone, resolveUserTimeZone } from "@/utils/timezone";
+import { useTabBar } from "@/contexts/tab-bar-context";
 
 const NativeDateTimePicker = Platform.OS === "web"
   ? null

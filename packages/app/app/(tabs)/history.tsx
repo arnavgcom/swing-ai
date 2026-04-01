@@ -21,8 +21,8 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { fetchAnalysesSummary, deleteAnalysis, retryAnalysis } from "@/lib/api";
-import type { AnalysisSummary } from "@/lib/api";
+import { fetchAnalysesSummary, deleteAnalysis, retryAnalysis } from "@/services/api";
+import type { AnalysisSummary } from "@/services/api";
 import {
   DEFAULT_SESSION_TYPE_FILTERS,
   filterAnalysesBySessionAndStroke,
@@ -30,20 +30,20 @@ import {
   STROKE_FILTER_OPTIONS,
   type SessionTypeFilter,
   type StrokeTypeFilter,
-} from "@/lib/analysis-filters";
-import { getApiUrl } from "@/lib/query-client";
-import { useAuth } from "@/lib/auth-context";
+} from "@/utils/analysis-filters";
+import { getApiUrl } from "@/services/query-client";
+import { useAuth } from "@/contexts/auth-context";
 import {
   formatDateInTimeZone,
   formatDateTimeInTimeZone,
   formatMonthDayInTimeZone,
   parseApiDate,
   resolveUserTimeZone,
-} from "@/lib/timezone";
-import { useSport } from "@/lib/sport-context";
-import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/components/TabScreenIntro";
+} from "@/utils/timezone";
+import { useSport } from "@/contexts/sport-context";
+import { TabScreenFilterGroup, TabScreenFilterRow, TabScreenIntro } from "@/components/layout/TabScreenIntro";
 import { ds } from "@/constants/design-system";
-import { useTabBar } from "@/lib/tab-bar-context";
+import { useTabBar } from "@/contexts/tab-bar-context";
 
 const LAST_WORKED_ANALYSIS_KEY = "swingai_last_worked_analysis_id";
 const BACKGROUND_NOTICE_KEY = "swingai_background_processing_notice";
@@ -116,9 +116,9 @@ const hcStyles = StyleSheet.create({
 });
 
 function TrendChart({ data, dates }: { data: number[]; dates: string[] }) {
+  const { width: screenWidth } = useWindowDimensions();
   if (data.length === 0) return null;
 
-  const { width: screenWidth } = useWindowDimensions();
   const maxVal = Math.max(...data, 1);
   const minVal = Math.min(...data, 0);
   const range = Math.max(maxVal - minVal, 10);

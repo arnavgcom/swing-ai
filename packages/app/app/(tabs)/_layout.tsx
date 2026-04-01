@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Platform, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React from "react";
-import { TabBarProvider, useTabBar } from "@/lib/tab-bar-context";
+import { TabBarProvider, useTabBar } from "@/contexts/tab-bar-context";
 
 const TAB_BAR_HEIGHT = 50;
 

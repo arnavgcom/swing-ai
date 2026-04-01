@@ -13,11 +13,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/contexts/auth-context";
 import {
   fetchPoseLandmarkerSettings,
   updatePoseLandmarkerSettings,
-} from "@/lib/api";
+} from "@/services/api";
 import type { PoseLandmarkerModel } from "@swing-ai/shared/pose-landmarker";
 
 const POSE_LANDMARKER_OPTIONS: Array<{

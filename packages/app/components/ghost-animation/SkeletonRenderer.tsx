@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { View, StyleSheet } from "react-native";
 import Svg, { Circle, Line, G } from "react-native-svg";
-import type { Landmark } from "@/lib/ghost-correction";
+import type { Landmark } from "@/features/ghost-correction";
 
 interface SkeletonRendererProps {
   landmarks: Landmark[];

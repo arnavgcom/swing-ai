@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { G, Polyline } from "react-native-svg";
-import type { Landmark, SkeletonFrame } from "@/lib/ghost-correction";
+import type { Landmark, SkeletonFrame } from "@/features/ghost-correction";
 
 interface PathConfig {
   jointIds: number[];

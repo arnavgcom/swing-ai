@@ -16,28 +16,28 @@ import * as Haptics from "expo-haptics";
 import {
   getAnalysisRefreshIntervalMs,
   getCompletedAnalysisEnrichmentMessage,
-} from "@/lib/analysis-refresh";
+} from "@/utils/analysis-refresh";
 import {
   fetchAnalysisDetail,
   fetchImprovedTennisAnalysis,
   fetchSportConfig,
-} from "@/lib/api";
-import { ScoreGauge } from "@/components/ScoreGauge";
-import { MetricCard } from "@/components/MetricCard";
-import { CoachingCard } from "@/components/CoachingCard";
+} from "@/services/api";
+import { ScoreGauge } from "@/components/scoring/ScoreGauge";
+import { MetricCard } from "@/components/cards/MetricCard";
+import { CoachingCard } from "@/components/cards/CoachingCard";
 import Colors from "@/constants/colors";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
   isImprovedTennisEnabled,
   type ImprovedScoreDetail,
-} from "@/lib/improved-tennis";
-import { resolveClientMediaUrl } from "@/lib/media";
-import type { SportCategoryConfig } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+} from "@/features/improved-tennis";
+import { resolveClientMediaUrl } from "@/utils/media";
+import type { SportCategoryConfig } from "@/services/api";
+import { useAuth } from "@/contexts/auth-context";
 import {
   buildMetricOptionsWithCatalog,
   normalizeMetricSelectionKey,
-} from "@/lib/metrics-catalog";
+} from "@/utils/metrics-catalog";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const HORIZONTAL_SCREEN_PADDING = 40; // scrollContent: 20 + 20

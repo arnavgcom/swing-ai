@@ -5,7 +5,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { ds } from "@/constants/design-system";
-import AdminDashboardWorkspace from "@/components/AdminDashboardWorkspace";
+import AdminDashboardWorkspace from "@/components/analysis/AdminDashboardWorkspace";
 
 export default function AdminDashboardScreen() {
   const insets = useSafeAreaInsets();

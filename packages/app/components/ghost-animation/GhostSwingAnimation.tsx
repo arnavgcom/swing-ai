@@ -9,15 +9,15 @@ import { SwingPathRenderer } from "./SwingPathRenderer";
 import { PlaybackControls } from "./PlaybackControls";
 import { JointHeatmapRenderer } from "./JointHeatmapRenderer";
 import { CorrectionArrowRenderer } from "./CorrectionArrowRenderer";
-import type { CorrectionResult, SkeletonFrame } from "@/lib/ghost-correction";
-import { generateCorrectedFrames } from "@/lib/ghost-correction";
+import type { CorrectionResult, SkeletonFrame } from "@/features/ghost-correction";
+import { generateCorrectedFrames } from "@/features/ghost-correction";
 import {
   calculateDeviationScores,
   buildJointDeviationMap,
   type PlayerMetrics,
   type OptimalRanges,
   type JointDeviationMap,
-} from "@/lib/joint-heatmap";
+} from "@/utils/joint-heatmap";
 
 interface GhostSwingAnimationProps {
   playerFrames: SkeletonFrame[];
