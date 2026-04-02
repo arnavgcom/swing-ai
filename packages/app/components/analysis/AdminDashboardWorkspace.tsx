@@ -499,18 +499,13 @@ export default function AdminDashboardWorkspace({
                 <Text style={styles.cardTitle}>Confusion matrix</Text>
                 <Text style={styles.metaHint}>Actual rows, predicted columns</Text>
               </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.confusionMatrixScrollContent}
-              >
-              <View style={[styles.confusionMatrixTable, isNarrowViewport && styles.confusionMatrixTableNarrow]}>
+              <View style={styles.confusionMatrixTable}>
                 <View style={styles.confusionMatrixRow}>
                   <View
                     style={[
                       styles.confusionMatrixCell,
                       styles.confusionMatrixCornerCell,
-                      isNarrowViewport && styles.confusionMatrixAxisCellNarrow,
+                      styles.confusionMatrixAxisCell,
                     ]}
                   >
                     <Text style={styles.confusionMatrixAxisText}>Actual</Text>
@@ -521,10 +516,9 @@ export default function AdminDashboardWorkspace({
                       style={[
                         styles.confusionMatrixCell,
                         styles.confusionMatrixHeaderCell,
-                        isNarrowViewport && styles.confusionMatrixCellNarrow,
                       ]}
                     >
-                      <Text style={styles.confusionMatrixHeaderText}>{formatLabel(label)}</Text>
+                      <Text style={styles.confusionMatrixHeaderText} numberOfLines={1}>{formatLabel(label)}</Text>
                     </View>
                   ))}
                 </View>
@@ -534,10 +528,10 @@ export default function AdminDashboardWorkspace({
                       style={[
                         styles.confusionMatrixCell,
                         styles.confusionMatrixRowLabelCell,
-                        isNarrowViewport && styles.confusionMatrixAxisCellNarrow,
+                        styles.confusionMatrixAxisCell,
                       ]}
                     >
-                      <Text style={styles.confusionMatrixRowLabel}>{formatLabel(row.actual)}</Text>
+                      <Text style={styles.confusionMatrixRowLabel} numberOfLines={1}>{formatLabel(row.actual)}</Text>
                     </View>
                     {row.counts.map((cell) => {
                       const intensity = activeModelConfusionMax > 0 ? cell.count / activeModelConfusionMax : 0;
@@ -548,7 +542,6 @@ export default function AdminDashboardWorkspace({
                           style={[
                             styles.confusionMatrixCell,
                             styles.confusionMatrixValueCell,
-                            isNarrowViewport && styles.confusionMatrixCellNarrow,
                             {
                               backgroundColor: isCorrect
                                 ? `rgba(34, 197, 94, ${0.16 + intensity * 0.42})`
@@ -565,7 +558,6 @@ export default function AdminDashboardWorkspace({
                   </View>
                 ))}
               </View>
-              </ScrollView>
             </View>
           </GlassCard>
         ) : null}
@@ -1362,34 +1354,30 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   confusionMatrixTable: {
-    gap: 8,
+    gap: 4,
     width: "100%",
-  },
-  confusionMatrixTableNarrow: {
-    width: "auto",
   },
   confusionMatrixScrollContent: {
     paddingRight: 2,
   },
   confusionMatrixRow: {
     flexDirection: "row",
-    gap: 6,
+    gap: 4,
   },
   confusionMatrixCell: {
     flex: 1,
     minWidth: 0,
-    paddingHorizontal: 6,
-    paddingVertical: 8,
-    borderRadius: ds.radius.md,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+    borderRadius: ds.radius.sm,
     borderWidth: 1,
     borderColor: "rgba(148, 163, 184, 0.12)",
     justifyContent: "center",
   },
-  confusionMatrixCellNarrow: {
-    minWidth: 108,
-  },
-  confusionMatrixAxisCellNarrow: {
-    minWidth: 112,
+  confusionMatrixAxisCell: {
+    flex: 0,
+    width: 72,
+    minWidth: 72,
   },
   confusionMatrixCornerCell: {
     backgroundColor: "#1C1C1E",
@@ -1409,13 +1397,13 @@ const styles = StyleSheet.create({
   },
   confusionMatrixHeaderText: {
     color: ds.color.textPrimary,
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: "600",
     textAlign: "center",
   },
   confusionMatrixRowLabel: {
     color: ds.color.textPrimary,
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: "600",
     textAlign: "center",
   },

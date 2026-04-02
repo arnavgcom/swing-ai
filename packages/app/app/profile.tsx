@@ -104,11 +104,9 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { returnTo: rawReturnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
-  const { user, logout, refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
   const webTopInset = Platform.OS === "web" ? 67 : 0;
   const returnTo = Array.isArray(rawReturnTo) ? rawReturnTo[0] : rawReturnTo;
-
-  const profileRouteParams = returnTo ? { returnTo } : undefined;
 
   const [name, setName] = useState(user?.name || "");
   const [phone, setPhone] = useState(user?.phone || "+65 ");
@@ -128,10 +126,7 @@ export default function ProfileScreen() {
   const [showDominantProfilePicker, setShowDominantProfilePicker] = useState(false);
   const [showSportsPicker, setShowSportsPicker] = useState(false);
   const [sportOptions, setSportOptions] = useState<SportSelectionOption[]>([]);
-  const isPersistedAdmin = normalizeRole(user?.role) === "admin";
-  const isSelectedAdmin = normalizeRole(role) === "admin";
-  const showAdminControls = isSelectedAdmin;
-  const canUseAdminApis = isPersistedAdmin && isSelectedAdmin;
+
   const lastSavedProfileRef = useRef<ProfileDraftPayload | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -418,39 +413,6 @@ export default function ProfileScreen() {
       ? styles.statusPillSuccess
       : styles.statusPillNeutral;
 
-  const handleLogout = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    const performLogout = async () => {
-      try {
-        await logout();
-      } catch (error: any) {
-        Alert.alert("Logout failed", error?.message || "Could not log out.");
-      }
-    };
-
-    if (Platform.OS === "web") {
-      const confirmed = typeof globalThis.confirm === "function"
-        ? globalThis.confirm("Are you sure you want to log out?")
-        : true;
-      if (confirmed) {
-        await performLogout();
-      }
-      return;
-    }
-
-    Alert.alert("Logout", "Are you sure you want to log out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Logout",
-        style: "destructive",
-        onPress: async () => {
-          await performLogout();
-        },
-      },
-    ]);
-  };
-
   const handleBack = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (returnTo && returnTo !== "/profile") {
@@ -650,63 +612,6 @@ export default function ProfileScreen() {
           </View>
         ) : null}
 
-        <View style={styles.sectionGroup}>
-          <Text style={styles.sectionLabel}>{showAdminControls ? "Admin Tools" : "Tools"}</Text>
-          <View style={styles.sectionCards}>
-            {showAdminControls ? (
-              <Pressable
-                onPress={() => {
-                  if (!canUseAdminApis) {
-                    Alert.alert("Role update in progress", "Please wait a moment and try again.");
-                    return;
-                  }
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push({ pathname: "/profile/configure", params: profileRouteParams });
-                }}
-                style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
-                testID="profile-configure"
-              >
-                <View style={styles.navCardIconWrap}>
-                  <Ionicons name="settings-outline" size={20} color="#0A84FF" />
-                </View>
-                <View style={styles.navCardBody}>
-                  <Text style={styles.navCardTitle}>Configure</Text>
-                  <Text style={styles.navCardDescription}>Platform, analysis, scoring, dataset, and player administration settings</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
-              </Pressable>
-            ) : (
-              <Pressable
-                onPress={() => {
-                  router.push({ pathname: "/profile/score-metrics-selection", params: profileRouteParams });
-                }}
-                style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
-                testID="score-metrics-selection"
-              >
-                <View style={styles.navCardIconWrap}>
-                  <Ionicons name="options-outline" size={20} color="#0A84FF" />
-                </View>
-                <View style={styles.navCardBody}>
-                  <Text style={styles.navCardTitle}>Performance Metrics Selection</Text>
-                  <Text style={styles.navCardDescription} numberOfLines={1}>Choose score sections and metrics by sport</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
-              </Pressable>
-            )}
-          </View>
-        </View>
-
-          <Pressable
-            onPress={handleLogout}
-            style={({ pressed }) => [
-              styles.logoutButton,
-              { transform: [{ scale: pressed ? 0.97 : 1 }] },
-            ]}
-            testID="logout-button"
-          >
-            <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-            <Text style={styles.logoutText}>Logout</Text>
-          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -1147,41 +1052,7 @@ const styles = StyleSheet.create({
     color: "#8E8E93",
     marginTop: 6,
   },
-  navCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#1C1C1E",
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  navCardIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#2C2C2E",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(84,84,88,0.65)",
-  },
-  navCardBody: {
-    flex: 1,
-    gap: 3,
-  },
-  navCardTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-  navCardDescription: {
-    fontSize: 12,
-    lineHeight: 18,
-    color: "#8E8E93",
-  },
+
   recalculateButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1227,22 +1098,7 @@ const styles = StyleSheet.create({
   clearHistoryTextDisabled: {
     color: "#636366",
   },
-  logoutButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#FF453A30",
-    backgroundColor: "#FF453A10",
-  },
-  logoutText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#FF453A",
-  },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",

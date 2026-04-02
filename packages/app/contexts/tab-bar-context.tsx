@@ -77,3 +77,7 @@ export function useTabBar() {
   if (!ctx) throw new Error("useTabBar must be inside TabBarProvider");
   return ctx;
 }
+
+export function useTabBarSafe() {
+  return useContext(TabBarContext);
+}

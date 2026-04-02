@@ -829,9 +829,10 @@ export default function DashboardScreen() {
     queryKey: ["analyses-summary"],
     queryFn: () => fetchAnalysesSummary(),
     refetchInterval: (query) => {
-      const data = query.state.data;
-      if (!data) return false;
-      const active = data.some((a) => a.status === "processing" || a.status === "queued");
+      const data = query.state.data as AnalysisSummary[] | undefined;
+      const active = (data || []).some(
+        (a) => a.status === "processing" || a.status === "queued",
+      );
       return active ? 5000 : false;
     },
     enabled: !!user,
