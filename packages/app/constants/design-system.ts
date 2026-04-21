@@ -1,48 +1,54 @@
 /**
- * Design system inspired by Apple Fitness + Apple Sports.
+ * Design system — restored from the original Swing AI palette.
  *
- * Background hierarchy: bg → bgElevated → bgTertiary
- * Apple dark-mode system colors used for semantic tokens.
+ * Core color values match the legacy app verbatim (deeper midnight,
+ * warmer translucent glass, purple `#6C5CE7` brand accent). Additive
+ * scaffolding (Inter typography presets, tabular numbers, sharedStyles,
+ * extended palette + sport tokens) is preserved so dependent components
+ * keep compiling.
  */
 export const ds = {
   color: {
-    // ─── Backgrounds ─────────────────────────────
-    bg: "#000000", // pure black (Apple Fitness / Sports)
-    bgElevated: "#1C1C1E", // systemGray6 dark
-    bgTertiary: "#2C2C2E", // systemGray5 dark
-    bgGrouped: "#1C1C1E", // grouped background
-    bgSecondaryGrouped: "#2C2C2E",
+    // ─── Backgrounds (restored) ──────────────────
+    bg: "#070B16",
+    bgElevated: "#0F172A",
+    bgTertiary: "#1A1A36",
+    bgGrouped: "#0F172A",
+    bgSecondaryGrouped: "#1A1A36",
 
-    // ─── Glass / Overlay ─────────────────────────
-    glass: "rgba(28, 28, 30, 0.72)",
-    glassLight: "rgba(255, 255, 255, 0.04)",
-    glassBorder: "rgba(255, 255, 255, 0.08)",
-    glassBorderLight: "rgba(255, 255, 255, 0.14)",
+    // ─── Glass / Overlay (restored) ──────────────
+    // Warmer, slightly transparent navy. Pairs with intensity 28 in
+    // GlassCard to recreate the original "deep frost" look.
+    glass: "rgba(15, 23, 42, 0.58)",
+    glassLight: "rgba(255, 255, 255, 0.05)",
+    glassBorder: "rgba(255, 255, 255, 0.16)",
+    glassBorderLight: "rgba(255, 255, 255, 0.20)",
 
-    // ─── Text ────────────────────────────────────
-    textPrimary: "#FFFFFF",
-    textSecondary: "#8E8E93", // systemGray
-    textTertiary: "#636366", // systemGray2
+    // ─── Text (restored) ─────────────────────────
+    textPrimary: "#F8FAFC",
+    textSecondary: "#CBD5E1",
+    textTertiary: "#94A3B8",
 
-    // ─── Semantic ────────────────────────────────
-    success: "#30D158", // Apple system green
-    warning: "#FFD60A", // Apple system yellow
-    danger: "#FF453A", // Apple system red
-    accent: "#0A84FF", // Apple system blue
-    accentGlow: "rgba(10, 132, 255, 0.15)",
+    // ─── Semantic (restored) ─────────────────────
+    success: "#34D399",
+    warning: "#FBBF24",
+    danger: "#F87171",
+    accent: "#6C5CE7",
+    accentGlow: "rgba(108, 92, 231, 0.18)",
 
     // ─── Extended palette ────────────────────────
-    orange: "#FF9F0A",
-    mint: "#63E6E2",
-    teal: "#40C8E0",
-    cyan: "#64D2FF",
-    indigo: "#5E5CE6",
-    purple: "#BF5AF2",
-    pink: "#FF375F",
+    orange: "#F59E0B",
+    mint: "#5EEAD4",
+    teal: "#14B8A6",
+    cyan: "#22D3EE",
+    indigo: "#6366F1",
+    purple: "#8B5CF6",
+    pink: "#F472B6",
+    info: "#60A5FA",
 
     // ─── Separators ──────────────────────────────
-    separator: "rgba(84, 84, 88, 0.65)", // Apple separator dark
-    separatorOpaque: "#38383A",
+    separator: "rgba(255, 255, 255, 0.08)",
+    separatorOpaque: "#22224A",
   },
   radius: {
     xs: 6,
@@ -84,14 +90,34 @@ export const ds = {
     },
   },
   font: {
-    title: 22,
-    headline: 17,
-    body: 15,
-    callout: 14,
-    subhead: 13,
-    footnote: 12,
-    caption: 11,
-    caption2: 10,
+    // Bumped one step from Apple HIG defaults — coaches/players are
+    // often 35–60+ and the app is used outdoors.
+    title: 24,
+    headline: 18,
+    body: 16,
+    callout: 15,
+    subhead: 14,
+    footnote: 13,
+    caption: 12,
+    caption2: 11,
+  },
+  // Tabular figures so score numbers line up in lists & comparison views.
+  // Spread into Text style: { ...ds.tabularNums, fontSize: 24, ... }
+  tabularNums: {
+    fontVariant: ["tabular-nums" as const],
+  },
+  /**
+   * Inter font-family presets. The Inter family is loaded in app/_layout.tsx
+   * via @expo-google-fonts/inter. Spread these into Text styles so weight is
+   * driven by family (more reliable cross-platform than `fontWeight`).
+   *
+   *   <Text style={[ds.font.bodyText, ds.type.semibold]}>Score</Text>
+   */
+  type: {
+    regular: { fontFamily: "Inter_400Regular" as const },
+    medium: { fontFamily: "Inter_500Medium" as const },
+    semibold: { fontFamily: "Inter_600SemiBold" as const },
+    bold: { fontFamily: "Inter_700Bold" as const },
   },
   motion: {
     quick: 120,
@@ -118,27 +144,28 @@ export const sharedStyles = {
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 0.5,
-    borderBottomColor: "#38383A",
+    borderBottomColor: ds.color.separator,
   },
   navHeaderTitle: {
-    fontSize: 17,       // Apple HIG: navigation bar title
+    fontSize: ds.font.headline,
     fontWeight: "600" as const,
-    color: "#FFFFFF",
+    color: ds.color.textPrimary,
   },
   navBackButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: ds.color.bgElevated,
     alignItems: "center" as const,
     justifyContent: "center" as const,
   },
 
   // ─── Primary action button ────────────────────────────────────────────────
+  // Purple brand accent on the original Swing AI palette.
   primaryButton: {
     minHeight: 50,
     borderRadius: 14,
-    backgroundColor: "#0A84FF",
+    backgroundColor: ds.color.accent,
     alignItems: "center" as const,
     justifyContent: "center" as const,
     flexDirection: "row" as const,
@@ -146,12 +173,12 @@ export const sharedStyles = {
     paddingHorizontal: 20,
   },
   primaryButtonDisabled: {
-    backgroundColor: "rgba(10,132,255,0.35)",
+    backgroundColor: "rgba(108, 92, 231, 0.45)",
   },
   primaryButtonText: {
-    fontSize: 15,
+    fontSize: ds.font.callout,
     fontWeight: "600" as const,
-    color: "#FFFFFF",
+    color: ds.color.textPrimary,
   },
 
   // ─── Secondary / outline button ───────────────────────────────────────────
@@ -159,8 +186,8 @@ export const sharedStyles = {
     minHeight: 44,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#2C2C2E",
+    borderColor: ds.color.glassBorder,
+    backgroundColor: ds.color.bgElevated,
     alignItems: "center" as const,
     justifyContent: "center" as const,
     flexDirection: "row" as const,
@@ -168,9 +195,9 @@ export const sharedStyles = {
     paddingHorizontal: 20,
   },
   secondaryButtonText: {
-    fontSize: 15,
+    fontSize: ds.font.callout,
     fontWeight: "600" as const,
-    color: "#FFFFFF",
+    color: ds.color.textPrimary,
   },
 
   // ─── Filter / selection chip ─────────────────────────────────────────────
@@ -183,15 +210,15 @@ export const sharedStyles = {
     justifyContent: "center" as const,
   },
   filterChipText: {
-    fontSize: 13,
+    fontSize: ds.font.footnote,
     fontWeight: "600" as const,
   },
 
   // ─── Section label (UPPERCASE metadata label above a group) ──────────────
   sectionLabel: {
-    fontSize: 12,
+    fontSize: ds.font.caption,
     fontWeight: "600" as const,
-    color: "#8E8E93",
+    color: ds.color.textSecondary,
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
   },
@@ -201,20 +228,20 @@ export const sharedStyles = {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: 12,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: ds.color.bgElevated,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(84,84,88,0.65)",
+    borderColor: ds.color.glassBorder,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
   listRowTitle: {
-    fontSize: 15,
+    fontSize: ds.font.callout,
     fontWeight: "600" as const,
-    color: "#FFFFFF",
+    color: ds.color.textPrimary,
   },
   listRowSubtitle: {
-    fontSize: 13,
-    color: "#8E8E93",
+    fontSize: ds.font.footnote,
+    color: ds.color.textSecondary,
   },
 } as const;

@@ -75,12 +75,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: {
-    fontSize: 13,
-    fontWeight: "600",
+    ...ds.type.semibold,
+    fontSize: ds.font.subhead,
     letterSpacing: 0.3,
   },
   content: {
-    fontSize: 14,
+    ...ds.type.regular,
+    fontSize: ds.font.callout,
     lineHeight: 21,
     color: ds.color.textSecondary,
   },
@@ -89,7 +90,7 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
   moreText: {
-    fontSize: 12,
-    fontWeight: "600",
+    ...ds.type.semibold,
+    fontSize: ds.font.caption,
   },
 });

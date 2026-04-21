@@ -41,11 +41,11 @@ type AdminDashboardWorkspaceProps = {
 
 const LABEL_COLORS: Record<string, string> = {
   forehand: "#64D2FF",
-  backhand: "#BF5AF2",
+  backhand: "#A78BFA",
   serve: "#F97316",
-  volley: "#30D158",
+  volley: "#34D399",
   practice: "#64D2FF",
-  "match-play": "#FF9F0A",
+  "match-play": "#F59E0B",
 };
 
 function formatPercent(value?: number | null, digits = 0): string {
@@ -708,13 +708,13 @@ export default function AdminDashboardWorkspace({
             label="Eligible videos"
             value={formatCompactNumber(datasetDistributions?.eligibleVideoCount)}
             helper={`${formatCompactNumber(datasetDistributions?.eligibleShotCount)} labeled shots available`}
-            accent="#FF9F0A"
+            accent="#F59E0B"
           />
           <MetricTile
             label="Labeled shots"
             value={formatCompactNumber(datasetDistributions?.eligibleShotCount)}
             helper={`${datasetDistributions?.shotDistribution.length || 0} shot labels represented`}
-            accent="#30D158"
+            accent="#34D399"
           />
         </View>
 
@@ -816,7 +816,7 @@ const styles = StyleSheet.create({
     borderRadius: ds.radius.pill,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.36)",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     justifyContent: "center",
   },
   sectionChipActive: {
@@ -1118,7 +1118,7 @@ const styles = StyleSheet.create({
   trainingTrendBarTrack: {
     height: 8,
     borderRadius: 999,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     overflow: "hidden",
   },
   trainingTrendBarFill: {
@@ -1130,7 +1130,7 @@ const styles = StyleSheet.create({
     opacity: 0.95,
   },
   trainingTrendHistoryBarFill: {
-    backgroundColor: "#30D158",
+    backgroundColor: "#34D399",
   },
   trainingTrendValueText: {
     color: "#7DD3FC",
@@ -1304,7 +1304,7 @@ const styles = StyleSheet.create({
   datasetCountText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#30D158",
+    color: "#34D399",
   },
   distributionList: {
     gap: 10,
@@ -1331,7 +1331,7 @@ const styles = StyleSheet.create({
   barTrack: {
     height: 9,
     borderRadius: 999,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     overflow: "hidden",
   },
   barFill: {
@@ -1380,13 +1380,13 @@ const styles = StyleSheet.create({
     minWidth: 72,
   },
   confusionMatrixCornerCell: {
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
   },
   confusionMatrixHeaderCell: {
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
   },
   confusionMatrixRowLabelCell: {
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
   },
   confusionMatrixAxisText: {
     color: ds.color.textTertiary,
@@ -1501,7 +1501,7 @@ const styles = StyleSheet.create({
   trendActiveBadgeText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#30D158",
+    color: "#34D399",
     textTransform: "uppercase",
   },
   trendMetricText: {
@@ -1512,7 +1512,7 @@ const styles = StyleSheet.create({
   trendBarTrack: {
     height: 10,
     borderRadius: 999,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     overflow: "hidden",
   },
   trendBarFill: {

@@ -89,7 +89,7 @@ export default function AddPlayerScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
 
       <View style={[styles.header, { paddingTop: insets.top + 10 + webTopInset }]}> 
         <Pressable
@@ -110,7 +110,7 @@ export default function AddPlayerScreen() {
               <View style={styles.fieldWrapper}>
                 <Text style={styles.fieldLabel}>Email</Text>
                 <GlassCard style={styles.fieldInput}>
-                  <Ionicons name="mail-outline" size={18} color="#0A84FF" />
+                  <Ionicons name="mail-outline" size={18} color="#6C5CE7" />
                   <TextInput
                     value={newPlayerEmail}
                     onChangeText={(text) => {
@@ -130,7 +130,7 @@ export default function AddPlayerScreen() {
               <View style={styles.fieldWrapper}>
                 <Text style={styles.fieldLabel}>Full Name</Text>
                 <GlassCard style={styles.fieldInput}>
-                  <Ionicons name="person-outline" size={18} color="#0A84FF" />
+                  <Ionicons name="person-outline" size={18} color="#6C5CE7" />
                   <TextInput
                     value={newPlayerName}
                     onChangeText={(text) => {
@@ -154,7 +154,7 @@ export default function AddPlayerScreen() {
               <View style={styles.fieldWrapper}>
                 <Text style={styles.fieldLabel}>Password</Text>
                 <GlassCard style={styles.fieldInput}>
-                  <Ionicons name="lock-closed-outline" size={18} color="#0A84FF" />
+                  <Ionicons name="lock-closed-outline" size={18} color="#6C5CE7" />
                   <TextInput
                     value={newPlayerPassword}
                     onChangeText={(text) => {
@@ -184,10 +184,10 @@ export default function AddPlayerScreen() {
                 style={({ pressed }) => [styles.saveButton, { opacity: pressed || creatingPlayer ? 0.75 : 1 }]}
               >
                 {creatingPlayer ? (
-                  <ActivityIndicator size="small" color="#0A84FF" />
+                  <ActivityIndicator size="small" color="#6C5CE7" />
                 ) : (
                   <View style={styles.saveContent}>
-                    <Ionicons name="checkmark-circle" size={20} color="#0A84FF" />
+                    <Ionicons name="checkmark-circle" size={20} color="#6C5CE7" />
                     <Text style={styles.saveText}>Add Player</Text>
                   </View>
                 )}
@@ -286,5 +286,5 @@ const styles = StyleSheet.create({
     height: 40,
   },
   saveContent: { flexDirection: "row", alignItems: "center", gap: 8 },
-  saveText: { fontSize: 15, fontWeight: "600", color: "#0A84FF" },
+  saveText: { fontSize: 15, fontWeight: "600", color: "#6C5CE7" },
 });

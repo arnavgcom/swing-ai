@@ -689,7 +689,7 @@ export default function UploadScreen() {
                     style={[
                       styles.filterChip,
                       {
-                        borderColor: selected ? `${sportColor}75` : "#54545860",
+                        borderColor: selected ? `${sportColor}75` : "#2A2A5060",
                         backgroundColor: selected ? `${sportColor}1C` : "#00000080",
                       },
                     ]}
@@ -697,7 +697,7 @@ export default function UploadScreen() {
                     <Text
                       style={[
                         styles.filterChipText,
-                        { color: selected ? sportColor : "#8E8E93" },
+                        { color: selected ? sportColor : "#94A3B8" },
                       ]}
                     >
                       {option.label}
@@ -723,7 +723,7 @@ export default function UploadScreen() {
                       style={[
                         styles.filterChip,
                         {
-                          borderColor: selected ? `${sportColor}75` : "#54545860",
+                          borderColor: selected ? `${sportColor}75` : "#2A2A5060",
                           backgroundColor: selected ? `${sportColor}1C` : "#00000080",
                         },
                       ]}
@@ -731,7 +731,7 @@ export default function UploadScreen() {
                       <Text
                         style={[
                           styles.filterChipText,
-                          { color: selected ? sportColor : "#8E8E93" },
+                          { color: selected ? sportColor : "#94A3B8" },
                         ]}
                       >
                         {option.label}
@@ -818,7 +818,7 @@ export default function UploadScreen() {
             </Text>
             {!isSelectingVideo ? (
               <View style={styles.aiBadgeRow}>
-                <Ionicons name="sparkles" size={12} color="#BF5AF2" />
+                <Ionicons name="sparkles" size={12} color="#A78BFA" />
                 <Text style={styles.aiBadgeText}>AI-Powered Analysis</Text>
               </View>
             ) : null}
@@ -835,8 +835,8 @@ export default function UploadScreen() {
             style={[
               styles.previewCard,
               {
-                backgroundColor: "#1C1C1E",
-                borderColor: "#54545860",
+                backgroundColor: "#131328",
+                borderColor: "#2A2A5060",
               },
             ]}
           >
@@ -862,7 +862,7 @@ export default function UploadScreen() {
                 <Ionicons
                   name="close-circle"
                   size={26}
-                  color={isUploadBusy ? "#38383A" : "#48484A"}
+                  color={isUploadBusy ? "#2A2A50" : "#48484A"}
                 />
               </Pressable>
             </View>
@@ -881,7 +881,7 @@ export default function UploadScreen() {
                   <Ionicons
                     name="time-outline"
                     size={14}
-                    color="#8E8E93"
+                    color="#94A3B8"
                   />
                   <Text style={styles.metaText}>
                     {selectedVideo.duration.toFixed(1)}s
@@ -893,7 +893,7 @@ export default function UploadScreen() {
                   <Ionicons
                     name="document-outline"
                     size={14}
-                    color="#8E8E93"
+                    color="#94A3B8"
                   />
                   <Text style={styles.metaText}>
                     {(selectedVideo.fileSize / (1024 * 1024)).toFixed(1)} MB
@@ -1020,7 +1020,7 @@ export default function UploadScreen() {
                     value={recordedDateInput}
                     onChangeText={setRecordedDateInput}
                     placeholder="YYYY-MM-DD"
-                    placeholderTextColor="#636366"
+                    placeholderTextColor="#64748B"
                     autoCapitalize="none"
                     autoCorrect={false}
                     style={styles.recordedAtInput}
@@ -1032,7 +1032,7 @@ export default function UploadScreen() {
                     value={recordedTimeInput}
                     onChangeText={setRecordedTimeInput}
                     placeholder="HH:MM"
-                    placeholderTextColor="#636366"
+                    placeholderTextColor="#64748B"
                     autoCapitalize="none"
                     autoCorrect={false}
                     style={styles.recordedAtInput}
@@ -1110,7 +1110,7 @@ const styles = StyleSheet.create({
   aiBadgeText: {
     fontSize: 12,
     fontWeight: "500",
-    color: "#BF5AF2",
+    color: "#A78BFA",
   },
   content: {
     flex: 1,
@@ -1127,7 +1127,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     marginTop: 10,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   topControlsRow: {
     flexDirection: "row",
@@ -1332,7 +1332,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 13,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   sessionDateCard: {
     marginBottom: 12,
@@ -1361,7 +1361,7 @@ const styles = StyleSheet.create({
   },
   sessionDateCaption: {
     fontSize: 12,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   sessionDateActions: {
     flexDirection: "row",
@@ -1386,7 +1386,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   analyzeStatusText: {
-    color: "#8E8E93",
+    color: "#94A3B8",
     fontSize: 13,
     lineHeight: 18,
     marginBottom: 16,
@@ -1433,7 +1433,7 @@ const styles = StyleSheet.create({
   tipText: {
     fontSize: 13,
     flex: 1,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   recordedAtModalBackdrop: {
     flex: 1,
@@ -1445,7 +1445,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.36)",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     padding: 18,
     gap: 14,
   },
@@ -1456,7 +1456,7 @@ const styles = StyleSheet.create({
   recordedAtModalHelp: {
     fontSize: 13,
     lineHeight: 19,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   recordedAtWebFields: {
     gap: 12,
@@ -1472,8 +1472,8 @@ const styles = StyleSheet.create({
   recordedAtInput: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#38383A",
-    backgroundColor: "#2C2C2E",
+    borderColor: "#2A2A50",
+    backgroundColor: "#1A1A36",
     color: "#AEAEB2",
     paddingHorizontal: 12,
     paddingVertical: 12,
@@ -1492,7 +1492,7 @@ const styles = StyleSheet.create({
   recordedAtSecondaryButton: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#38383A",
+    borderColor: "#2A2A50",
     paddingHorizontal: 16,
     paddingVertical: 11,
   },

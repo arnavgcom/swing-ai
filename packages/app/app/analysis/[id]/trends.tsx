@@ -137,9 +137,9 @@ function computePercentDelta(current: number | null, previous: number | null): n
 }
 
 function deltaColor(deltaPct: number | null): string {
-  if (deltaPct == null) return "#636366";
-  if (Math.abs(deltaPct) < 1e-6) return "#8E8E93";
-  return deltaPct >= 0 ? "#30D158" : "#FF453A";
+  if (deltaPct == null) return "#64748B";
+  if (Math.abs(deltaPct) < 1e-6) return "#94A3B8";
+  return deltaPct >= 0 ? "#34D399" : "#F87171";
 }
 
 function formatDeltaPercent(deltaPct: number | null): string {
@@ -439,10 +439,10 @@ export default function AnalysisMetricTrendsScreen() {
               : "Movement Score",
         color:
           section === "technical"
-            ? "#0A84FF"
+            ? "#6C5CE7"
             : section === "tactical"
-              ? "#30D158"
-              : "#FF9F0A",
+              ? "#34D399"
+              : "#F59E0B",
         unit: "/10",
         points: pointsForSection,
       };
@@ -465,7 +465,7 @@ export default function AnalysisMetricTrendsScreen() {
         unit: "kmph",
         icon: "speedometer-outline",
         category: "ball",
-        color: "#FF9F0A",
+        color: "#F59E0B",
         description: "Normalized shot speed across sessions.",
       });
     }
@@ -522,7 +522,7 @@ export default function AnalysisMetricTrendsScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={["#000000", "#1C1C1E", "#000000"]}
+        colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
         style={StyleSheet.absoluteFill}
       />
 
@@ -560,7 +560,7 @@ export default function AnalysisMetricTrendsScreen() {
 
       {isLoading ? (
         <View style={styles.centerWrap}>
-          <ActivityIndicator size="large" color="#0A84FF" />
+          <ActivityIndicator size="large" color="#6C5CE7" />
         </View>
       ) : isError || !sportConfig ? (
         <View style={styles.centerWrap}>
@@ -591,8 +591,8 @@ export default function AnalysisMetricTrendsScreen() {
             <Text style={styles.sectionTitle}>Overall Score</Text>
             <GlassCard style={styles.metricTrendCard}>
               <View style={styles.metricHeaderRow}>
-                <View style={[styles.metricIconWrap, { backgroundColor: "#0A84FF1F" }]}>
-                  <Ionicons name="stats-chart" size={14} color="#0A84FF" />
+                <View style={[styles.metricIconWrap, { backgroundColor: "#6C5CE71F" }]}>
+                  <Ionicons name="stats-chart" size={14} color="#6C5CE7" />
                 </View>
                 <View style={styles.metricTitleWrap}>
                   <Text style={styles.metricTitle}>Overall Score Trend</Text>
@@ -609,7 +609,7 @@ export default function AnalysisMetricTrendsScreen() {
                   })()}
                 </View>
               </View>
-              <MetricTrendChart points={overallTrendPoints} color="#0A84FF" />
+              <MetricTrendChart points={overallTrendPoints} color="#6C5CE7" />
             </GlassCard>
           </View>
 
@@ -637,7 +637,7 @@ export default function AnalysisMetricTrendsScreen() {
                     </View>
                     <View style={styles.metricTitleWrap}>
                       <Text style={styles.metricTitle}>{scoreTrend.label}</Text>
-                      <Text style={[styles.metricSubTitle, { color: deltaPct != null ? deltaColor(deltaPct) : "#8E8E93" }]}>
+                      <Text style={[styles.metricSubTitle, { color: deltaPct != null ? deltaColor(deltaPct) : "#94A3B8" }]}>
                         Latest: {latestValue !== null ? latestValue.toFixed(2) : "-"} {scoreTrend.unit}
                         {formatDeltaPercent(deltaPct)}
                       </Text>
@@ -705,7 +705,7 @@ export default function AnalysisMetricTrendsScreen() {
                       </View>
                       <View style={styles.metricTitleWrap}>
                         <Text style={styles.metricTitle}>{metric.label}</Text>
-                        <Text style={[styles.metricSubTitle, { color: deltaPct != null ? deltaColor(deltaPct) : "#8E8E93" }]}>
+                        <Text style={[styles.metricSubTitle, { color: deltaPct != null ? deltaColor(deltaPct) : "#94A3B8" }]}>
                           Latest: {latestValue !== null ? latestValue.toFixed(latestPrecision) : "-"} {metricDisplayUnit}
                           {formatDeltaPercent(deltaPct)}
                         </Text>

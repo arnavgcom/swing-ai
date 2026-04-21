@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
 import { ds } from "@/constants/design-system";
+import { useSportAccent } from "@/utils/useSportAccent";
 
 interface ScoreGaugeProps {
   score: number;
@@ -23,6 +24,7 @@ export function ScoreGauge({
   change,
   changeLayout = "leftOfScore",
 }: ScoreGaugeProps) {
+  const accent = useSportAccent();
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const clampedMaxScore = Number.isFinite(maxScore) && maxScore > 0 ? maxScore : 100;
@@ -30,9 +32,13 @@ export function ScoreGauge({
   const normalizedScore = (clampedScore / clampedMaxScore) * 100;
   const strokeDashoffset = circumference * (1 - normalizedScore / 100);
 
+  // Score band colours stay semantic for instant readability — coaches
+  // need to know "good vs bad" at a glance regardless of sport. The
+  // mid-band uses the active sport's accent so the gauge still feels
+  // sport-aware without losing the green/yellow/red information.
   const getScoreColor = () => {
     if (normalizedScore >= 80) return ds.color.success;
-    if (normalizedScore >= 60) return "#0A84FF";
+    if (normalizedScore >= 60) return accent.primary;
     if (normalizedScore >= 40) return ds.color.warning;
     return ds.color.danger;
   };
@@ -41,7 +47,7 @@ export function ScoreGauge({
   const hasRenderableChange = hasChange && Math.abs(change) >= 1e-6;
   const changeColor = hasRenderableChange
     ? Math.abs(change) < 1e-6
-      ? "#8E8E93"
+      ? ds.color.textSecondary
       : change > 0
         ? ds.color.success
         : ds.color.danger
@@ -163,10 +169,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   scoreText: {
-    fontWeight: "700",
+    ...ds.type.bold,
+    ...ds.tabularNums,
   },
   label: {
-    fontWeight: "500",
+    ...ds.type.medium,
     marginTop: 2,
     textTransform: "uppercase",
     letterSpacing: 1,
@@ -184,6 +191,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   changeText: {
-    fontWeight: "600",
+    ...ds.type.semibold,
+    ...ds.tabularNums,
   },
 });

@@ -425,7 +425,7 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={["#000000", "#1C1C1E", "#000000"]}
+        colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
         style={StyleSheet.absoluteFill}
       />
 
@@ -464,7 +464,7 @@ export default function ProfileScreen() {
               <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
             ) : (
               <LinearGradient
-                colors={["#0A84FF", "#A29BFE"]}
+                colors={["#6C5CE7", "#A29BFE"]}
                 style={styles.avatarPlaceholder}
               >
                 <Text style={styles.avatarInitial}>
@@ -528,11 +528,11 @@ export default function ProfileScreen() {
                   style={styles.fieldInput}
                   testID="field-country"
                 >
-                  <Ionicons name="globe-outline" size={18} color="#0A84FF" />
+                  <Ionicons name="globe-outline" size={18} color="#6C5CE7" />
                   <Text style={[styles.dropdownText, !country && styles.dropdownPlaceholder]}>
                     {country || "Select country"}
                   </Text>
-                  <Ionicons name="chevron-down" size={16} color="#636366" />
+                  <Ionicons name="chevron-down" size={16} color="#64748B" />
                 </Pressable>
               </View>
 
@@ -546,11 +546,11 @@ export default function ProfileScreen() {
                   style={styles.fieldInput}
                   testID="field-dominant-profile"
                 >
-                  <Ionicons name="hand-left-outline" size={18} color="#0A84FF" />
+                  <Ionicons name="hand-left-outline" size={18} color="#6C5CE7" />
                   <Text style={[styles.dropdownText, !dominantProfile && styles.dropdownPlaceholder]}>
                     {dominantProfile || "Select dominant profile"}
                   </Text>
-                  <Ionicons name="chevron-down" size={16} color="#636366" />
+                  <Ionicons name="chevron-down" size={16} color="#64748B" />
                 </Pressable>
               </View>
 
@@ -564,11 +564,11 @@ export default function ProfileScreen() {
                   style={styles.fieldInput}
                   testID="field-sport"
                 >
-                  <Ionicons name="tennisball-outline" size={18} color="#0A84FF" />
+                  <Ionicons name="tennisball-outline" size={18} color="#6C5CE7" />
                   <Text style={[styles.dropdownText, !sportsInterests && styles.dropdownPlaceholder]}>
                     {sportsInterests || "Select sport"}
                   </Text>
-                  <Ionicons name="chevron-down" size={16} color="#636366" />
+                  <Ionicons name="chevron-down" size={16} color="#64748B" />
                 </Pressable>
                 <Text style={styles.fieldHint}>All sports are visible. Only enabled sports can be selected.</Text>
               </View>
@@ -587,7 +587,7 @@ export default function ProfileScreen() {
                     <Ionicons
                       name={role === "admin" ? "shield-checkmark" : "person"}
                       size={18}
-                      color={role === "admin" ? "#FFD60A" : "#0A84FF"}
+                      color={role === "admin" ? "#FBBF24" : "#6C5CE7"}
                     />
                     <Text style={styles.roleText}>
                       {role === "admin" ? "Admin" : "Player"}
@@ -602,8 +602,8 @@ export default function ProfileScreen() {
                     value={role === "admin"}
                     onValueChange={handleRoleToggle}
                     disabled={saving}
-                    trackColor={{ false: "#545458", true: "#FFD60A40" }}
-                    thumbColor={role === "admin" ? "#FFD60A" : "#636366"}
+                    trackColor={{ false: "#2A2A50", true: "#FBBF2440" }}
+                    thumbColor={role === "admin" ? "#FBBF24" : "#64748B"}
                     testID="role-toggle"
                   />
                 </View>
@@ -730,7 +730,7 @@ function PickerModal({
                       </View>
                     ) : null}
                     {isSelected && (
-                      <Ionicons name="checkmark-circle" size={22} color="#0A84FF" />
+                      <Ionicons name="checkmark-circle" size={22} color="#6C5CE7" />
                     )}
                   </View>
                 </Pressable>
@@ -766,12 +766,12 @@ function ProfileField({
     <View style={styles.fieldWrapper}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <View style={[styles.fieldInput, !editable && styles.fieldDisabled]}>
-        <Ionicons name={icon as any} size={18} color={editable ? "#0A84FF" : "#4A4A6A"} />
+        <Ionicons name={icon as any} size={18} color={editable ? "#6C5CE7" : "#4A4A6A"} />
         <TextInput
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor="#636366"
+          placeholderTextColor="#64748B"
           editable={editable}
           multiline={multiline}
           numberOfLines={multiline ? 3 : 1}
@@ -800,13 +800,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#38383A",
+    borderBottomColor: "#2A2A50",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -825,16 +825,16 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   statusPillNeutral: {
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     borderColor: "#48484A",
   },
   statusPillSuccess: {
-    backgroundColor: "#30D15814",
-    borderColor: "#30D15840",
+    backgroundColor: "#34D39914",
+    borderColor: "#34D39940",
   },
   statusPillError: {
-    backgroundColor: "#FF453A14",
-    borderColor: "#FF453A40",
+    backgroundColor: "#F8717114",
+    borderColor: "#F8717140",
   },
   statusPillText: {
     fontSize: 10,
@@ -862,7 +862,7 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 50,
     borderWidth: 3,
-    borderColor: "#0A84FF",
+    borderColor: "#6C5CE7",
   },
   avatarPlaceholder: {
     width: 100,
@@ -871,7 +871,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 3,
-    borderColor: "#0A84FF",
+    borderColor: "#6C5CE7",
   },
   avatarInitial: {
     fontSize: 36,
@@ -896,7 +896,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: "#0A84FF",
+    backgroundColor: "#6C5CE7",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
@@ -906,7 +906,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 14,
     fontWeight: "500",
-    color: "#0A84FF",
+    color: "#6C5CE7",
   },
   sectionGroup: {
     gap: 10,
@@ -915,12 +915,12 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#8E8E93",
+    color: "#94A3B8",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   sectionCard: {
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
@@ -938,19 +938,19 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#8E8E93",
+    color: "#94A3B8",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   fieldHint: {
     fontSize: 12,
-    color: "#636366",
+    color: "#64748B",
   },
   fieldInput: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
@@ -958,8 +958,8 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === "web" ? 14 : 12,
   },
   fieldDisabled: {
-    backgroundColor: "#1C1C1E",
-    borderColor: "#38383A",
+    backgroundColor: "#131328",
+    borderColor: "#2A2A50",
   },
   textInput: {
     flex: 1,
@@ -968,7 +968,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   textDisabled: {
-    color: "#636366",
+    color: "#64748B",
   },
   textMultiline: {
     minHeight: 60,
@@ -980,7 +980,7 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   dropdownPlaceholder: {
-    color: "#636366",
+    color: "#64748B",
   },
   chipRow: {
     flexDirection: "row",
@@ -992,23 +992,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#0A84FF20",
+    backgroundColor: "#6C5CE720",
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: "#0A84FF40",
+    borderColor: "#6C5CE740",
   },
   chipText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#0A84FF",
+    color: "#6C5CE7",
   },
   roleToggleRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
@@ -1031,10 +1031,10 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   roleBadgePlayer: {
-    backgroundColor: "#0A84FF20",
+    backgroundColor: "#6C5CE720",
   },
   roleBadgeAdmin: {
-    backgroundColor: "#FFD60A20",
+    backgroundColor: "#FBBF2420",
   },
   roleBadgeText: {
     fontSize: 10,
@@ -1042,14 +1042,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   roleBadgeTextPlayer: {
-    color: "#0A84FF",
+    color: "#6C5CE7",
   },
   roleBadgeTextAdmin: {
-    color: "#FFD60A",
+    color: "#FBBF24",
   },
   helperText: {
     fontSize: 12,
-    color: "#8E8E93",
+    color: "#94A3B8",
     marginTop: 6,
   },
 
@@ -1061,8 +1061,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#0A84FF40",
-    backgroundColor: "#0A84FF20",
+    borderColor: "#6C5CE740",
+    backgroundColor: "#6C5CE720",
     marginBottom: 12,
   },
   recalculateButtonDisabled: {
@@ -1071,7 +1071,7 @@ const styles = StyleSheet.create({
   recalculateText: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#0A84FF",
+    color: "#6C5CE7",
   },
   clearHistoryButton: {
     flexDirection: "row",
@@ -1081,22 +1081,22 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#FF453A30",
-    backgroundColor: "#FF453A10",
+    borderColor: "#F8717130",
+    backgroundColor: "#F8717110",
     marginBottom: 12,
   },
   clearHistoryText: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#FF453A",
+    color: "#F87171",
   },
   clearHistoryButtonDisabled: {
     borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     opacity: 0.7,
   },
   clearHistoryTextDisabled: {
-    color: "#636366",
+    color: "#64748B",
   },
 
   modalOverlay: {
@@ -1112,7 +1112,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalContent: {
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 12,
@@ -1146,7 +1146,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#38383A",
+    borderBottomColor: "#2A2A50",
   },
   modalTitle: {
     fontSize: 17,
@@ -1157,12 +1157,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: "#0A84FF20",
+    backgroundColor: "#6C5CE720",
   },
   modalDoneText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#0A84FF",
+    color: "#6C5CE7",
   },
   modalList: {
     paddingHorizontal: 12,
@@ -1177,7 +1177,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   modalItemSelected: {
-    backgroundColor: "#0A84FF15",
+    backgroundColor: "#6C5CE715",
   },
   modalItemDisabled: {
     opacity: 0.72,
@@ -1193,18 +1193,18 @@ const styles = StyleSheet.create({
   },
   modalItemText: {
     fontSize: 16,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   modalItemTextSelected: {
     color: "#FFFFFF",
     fontWeight: "600",
   },
   modalItemTextDisabled: {
-    color: "#636366",
+    color: "#64748B",
   },
   modalItemHint: {
     fontSize: 12,
-    color: "#636366",
+    color: "#64748B",
   },
   modalBadge: {
     borderRadius: 999,
@@ -1213,8 +1213,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   modalBadgeEnabled: {
-    backgroundColor: "#30D15814",
-    borderColor: "#30D15840",
+    backgroundColor: "#34D39914",
+    borderColor: "#34D39940",
   },
   modalBadgeDisabled: {
     backgroundColor: "#48484A20",
@@ -1227,9 +1227,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   modalBadgeTextEnabled: {
-    color: "#30D158",
+    color: "#34D399",
   },
   modalBadgeTextDisabled: {
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
 });

@@ -197,7 +197,7 @@ export default function SettingsTab() {
               <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
             ) : (
               <LinearGradient
-                colors={["#0A84FF", "#A29BFE"]}
+                colors={["#6C5CE7", "#A29BFE"]}
                 style={styles.avatarPlaceholder}
               >
                 <Text style={styles.avatarInitial}>
@@ -208,7 +208,7 @@ export default function SettingsTab() {
           </View>
           <View style={styles.nameRow}>
             <Text style={styles.userName}>{user?.name || "User"}</Text>
-            <Ionicons name="chevron-down" size={16} color="#8E8E93" />
+            <Ionicons name="chevron-down" size={16} color="#94A3B8" />
           </View>
         </Pressable>
 

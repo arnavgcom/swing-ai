@@ -10,10 +10,12 @@ import {
   TextInput,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { useAuth } from "@/contexts/auth-context";
+import { ds } from "@/constants/design-system";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -64,6 +66,18 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Restored from the original Swing AI: vertical midnight gradient
+          plus two soft glow orbs (teal top-right, blue bottom-left). */}
+      <LinearGradient
+        colors={["#040611", "#0B1122", "#03060E"]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      <View style={[styles.glowOrb, styles.glowOrbTop]} pointerEvents="none" />
+      <View style={[styles.glowOrb, styles.glowOrbBottom]} pointerEvents="none" />
+
       <View
         style={[
           styles.content,
@@ -75,7 +89,7 @@ export default function LoginScreen() {
       >
         <View style={styles.brandingSection}>
           <View style={styles.logoWrap}>
-            <Ionicons name="analytics" size={36} color="#0A84FF" />
+            <Ionicons name="analytics" size={36} color={ds.color.success} />
           </View>
           <Text style={styles.appName}>
             Swing <Text style={styles.appNameAccent}>AI</Text>
@@ -91,12 +105,12 @@ export default function LoginScreen() {
 
           {isSignUpMode && (
             <View style={styles.inputWrap}>
-              <Ionicons name="person-outline" size={18} color="#636366" />
+              <Ionicons name="person-outline" size={18} color={ds.color.textTertiary} />
               <TextInput
                 value={fullName}
                 onChangeText={setFullName}
                 placeholder="Full Name"
-                placeholderTextColor="#636366"
+                placeholderTextColor={ds.color.textTertiary}
                 autoCapitalize="words"
                 autoCorrect={false}
                 style={styles.input}
@@ -107,12 +121,12 @@ export default function LoginScreen() {
           )}
 
           <View style={styles.inputWrap}>
-            <Ionicons name="mail-outline" size={18} color="#636366" />
+            <Ionicons name="mail-outline" size={18} color={ds.color.textTertiary} />
             <TextInput
               value={email}
               onChangeText={setEmail}
               placeholder="Email"
-              placeholderTextColor="#636366"
+              placeholderTextColor={ds.color.textTertiary}
               autoCapitalize="none"
               keyboardType="email-address"
               autoCorrect={false}
@@ -123,12 +137,12 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.inputWrap}>
-            <Ionicons name="lock-closed-outline" size={18} color="#636366" />
+            <Ionicons name="lock-closed-outline" size={18} color={ds.color.textTertiary} />
             <TextInput
               value={password}
               onChangeText={setPassword}
               placeholder="Password"
-              placeholderTextColor="#636366"
+              placeholderTextColor={ds.color.textTertiary}
               secureTextEntry
               style={styles.input}
               returnKeyType="go"
@@ -150,7 +164,7 @@ export default function LoginScreen() {
             testID="local-auth-button"
           >
             {authLoading ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={ds.color.bg} />
             ) : (
               <Text style={styles.primaryButtonText}>
                 {isSignUpMode ? "Sign Up" : "Sign In"}
@@ -180,7 +194,25 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000000" },
+  container: { flex: 1, backgroundColor: ds.color.bg },
+  glowOrb: {
+    position: "absolute",
+    borderRadius: 130,
+  },
+  glowOrbTop: {
+    top: -90,
+    right: -30,
+    width: 260,
+    height: 260,
+    backgroundColor: "#34D39912", // soft teal halo
+  },
+  glowOrbBottom: {
+    bottom: -80,
+    left: -40,
+    width: 240,
+    height: 240,
+    backgroundColor: "#60A5FA14", // soft blue halo
+  },
   content: {
     flex: 1,
     paddingHorizontal: 24,
@@ -195,40 +227,44 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 16,
-    backgroundColor: "rgba(10, 132, 255, 0.12)",
+    backgroundColor: "rgba(52, 211, 153, 0.14)",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
   },
   appName: {
+    ...ds.type.bold,
     fontSize: 40,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    color: ds.color.textPrimary,
     letterSpacing: -1,
   },
   appNameAccent: {
-    color: "#0A84FF",
+    color: ds.color.success,
   },
   tagline: {
-    fontSize: 15,
-    color: "#8E8E93",
+    ...ds.type.regular,
+    fontSize: ds.font.callout,
+    color: ds.color.textSecondary,
     letterSpacing: 0.2,
   },
   authCard: {
     borderRadius: 18,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: ds.color.glass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: ds.color.glassBorder,
     padding: 20,
     gap: 12,
   },
   cardTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    ...ds.type.bold,
+    fontSize: ds.font.title,
+    color: ds.color.textPrimary,
     letterSpacing: -0.3,
   },
   cardSubtitle: {
-    fontSize: 15,
-    color: "#8E8E93",
+    ...ds.type.regular,
+    fontSize: ds.font.callout,
+    color: ds.color.textSecondary,
     marginBottom: 4,
   },
   inputWrap: {
@@ -236,28 +272,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     borderRadius: 12,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: ds.color.bgTertiary,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: ds.color.glassBorder,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === "web" ? 14 : 12,
   },
   input: {
+    ...ds.type.regular,
     flex: 1,
-    color: "#FFFFFF",
-    fontSize: 15,
+    color: ds.color.textPrimary,
+    fontSize: ds.font.callout,
     paddingVertical: 0,
   },
   primaryButton: {
     marginTop: 4,
     borderRadius: 12,
-    backgroundColor: "#0A84FF",
+    backgroundColor: ds.color.accent,
     paddingVertical: 15,
     alignItems: "center",
     justifyContent: "center",
   },
   primaryButtonText: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#FFFFFF",
+    ...ds.type.semibold,
+    fontSize: ds.font.headline,
+    color: ds.color.bg,
     letterSpacing: -0.2,
   },
   modeToggle: {
@@ -266,11 +305,12 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   modeToggleText: {
-    fontSize: 14,
-    color: "#8E8E93",
+    ...ds.type.regular,
+    fontSize: ds.font.subhead,
+    color: ds.color.textSecondary,
   },
   modeToggleLink: {
-    color: "#0A84FF",
-    fontWeight: "500",
+    ...ds.type.medium,
+    color: ds.color.success,
   },
 });

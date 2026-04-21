@@ -75,7 +75,7 @@ export function JointHeatmapRenderer({
         const color = getHeatmapColor(score);
         const cx = lm.x * width;
         const cy = lm.y * height;
-        const isRed = color === "#FF453A";
+        const isRed = color === "#F87171";
 
         return (
           <G key={lm.id}>

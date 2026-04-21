@@ -54,16 +54,16 @@ function toTitleCase(value: string): string {
 }
 
 function strokeColor(stroke: string): string {
-  if (stroke === "serve") return "#0A84FF";
-  if (stroke === "backhand") return "#FFD60A";
-  if (stroke === "volley") return "#BF5AF2";
-  return "#30D158";
+  if (stroke === "serve") return "#6C5CE7";
+  if (stroke === "backhand") return "#FBBF24";
+  if (stroke === "volley") return "#A78BFA";
+  return "#34D399";
 }
 
 function scoreColor(score: number): string {
-  if (score >= 8) return "#30D158";
-  if (score >= 6) return "#0A84FF";
-  return "#FFD60A";
+  if (score >= 8) return "#34D399";
+  if (score >= 6) return "#6C5CE7";
+  return "#FBBF24";
 }
 
 function asFiniteNumber(value: unknown): number | null {
@@ -313,8 +313,8 @@ export default function ImprovedTennisAnalysisScreen() {
   if (isLoading || improvedLoading) {
     return (
       <View style={[styles.container, styles.center]}>
-        <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
-        <ActivityIndicator size="large" color="#0A84FF" />
+        <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
+        <ActivityIndicator size="large" color="#6C5CE7" />
       </View>
     );
   }
@@ -322,7 +322,7 @@ export default function ImprovedTennisAnalysisScreen() {
   if (!detail) {
     return (
       <View style={[styles.container, styles.center]}>
-        <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
         <Text style={styles.emptyText}>Analysis not found.</Text>
       </View>
     );
@@ -331,7 +331,7 @@ export default function ImprovedTennisAnalysisScreen() {
   if (!isImprovedTennisEnabled()) {
     return (
       <View style={[styles.container, styles.center]}>
-        <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
         <Text style={styles.emptyText}>Improved analysis is currently disabled.</Text>
       </View>
     );
@@ -340,7 +340,7 @@ export default function ImprovedTennisAnalysisScreen() {
   if (!isTennis) {
     return (
       <View style={[styles.container, styles.center]}>
-        <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
         <Text style={styles.emptyText}>Improved analysis is available for Tennis only.</Text>
       </View>
     );
@@ -348,7 +348,7 @@ export default function ImprovedTennisAnalysisScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
 
       <View style={styles.topBar}>
         <Pressable
@@ -375,14 +375,14 @@ export default function ImprovedTennisAnalysisScreen() {
 
         <View style={styles.badgesRow}>
           <View style={styles.badgeNeutral}>
-            <Ionicons name="flash-outline" size={12} color="#30D158" />
+            <Ionicons name="flash-outline" size={12} color="#34D399" />
             <Text style={styles.badgeTextNeutral}>
               {isMatchPlayReport ? "Match Play" : toTitleCase(report?.stroke || "forehand")}
             </Text>
           </View>
           {isMatchPlayReport && strokeMixItems.length > 0 ? (
             <View style={styles.badgeNeutral}>
-              <Ionicons name="tennisball-outline" size={12} color="#0A84FF" />
+              <Ionicons name="tennisball-outline" size={12} color="#6C5CE7" />
               <Text style={styles.badgeTextNeutral}>
                 Primary: {toTitleCase(strokeMixItems[0].stroke)}
               </Text>
@@ -512,19 +512,19 @@ export default function ImprovedTennisAnalysisScreen() {
               icon="trophy"
               title="Key Strength"
               content={strengthsText}
-              color="#30D158"
+              color="#34D399"
             />
             <CoachingCard
               icon="warning"
               title="Improvement Area"
               content={improvementsText}
-              color="#FFD60A"
+              color="#FBBF24"
             />
             <CoachingCard
               icon="bulb"
               title="Coach Tips"
               content={coachTipsText}
-              color="#0A84FF"
+              color="#6C5CE7"
             />
           </View>
         </View>
@@ -557,7 +557,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
   },
   topTitle: {
     flex: 1,
@@ -609,8 +609,8 @@ const styles = StyleSheet.create({
     gap: 5,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#54545860",
-    backgroundColor: "#1C1C1E",
+    borderColor: "#2A2A5060",
+    backgroundColor: "#131328",
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
@@ -631,8 +631,8 @@ const styles = StyleSheet.create({
   section: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#54545860",
-    backgroundColor: "#1C1C1E",
+    borderColor: "#2A2A5060",
+    backgroundColor: "#131328",
     padding: 16,
     gap: 12,
   },
@@ -647,7 +647,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#54545840",
+    borderColor: "#2A2A5040",
     backgroundColor: "rgba(10, 10, 26, 0.38)",
   },
   tenHeader: {
@@ -766,7 +766,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#000",
     borderWidth: 1,
-    borderColor: "#54545840",
+    borderColor: "#2A2A5040",
   },
   videoPlayer: {
     width: "100%",

@@ -444,7 +444,7 @@ export default function ScoreMetricsSelectionScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={["#000000", "#1C1C1E", "#000000"]}
+        colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]}
         style={StyleSheet.absoluteFill}
       />
 
@@ -476,11 +476,11 @@ export default function ScoreMetricsSelectionScreen() {
                 style={styles.fieldInput}
                 testID="field-selected-sport"
               >
-                <Ionicons name="football-outline" size={18} color="#0A84FF" />
+                <Ionicons name="football-outline" size={18} color="#6C5CE7" />
                 <Text style={[styles.dropdownText, !selectedSportName && styles.dropdownPlaceholder]}>
                   {selectedSportName || "Select sport"}
                 </Text>
-                <Ionicons name="chevron-down" size={16} color="#636366" />
+                <Ionicons name="chevron-down" size={16} color="#64748B" />
               </Pressable>
             </View>
           </View>
@@ -496,13 +496,13 @@ export default function ScoreMetricsSelectionScreen() {
                 style={styles.fieldInput}
                 testID="field-score-sections"
               >
-                <Ionicons name="layers-outline" size={18} color="#0A84FF" />
+                <Ionicons name="layers-outline" size={18} color="#6C5CE7" />
                 <Text style={[styles.dropdownText, selectedScoreSections.length === 0 && styles.dropdownPlaceholder]}>
                   {selectedScoreSections.length > 0
                     ? `${selectedScoreSections.length} selected`
                     : "Select score sections"}
                 </Text>
-                <Ionicons name="chevron-down" size={16} color="#636366" />
+                <Ionicons name="chevron-down" size={16} color="#64748B" />
               </Pressable>
               {selectedScoreSections.length > 0 ? (
                 <View style={styles.chipRow}>
@@ -532,13 +532,13 @@ export default function ScoreMetricsSelectionScreen() {
                 style={styles.fieldInput}
                 testID="field-selected-metrics"
               >
-                <Ionicons name="options-outline" size={18} color="#0A84FF" />
+                <Ionicons name="options-outline" size={18} color="#6C5CE7" />
                 <Text style={[styles.dropdownText, selectedMetricKeys.length === 0 && styles.dropdownPlaceholder]}>
                   {selectedMetricKeys.length > 0
                     ? `${selectedMetricKeys.length} selected`
                     : `Select metrics (${metricOptions.length} available)`}
                 </Text>
-                <Ionicons name="chevron-down" size={16} color="#636366" />
+                <Ionicons name="chevron-down" size={16} color="#64748B" />
               </Pressable>
               {sortedSelectedMetricKeys.length > 0 ? (
                 <View style={styles.chipRow}>
@@ -659,7 +659,7 @@ function PickerModal({
                     {item.hint ? <Text style={styles.modalItemHint}>{item.hint}</Text> : null}
                   </View>
                   {isSelected && (
-                    <Ionicons name="checkmark-circle" size={22} color="#0A84FF" />
+                    <Ionicons name="checkmark-circle" size={22} color="#6C5CE7" />
                   )}
                 </Pressable>
               );
@@ -683,13 +683,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#2C2C2E",
+    borderBottomColor: "#1A1A36",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -708,7 +708,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   statusPillNeutral: {
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     borderColor: "rgba(84,84,88,0.65)",
   },
   statusPillSuccess: {
@@ -737,12 +737,12 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#8E8E93",
+    color: "#94A3B8",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   sectionCard: {
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
@@ -754,19 +754,19 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#8E8E93",
+    color: "#94A3B8",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   fieldHint: {
     fontSize: 12,
-    color: "#636366",
+    color: "#64748B",
   },
   fieldInput: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
@@ -791,12 +791,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#0A84FF20",
+    backgroundColor: "#6C5CE720",
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: "#0A84FF40",
+    borderColor: "#6C5CE740",
   },
   chipText: {
     fontSize: 13,
@@ -809,7 +809,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalContent: {
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 12,
@@ -842,12 +842,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: "#0A84FF20",
+    backgroundColor: "#6C5CE720",
   },
   modalDoneText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#0A84FF",
+    color: "#6C5CE7",
   },
   modalList: {
     paddingHorizontal: 12,
@@ -862,7 +862,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   modalItemSelected: {
-    backgroundColor: "#0A84FF15",
+    backgroundColor: "#6C5CE715",
   },
   modalItemDisabled: {
     opacity: 0.72,
@@ -873,17 +873,17 @@ const styles = StyleSheet.create({
   },
   modalItemText: {
     fontSize: 16,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   modalItemTextSelected: {
     color: "#FFFFFF",
     fontWeight: "600",
   },
   modalItemTextDisabled: {
-    color: "#636366",
+    color: "#64748B",
   },
   modalItemHint: {
     fontSize: 12,
-    color: "#636366",
+    color: "#64748B",
   },
 });

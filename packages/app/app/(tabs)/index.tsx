@@ -118,15 +118,15 @@ const TREND_SESSION_FILTERS = [
 type TrendSessionWindow = (typeof TREND_SESSION_FILTERS)[number]["key"];
 
 const PLAYER_TREND_FILTERS = [
-  { key: "overall", label: "Overall", color: "#FF9F0A" },
-  { key: "technical", label: "Technical", color: "#0A84FF" },
-  { key: "tactical", label: "Tactical", color: "#BF5AF2" },
-  { key: "movement", label: "Movement", color: "#30D158" },
+  { key: "overall", label: "Overall", color: "#F59E0B" },
+  { key: "technical", label: "Technical", color: "#60A5FA" },
+  { key: "tactical", label: "Tactical", color: "#A78BFA" },
+  { key: "movement", label: "Movement", color: "#34D399" },
 ] as const;
 
 const PLAYER_METRICS = [
-  { key: "technical", label: "Technical", icon: "construct", color: "#0A84FF" },
-  { key: "tactical", label: "Tactical", icon: "analytics", color: "#BF5AF2" },
+  { key: "technical", label: "Technical", icon: "construct", color: "#60A5FA" },
+  { key: "tactical", label: "Tactical", icon: "analytics", color: "#A78BFA" },
   { key: "movement", label: "Movement", icon: "body", color: ds.color.success },
 ] as const;
 
@@ -329,7 +329,7 @@ function metricDeltaIcon(delta: number | null): "caret-up" | "caret-down" | "rem
 
 function getDeltaColor(delta: number | null): string {
   if (delta === null) return ds.color.textTertiary;
-  if (Math.abs(delta) < 1e-6) return "#8E8E93";
+  if (Math.abs(delta) < 1e-6) return "#94A3B8";
   if (delta >= 0) return ds.color.success;
   return ds.color.danger;
 }
@@ -765,7 +765,7 @@ export default function DashboardScreen() {
   }, [isAdmin, user]);
 
   const sc = sportColors[selectedSport?.name || ""] || {
-    primary: "#0A84FF",
+    primary: "#60A5FA",
     gradient: "#0071E3",
   };
   const areAllSessionTypesSelected = selectedSessionTypes.length === DEFAULT_SESSION_TYPE_FILTERS.length;
@@ -1124,7 +1124,7 @@ export default function DashboardScreen() {
       ) : null}
       {selectedMovement?.name ? (
         <View style={styles.movementBadge}>
-          <Ionicons name="flash-outline" size={11} color="#30D158" />
+          <Ionicons name="flash-outline" size={11} color="#34D399" />
           <Text style={styles.movementBadgeText}>
             {formatMovementBadgeLabel(selectedMovement?.name)}
           </Text>
@@ -1148,7 +1148,7 @@ export default function DashboardScreen() {
                 refetchShotAnnotations();
               }
             }}
-            tintColor="#0A84FF"
+            tintColor="#60A5FA"
           />
         }
         showsVerticalScrollIndicator={false}
@@ -1189,7 +1189,7 @@ export default function DashboardScreen() {
                           styles.filterChip,
                           {
                             borderColor: selected ? `${sc.primary}60` : "rgba(84,84,88,0.36)",
-                            backgroundColor: selected ? `${sc.primary}1C` : "#1C1C1E",
+                            backgroundColor: selected ? `${sc.primary}1C` : "#131328",
                             opacity: pressed ? 0.82 : 1,
                           },
                         ]}
@@ -1197,7 +1197,7 @@ export default function DashboardScreen() {
                         <Text
                           style={[
                             styles.filterChipText,
-                            { color: selected ? sc.primary : "#8E8E93" },
+                            { color: selected ? sc.primary : "#94A3B8" },
                           ]}
                         >
                           {option.label}
@@ -1219,8 +1219,8 @@ export default function DashboardScreen() {
                         style={({ pressed }) => [
                           styles.filterChip,
                           {
-                            borderColor: selected ? "#30D15860" : "rgba(84,84,88,0.36)",
-                            backgroundColor: selected ? "#30D1581C" : "#1C1C1E",
+                            borderColor: selected ? "#34D39960" : "rgba(84,84,88,0.36)",
+                            backgroundColor: selected ? "#34D3991C" : "#131328",
                             opacity: pressed ? 0.82 : 1,
                           },
                         ]}
@@ -1228,7 +1228,7 @@ export default function DashboardScreen() {
                         <Text
                           style={[
                             styles.filterChipText,
-                            { color: selected ? "#30D158" : "#8E8E93" },
+                            { color: selected ? "#34D399" : "#94A3B8" },
                           ]}
                         >
                           {option.label}
@@ -1293,7 +1293,7 @@ export default function DashboardScreen() {
 
         {isLoading ? (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color="#0A84FF" />
+            <ActivityIndicator size="large" color="#60A5FA" />
           </View>
         ) : (
           <>
@@ -1636,7 +1636,7 @@ export default function DashboardScreen() {
                   />
                   <View style={styles.aiSectionHeader}>
                     <View style={styles.aiSectionBadge}>
-                      <Ionicons name="sparkles" size={12} color="#BF5AF2" />
+                      <Ionicons name="sparkles" size={12} color="#A78BFA" />
                       <Text style={styles.aiSectionBadgeText}>AI Coach</Text>
                     </View>
                     <View style={styles.playerPlanDurationRow}>
@@ -1650,7 +1650,7 @@ export default function DashboardScreen() {
                               borderColor:
                                 selectedPlanMinutes === minutes ? "rgba(191,90,242,0.5)" : "rgba(84,84,88,0.36)",
                               backgroundColor:
-                                selectedPlanMinutes === minutes ? "rgba(191,90,242,0.15)" : "#1C1C1E",
+                                selectedPlanMinutes === minutes ? "rgba(191,90,242,0.15)" : "#131328",
                               opacity: pressed ? 0.8 : 1,
                             },
                           ]}
@@ -1658,7 +1658,7 @@ export default function DashboardScreen() {
                           <Text
                             style={[
                               styles.playerPlanDurationText,
-                              { color: selectedPlanMinutes === minutes ? "#BF5AF2" : "#8E8E93" },
+                              { color: selectedPlanMinutes === minutes ? "#A78BFA" : "#94A3B8" },
                             ]}
                           >
                             {minutes}m
@@ -1670,7 +1670,7 @@ export default function DashboardScreen() {
                   {playerDashboard.focusAreas.map((area, index) => (
                     <View key={area.key} style={styles.playerPlanRow}>
                       <View style={[styles.playerPlanIndexWrap, { backgroundColor: "rgba(191,90,242,0.15)" }]}>
-                        <Text style={[styles.playerPlanIndex, { color: "#BF5AF2" }]}>{index + 1}</Text>
+                        <Text style={[styles.playerPlanIndex, { color: "#A78BFA" }]}>{index + 1}</Text>
                       </View>
                       <View style={styles.playerPlanContent}>
                         <Text style={styles.playerPlanTitle}>{area.label}</Text>
@@ -1679,7 +1679,7 @@ export default function DashboardScreen() {
                         </Text>
                         <Text style={styles.playerPlanGain}>+{area.expectedGain.toFixed(1)} expected</Text>
                         <View style={styles.aiDrillRow}>
-                          <Ionicons name="barbell-outline" size={11} color="#BF5AF2" />
+                          <Ionicons name="barbell-outline" size={11} color="#A78BFA" />
                           <Text style={styles.playerPlanDrill}>{area.drill}</Text>
                         </View>
                       </View>
@@ -1704,7 +1704,7 @@ export default function DashboardScreen() {
                               borderColor:
                                 selectedTrendSessions === option.key ? `${sc.primary}60` : "rgba(84,84,88,0.36)",
                               backgroundColor:
-                                selectedTrendSessions === option.key ? `${sc.primary}20` : "#1C1C1E",
+                                selectedTrendSessions === option.key ? `${sc.primary}20` : "#131328",
                               opacity: pressed ? 0.8 : 1,
                             },
                           ]}
@@ -1712,7 +1712,7 @@ export default function DashboardScreen() {
                           <Text
                             style={[
                               styles.playerTrendSessionTabText,
-                              { color: selectedTrendSessions === option.key ? sc.primary : "#8E8E93" },
+                              { color: selectedTrendSessions === option.key ? sc.primary : "#94A3B8" },
                             ]}
                           >
                             {option.label}
@@ -1736,7 +1736,7 @@ export default function DashboardScreen() {
                             backgroundColor:
                               selectedTrendMetric === metric.key
                                 ? `${metric.color}1F`
-                                : "#1C1C1E",
+                                : "#131328",
                             opacity: pressed ? 0.8 : 1,
                           },
                         ]}
@@ -1745,7 +1745,7 @@ export default function DashboardScreen() {
                           style={[
                             styles.playerTrendMetricTabText,
                             {
-                              color: selectedTrendMetric === metric.key ? metric.color : "#8E8E93",
+                              color: selectedTrendMetric === metric.key ? metric.color : "#94A3B8",
                             },
                           ]}
                         >
@@ -1807,7 +1807,7 @@ export default function DashboardScreen() {
                   <Ionicons
                     name={(selectedSport?.icon as any) || "fitness-outline"}
                     size={36}
-                    color="#636366"
+                    color="#64748B"
                   />
                 </View>
                 <Text style={styles.emptyTitle}>No analyses yet</Text>
@@ -1879,14 +1879,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
-    backgroundColor: "#30D15815",
+    backgroundColor: "#34D39915",
     borderWidth: 1,
-    borderColor: "#30D15830",
+    borderColor: "#34D39930",
   },
   movementBadgeText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#30D158",
+    color: "#34D399",
   },
   filterSection: {
     gap: 12,
@@ -1994,7 +1994,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.36)",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     padding: 14,
     gap: 8,
     marginBottom: 12,
@@ -2014,7 +2014,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.36)",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     paddingHorizontal: 10,
     paddingVertical: 6,
     minHeight: 34,
@@ -2109,7 +2109,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     paddingVertical: 9,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
   },
   scoringSaveText: {
     fontSize: 12,
@@ -2369,12 +2369,12 @@ const styles = StyleSheet.create({
   registryTrendBarTrack: {
     height: 8,
     borderRadius: 999,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     overflow: "hidden",
   },
   registryTrendBarFillMovement: {
     height: "100%",
-    backgroundColor: "#30D158",
+    backgroundColor: "#34D399",
     borderRadius: 999,
   },
   registryTrendBarFillScoring: {
@@ -2405,7 +2405,7 @@ const styles = StyleSheet.create({
   registryEntryVersionText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#30D158",
+    color: "#34D399",
   },
   registryEntryDateText: {
     fontSize: 11,
@@ -2432,7 +2432,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(84,84,88,0.36)",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     maxHeight: "82%",
     padding: 14,
     gap: 8,
@@ -2462,7 +2462,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(84,84,88,0.36)",
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     padding: 8,
     gap: 3,
   },
@@ -2473,10 +2473,10 @@ const styles = StyleSheet.create({
   },
   registryDetailVideoMeta: {
     fontSize: 10,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   playerSummaryCard: {
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(84,84,88,0.36)",
@@ -2511,7 +2511,7 @@ const styles = StyleSheet.create({
   playerSummaryEyebrow: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   playerSummaryMetaRow: {
     flexDirection: "row",
@@ -2545,7 +2545,7 @@ const styles = StyleSheet.create({
   playerSummaryScoreLabel: {
     fontSize: 9,
     fontWeight: "500",
-    color: "#636366",
+    color: "#64748B",
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
   },
@@ -2557,7 +2557,7 @@ const styles = StyleSheet.create({
   playerSummaryScoreText: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#30D158",
+    color: "#34D399",
   },
   playerSummaryDeltaWrap: {
     flexDirection: "row",
@@ -2579,7 +2579,7 @@ const styles = StyleSheet.create({
     minWidth: "31%" as const,
     flexGrow: 1,
     flexBasis: "31%" as const,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     borderRadius: 10,
     padding: 8,
     alignItems: "center",
@@ -2590,7 +2590,7 @@ const styles = StyleSheet.create({
   playerSummaryMetricLabel: {
     fontSize: 10,
     fontWeight: "500",
-    color: "#636366",
+    color: "#64748B",
     textTransform: "uppercase" as const,
     letterSpacing: 0.3,
   },
@@ -2653,7 +2653,7 @@ const styles = StyleSheet.create({
   aiSectionBadgeText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#BF5AF2",
+    color: "#A78BFA",
   },
   aiDrillRow: {
     flexDirection: "row",
@@ -2697,7 +2697,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(84,84,88,0.36)",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
   },
   playerTrendMetricDot: {
     width: 8,
@@ -2777,7 +2777,7 @@ const styles = StyleSheet.create({
   playerMovementScore: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#30D158",
+    color: "#34D399",
   },
   playerMovementDelta: {
     fontSize: 11,
@@ -2815,7 +2815,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     marginTop: 1,
   },
   playerPlanIndex: {
@@ -2840,7 +2840,7 @@ const styles = StyleSheet.create({
   playerPlanGain: {
     fontSize: 11,
     fontWeight: "500",
-    color: "#30D158",
+    color: "#34D399",
   },
   playerPlanDrill: {
     fontSize: 12,

@@ -164,7 +164,7 @@ export default function ManualAnnotationScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
 
       <View style={styles.header}>
         <Pressable
@@ -186,7 +186,7 @@ export default function ManualAnnotationScreen() {
             onPress={() => setManualShotLabels((prev) => [...prev, movementTypeOptions[0] || "forehand"])}
             style={({ pressed }) => [styles.actionButton, { opacity: pressed ? 0.85 : 1 }]}
           >
-            <Ionicons name="add" size={14} color="#0A84FF" />
+            <Ionicons name="add" size={14} color="#6C5CE7" />
             <Text style={styles.actionText}>Add Shot</Text>
           </Pressable>
           <Pressable
@@ -198,7 +198,7 @@ export default function ManualAnnotationScreen() {
               { opacity: pressed ? 0.85 : 1 },
             ]}
           >
-            <Ionicons name="remove" size={14} color={manualShotLabels.length === 0 ? "#636366" : "#FF6961"} />
+            <Ionicons name="remove" size={14} color={manualShotLabels.length === 0 ? "#64748B" : "#FF6961"} />
             <Text style={[styles.actionText, manualShotLabels.length === 0 && styles.actionTextDisabled]}>Remove Shot</Text>
           </Pressable>
         </View>
@@ -231,7 +231,7 @@ export default function ManualAnnotationScreen() {
                   style={({ pressed }) => [styles.dropdownTrigger, { opacity: pressed ? 0.85 : 1 }]}
                 >
                   <Text style={styles.dropdownText}>{toTitle(shotLabel)}</Text>
-                  <Ionicons name={dropdownOpen ? "chevron-up" : "chevron-down"} size={14} color="#8E8E93" />
+                  <Ionicons name={dropdownOpen ? "chevron-up" : "chevron-down"} size={14} color="#94A3B8" />
                 </Pressable>
                 {dropdownOpen && (
                   <View style={styles.dropdownMenu}>

@@ -1,6 +1,8 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { ds } from "@/constants/design-system";
+import { useSportAccent } from "@/utils/useSportAccent";
 
 interface SubScoreBarProps {
   label: string;
@@ -9,17 +11,20 @@ interface SubScoreBarProps {
 }
 
 export function SubScoreBar({ label, score, change }: SubScoreBarProps) {
+  const accent = useSportAccent();
   const widthPercent = `${Math.max(0, Math.min(100, score))}%`;
 
+  // Mid-band uses the active sport's accent so the bars feel sport-aware
+  // while the green/yellow/red bands remain semantically meaningful.
   const getColor = () => {
-    if (score >= 80) return "#30D158";
-    if (score >= 60) return "#0A84FF";
-    if (score >= 40) return "#FFD60A";
-    return "#FF453A";
+    if (score >= 80) return ds.color.success;
+    if (score >= 60) return accent.primary;
+    if (score >= 40) return ds.color.warning;
+    return ds.color.danger;
   };
 
   const hasChange = change !== null && change !== undefined;
-  const changeColor = hasChange ? (change >= 0 ? "#30D158" : "#FF453A") : null;
+  const changeColor = hasChange ? (change >= 0 ? ds.color.success : ds.color.danger) : null;
 
   return (
     <View style={styles.container}>
@@ -57,8 +62,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   label: {
-    fontSize: 14,
-    color: "#FFFFFF",
+    ...ds.type.regular,
+    fontSize: ds.font.subhead,
+    color: ds.color.textPrimary,
   },
   scoreRow: {
     flexDirection: "row",
@@ -66,8 +72,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   score: {
-    fontSize: 16,
-    fontWeight: "700",
+    ...ds.type.bold,
+    ...ds.tabularNums,
+    fontSize: ds.font.body,
   },
   changeRow: {
     flexDirection: "row",
@@ -75,14 +82,15 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   changeText: {
-    fontSize: 11,
-    fontWeight: "600",
+    ...ds.type.semibold,
+    ...ds.tabularNums,
+    fontSize: ds.font.caption,
   },
   track: {
     height: 6,
     borderRadius: 3,
     overflow: "hidden",
-    backgroundColor: "#1E1E3F",
+    backgroundColor: ds.color.bgTertiary,
   },
   fill: {
     height: "100%",

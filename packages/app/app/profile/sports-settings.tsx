@@ -89,7 +89,7 @@ export default function SportsSettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
 
       <View style={[styles.header, { paddingTop: insets.top + 10 + webTopInset }]}> 
         <Pressable
@@ -114,7 +114,7 @@ export default function SportsSettingsScreen() {
             <View key={sport.id} style={styles.card}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardIconWrap}>
-                  <Ionicons name={(sport.icon as any) || "tennisball-outline"} size={18} color={sport.enabled ? sport.color || "#30D158" : "#8E8E93"} />
+                  <Ionicons name={(sport.icon as any) || "tennisball-outline"} size={18} color={sport.enabled ? sport.color || "#34D399" : "#94A3B8"} />
                 </View>
                 <View style={styles.cardBody}>
                   <Text style={styles.cardTitle}>{sport.name}</Text>
@@ -127,8 +127,8 @@ export default function SportsSettingsScreen() {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     handleToggle(sport, value);
                   }}
-                  trackColor={{ false: "#545458", true: "#30D15840" }}
-                  thumbColor={sport.enabled ? "#30D158" : "#636366"}
+                  trackColor={{ false: "#2A2A50", true: "#34D39940" }}
+                  thumbColor={sport.enabled ? "#34D399" : "#64748B"}
                 />
               </View>
               <View style={styles.badgeRow}>
@@ -155,13 +155,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#2C2C2E",
+    borderBottomColor: "#1A1A36",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -186,17 +186,17 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#8E8E93",
+    color: "#94A3B8",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   sectionHint: {
     fontSize: 12,
-    color: "#636366",
+    color: "#64748B",
   },
   card: {
     gap: 10,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
   },
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
   cardDescription: {
     fontSize: 12,
     lineHeight: 18,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   badgeRow: {
     flexDirection: "row",
@@ -257,9 +257,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   badgeTextEnabled: {
-    color: "#30D158",
+    color: "#34D399",
   },
   badgeTextDisabled: {
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
 });

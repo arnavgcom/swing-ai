@@ -376,7 +376,7 @@ export default function RecalculateMetricsScreen() {
   if (authLoading) {
     return (
       <View style={styles.container}>
-        <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
         <View style={styles.authLoadingWrap}>
           <ActivityIndicator size="small" color="#64D2FF" />
           <Text style={styles.authLoadingText}>Loading admin access...</Text>
@@ -387,7 +387,7 @@ export default function RecalculateMetricsScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
 
       <View style={[styles.header, { paddingTop: insets.top + 10 + webTopInset }]}>
         <Pressable onPress={handleBack} style={styles.backButton}>
@@ -506,15 +506,15 @@ export default function RecalculateMetricsScreen() {
                 <Text style={styles.statLabel}>Queued</Text>
               </View>
               <View style={styles.statCard}>
-                <Text style={[styles.statValue, { color: "#0A84FF" }]}>{String(displayQueuedStatus.inProgress)}</Text>
+                <Text style={[styles.statValue, { color: "#6C5CE7" }]}>{String(displayQueuedStatus.inProgress)}</Text>
                 <Text style={styles.statLabel}>Running</Text>
               </View>
               <View style={styles.statCard}>
-                <Text style={[styles.statValue, { color: "#30D158" }]}>{String(displayQueuedStatus.completed)}</Text>
+                <Text style={[styles.statValue, { color: "#34D399" }]}>{String(displayQueuedStatus.completed)}</Text>
                 <Text style={styles.statLabel}>Completed</Text>
               </View>
               <View style={styles.statCard}>
-                <Text style={[styles.statValue, { color: "#FF453A" }]}>{String(displayQueuedStatus.failed)}</Text>
+                <Text style={[styles.statValue, { color: "#F87171" }]}>{String(displayQueuedStatus.failed)}</Text>
                 <Text style={styles.statLabel}>Failed</Text>
               </View>
             </View>
@@ -650,13 +650,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#38383A",
+    borderBottomColor: "#2A2A50",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -678,7 +678,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     padding: 18,
     gap: 14,
   },
@@ -692,7 +692,7 @@ const styles = StyleSheet.create({
   authLoadingText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   heroTitle: {
     fontSize: 20,
@@ -702,7 +702,7 @@ const styles = StyleSheet.create({
   heroDescription: {
     fontSize: 13,
     lineHeight: 19,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   modelCard: {
     gap: 10,
@@ -710,7 +710,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
   },
   modelCardLabel: {
     fontSize: 12,
@@ -724,7 +724,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     paddingHorizontal: 14,
     paddingVertical: 12,
     flexDirection: "row",
@@ -747,7 +747,7 @@ const styles = StyleSheet.create({
   modelPickerHint: {
     fontSize: 12,
     lineHeight: 17,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   modelPickerTrailing: {
     flexDirection: "row",
@@ -757,8 +757,8 @@ const styles = StyleSheet.create({
   modelPickerBadge: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#0A84FF40",
-    backgroundColor: "#0A84FF14",
+    borderColor: "#6C5CE740",
+    backgroundColor: "#6C5CE714",
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
@@ -771,7 +771,7 @@ const styles = StyleSheet.create({
   modelCardFootnote: {
     fontSize: 11,
     lineHeight: 16,
-    color: "#636366",
+    color: "#64748B",
   },
   modelCardLockNote: {
     fontSize: 11,
@@ -783,7 +783,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     fontWeight: "500",
-    color: "#FF453A",
+    color: "#F87171",
   },
   inlineLoadingRow: {
     flexDirection: "row",
@@ -793,12 +793,12 @@ const styles = StyleSheet.create({
   inlineLoadingText: {
     fontSize: 11,
     fontWeight: "500",
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   primaryButton: {
     minHeight: 50,
     borderRadius: 14,
-    backgroundColor: "#0A84FF",
+    backgroundColor: "#6C5CE7",
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -822,7 +822,7 @@ const styles = StyleSheet.create({
   restoreStateText: {
     fontSize: 12,
     fontWeight: "500",
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   runStatusWrap: {
     gap: 8,
@@ -841,12 +841,12 @@ const styles = StyleSheet.create({
   progressValue: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#0A84FF",
+    color: "#6C5CE7",
   },
   progressTrack: {
     height: 10,
     borderRadius: 999,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(84,84,88,0.65)",
@@ -854,12 +854,12 @@ const styles = StyleSheet.create({
   progressFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: "#0A84FF",
+    backgroundColor: "#6C5CE7",
   },
   progressMeta: {
     fontSize: 12,
     fontWeight: "500",
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   errorBanner: {
     flexDirection: "row",
@@ -867,8 +867,8 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#FF453A30",
-    backgroundColor: "#FF453A14",
+    borderColor: "#F8717130",
+    backgroundColor: "#F8717114",
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -877,7 +877,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "500",
-    color: "#FF453A",
+    color: "#F87171",
   },
   statsRow: {
     flexDirection: "row",
@@ -888,7 +888,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     paddingVertical: 14,
     paddingHorizontal: 10,
     alignItems: "center",
@@ -902,14 +902,14 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#8E8E93",
+    color: "#94A3B8",
     textTransform: "uppercase",
   },
   panelCard: {
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     padding: 16,
     gap: 10,
   },
@@ -921,7 +921,7 @@ const styles = StyleSheet.create({
   panelText: {
     fontSize: 12,
     lineHeight: 18,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   listWrap: {
     gap: 8,
@@ -933,7 +933,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -948,7 +948,7 @@ const styles = StyleSheet.create({
   },
   listMeta: {
     fontSize: 11,
-    color: "#636366",
+    color: "#64748B",
   },
   statusBadge: {
     borderRadius: 999,
@@ -957,16 +957,16 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   statusBadgeCompleted: {
-    borderColor: "#30D15840",
-    backgroundColor: "#30D15814",
+    borderColor: "#34D39940",
+    backgroundColor: "#34D39914",
   },
   statusBadgeRunning: {
-    borderColor: "#0A84FF40",
-    backgroundColor: "#0A84FF14",
+    borderColor: "#6C5CE740",
+    backgroundColor: "#6C5CE714",
   },
   statusBadgeFailed: {
-    borderColor: "#FF453A30",
-    backgroundColor: "#FF453A14",
+    borderColor: "#F8717130",
+    backgroundColor: "#F8717114",
   },
   statusBadgeText: {
     fontSize: 10,
@@ -982,12 +982,12 @@ const styles = StyleSheet.create({
   modalContent: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     paddingHorizontal: 20,
     paddingTop: 12,
     gap: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#38383A",
+    borderColor: "#2A2A50",
   },
   modalHandle: {
     alignSelf: "center",
@@ -1014,7 +1014,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#38383A",
+    borderBottomColor: "#2A2A50",
   },
   modalItemSelected: {
     backgroundColor: "rgba(10, 132, 255, 0.1)",
@@ -1040,18 +1040,18 @@ const styles = StyleSheet.create({
     color: "#64D2FF",
   },
   modalItemTextDisabled: {
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   modalItemHint: {
     fontSize: 12,
     lineHeight: 17,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   modalBadge: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#0A84FF40",
-    backgroundColor: "#0A84FF14",
+    borderColor: "#6C5CE740",
+    backgroundColor: "#6C5CE714",
     paddingHorizontal: 8,
     paddingVertical: 4,
   },

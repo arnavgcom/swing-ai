@@ -82,7 +82,7 @@ function HistoryCollapsibleSection({
 const hcStyles = StyleSheet.create({
   wrapper: {
     borderRadius: 14,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderWidth: 1,
     overflow: "hidden",
     marginBottom: 12,
@@ -168,7 +168,7 @@ function TrendChart({ data, dates }: { data: number[]; dates: string[] }) {
                   top: prev.y,
                   width: length,
                   height: 2,
-                  backgroundColor: "#30D158",
+                  backgroundColor: "#34D399",
                   transform: [{ rotate: `${angle}deg` }],
                   transformOrigin: "left center",
                   opacity: 0.8,
@@ -183,7 +183,7 @@ function TrendChart({ data, dates }: { data: number[]; dates: string[] }) {
                 trendStyles.dot,
                 {
                   backgroundColor:
-                    i === points.length - 1 ? "#30D158" : "#30D15860",
+                    i === points.length - 1 ? "#34D399" : "#34D39960",
                   width: i === points.length - 1 ? 8 : 6,
                   height: i === points.length - 1 ? 8 : 6,
                   borderRadius: i === points.length - 1 ? 4 : 3,
@@ -226,7 +226,7 @@ const trendStyles = StyleSheet.create({
   },
   yLabel: {
     fontSize: 9,
-    color: "#636366",
+    color: "#64748B",
     textAlign: "right" as const,
   },
   gridLine: {
@@ -235,7 +235,7 @@ const trendStyles = StyleSheet.create({
     right: 0,
     top: 0,
     height: 1,
-    backgroundColor: "#54545820",
+    backgroundColor: "#2A2A5020",
   },
   dot: { position: "absolute" },
   xAxis: {
@@ -245,7 +245,7 @@ const trendStyles = StyleSheet.create({
   },
   xLabel: {
     fontSize: 9,
-    color: "#636366",
+    color: "#64748B",
     flex: 1,
     textAlign: "center" as const,
   },
@@ -369,9 +369,9 @@ function computePercentDelta(current: number | null, previous: number | null): n
 }
 
 function getDeltaColor(deltaPct: number | null): string {
-  if (deltaPct == null) return "#636366";
-  if (Math.abs(deltaPct) < 1e-6) return "#8E8E93";
-  return deltaPct >= 0 ? "#30D158" : "#FF453A";
+  if (deltaPct == null) return "#64748B";
+  if (Math.abs(deltaPct) < 1e-6) return "#94A3B8";
+  return deltaPct >= 0 ? "#34D399" : "#F87171";
 }
 
 function formatDeltaPercent(deltaPct: number | null): string | null {
@@ -500,20 +500,20 @@ function getReviewStatusLabel(item: AnalysisSummary, nowMs: number): string {
 
 function getReviewStatusTone(item: AnalysisSummary, nowMs: number): { bg: string; border: string; text: string } {
   if (item.status === "rejected") {
-    return { bg: "#FF453A14", border: "#FF453A30", text: "#FF453A" };
+    return { bg: "#F8717114", border: "#F8717130", text: "#F87171" };
   }
   if (item.status === "failed") {
-    return { bg: "#332B00", border: "#665600", text: "#FFD60A" };
+    return { bg: "#332B00", border: "#665600", text: "#FBBF24" };
   }
   if (item.status === "processing" || item.status === "pending") {
     const startedAt = parseApiDate(getProcessingStartDate(item))?.getTime() ?? nowMs;
     const elapsedMinutes = Math.max(nowMs - startedAt, 0) / 60000;
     if (elapsedMinutes >= 20) {
-      return { bg: "#332B00", border: "#665600", text: "#FFD60A" };
+      return { bg: "#332B00", border: "#665600", text: "#FBBF24" };
     }
-    return { bg: "#002040", border: "#0A84FF", text: "#64D2FF" };
+    return { bg: "#002040", border: "#6C5CE7", text: "#64D2FF" };
   }
-  return { bg: "#30D15814", border: "#30D15840", text: "#30D158" };
+  return { bg: "#34D39914", border: "#34D39940", text: "#34D399" };
 }
 
 function ReviewMetricCard({
@@ -579,11 +579,11 @@ function AdminQueueItem({
       <View style={styles.reviewQueueBottomRow}>
         <View style={styles.reviewQueueTags}>
           <View style={styles.reviewQueueTag}>
-            <Ionicons name="flash-outline" size={11} color="#8E8E93" />
+            <Ionicons name="flash-outline" size={11} color="#94A3B8" />
             <Text style={styles.reviewQueueTagText}>{movementLabel}</Text>
           </View>
           <View style={styles.reviewQueueTag}>
-            <Ionicons name="calendar-outline" size={11} color="#8E8E93" />
+            <Ionicons name="calendar-outline" size={11} color="#94A3B8" />
             <Text style={styles.reviewQueueTagText}>
               {formatMonthDayInTimeZone(getVideoDate(item), timeZone)}
             </Text>
@@ -776,11 +776,11 @@ function SummaryCard({
   const overallDeltaPct = deltas?.overallPct ?? null;
 
   const statusConfig: Record<string, { color: string; label: string }> = {
-    pending: { color: "#FFD60A", label: "Pending" },
-    processing: { color: "#0A84FF", label: "Processing" },
-    completed: { color: "#30D158", label: "Completed" },
-    failed: { color: "#FF453A", label: "Failed Processing" },
-    rejected: { color: "#FF453A", label: "Rejected" },
+    pending: { color: "#FBBF24", label: "Pending" },
+    processing: { color: "#6C5CE7", label: "Processing" },
+    completed: { color: "#34D399", label: "Completed" },
+    failed: { color: "#F87171", label: "Failed Processing" },
+    rejected: { color: "#F87171", label: "Rejected" },
   };
   const status = statusConfig[item.status] || statusConfig.pending;
   const failureMessage = item.status === "failed"
@@ -857,7 +857,7 @@ function SummaryCard({
               ) : null}
               {item.status === "rejected" ? (
                 <View style={summaryStyles.rejectedBadge}>
-                  <Ionicons name="close-circle-outline" size={11} color="#FF453A" />
+                  <Ionicons name="close-circle-outline" size={11} color="#F87171" />
                   <Text style={summaryStyles.rejectedBadgeText}>Rejected</Text>
                 </View>
               ) : null}
@@ -912,7 +912,7 @@ function SummaryCard({
 
       {failureMessage ? (
         <View style={summaryStyles.failureMessageWrap}>
-          <Ionicons name="alert-circle-outline" size={13} color="#FF453A" />
+          <Ionicons name="alert-circle-outline" size={13} color="#F87171" />
           <View style={summaryStyles.failureContent}>
             <Text style={summaryStyles.failureMessageText} numberOfLines={3}>
               {failureMessage}
@@ -931,9 +931,9 @@ function SummaryCard({
               ]}
             >
               {retryPending ? (
-                <ActivityIndicator size="small" color="#FF453A" />
+                <ActivityIndicator size="small" color="#F87171" />
               ) : (
-                <Ionicons name="refresh" size={12} color="#FF453A" />
+                <Ionicons name="refresh" size={12} color="#F87171" />
               )}
               <Text style={summaryStyles.retryButtonText}>{retryPending ? "Retrying..." : "Retry"}</Text>
             </Pressable>
@@ -989,7 +989,7 @@ function SummaryCard({
           ]}
           hitSlop={8}
         >
-          <Ionicons name="trash-outline" size={13} color="#FF453A" />
+          <Ionicons name="trash-outline" size={13} color="#F87171" />
         </Pressable>
       )}
     </Pressable>
@@ -998,10 +998,10 @@ function SummaryCard({
 
 const summaryStyles = StyleSheet.create({
   card: {
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#54545840",
+    borderColor: "#2A2A5040",
     padding: 16,
     overflow: "hidden",
     position: "relative",
@@ -1025,12 +1025,12 @@ const summaryStyles = StyleSheet.create({
   timeText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   playerNameText: {
     fontSize: 12,
     fontWeight: "500",
-    color: "#BF5AF2",
+    color: "#A78BFA",
     flexShrink: 1,
   },
   playerMetaRow: {
@@ -1059,18 +1059,18 @@ const summaryStyles = StyleSheet.create({
     fontWeight: "600",
   },
   compactPlayerBadge: {
-    backgroundColor: "#BF5AF212",
-    borderColor: "#BF5AF230",
+    backgroundColor: "#A78BFA12",
+    borderColor: "#A78BFA30",
   },
   compactPlayerBadgeText: {
-    color: "#BF5AF2",
+    color: "#A78BFA",
   },
   compactUploadBadge: {
-    backgroundColor: "#30D15812",
-    borderColor: "#30D15844",
+    backgroundColor: "#34D39912",
+    borderColor: "#34D39944",
   },
   compactUploadBadgeText: {
-    color: "#30D158",
+    color: "#34D399",
   },
   compactSessionBadge: {
     backgroundColor: "#64D2FF12",
@@ -1080,11 +1080,11 @@ const summaryStyles = StyleSheet.create({
     color: "#64D2FF",
   },
   compactFocusBadge: {
-    backgroundColor: "#30D15812",
-    borderColor: "#30D15830",
+    backgroundColor: "#34D39912",
+    borderColor: "#34D39930",
   },
   compactFocusBadgeText: {
-    color: "#30D158",
+    color: "#34D399",
   },
   rejectedBadge: {
     flexDirection: "row",
@@ -1094,14 +1094,14 @@ const summaryStyles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 9,
-    backgroundColor: "#FF453A14",
+    backgroundColor: "#F8717114",
     borderWidth: 1,
-    borderColor: "#FF453A30",
+    borderColor: "#F8717130",
   },
   rejectedBadgeText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#FF453A",
+    color: "#F87171",
   },
   backgroundProcessingBadge: {
     flexDirection: "row",
@@ -1114,7 +1114,7 @@ const summaryStyles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#00000090",
     borderWidth: 1,
-    borderColor: "#38383A",
+    borderColor: "#2A2A50",
   },
   inlineProcessingBadge: {
     marginTop: 0,
@@ -1126,7 +1126,7 @@ const summaryStyles = StyleSheet.create({
   scoreText: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#30D158",
+    color: "#34D399",
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -1146,8 +1146,8 @@ const summaryStyles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#FF453A30",
-    backgroundColor: "#FF453A14",
+    borderColor: "#F8717130",
+    backgroundColor: "#F8717114",
   },
   failureContent: {
     flex: 1,
@@ -1157,7 +1157,7 @@ const summaryStyles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     fontWeight: "500",
-    color: "#FF453A",
+    color: "#F87171",
   },
   retryButton: {
     alignSelf: "flex-start",
@@ -1168,17 +1168,17 @@ const summaryStyles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#FF453A30",
-    backgroundColor: "#FF453A18",
+    borderColor: "#F8717130",
+    backgroundColor: "#F8717118",
   },
   retryButtonDisabled: {
     backgroundColor: "#48484A80",
-    borderColor: "#636366",
+    borderColor: "#64748B",
   },
   retryButtonText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#FF453A",
+    color: "#F87171",
   },
   metricsRow: {
     flexDirection: "row",
@@ -1196,12 +1196,12 @@ const summaryStyles = StyleSheet.create({
     alignItems: "center",
     gap: 2,
     borderWidth: 1,
-    borderColor: "#54545820",
+    borderColor: "#2A2A5020",
   },
   metricLabel: {
     fontSize: 10,
     fontWeight: "500",
-    color: "#636366",
+    color: "#64748B",
     textTransform: "uppercase" as const,
     letterSpacing: 0.3,
   },
@@ -1223,7 +1223,7 @@ const summaryStyles = StyleSheet.create({
   scoreLabel: {
     fontSize: 9,
     fontWeight: "500",
-    color: "#636366",
+    color: "#64748B",
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
   },
@@ -1721,7 +1721,7 @@ export default function HistoryScreen() {
     formatMonthDayInTimeZone(getVideoDate(a), profileTimeZone),
   );
 
-  const historyHighlightColor = selectedSport?.color || "#30D158";
+  const historyHighlightColor = selectedSport?.color || "#34D399";
   const historyMovementLabel = selectedMovement?.name
     ? toTitleCase(selectedMovement.name.replace(/-/g, " "))
     : null;
@@ -1889,15 +1889,15 @@ export default function HistoryScreen() {
                   style={[
                     styles.filterChip,
                     {
-                      borderColor: selected ? `${historyHighlightColor}66` : "#54545860",
-                      backgroundColor: selected ? `${historyHighlightColor}1A` : "#1C1C1E",
+                      borderColor: selected ? `${historyHighlightColor}66` : "#2A2A5060",
+                      backgroundColor: selected ? `${historyHighlightColor}1A` : "#131328",
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.filterChipText,
-                      { color: selected ? historyHighlightColor : "#8E8E93" },
+                      { color: selected ? historyHighlightColor : "#94A3B8" },
                     ]}
                   >
                     {option.label}
@@ -1914,15 +1914,15 @@ export default function HistoryScreen() {
                   style={[
                     styles.filterChip,
                     {
-                      borderColor: selected ? `${historyHighlightColor}66` : "#54545860",
-                      backgroundColor: selected ? `${historyHighlightColor}1A` : "#1C1C1E",
+                      borderColor: selected ? `${historyHighlightColor}66` : "#2A2A5060",
+                      backgroundColor: selected ? `${historyHighlightColor}1A` : "#131328",
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.filterChipText,
-                      { color: selected ? historyHighlightColor : "#8E8E93" },
+                      { color: selected ? historyHighlightColor : "#94A3B8" },
                     ]}
                   >
                     {option.label}
@@ -2013,7 +2013,7 @@ export default function HistoryScreen() {
                           color:
                             selectedTrendSessions === option.key
                               ? historyHighlightColor
-                              : "#8E8E93",
+                              : "#94A3B8",
                         },
                       ]}
                     >
@@ -2031,9 +2031,9 @@ export default function HistoryScreen() {
       {isAdmin ? (
       <View style={styles.statsRow}>
         {[
-          { label: "Total", value: totalAnalyses, color: "#0A84FF" },
-          { label: "Processing", value: processing.length, color: "#FFD60A" },
-          { label: "Done", value: completed.length, color: "#30D158" },
+          { label: "Total", value: totalAnalyses, color: "#6C5CE7" },
+          { label: "Processing", value: processing.length, color: "#FBBF24" },
+          { label: "Done", value: completed.length, color: "#34D399" },
         ].map((stat) => (
           <View key={stat.label} style={styles.statCard}>
             <Text style={[styles.statNumber, { color: stat.color }]}>{stat.value}</Text>
@@ -2074,7 +2074,7 @@ export default function HistoryScreen() {
                   <Text
                     style={[
                       styles.recentSortText,
-                      { color: selected ? historyHighlightColor : "#8E8E93" },
+                      { color: selected ? historyHighlightColor : "#94A3B8" },
                     ]}
                   >
                     {option.label}
@@ -2112,7 +2112,7 @@ export default function HistoryScreen() {
         return (
           <View style={[styles.aiInsightCard, { borderColor: `${historyHighlightColor}30` }]}>
             <View style={styles.aiInsightBadge}>
-              <Ionicons name="sparkles" size={12} color="#BF5AF2" />
+              <Ionicons name="sparkles" size={12} color="#A78BFA" />
               <Text style={styles.aiInsightBadgeText}>AI Insight</Text>
             </View>
             <Text style={styles.aiInsightTitle}>
@@ -2143,7 +2143,7 @@ export default function HistoryScreen() {
         {backgroundNotice ? (
           <View style={styles.backgroundNoticeCard}>
             <View style={styles.backgroundNoticeIconWrap}>
-              <Ionicons name="time-outline" size={16} color="#0A84FF" />
+              <Ionicons name="time-outline" size={16} color="#6C5CE7" />
             </View>
             <Text style={styles.backgroundNoticeText}>{backgroundNotice}</Text>
           </View>
@@ -2156,7 +2156,7 @@ export default function HistoryScreen() {
                 <Ionicons
                   name={completionNotice.status === "completed" ? "checkmark-circle" : "alert-circle"}
                   size={18}
-                  color={completionNotice.status === "completed" ? "#30D158" : "#FFD60A"}
+                  color={completionNotice.status === "completed" ? "#34D399" : "#FBBF24"}
                 />
               </View>
               <Text style={styles.completionNoticeText}>{completionNotice.message}</Text>
@@ -2195,7 +2195,7 @@ export default function HistoryScreen() {
 
       {isLoading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color="#0A84FF" />
+          <ActivityIndicator size="large" color="#6C5CE7" />
         </View>
       ) : (
         <FlatList
@@ -2208,7 +2208,7 @@ export default function HistoryScreen() {
             <RefreshControl
               refreshing={isRefetching}
               onRefresh={refetch}
-              tintColor="#0A84FF"
+              tintColor="#6C5CE7"
             />
           }
           onScroll={handleTabBarScroll}
@@ -2266,7 +2266,7 @@ const styles = StyleSheet.create({
   aiInsightBadgeText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#BF5AF2",
+    color: "#A78BFA",
   },
   aiInsightTitle: {
     fontSize: 14,
@@ -2291,7 +2291,7 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: 10,
     fontSize: 14,
-    color: "#8E8E93",
+    color: "#94A3B8",
     maxWidth: 620,
   },
   topControlsRow: {
@@ -2411,8 +2411,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#54545840",
-    backgroundColor: "#1C1C1E",
+    borderColor: "#2A2A5040",
+    backgroundColor: "#131328",
     padding: 14,
   },
   compactReviewSummaryHeader: {
@@ -2433,7 +2433,7 @@ const styles = StyleSheet.create({
   compactReviewSummarySubtitle: {
     fontSize: 12,
     lineHeight: 18,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   compactReviewSummaryToggle: {
     flexDirection: "row",
@@ -2443,7 +2443,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 7,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderColor: "rgba(84,84,88,0.36)",
   },
   compactReviewSummaryToggleText: {
@@ -2459,15 +2459,15 @@ const styles = StyleSheet.create({
     gap: 4,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#54545860",
-    backgroundColor: "#1C1C1E",
+    borderColor: "#2A2A5060",
+    backgroundColor: "#131328",
     paddingHorizontal: 10,
     paddingVertical: 9,
   },
   compactReviewSummaryMetricLabel: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#8E8E93",
+    color: "#94A3B8",
     textTransform: "uppercase",
     letterSpacing: 0.35,
   },
@@ -2488,8 +2488,8 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#54545840",
-    backgroundColor: "#1C1C1E",
+    borderColor: "#2A2A5040",
+    backgroundColor: "#131328",
     padding: 14,
     gap: 6,
   },
@@ -2503,7 +2503,7 @@ const styles = StyleSheet.create({
   reviewMetricLabel: {
     fontSize: 12,
     fontWeight: "500",
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   reviewMetricValue: {
     fontSize: 22,
@@ -2512,13 +2512,13 @@ const styles = StyleSheet.create({
   reviewMetricHelper: {
     fontSize: 11,
     lineHeight: 16,
-    color: "#636366",
+    color: "#64748B",
   },
   adminSectionCard: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#54545840",
-    backgroundColor: "#1C1C1E",
+    borderColor: "#2A2A5040",
+    backgroundColor: "#131328",
     padding: 14,
     gap: 12,
   },
@@ -2537,14 +2537,14 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontSize: 12,
     lineHeight: 17,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   adminSectionCount: {
     minWidth: 28,
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     color: "#AEAEB2",
     textAlign: "center" as const,
     fontSize: 11,
@@ -2556,8 +2556,8 @@ const styles = StyleSheet.create({
   reviewQueueItem: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#54545860",
-    backgroundColor: "#1C1C1E",
+    borderColor: "#2A2A5060",
+    backgroundColor: "#131328",
     padding: 12,
     gap: 10,
   },
@@ -2578,7 +2578,7 @@ const styles = StyleSheet.create({
   },
   reviewQueueVideo: {
     fontSize: 12,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   reviewQueueStatusPill: {
     borderRadius: 999,
@@ -2609,7 +2609,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.36)",
   },
@@ -2629,8 +2629,8 @@ const styles = StyleSheet.create({
   playerPulseCard: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#54545860",
-    backgroundColor: "#1C1C1E",
+    borderColor: "#2A2A5060",
+    backgroundColor: "#131328",
     padding: 12,
     gap: 4,
   },
@@ -2667,12 +2667,12 @@ const styles = StyleSheet.create({
   },
   playerPulseSubtle: {
     fontSize: 11,
-    color: "#636366",
+    color: "#64748B",
   },
   adminEmptyText: {
     fontSize: 12,
     lineHeight: 17,
-    color: "#636366",
+    color: "#64748B",
   },
   loadingWrap: {
     flex: 1,
@@ -2680,10 +2680,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   searchWrap: {
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#54545840",
+    borderColor: "#2A2A5040",
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: "row",
@@ -2713,7 +2713,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#0A84FF40",
+    borderColor: "#6C5CE740",
     backgroundColor: "#172554EE",
     shadowColor: "#020617",
     shadowOpacity: 0.3,
@@ -2745,7 +2745,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#30D15840",
+    borderColor: "#34D39940",
     backgroundColor: "#052E2BCC",
     shadowColor: "#020617",
     shadowOpacity: 0.3,
@@ -2778,13 +2778,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "#30D15822",
+    backgroundColor: "#34D39922",
     borderWidth: 1,
-    borderColor: "#30D15850",
+    borderColor: "#34D39950",
   },
   completionNoticeDismissButton: {
-    backgroundColor: "#FFD60A16",
-    borderColor: "#FFD60A40",
+    backgroundColor: "#FBBF2416",
+    borderColor: "#FBBF2440",
   },
   completionNoticeButtonText: {
     fontSize: 11,
@@ -2797,7 +2797,7 @@ const styles = StyleSheet.create({
   trendLabel: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#8E8E93",
+    color: "#94A3B8",
     marginBottom: 4,
   },
   trendHeaderRow: {
@@ -2815,7 +2815,7 @@ const styles = StyleSheet.create({
   trendSessionTab: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#54545860",
+    borderColor: "#2A2A5060",
     backgroundColor: "#00000080",
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -2823,7 +2823,7 @@ const styles = StyleSheet.create({
   trendSessionTabText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   statsRow: {
     flexDirection: "row",
@@ -2835,7 +2835,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(84,84,88,0.36)",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     padding: 10,
     alignItems: "center",
     gap: 2,
@@ -2846,8 +2846,8 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#54545840",
-    backgroundColor: "#1C1C1E",
+    borderColor: "#2A2A5040",
+    backgroundColor: "#131328",
   },
   statNumber: {
     fontSize: 18,
@@ -2855,7 +2855,7 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 10,
-    color: "#636366",
+    color: "#64748B",
   },
   recentTitle: {
     fontSize: 15,
@@ -2901,9 +2901,9 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 20,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderWidth: 1,
-    borderColor: "#54545860",
+    borderColor: "#2A2A5060",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2916,6 +2916,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center" as const,
     paddingHorizontal: 40,
-    color: "#636366",
+    color: "#64748B",
   },
 });

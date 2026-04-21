@@ -112,7 +112,7 @@ export default function ValidationSettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
 
       <View style={[styles.header, { paddingTop: insets.top + 10 + webTopInset }]}> 
         <Pressable
@@ -155,7 +155,7 @@ export default function ValidationSettingsScreen() {
                       <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>{option.label}</Text>
                       <Text style={styles.optionDescription}>{option.description}</Text>
                     </View>
-                    {selected ? <Ionicons name="checkmark-circle" size={18} color="#30D158" /> : null}
+                    {selected ? <Ionicons name="checkmark-circle" size={18} color="#34D399" /> : null}
                   </Pressable>
                 );
               })}
@@ -176,13 +176,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#2C2C2E",
+    borderBottomColor: "#1A1A36",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -206,13 +206,13 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#8E8E93",
+    color: "#94A3B8",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   card: {
     gap: 10,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
   cardSubtext: {
     fontSize: 12,
     lineHeight: 18,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   optionsList: {
     gap: 8,
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
@@ -265,6 +265,6 @@ const styles = StyleSheet.create({
   },
   optionDescription: {
     fontSize: 12,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
 });

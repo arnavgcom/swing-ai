@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 28,
     borderRadius: 99,
-    backgroundColor: "#8E8E93",
+    backgroundColor: "#94A3B8",
   },
   figureLegLeft: {
     left: 15,

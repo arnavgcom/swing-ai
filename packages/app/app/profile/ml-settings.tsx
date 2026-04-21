@@ -79,7 +79,7 @@ export default function MlSettingsScreen() {
   if (!settings) {
     return (
       <View style={styles.container}>
-        <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
         <View style={[styles.header, { paddingTop: insets.top + 10 + webTopInset }]}>
           <Pressable onPress={handleBack} style={styles.backButton}>
             <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
@@ -88,7 +88,7 @@ export default function MlSettingsScreen() {
           <View style={styles.headerSpacer} />
         </View>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ fontSize: 14, color: "#8E8E93" }}>Loading…</Text>
+          <Text style={{ fontSize: 14, color: "#94A3B8" }}>Loading…</Text>
         </View>
       </View>
     );
@@ -99,7 +99,7 @@ export default function MlSettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
 
       <View style={[styles.header, { paddingTop: insets.top + 10 + webTopInset }]}>
         <Pressable onPress={handleBack} style={styles.backButton}>
@@ -132,7 +132,7 @@ export default function MlSettingsScreen() {
                   onValueChange={(v) => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); update({ lstmEnabled: v }); }}
                   disabled={saving}
                   trackColor={{ false: "#39393D", true: "rgba(48,209,88,0.5)" }}
-                  thumbColor={settings.lstmEnabled ? "#30D158" : "#F4F3F4"}
+                  thumbColor={settings.lstmEnabled ? "#34D399" : "#F4F3F4"}
                 />
               </View>
 
@@ -242,7 +242,7 @@ export default function MlSettingsScreen() {
                   onValueChange={(v) => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); update({ lstmTrainingEnabled: v }); }}
                   disabled={saving}
                   trackColor={{ false: "#39393D", true: "rgba(48,209,88,0.5)" }}
-                  thumbColor={settings.lstmTrainingEnabled ? "#30D158" : "#F4F3F4"}
+                  thumbColor={settings.lstmTrainingEnabled ? "#34D399" : "#F4F3F4"}
                 />
               </View>
 
@@ -320,7 +320,7 @@ function NumberOption({
         onSubmitEditing={commit}
         keyboardType={isDecimal ? "decimal-pad" : "number-pad"}
         editable={!disabled}
-        placeholderTextColor="#636366"
+        placeholderTextColor="#64748B"
       />
     </View>
   );
@@ -337,13 +337,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#2C2C2E",
+    borderBottomColor: "#1A1A36",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -367,13 +367,13 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#8E8E93",
+    color: "#94A3B8",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   card: {
     gap: 10,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
   cardSubtext: {
     fontSize: 12,
     lineHeight: 18,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   optionsList: {
     gap: 8,
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
   },
   optionDescription: {
     fontSize: 12,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   stepperRow: {
     flexDirection: "row",
@@ -430,14 +430,14 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: "#3A3A3C",
+    backgroundColor: "#22224A",
     alignItems: "center",
     justifyContent: "center",
   },
   stepperValue: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#0A84FF",
+    color: "#6C5CE7",
     minWidth: 40,
     textAlign: "center",
   },
@@ -447,11 +447,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     paddingHorizontal: 10,
     fontSize: 13,
     fontWeight: "600",
-    color: "#0A84FF",
+    color: "#6C5CE7",
     textAlign: "center",
   },
 

@@ -144,7 +144,7 @@ function RootNavigator() {
 
       {(isLoading || isRedirecting) && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#0A84FF" />
+          <ActivityIndicator size="large" color="#6C5CE7" />
         </View>
       )}
     </>

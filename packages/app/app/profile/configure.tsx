@@ -271,7 +271,7 @@ export default function ConfigureScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
 
       <View style={[styles.header, { paddingTop: insets.top + 10 + webTopInset }]}> 
         <Pressable
@@ -304,7 +304,7 @@ export default function ConfigureScreen() {
                   Video storage mode, R2 credentials & folder prefixes
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
             </Pressable>
 
             <Pressable
@@ -315,7 +315,7 @@ export default function ConfigureScreen() {
               style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
             >
               <View style={styles.navCardIconWrap}>
-                <Ionicons name="tennisball-outline" size={20} color="#FF9F0A" />
+                <Ionicons name="tennisball-outline" size={20} color="#F59E0B" />
               </View>
               <View style={styles.navCardBody}>
                 <Text style={styles.navCardTitle}>Sports</Text>
@@ -323,7 +323,7 @@ export default function ConfigureScreen() {
                   {sportsSummary}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
             </Pressable>
           </View>
         </View>
@@ -339,7 +339,7 @@ export default function ConfigureScreen() {
               style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
             >
               <View style={styles.navCardIconWrap}>
-                <Ionicons name="shield-checkmark-outline" size={20} color="#30D158" />
+                <Ionicons name="shield-checkmark-outline" size={20} color="#34D399" />
               </View>
               <View style={styles.navCardBody}>
                 <Text style={styles.navCardTitle}>Video Validation</Text>
@@ -347,7 +347,7 @@ export default function ConfigureScreen() {
                   Current mode: {VIDEO_VALIDATION_OPTIONS.find((option) => option.mode === videoValidationMode)?.label || "Disabled"}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
             </Pressable>
 
             <Pressable
@@ -366,7 +366,7 @@ export default function ConfigureScreen() {
                   Low: {LOW_IMPACT_FPS_OPTIONS.find((option) => option.step === lowImpactFpsStep)?.label || "Step 2"} | High: {HIGH_IMPACT_FPS_OPTIONS.find((option) => option.step === highImpactFpsStep)?.label || "Step 1"}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
             </Pressable>
 
             <Pressable
@@ -385,7 +385,7 @@ export default function ConfigureScreen() {
                   Current model: {POSE_LANDMARKER_OPTIONS.find((option) => option.model === poseLandmarkerModel)?.label || "Lite"}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
             </Pressable>
 
             <Pressable
@@ -397,9 +397,9 @@ export default function ConfigureScreen() {
             >
               <View style={styles.navCardIconWrap}>
                 {classificationModelLoading ? (
-                  <ActivityIndicator size="small" color="#BF5AF2" />
+                  <ActivityIndicator size="small" color="#A78BFA" />
                 ) : (
-                  <Ionicons name="git-branch-outline" size={20} color="#BF5AF2" />
+                  <Ionicons name="git-branch-outline" size={20} color="#A78BFA" />
                 )}
               </View>
               <View style={styles.navCardBody}>
@@ -411,7 +411,7 @@ export default function ConfigureScreen() {
               <View style={styles.inlineStatusBadge}>
                 <Text style={styles.inlineStatusBadgeText}>{classificationModelCardBadge}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
             </Pressable>
 
             <Pressable
@@ -422,7 +422,7 @@ export default function ConfigureScreen() {
               style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
             >
               <View style={styles.navCardIconWrap}>
-                <Ionicons name="hardware-chip-outline" size={20} color="#FF9F0A" />
+                <Ionicons name="hardware-chip-outline" size={20} color="#F59E0B" />
               </View>
               <View style={styles.navCardBody}>
                 <Text style={styles.navCardTitle}>ML / LSTM Settings</Text>
@@ -430,7 +430,7 @@ export default function ConfigureScreen() {
                   Ensemble weights, thresholds & training params
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
             </Pressable>
 
           </View>
@@ -447,7 +447,7 @@ export default function ConfigureScreen() {
               style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
             >
               <View style={styles.navCardIconWrap}>
-                <Ionicons name="options-outline" size={20} color="#BF5AF2" />
+                <Ionicons name="options-outline" size={20} color="#A78BFA" />
               </View>
               <View style={styles.navCardBody}>
                 <Text style={styles.navCardTitle} numberOfLines={1}>
@@ -457,7 +457,7 @@ export default function ConfigureScreen() {
                   {scoreMetricSummary}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
             </Pressable>
 
             <Pressable
@@ -489,7 +489,7 @@ export default function ConfigureScreen() {
                   <Text style={styles.inlineStatusBadgeActiveText}>In progress</Text>
                 </View>
               ) : null}
-              <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
             </Pressable>
           </View>
         </View>
@@ -505,7 +505,7 @@ export default function ConfigureScreen() {
               style={({ pressed }) => [styles.navCard, { transform: [{ scale: pressed ? 0.99 : 1 }] }]}
             >
               <View style={styles.navCardIconWrap}>
-                <Ionicons name="person-add-outline" size={20} color="#FF9F0A" />
+                <Ionicons name="person-add-outline" size={20} color="#F59E0B" />
               </View>
               <View style={styles.navCardBody}>
                 <Text style={styles.navCardTitle}>Add Player</Text>
@@ -513,7 +513,7 @@ export default function ConfigureScreen() {
                   Create a new player profile for uploads and analysis
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
             </Pressable>
           </View>
         </View>
@@ -532,13 +532,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#38383A",
+    borderBottomColor: "#2A2A50",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -562,7 +562,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#8E8E93",
+    color: "#94A3B8",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -573,7 +573,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
@@ -586,7 +586,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(84,84,88,0.65)",
   },
@@ -600,8 +600,8 @@ const styles = StyleSheet.create({
   inlineStatusBadge: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#BF5AF255",
-    backgroundColor: "#BF5AF222",
+    borderColor: "#A78BFA55",
+    backgroundColor: "#A78BFA22",
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
@@ -611,15 +611,15 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#0A84FF40",
-    backgroundColor: "#0A84FF14",
+    borderColor: "#6C5CE740",
+    backgroundColor: "#6C5CE714",
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   inlineStatusBadgeText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#BF5AF2",
+    color: "#A78BFA",
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -638,11 +638,11 @@ const styles = StyleSheet.create({
   navCardDescription: {
     fontSize: 12,
     lineHeight: 18,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   validationCard: {
     gap: 10,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
@@ -657,7 +657,7 @@ const styles = StyleSheet.create({
   validationSubtext: {
     fontSize: 12,
     lineHeight: 18,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   validationOptionsList: {
     gap: 8,
@@ -670,13 +670,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
   validationOptionSelected: {
-    borderColor: "#30D15866",
-    backgroundColor: "#30D15814",
+    borderColor: "#34D39966",
+    backgroundColor: "#34D39914",
   },
   validationOptionDisabled: {
     opacity: 0.7,
@@ -691,11 +691,11 @@ const styles = StyleSheet.create({
     color: "#C7C7CC",
   },
   validationOptionLabelSelected: {
-    color: "#30D158",
+    color: "#34D399",
   },
   validationOptionDescription: {
     fontSize: 12,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   toastContainer: {
     position: "absolute",
@@ -715,12 +715,12 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   toastSuccess: {
-    borderColor: "#30D15840",
-    backgroundColor: "#30D15814",
+    borderColor: "#34D39940",
+    backgroundColor: "#34D39914",
   },
   toastError: {
-    borderColor: "#FF453A30",
-    backgroundColor: "#FF453A14",
+    borderColor: "#F8717130",
+    backgroundColor: "#F8717114",
   },
   toastText: {
     fontSize: 12,
@@ -733,7 +733,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalContent: {
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#131328",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 12,
@@ -754,7 +754,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingBottom: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#38383A",
+    borderBottomColor: "#2A2A50",
   },
   modalTitle: {
     fontSize: 17,
@@ -765,12 +765,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: "#0A84FF20",
+    backgroundColor: "#6C5CE720",
   },
   modalDoneText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#0A84FF",
+    color: "#6C5CE7",
   },
   modalIntroText: {
     paddingHorizontal: 8,
@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     fontSize: 12,
     lineHeight: 18,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   modalOptionsList: {
     gap: 8,
@@ -790,7 +790,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 6,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#38383A",
+    borderTopColor: "#2A2A50",
     paddingTop: 14,
     paddingHorizontal: 4,
   },
@@ -802,7 +802,7 @@ const styles = StyleSheet.create({
   modalCreateHint: {
     fontSize: 12,
     lineHeight: 18,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   modalCreateFields: {
     gap: 10,
@@ -813,7 +813,7 @@ const styles = StyleSheet.create({
   modalFieldLabel: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#8E8E93",
+    color: "#94A3B8",
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -821,7 +821,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 14,
@@ -834,14 +834,14 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#BF5AF255",
-    backgroundColor: "#BF5AF222",
+    borderColor: "#A78BFA55",
+    backgroundColor: "#A78BFA22",
     paddingVertical: 12,
   },
   modalAddButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#BF5AF2",
+    color: "#A78BFA",
   },
   modalItem: {
     flexDirection: "row",
@@ -851,13 +851,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "#2C2C2E",
+    backgroundColor: "#1A1A36",
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
   modalItemSelected: {
-    borderColor: "#BF5AF266",
-    backgroundColor: "#BF5AF212",
+    borderColor: "#A78BFA66",
+    backgroundColor: "#A78BFA12",
   },
   modalItemDisabled: {
     opacity: 0.72,
@@ -882,9 +882,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FF453A14",
+    backgroundColor: "#F8717114",
     borderWidth: 1,
-    borderColor: "#FF453A30",
+    borderColor: "#F8717130",
   },
   modalItemText: {
     fontSize: 15,
@@ -897,20 +897,20 @@ const styles = StyleSheet.create({
   modalItemHint: {
     fontSize: 12,
     lineHeight: 18,
-    color: "#8E8E93",
+    color: "#94A3B8",
   },
   modalBadge: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#BF5AF255",
-    backgroundColor: "#BF5AF222",
+    borderColor: "#A78BFA55",
+    backgroundColor: "#A78BFA22",
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   modalBadgeText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#BF5AF2",
+    color: "#A78BFA",
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },

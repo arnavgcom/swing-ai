@@ -141,9 +141,9 @@ export default function AnalysisDiagnosticsScreen() {
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
         <View style={styles.centerWrap}>
-          <ActivityIndicator size="large" color="#0A84FF" />
+          <ActivityIndicator size="large" color="#6C5CE7" />
         </View>
       </View>
     );
@@ -151,7 +151,7 @@ export default function AnalysisDiagnosticsScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#000000", "#1C1C1E", "#000000"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#0A0A1A", "#0F0F2E", "#0A0A1A"]} style={StyleSheet.absoluteFill} />
 
       <View style={styles.header}>
         <Pressable

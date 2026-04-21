@@ -42,7 +42,7 @@ function getStageStatusMeta(status: PipelineTimingStage["status"]) {
     case "completed":
       return { icon: "checkmark-circle", color: ds.color.success, label: "Completed" } as const;
     case "running":
-      return { icon: "time", color: "#0A84FF", label: "Running" } as const;
+      return { icon: "time", color: "#6C5CE7", label: "Running" } as const;
     case "failed":
       return { icon: "alert-circle", color: ds.color.danger, label: "Failed" } as const;
     default:

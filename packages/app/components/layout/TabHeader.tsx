@@ -19,7 +19,7 @@ export function TabHeader({ rightContent }: TabHeaderProps) {
   const pathname = usePathname();
   const { user } = useAuth();
   const { selectedSport } = useSport();
-  const sc = sportColors[selectedSport?.name || ""] || { primary: "#0A84FF", gradient: "#5A4BD1" };
+  const sc = sportColors[selectedSport?.name || ""] || { primary: "#6C5CE7", gradient: "#5A4BD1" };
 
   const avatarUrl = resolveClientMediaUrl(user?.avatarUrl);
   const avatarSource = avatarUrl ? { uri: avatarUrl } : null;

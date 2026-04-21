@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ds } from "@/constants/design-system";
+import { useSportAccent } from "@/utils/useSportAccent";
 
 interface MetricCardProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -25,7 +26,10 @@ export function MetricCard({
   change,
   optimalRange,
 }: MetricCardProps) {
-  const accentColor = color || "#0A84FF";
+  const sportAccent = useSportAccent();
+  // Default to the active sport's accent so each metric tile reflects
+  // the user's sport context. Explicit `color` prop still wins.
+  const accentColor = color || sportAccent.primary;
   const numericValue = typeof value === "number" && Number.isFinite(value) ? value : null;
   const hasOptimalRange =
     !!optimalRange
@@ -92,12 +96,12 @@ export function MetricCard({
 
   const changeColor =
     !hasChangeValue
-      ? "#636366"
+      ? ds.color.textTertiary
       : Math.abs(change) < 1e-6
-        ? "#8E8E93"
+        ? ds.color.textSecondary
         : change >= 0
-          ? "#30D158"
-          : "#FF453A";
+          ? ds.color.success
+          : ds.color.danger;
 
   const changeIcon =
     !hasChangeValue
@@ -197,7 +201,8 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   label: {
-    fontSize: 12,
+    ...ds.type.medium,
+    fontSize: ds.font.caption,
     letterSpacing: 0.3,
     color: ds.color.textTertiary,
   },
@@ -207,12 +212,14 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   value: {
+    ...ds.type.bold,
+    ...ds.tabularNums,
     fontSize: 20,
-    fontWeight: "700",
     color: ds.color.textPrimary,
   },
   unit: {
-    fontSize: 12,
+    ...ds.type.regular,
+    fontSize: ds.font.caption,
     color: ds.color.textTertiary,
   },
   footerBlock: {
@@ -240,8 +247,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   rangeText: {
+    ...ds.type.semibold,
+    ...ds.tabularNums,
     fontSize: 10,
-    fontWeight: "600",
     color: ds.color.textTertiary,
   },
   rangeChip: {
@@ -259,8 +267,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   rangeStatusText: {
+    ...ds.type.bold,
     fontSize: 9,
-    fontWeight: "700",
     letterSpacing: 0.4,
   },
   rangeTrack: {
@@ -286,7 +294,8 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   changeText: {
+    ...ds.type.semibold,
+    ...ds.tabularNums,
     fontSize: 11,
-    fontWeight: "600",
   },
 });

@@ -26,7 +26,7 @@ nohup /opt/homebrew/opt/postgresql@16/bin/postgres \
 # ── Swing AI Backend (Express + Python analysis) ─────────────────────────────
 echo "Starting Swing AI Backend"
 export PYTHON_EXECUTABLE="$REPO_ROOT/packages/server/.venv/bin/python3"
-export DATABASE_URL='postgres://swing-ai:swing-ai@localhost:5432/swing-ai'
+export DATABASE_URL='postgres://swing_ai:swing_ai@localhost:5432/swing_ai_local'
 export PORT=5001
 
 cd "$REPO_ROOT"

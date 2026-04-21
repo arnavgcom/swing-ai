@@ -5,20 +5,26 @@ import { Platform, StyleSheet, View, Pressable, Text, Animated as RNAnimated, La
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import { TabBarProvider, useTabBar } from "@/contexts/tab-bar-context";
+import { ds } from "@/constants/design-system";
+import { useSportAccent } from "@/utils/useSportAccent";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 
 const TAB_BAR_HEIGHT = 64;
 const INDICATOR_V_PAD = 8;
 const INDICATOR_HEIGHT = TAB_BAR_HEIGHT - INDICATOR_V_PAD * 2;
 
-const ACTIVE_COLOR = "#0A84FF";
-const INACTIVE_COLOR = "rgba(255, 255, 255, 0.5)";
+const INACTIVE_COLOR = "rgba(255, 255, 255, 0.55)";
 
 type TabItemRect = { x: number; width: number };
 
 function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const { translateY } = useTabBar();
+  const accent = useSportAccent();
+  // Active tint follows the active sport so users always know what
+  // sport context they're in. Falls back to neutral white when no
+  // sport is selected.
+  const activeColor = accent.isSportSpecific ? accent.primary : ds.color.textPrimary;
   const hideDistance = TAB_BAR_HEIGHT + insets.bottom + 30;
 
   // Sliding indicator state
@@ -82,7 +88,7 @@ function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         {Platform.OS === "ios" ? (
           <BlurView
             intensity={80}
-            tint="systemChromeMaterialDark"
+            tint="dark"
             style={[StyleSheet.absoluteFill, { borderRadius: TAB_BAR_HEIGHT / 2, overflow: "hidden" }]}
           />
         ) : null}
@@ -144,12 +150,12 @@ function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                 <Ionicons
                   name={iconName as any}
                   size={18}
-                  color={isFocused ? ACTIVE_COLOR : INACTIVE_COLOR}
+                  color={isFocused ? activeColor : INACTIVE_COLOR}
                 />
                 <Text
                   style={[
                     styles.tabLabel,
-                    { color: isFocused ? ACTIVE_COLOR : INACTIVE_COLOR },
+                    { color: isFocused ? activeColor : INACTIVE_COLOR },
                     isFocused && styles.tabLabelActive,
                   ]}
                 >
@@ -227,9 +233,9 @@ const styles = StyleSheet.create({
   pill: {
     height: TAB_BAR_HEIGHT,
     borderRadius: TAB_BAR_HEIGHT / 2,
-    backgroundColor: Platform.OS === "ios" ? "rgba(40, 40, 42, 0.65)" : "rgba(40, 40, 42, 0.94)",
+    backgroundColor: Platform.OS === "ios" ? "rgba(20, 20, 40, 0.55)" : "rgba(20, 20, 40, 0.94)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255, 255, 255, 0.18)",
+    borderColor: ds.color.glassBorder,
     overflow: "hidden",
     ...(Platform.OS === "ios"
       ? {
@@ -251,9 +257,9 @@ const styles = StyleSheet.create({
     top: INDICATOR_V_PAD,
     height: INDICATOR_HEIGHT,
     borderRadius: INDICATOR_HEIGHT / 2,
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255, 255, 255, 0.22)",
+    borderColor: "rgba(255, 255, 255, 0.20)",
     overflow: "hidden",
   },
   tabItem: {
@@ -264,11 +270,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   tabLabel: {
+    ...ds.type.regular,
     fontSize: 10,
-    fontWeight: "400",
     letterSpacing: 0.1,
   },
   tabLabelActive: {
-    fontWeight: "600",
+    ...ds.type.semibold,
   },
 });

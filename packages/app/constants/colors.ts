@@ -1,37 +1,36 @@
 /**
- * Colour constants – Apple Fitness / Apple Sports inspired.
- * Uses official Apple dark-mode system colour values.
+ * Colour constants — restored from the original Swing AI palette.
+ * Purple `#6C5CE7` brand primary, teal `#34D399` accent, deep midnight
+ * background. Sport-specific accents are layered on top via sportColors.
  */
-
-// ─── Core palette ────────────────────────────────────────────
-const primary = "#0A84FF"; // Apple system blue
-const primaryLight = "#409CFF";
-const primaryDark = "#0071E3";
-const neon = "#30D158"; // Apple system green
-const neonDark = "#28CD41";
-const midnight = "#000000"; // pure black
-const darkSurface = "#1C1C1E"; // systemGray6
-const darkCard = "#2C2C2E"; // systemGray5
-const darkCardAlt = "#3A3A3C"; // systemGray4
-const darkBorder = "rgba(84,84,88,0.36)"; // Apple separator
-const glow = "rgba(10,132,255,0.15)";
-const white = "#FFFFFF";
-const offWhite = "#8E8E93"; // systemGray
-const muted = "#636366"; // systemGray2
-const accent = "#30D158"; // green for positive
-const red = "#FF453A"; // Apple system red
-const amber = "#FFD60A"; // Apple system yellow
-const blue = "#0A84FF";
-const cyan = "#64D2FF";
+const primary = "#6C5CE7";
+const primaryLight = "#A29BFE";
+const primaryDark = "#5A4BD1";
+const neon = "#34D399";
+const neonDark = "#10B981";
+const midnight = "#0A0A1A";
+const darkSurface = "#131328";
+const darkCard = "#1A1A36";
+const darkCardAlt = "#22224A";
+const darkBorder = "#2A2A5060";
+const glow = "#6C5CE720";
+const white = "#F8FAFC";
+const offWhite = "#CBD5E1";
+const muted = "#64748B";
+const accent = "#34D399";
+const red = "#F87171";
+const amber = "#FBBF24";
+const blue = "#60A5FA";
+const cyan = "#22D3EE";
 
 export default {
   light: {
-    text: "#000000",
-    textSecondary: "#3C3C43",
-    background: "#F2F2F7",
+    text: "#0F172A",
+    textSecondary: "#64748B",
+    background: "#F8FAFC",
     surface: "#FFFFFF",
-    surfaceAlt: "#F2F2F7",
-    border: "#C6C6C8",
+    surfaceAlt: "#F1F5F9",
+    border: "#E2E8F0",
     tint: primary,
     tintDark: primaryDark,
     accent: neon,
@@ -65,11 +64,15 @@ export default {
   },
 };
 
+/**
+ * Per-sport accent colours. These layer on top of the brand palette
+ * so each sport context still has its own identity (used by useSportAccent).
+ */
 export const sportColors: Record<string, { primary: string; gradient: string }> = {
-  Tennis: { primary: "#30D158", gradient: "#28CD41" },
-  Golf: { primary: "#64D2FF", gradient: "#40C8E0" },
-  Pickleball: { primary: "#FF9F0A", gradient: "#FF9500" },
-  Paddle: { primary: "#BF5AF2", gradient: "#AF52DE" },
-  Badminton: { primary: "#FF453A", gradient: "#FF3B30" },
-  "Table Tennis": { primary: "#0A84FF", gradient: "#007AFF" },
+  Tennis: { primary: "#10B981", gradient: "#059669" },
+  Golf: { primary: "#22D3EE", gradient: "#0891B2" },
+  Pickleball: { primary: "#F59E0B", gradient: "#D97706" },
+  Paddle: { primary: "#8B5CF6", gradient: "#7C3AED" },
+  Badminton: { primary: "#EF4444", gradient: "#DC2626" },
+  "Table Tennis": { primary: "#3B82F6", gradient: "#2563EB" },
 };

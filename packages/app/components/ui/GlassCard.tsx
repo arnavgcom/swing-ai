@@ -6,39 +6,47 @@ import { ds } from "@/constants/design-system";
 type GlassCardProps = ViewProps & {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
+  /** Blur intensity (iOS only). Matches the original Swing AI feel. */
   intensity?: number;
   tint?: "light" | "dark" | "default";
+  /**
+   * Force a solid (non-blurred) surface. Useful for very dense lists where
+   * blur hurts scanning. Off by default — the default look is the original
+   * translucent glass.
+   */
+  solid?: boolean;
 };
 
 export function GlassCard({
   children,
   style,
-  intensity = 40,
+  intensity = 28,
   tint = "dark",
+  solid = false,
   ...rest
 }: GlassCardProps) {
-  // Use BlurView on iOS for subtle vibrancy; solid card elsewhere
-  if (Platform.OS === "ios") {
+  if (solid || Platform.OS === "android") {
     return (
-      <BlurView intensity={intensity} tint={tint} style={[styles.base, style]} {...rest}>
+      <View style={[styles.base, style]} {...rest}>
         {children}
-      </BlurView>
+      </View>
     );
   }
 
   return (
-    <View style={[styles.base, style]} {...rest}>
+    <BlurView intensity={intensity} tint={tint} style={[styles.base, style]} {...rest}>
       {children}
-    </View>
+    </BlurView>
   );
 }
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: ds.radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: ds.radius.lg,
+    borderWidth: 1,
     borderColor: ds.color.glassBorder,
-    backgroundColor: ds.color.bgElevated,
+    backgroundColor: ds.color.glass,
     overflow: "hidden",
+    ...ds.shadow.subtle,
   },
 });
